@@ -1,7 +1,0 @@
----
-"accounts": minor
----
-
-Added `provider.ready()`, which resolves once the provider has loaded its stored state and rejects with `Store.HydrationError` when the storage read fails or takes longer than the new `hydrationTimeout` option (default 10 seconds). `request` now waits for the load instead of continuing with an empty store after 100ms, and rejects with an `RpcResponse.InternalError` caused by the `Store.HydrationError` when the load fails. `getAccount` throws `Store.HydrationError` until the load finishes instead of reporting no accounts.
-
-The default storage now uses IndexedDB only where `indexedDB` exists, so React Native gets memory storage, and keeps state in memory when IndexedDB fails.

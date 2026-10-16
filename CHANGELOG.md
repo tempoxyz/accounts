@@ -1,5 +1,23 @@
 # accounts
 
+## 0.21.0
+
+### Minor Changes
+
+- a60b2c6: Added `provider.ready()`, which resolves once the provider has loaded its stored state and rejects with `Store.HydrationError` when the storage read fails or takes longer than the new `hydrationTimeout` option (default 10 seconds). `request` now waits for the load instead of continuing with an empty store after 100ms, and rejects with an `RpcResponse.InternalError` caused by the `Store.HydrationError` when the load fails. `getAccount` throws `Store.HydrationError` until the load finishes instead of reporting no accounts.
+  
+  The default storage now uses IndexedDB only where `indexedDB` exists, so React Native gets memory storage, and keeps state in memory when IndexedDB fails.
+- 4008d21: Add an optional `chainId` to `wallet_revokeAccessKey` so callers can revoke an access key on a specific chain. The provider rejects a chain it is not configured for. Local, Privy, dialog, device-code (including CLI), postMessage and mobile web auth revocations target that chain and remove the local key for it only after the revocation succeeds. Other JSON-RPC adapters reject a `chainId` other than the active chain. Omitting `chainId` keeps revoking on the active chain.
+
+### Patch Changes
+
+- 0488591: Limit the WebAuthn adapter's post-registration signing shortcut to the most recent registration, for 5 minutes, so it only applies while that registration still owns the server session. Any later registration, server login or disconnect falls back to server authentication.
+- 0488591: Prompt for the passkey while the WebAuthn ceremony registers the login challenge when the credential is already known (stored account or this session's registration), instead of after the `/login/options` round trip. Falls back to the ceremony's options if they differ from the locally built ones.
+- 6ec2640: Apply `retryCount` to `wallet_revokeAccessKey` in request-based adapters (device code, CLI, postMessage, mobile web auth), which now send revocations through the same transport as other wallet requests. Device-code and CLI revocations are still sent once by default, on the chain named in the request context.
+- af5e9b8: Send device-code wallet requests once by default. A failed or timed-out request such as `eth_sendTransactionSync` or `wallet_revokeAccessKey` was retried up to three times, starting a new approval (and possibly a second transaction) on each attempt. Added `retryCount` to `deviceCode`, `cli`, and the CLI `Provider.create` to opt back into retries. Chain reads still retry.
+- 6b06ace: Route `wallet_updateAccessKey` to the requested `chainId` for dialog, device-code, postMessage and mobile web auth adapters by carrying it in the request context, as `wallet_revokeAccessKey` does, instead of sending it only in params while the context names the active chain. Request-based updates honor `retryCount` like revocations. Mobile web auth now forwards the request context (account and chain) to the wallet like the other Wata transports, which also fixes chain routing for its revocations. Other JSON-RPC adapters reject a `chainId` other than the active chain instead of updating on it. `wallet_revokeAccessKey` and `wallet_updateAccessKey` reject an `address` that is not a connected account before any adapter runs, instead of opening the wallet for it.
+- 2a088fc: Reject `wallet_updateAccessKey` with `UnsupportedChainIdError` when `chainId` is not one of the provider's configured chains, instead of updating the key on the default chain. The request fails before any adapter or wallet approval runs and leaves local access-key state unchanged.
+
 ## 0.20.0
 
 ### Minor Changes
