@@ -726,6 +726,8 @@ export function create(options: create.Options = {}): create.ReturnType {
       throw new ox_Provider.UnsupportedChainIdError({
         message: `Chain ${parameters.chainId} not configured.`,
       })
+    // An unknown account fails here instead of reaching a remote wallet.
+    getAccount({ address: parameters.address })
     if (actions.revokeAccessKey) return await actions.revokeAccessKey(parameters, request)
     if (instance.getAccount) return await revokeAccessKey(parameters)
     unsupported('revokeAccessKey')
@@ -744,6 +746,8 @@ export function create(options: create.Options = {}): create.ReturnType {
       throw new ox_Provider.UnsupportedChainIdError({
         message: `Chain ${parameters.chainId} not configured.`,
       })
+    // An unknown account fails here instead of reaching a remote wallet.
+    getAccount({ address: parameters.address })
     if (actions.updateAccessKey) return await actions.updateAccessKey(parameters, request)
     if (instance.getAccount) return await updateAccessKey(parameters)
     unsupported('updateAccessKey')

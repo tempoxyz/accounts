@@ -88,4 +88,18 @@ describe.each([
       ]
     `)
   })
+
+  test('error: rejects an account that is not connected before sending', async () => {
+    const { provider, requests } = await connect(0)
+
+    await expect(
+      provider.request({
+        ...request,
+        params: [{ ...request.params[0], address: accessKey.address }],
+      } as never),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnauthorizedError: Account "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650" not found.]`,
+    )
+    expect(requests).toEqual([])
+  })
 })

@@ -604,4 +604,36 @@ describe('dialog', () => {
       )
     })
   })
+
+  describe.each([
+    {
+      method: 'wallet_revokeAccessKey',
+      params: [{ accessKeyAddress: accessKey, address: accessKey }],
+    },
+    {
+      method: 'wallet_updateAccessKey',
+      params: [
+        {
+          accessKeyAddress: accessKey,
+          address: accessKey,
+          limits: [{ token: address, limit: '0x1' }],
+        },
+      ],
+    },
+  ] as const)('provider $method', (request) => {
+    test('error: rejects an account that is not connected without opening the dialog', async () => {
+      const dialog_ = createDialog()
+      const provider = Provider.create({
+        adapter: dialog({ dialog: dialog_.dialog, host }),
+        chains: [tempoLocalnet],
+        storage: Storage.memory(),
+      })
+      provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+      await expect(provider.request(request)).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UnauthorizedError: Account "0x0000000000000000000000000000000000000002" not found.]`,
+      )
+      expect(dialog_.syncs).toEqual([])
+    })
+  })
 })
