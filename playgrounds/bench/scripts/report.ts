@@ -224,52 +224,32 @@ export function markdown(
     '## ⚡ UX bench',
     '',
     '<table>',
-    '<thead><tr><th>Renderer</th><th align="center">Score</th>' +
-      cases.map((name) => `<th align="center">${name}</th>`).join('') +
-      '</tr></thead>',
+    '<thead><tr><th>Renderer</th><th align="center">Score</th></tr></thead>',
     '<tbody>',
-    ...summary.overall.map((entry) => {
-      const rows = summary.rows.filter((row) => row.renderer === entry.renderer)
-      const scores = rows.map((row) => {
-        if (!row.ok) return '<td align="center">–</td>'
-        const total = row.values.total
-        return `<td align="center">${img(row.score, `${row.case}: ${row.score}`)}${total ? `<br><sub>${total.value} ms</sub>` : ''}</td>`
-      })
-      return `<tr><td>${names[entry.renderer]}</td><td align="center">${img(entry.score, `${names[entry.renderer]}: ${entry.score}`)}</td>${scores.join('')}</tr>`
-    }),
+    ...summary.overall.map(
+      (entry) =>
+        `<tr><td>${names[entry.renderer]}</td><td align="center">${img(entry.score, `${names[entry.renderer]}: ${entry.score}`)}</td></tr>`,
+    ),
     '</tbody>',
     '</table>',
     '',
+    '<details><summary>Timings</summary>',
+    '',
+    `| Renderer | Case | ${metrics.map((metric) => labels[metric].name).join(' | ')} | Score | Runs |`,
+    `| --- | --- | ${metrics.map(() => '---:').join(' | ')} | ---: | ---: |`,
+    ...summary.rows.map((row) => {
+      const cells = metrics.map((metric) => {
+        const value = row.values[metric]
+        return value ? `${value.value} ms` : '–'
+      })
+      const score = row.ok ? `${row.score}` : '–'
+      const runs = row.ok === row.runs ? `${row.ok}/${row.runs}` : `⚠️ ${row.ok}/${row.runs}`
+      return `| ${names[row.renderer]} | ${row.case} | ${cells.join(' | ')} | ${score} | ${runs} |`
+    }),
+    '',
+    '</details>',
+    '',
   ]
-
-  for (const entry of summary.overall) {
-    const rows = summary.rows.filter((row) => row.renderer === entry.renderer)
-    const columns = metrics.filter((metric) => rows.some((row) => row.values[metric]))
-    lines.push(
-      `<details><summary><b>${names[entry.renderer]}</b></summary>`,
-      '',
-      '<table>',
-      '<thead><tr><th>Case</th>' +
-        columns.map((metric) => `<th align="center">${labels[metric].name}</th>`).join('') +
-        '<th align="center">Score</th><th align="center">Runs</th></tr></thead>',
-      '<tbody>',
-      ...rows.map((row) => {
-        const cells = columns.map((metric) => {
-          const value = row.values[metric]
-          if (!value) return '<td align="center">–</td>'
-          return `<td align="center">${img(value.score, `${labels[metric].name}: ${value.value} ms`)}<br><sub>${value.value} ms</sub></td>`
-        })
-        const score = row.ok ? img(row.score, `${row.case}: ${row.score}`) : '–'
-        const runs = row.ok === row.runs ? `${row.ok}/${row.runs}` : `⚠️ ${row.ok}/${row.runs}`
-        return `<tr><td>${row.case}</td>${cells.join('')}<td align="center">${score}</td><td align="center">${runs}</td></tr>`
-      }),
-      '</tbody>',
-      '</table>',
-      '',
-      '</details>',
-      '',
-    )
-  }
 
   const errors = summary.rows.flatMap((row) =>
     row.errors.map((error) => `- \`${row.renderer}\` ${row.case}: ${error.split('\n')[0]}`),
@@ -280,7 +260,7 @@ export function markdown(
   lines.push(
     '<details><summary>Scoring</summary>',
     '',
-    "Each value is the median of the passing runs. It is scored 0–100 on Lighthouse's log-normal curve: the **good** budget scores 90 and the **poor** budget scores 50. Rings are green from 90, orange from 50 and red below 50. A case score weights Total twice as much as Wallet ready and Confirm. The milliseconds under a case score are its Total.",
+    "Each value is the median of the passing runs. It is scored 0–100 on Lighthouse's log-normal curve: the **good** budget scores 90 and the **poor** budget scores 50. Rings are green from 90, orange from 50 and red below 50. A case score weights Total twice as much as Wallet ready and Confirm, and a renderer score is the mean of its case scores.",
     '',
     '| Metric | Measures | register / login (good · poor) | send (good · poor) |',
     '| --- | --- | --- | --- |',
