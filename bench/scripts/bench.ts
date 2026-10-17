@@ -221,19 +221,23 @@ async function clickAt(locator: Locator) {
     )
   })
   time.catch(() => {})
-  await frame.evaluate(() =>
-    document.addEventListener(
-      'click',
-      () =>
-        (window as never as { __benchClicked: (time: number) => void }).__benchClicked(Date.now()),
-      { capture: true, once: true },
-    ),
-  )
-  await locator.click()
-  return await time.finally(() => {
+  try {
+    await frame.evaluate(() =>
+      document.addEventListener(
+        'click',
+        () =>
+          (window as never as { __benchClicked: (time: number) => void }).__benchClicked(
+            Date.now(),
+          ),
+        { capture: true, once: true },
+      ),
+    )
+    await locator.click()
+    return await time
+  } finally {
     clearTimeout(timer)
     clicked = undefined
-  })
+  }
 }
 
 /** Runs one untimed setup action and fails when it rejects. */
