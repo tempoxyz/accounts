@@ -210,7 +210,7 @@ async function step(
   const popup = renderer === 'tempoWallet/popup' ? context.waitForEvent('page', { timeout }) : null
   popup?.catch(() => {})
 
-  const { done, start } = await click(page, options.case)
+  const { done } = await click(page, options.case)
 
   if (renderer === 'webAuthn') {
     const { callback, entry } = await done()
