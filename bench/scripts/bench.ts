@@ -177,7 +177,12 @@ async function step(
   const wallet: Page | FrameLocator = popup
     ? await popup
     : page.frameLocator('iframe[data-testid="tempo-wallet-postmessage"]')
-  const button: Locator = wallet.getByRole('button', { name: approvals[options.case] })
+  // Wallet ready waits for the approval button to be enabled, not just shown: the wallet
+  // renders it disabled while it prepares the request, and a click lands only once it is enabled.
+  const button: Locator = wallet.getByRole('button', {
+    disabled: false,
+    name: approvals[options.case],
+  })
   try {
     await button.waitFor({ state: 'visible', timeout })
   } catch (error) {

@@ -23,7 +23,7 @@ export type Sample = {
   /** Wallet approval click to app callback. Absent for WebAuthn. */
   confirm?: number | undefined
   error?: string | undefined
-  /** App click to wallet approval button visible. Absent for WebAuthn. */
+  /** App click to wallet approval button visible and enabled. Absent for WebAuthn. */
   ready?: number | undefined
   renderer: Renderer
   run: number
@@ -34,7 +34,10 @@ export type Sample = {
 /** Metric labels and descriptions for reports. */
 export const labels = {
   confirm: { description: 'Wallet approval click → app callback', name: 'Confirm' },
-  ready: { description: 'App click → wallet approval button visible', name: 'Wallet ready' },
+  ready: {
+    description: 'App click → wallet approval button visible and enabled',
+    name: 'Wallet ready',
+  },
   total: { description: 'App click → app callback', name: 'Total' },
 } as const satisfies Record<Metric, { description: string; name: string }>
 

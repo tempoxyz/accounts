@@ -36,7 +36,7 @@ Each case reports three metrics. Tempo Wallet renderers report all three, and We
 
 | Metric         | Measures                                                |
 | -------------- | ------------------------------------------------------- |
-| `Wallet ready` | App click to wallet approval button visible             |
+| `Wallet ready` | App click to wallet approval button visible and enabled |
 | `Confirm`      | Wallet approval click to app callback                   |
 | `Total`        | App click to app callback, from the page's own timeline |
 
