@@ -264,7 +264,12 @@ async function screenshot(page: Page, name: string) {
 async function measure(options: { renderer: Renderer; run: number; url: string }) {
   const { renderer, run } = options
   const results: Sample[] = []
-  const context = await browser.newContext({ ignoreHTTPSErrors: true })
+  const context = await browser.newContext({
+    ignoreHTTPSErrors: true,
+    // The SIWE cases have the public wallet page fetch the bench's local `/auth`,
+    // which Chrome's Local Network Access blocks unless granted.
+    permissions: ['local-network-access'],
+  })
   const credentials = new Map<string, { credentialId: string }>()
   // Each page's authenticator setup, awaited before the page is used.
   const authenticators = new WeakMap<Page, Promise<void>>()
