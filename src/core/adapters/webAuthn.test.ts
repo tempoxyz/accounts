@@ -45,12 +45,14 @@ describe('background registration', () => {
    */
   function setup(
     options: {
+      authenticator?: ReturnType<typeof Authenticator.create> | undefined
       logout?: (() => Promise<void>) | undefined
       reject?: Error | undefined
       storage?: Storage.Storage | undefined
     } = {},
   ) {
-    const authenticator = Authenticator.create({ origin, rpId: 'localhost' })
+    const authenticator =
+      options.authenticator ?? Authenticator.create({ origin, rpId: 'localhost' })
     vi.stubGlobal(
       'window',
       Object.assign(new EventTarget(), {
@@ -84,7 +86,7 @@ describe('background registration', () => {
       chains: [chain],
       storage,
     })
-    return { logins, provider, storage, verifications }
+    return { authenticator, logins, provider, storage, verifications }
   }
 
   async function register(provider: ReturnType<typeof setup>['provider'], name = 'alice') {
@@ -275,24 +277,31 @@ describe('background registration', () => {
     expect(logins).toHaveBeenCalledTimes(1)
   })
 
-  test('behavior: drops an account whose registration outlived its page', async () => {
-    const storage = Storage.memory()
+  /** Registers, then leaves the marker behind as a page closed mid-verification would. */
+  async function abandon(storage: Storage.Storage, time: number) {
     const first = setup({ storage })
+    authenticator = first.authenticator
     await register(first.provider)
     const credential = credentialOf(first.provider)!
-    // The page closed before the server answered; its marker stays behind.
-    const markers = await storage.getItem<Record<string, { time: number }>>('registrations:pending')
-    expect(Object.keys(markers ?? {})).toEqual([credential.id])
-    await storage.setItem('registrations:pending', {
-      [credential.id]: { ...markers![credential.id], time: 0 },
-    })
+    const marker = await storage.getItem<{ time: number }>(`registration:pending:${credential.id}`)
+    expect(marker).toBeTruthy()
+    await storage.setItem(`registration:pending:${credential.id}`, { ...marker, time })
+    return credential
+  }
+  let authenticator: ReturnType<typeof Authenticator.create> | undefined
+
+  test('behavior: drops an account whose registration outlived its page', async () => {
+    const storage = Storage.memory()
+    const credential = await abandon(storage, 0)
 
     const { provider } = setup({ storage })
 
     await vi.waitFor(async () =>
       expect(await provider.request({ method: 'eth_accounts' })).toEqual([]),
     )
-    expect(await storage.getItem('registrations:pending')).toMatchInlineSnapshot(`null`)
+    expect(await storage.getItem(`registration:pending:${credential.id}`)).toMatchInlineSnapshot(
+      `null`,
+    )
     expect(Object.keys((await storage.getItem<object>(`registration:${credential.id}`)) ?? {}))
       .toMatchInlineSnapshot(`
         [
@@ -302,13 +311,34 @@ describe('background registration', () => {
       `)
   })
 
+  test('behavior: a login before the marker expires keeps the account', async () => {
+    const storage = Storage.memory()
+    // Expires 200 ms from now.
+    const credential = await abandon(storage, Date.now() - 60_000 + 200)
+    const { provider } = setup({ authenticator, storage })
+
+    const { accounts } = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login', credentialId: credential.id } as never }],
+    })
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    expect(await provider.request({ method: 'eth_accounts' })).toEqual([accounts[0]!.address])
+    expect(await storage.getItem(`registration:pending:${credential.id}`)).toMatchInlineSnapshot(
+      `null`,
+    )
+  })
+
   test('behavior: clears the marker once the server stores the credential', async () => {
     const { provider, storage, verifications } = setup()
     await register(provider)
+    const credential = credentialOf(provider)!
 
     verifications[0]!.resolve()
 
-    await vi.waitFor(async () => expect(await storage.getItem('registrations:pending')).toBeNull())
+    await vi.waitFor(async () =>
+      expect(await storage.getItem(`registration:pending:${credential.id}`)).toBeNull(),
+    )
   })
 
   test('behavior: disconnect ends the ceremony session', async () => {

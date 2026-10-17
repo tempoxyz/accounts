@@ -17,8 +17,8 @@ import { local } from './local.js'
 /** How long a registration's server session backs the local signing shortcut. */
 const ttl_registration = 5 * 60 * 1_000
 
-/** Storage key of registrations still verifying with the server, by credential ID. */
-const key_pending = 'registrations:pending'
+/** Storage key prefix of registrations still verifying with the server, by credential ID. */
+const key_pending = 'registration:pending:'
 
 /** How long a registration can still be verifying after it answers. */
 const ttl_pending = 60 * 1_000
@@ -102,20 +102,23 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     // A registration whose page closed before the server answered leaves its
     // marker in storage. Once its requests can no longer be running, count it
     // as rejected: the account then needs a login, which succeeds if the
-    // server did store the credential.
+    // server did store the credential. A login before then clears the marker.
     void (async () => {
-      const markers = await storage.getItem<Record<string, Marker>>(key_pending)
-      for (const [id, marker] of Object.entries(markers ?? {}))
+      await Store.waitForHydration(store)
+      for (const account of store.getState().accounts) {
+        const id = 'credential' in account ? account.credential?.id : undefined
+        if (!id) continue
+        const marker = await storage.getItem<Marker>(`${key_pending}${id}`)
+        if (!marker) continue
         setTimeout(
           async () => {
             if (pending.has(id)) return
-            const markers = await storage.getItem<Record<string, Marker>>(key_pending)
-            if (!markers?.[id]) return
-            await Store.waitForHydration(store).catch(() => {})
+            if (!(await storage.getItem(`${key_pending}${id}`))) return
             await reject({ id, publicKey: marker.publicKey }, marker)
           },
           Math.max(0, marker.time + ttl_pending - Date.now()),
         )
+      }
     })().catch(() => {})
 
     /**
@@ -134,21 +137,10 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       })
     }
 
-    // Serializes marker writes, which read and rewrite one storage entry.
-    let marking = Promise.resolve()
-
     /** Records or clears a registration still verifying in storage. */
-    function mark(id: string, marker: Marker | undefined) {
-      marking = marking
-        .then(async () => {
-          const markers = { ...(await storage.getItem<Record<string, Marker>>(key_pending)) }
-          if (marker) markers[id] = marker
-          else delete markers[id]
-          if (Object.keys(markers).length > 0) await storage.setItem(key_pending, markers)
-          else await storage.removeItem(key_pending)
-        })
-        .catch(() => {})
-      return marking
+    async function mark(id: string, marker: Marker | undefined) {
+      if (marker) await storage.setItem(`${key_pending}${id}`, marker)
+      else await storage.removeItem(`${key_pending}${id}`)
     }
 
     /** Drops the account of a credential the server never stored. */
@@ -344,6 +336,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         rejected.delete(
           Account.fromWebAuthnP256({ id: response.id, publicKey }).address.toLowerCase(),
         )
+        if (!pending.has(response.id)) await mark(response.id, undefined)
 
         await storage.setItem('lastCredentialId', response.id)
 
