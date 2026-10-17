@@ -209,6 +209,337 @@ describe('server', () => {
   })
 })
 
+describe('server: prefetch', () => {
+  /** Serialized credential whose client data carries challenge `0x01`. */
+  const credential = {
+    attestationObject: 'AA',
+    clientDataJSON: 'eyJjaGFsbGVuZ2UiOiJBUSJ9',
+    id: 'credential',
+    publicKey: '0x04ab',
+    raw: {
+      authenticatorAttachment: null,
+      id: 'credential',
+      rawId: 'Y3JlZGVudGlhbA',
+      response: { clientDataJSON: 'eyJjaGFsbGVuZ2UiOiJBUSJ9' },
+      type: 'public-key',
+    },
+  } as never
+
+  /**
+   * Issues registration challenges `0x01`, `0x02`, … and login challenges
+   * `0x11`, `0x12`, …, with a challenge TTL of `ttl` seconds (none when
+   * null), and records each request's path and body.
+   */
+  function stub(ttl: number | null = 300) {
+    const requests: { body: unknown; path: string }[] = []
+    let logins = 0
+    let registrations = 0
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      const path = new URL(input).pathname.replace('/webauthn', '')
+      const body = JSON.parse(String(init?.body ?? 'null'))
+      requests.push({ body, path })
+      if (path === '/login/options')
+        return Response.json({
+          options: { publicKey: { challenge: `0x1${++logins}`, rpId: 'example.com' } },
+          ...(ttl === null ? {} : { ttl }),
+        })
+      if (path === '/register/options')
+        return Response.json({
+          options: {
+            publicKey: {
+              challenge: `0x0${++registrations}`,
+              rp: { id: 'example.com', name: 'example.com' },
+              user: { id: 'dXNlci0x', name: '' },
+            },
+          },
+          ...(ttl === null ? {} : { ttl }),
+        })
+      return Response.json({ credentialId: 'credential', publicKey: '0x04ab' })
+    })
+    return requests
+  }
+
+  /** Waits for the two prefetch requests to answer. */
+  async function prefetched(requests: readonly unknown[]) {
+    await vi.waitFor(() => expect(requests).toHaveLength(2))
+    await new Promise((resolve) => setTimeout(resolve))
+  }
+
+  test('behavior: builds options from prefetched challenges and fetches the next', async () => {
+    const requests = stub()
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+
+    ceremony.prefetch!()
+    await prefetched(requests)
+    const { options: registration } = await ceremony.getRegistrationOptions({ name: 'alice' })
+    const { options: authentication } = await ceremony.getAuthenticationOptions({
+      credentialId: 'abc',
+    })
+    await vi.waitFor(() => expect(requests).toHaveLength(4))
+
+    expect({
+      authentication: authentication.publicKey,
+      registration: {
+        challenge: registration.publicKey!.challenge,
+        rp: registration.publicKey!.rp,
+        user: registration.publicKey!.user.name,
+      },
+      requests,
+    }).toMatchInlineSnapshot(`
+      {
+        "authentication": {
+          "allowCredentials": [
+            {
+              "id": "abc",
+              "type": "public-key",
+            },
+          ],
+          "challenge": "0x11",
+          "rpId": "example.com",
+          "userVerification": "required",
+        },
+        "registration": {
+          "challenge": "0x01",
+          "rp": {
+            "id": "example.com",
+            "name": "example.com",
+          },
+          "user": "alice",
+        },
+        "requests": [
+          {
+            "body": {},
+            "path": "/login/options",
+          },
+          {
+            "body": {},
+            "path": "/register/options",
+          },
+          {
+            "body": {},
+            "path": "/register/options",
+          },
+          {
+            "body": {},
+            "path": "/login/options",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('behavior: sends the name with a registration whose challenge was prefetched', async () => {
+    const requests = stub()
+    const ceremony = WebAuthnCeremony.deferred({ url: 'https://example.com/webauthn' })
+    ceremony.prefetch!()
+    await prefetched(requests)
+
+    // Takes challenge `0x01`, the credential's, with the `user.id` the server
+    // bound. Verification sends the name, even when the caller omits it.
+    const { options } = await ceremony.getRegistrationOptions({ name: 'alice' })
+    const { verified } = await ceremony.verifyRegistration(credential)
+    await verified
+
+    const {
+      attestationObject: _,
+      raw: __,
+      ...body
+    } = requests.find(({ path }) => path === '/register')!.body as Record<string, unknown>
+    expect({ body, user: options.publicKey!.user }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJBUSJ9",
+          "id": "credential",
+          "name": "alice",
+          "publicKey": "0x04ab",
+        },
+        "user": {
+          "displayName": "alice",
+          "id": "dXNlci0x",
+          "name": "alice",
+        },
+      }
+    `)
+  })
+
+  test('behavior: a sign-up with its own userId requests its own options', async () => {
+    const requests = stub()
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    ceremony.prefetch!()
+    await prefetched(requests)
+
+    await ceremony.getRegistrationOptions({ name: 'alice', userId: 'user-2' })
+
+    expect(requests.slice(2)).toMatchInlineSnapshot(`
+      [
+        {
+          "body": {
+            "name": "alice",
+            "userId": "user-2",
+          },
+          "path": "/register/options",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: a challenge taken for local options answers without a request', async () => {
+    const requests = stub()
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    ceremony.prefetch!()
+    await prefetched(requests)
+
+    const challenge = ceremony.takeChallenge!()
+    const { options } = await ceremony.getAuthenticationOptions({ challenge, credentialId: 'abc' })
+    await vi.waitFor(() => expect(requests).toHaveLength(3))
+
+    expect({ challenge, options: options.publicKey, paths: requests.map(({ path }) => path) })
+      .toMatchInlineSnapshot(`
+        {
+          "challenge": "0x11",
+          "options": {
+            "allowCredentials": [
+              {
+                "id": "abc",
+                "type": "public-key",
+              },
+            ],
+            "challenge": "0x11",
+            "rpId": "example.com",
+            "userVerification": "required",
+          },
+          "paths": [
+            "/login/options",
+            "/register/options",
+            "/login/options",
+          ],
+        }
+      `)
+  })
+
+  test('behavior: waits for a prefetch in flight instead of requesting options', async () => {
+    const requests = stub()
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    ceremony.prefetch!()
+
+    // Both prefetches are still in flight.
+    const { options: registration } = await ceremony.getRegistrationOptions({ name: 'alice' })
+    const { options: authentication } = await ceremony.getAuthenticationOptions()
+
+    expect({
+      authentication: authentication.publicKey!.challenge,
+      paths: requests.map(({ path }) => path),
+      registration: registration.publicKey!.challenge,
+    }).toMatchInlineSnapshot(`
+      {
+        "authentication": "0x11",
+        "paths": [
+          "/login/options",
+          "/register/options",
+          "/register/options",
+          "/login/options",
+        ],
+        "registration": "0x01",
+      }
+    `)
+  })
+
+  test('behavior: stops prefetching from a server that sends no TTL', async () => {
+    const requests = stub(null)
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    ceremony.prefetch!()
+    await prefetched(requests)
+
+    const { options } = await ceremony.getRegistrationOptions({ name: 'alice' })
+    await ceremony.getAuthenticationOptions()
+
+    // Each ceremony requests its own options, and fetches nothing ahead. The sign-up's carries a
+    // random `userId`, so an older server doesn't derive the user handle from the name.
+    const { userId, ...body } = requests[2]!.body as { userId?: unknown }
+    expect({
+      body,
+      challenge: options.publicKey!.challenge,
+      paths: requests.slice(2).map(({ path }) => path),
+      userId: typeof userId,
+    }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "name": "alice",
+        },
+        "challenge": "0x02",
+        "paths": [
+          "/register/options",
+          "/login/options",
+        ],
+        "userId": "string",
+      }
+    `)
+  })
+
+  test('behavior: stops using a prefetched challenge before the server TTL runs out', async () => {
+    const requests = stub(60)
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    ceremony.prefetch!()
+    await prefetched(requests)
+
+    // A 60 s TTL leaves 48 s to use the challenge.
+    clock.mockReturnValue(now + 48_000)
+    const { options } = await ceremony.getAuthenticationOptions()
+    clock.mockRestore()
+
+    expect({
+      challenge: options.publicKey!.challenge,
+      requests: requests.slice(2).map(({ path }) => path),
+    }).toMatchInlineSnapshot(`
+      {
+        "challenge": "0x13",
+        "requests": [
+          "/login/options",
+          "/login/options",
+        ],
+      }
+    `)
+  })
+
+  test('behavior: without prefetch, fetches options for each ceremony', async () => {
+    const requests = stub()
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+
+    expect(ceremony.takeChallenge!()).toMatchInlineSnapshot(`undefined`)
+    await ceremony.getAuthenticationOptions()
+    await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        {
+          "body": {},
+          "path": "/login/options",
+        },
+        {
+          "body": {
+            "attestationObject": "AA",
+            "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJBUSJ9",
+            "id": "credential",
+            "publicKey": "0x04ab",
+            "raw": {
+              "authenticatorAttachment": null,
+              "id": "credential",
+              "rawId": "Y3JlZGVudGlhbA",
+              "response": {
+                "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJBUSJ9",
+              },
+              "type": "public-key",
+            },
+          },
+          "path": "/register",
+        },
+      ]
+    `)
+  })
+})
+
 describe('deferred', () => {
   const credential = { id: 'credential', publicKey: '0x04ab' } as never
 

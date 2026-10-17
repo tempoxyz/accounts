@@ -118,26 +118,33 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
   router.post(`${path}/register/options`, async (c) => {
     try {
       const body = await c.req.raw.json()
-      const { excludeCredentialIds, name, userId } = body as {
+      const { excludeCredentialIds, name } = body as {
         excludeCredentialIds?: string[]
-        name: string
+        name?: string
         userId?: string
       }
+      // The `userId` is always bound here, so a client can't choose it at
+      // `/register`. Without one, the challenge gets a random one.
+      const userId = (body as { userId?: string }).userId ?? Hex.random(16)
 
+      // Without a name, the challenge is issued ahead of the sign-up (see
+      // `WebAuthnCeremony.server`'s `prefetch`): the client builds the options
+      // itself, with the `user.id` issued here, and sends the name with `/register`.
       const { challenge, options } = Registration.getOptions({
         excludeCredentialIds,
-        name,
+        name: name ?? '',
         rp: { id: rpId, name: rpId },
-        ...(userId ? { user: { id: new TextEncoder().encode(userId), name } } : undefined),
+        user: { id: new TextEncoder().encode(userId), name: name ?? '' },
       })
 
       await kv.set(
         `challenge:${challenge}`,
-        { created: Date.now(), name, ...(userId ? { userId } : {}) },
+        { created: Date.now(), ...(name !== undefined ? { name } : {}), userId },
         { ttl: challengeTtl },
       )
 
-      return Response.json({ options })
+      // `ttl` tells a client that fetches challenges ahead of time how long it may hold one.
+      return Response.json({ options, ttl: challengeTtl })
     } catch (error) {
       return Response.json({ error: (error as Error).message }, { status: 400 })
     }
@@ -145,7 +152,10 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
   router.post(`${path}/register`, async (c) => {
     try {
-      const credential = (await c.req.raw.json()) as Registration_Types.Credential
+      const { name: name_body, ...credential } =
+        (await c.req.raw.json()) as Registration_Types.Credential & {
+          name?: string | undefined
+        }
       const deserialized = Credential.deserialize(credential)
 
       const clientData = JSON.parse(
@@ -160,16 +170,27 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       // single-use and needs no delete. Otherwise it is read here and deleted
       // after the response.
       const [stored, existing] = await Promise.all([
-        consume<{ created: number; name: string; userId?: string }>(`challenge:${challenge}`),
+        consume<{ created: number; name?: string; userId?: string } | number>(
+          `challenge:${challenge}`,
+        ),
         kv.create ? undefined : kv.get(key),
       ])
-      if (!stored || Date.now() - stored.created > challengeTtl * 1_000) {
+      // Login challenges are stored as a bare timestamp, so they can't register.
+      if (
+        typeof stored !== 'object' ||
+        stored === null ||
+        Date.now() - stored.created > challengeTtl * 1_000
+      ) {
         // A retry whose first attempt stored the credential (and consumed the
         // challenge) but lost its response: answer as a duplicate, so the
         // client can tell it was stored.
         if (existing ?? (await kv.get(key))) throw new Error('Credential already exists')
         throw new Error('Missing or expired challenge')
       }
+      // A registration challenge issued without a name was fetched ahead of
+      // the sign-up, so it takes the one sent with the credential.
+      const name = stored.name ?? name_body
+      if (typeof name !== 'string') throw new Error('Missing name')
 
       const result = Registration.verify(credential, {
         challenge,
@@ -199,7 +220,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
           return await onRegister?.({
             ...(aaguid ? { aaguid } : {}),
             credentialId,
-            name: stored.name,
+            name,
             publicKey,
             request: c.req.raw,
             ...(userId ? { userId } : {}),
@@ -288,7 +309,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
       await kv.set(`challenge:${challenge}`, Date.now(), { ttl: challengeTtl })
 
-      return Response.json({ options })
+      return Response.json({ options, ttl: challengeTtl })
     } catch (error) {
       return Response.json({ error: (error as Error).message }, { status: 400 })
     }
@@ -477,11 +498,11 @@ export declare namespace webAuthn {
       /** Authenticator model identifier, when the authenticator reports one. */
       aaguid?: string | undefined
       credentialId: string
-      /** The name provided during `/register/options` (e.g. user email). */
+      /** The name provided during `/register/options`, or with `/register` for a prefetched challenge (e.g. user email). */
       name: string
       publicKey: string
       request: Request
-      /** The `userId` provided during `/register/options`, if any. */
+      /** The `userId` provided during `/register/options`, or the random one it bound when none was. */
       userId?: string | undefined
     }) => Response | Promise<Response> | void | Promise<void>
     /**

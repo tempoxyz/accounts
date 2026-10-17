@@ -2,6 +2,8 @@ import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Authenticator from '../../../test/authenticator.js'
 import { chain } from '../../../test/config.js'
+import { webAuthn as handler_webAuthn } from '../../server/internal/handlers/webAuthn.js'
+import * as Kv from '../../server/Kv.js'
 import * as Provider from '../Provider.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
@@ -33,6 +35,87 @@ describe('webAuthn', () => {
     await Store.waitForHydration(provider.store)
 
     await expect(provider.request({ method: 'eth_accounts' })).resolves.toMatchInlineSnapshot(`[]`)
+  })
+})
+
+describe('prefetched challenges', () => {
+  const origin = 'http://localhost'
+
+  /** Provider whose server ceremony runs against an in-process `Handler.webAuthn`. */
+  function setup() {
+    const authenticator = Authenticator.create({ origin, rpId: 'localhost' })
+    vi.stubGlobal(
+      'window',
+      Object.assign(new EventTarget(), {
+        location: { hostname: 'localhost', origin },
+        navigator: { credentials: authenticator.credentials },
+      }),
+    )
+    const names: string[] = []
+    const handler = handler_webAuthn({
+      kv: Kv.memory(),
+      onRegister: ({ name }) => void names.push(name),
+      origin,
+      path: '/webauthn',
+      rpId: 'localhost',
+      session: false,
+    })
+    const requests: string[] = []
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      const body = request.method === 'POST' ? await request.clone().text() : ''
+      const { challenge } = JSON.parse(body || '{}') as { challenge?: string }
+      requests.push(`${new URL(request.url).pathname}${challenge ? ' (challenge)' : ''}`)
+      return handler.fetch(request)
+    })
+    const ceremony = WebAuthnCeremony.server({ url: `${origin}/webauthn` })
+    const provider = Provider.create({
+      adapter: webAuthn({ ceremony }),
+      chains: [chain],
+      storage: Storage.memory(),
+    })
+    return { ceremony, names, provider, requests }
+  }
+
+  test('behavior: signs up and logs in with challenges issued ahead of time', async () => {
+    const { ceremony, names, provider, requests } = setup()
+    ceremony.prefetch!()
+    await vi.waitFor(() => expect(requests).toHaveLength(2))
+    await new Promise((resolve) => setTimeout(resolve))
+
+    const { accounts } = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'alice' } }],
+    })
+    await provider.request({ method: 'wallet_disconnect' })
+    await new Promise((resolve) => setTimeout(resolve))
+    // A known passkey: the login builds its options from the prefetched challenge.
+    const login = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+
+    expect({
+      address: login.accounts[0]!.address === accounts[0]!.address,
+      names,
+      requests,
+    }).toMatchInlineSnapshot(`
+      {
+        "address": true,
+        "names": [
+          "alice",
+        ],
+        "requests": [
+          "/webauthn/login/options",
+          "/webauthn/register/options",
+          "/webauthn/register/options",
+          "/webauthn/register",
+          "/webauthn/logout",
+          "/webauthn/login/options",
+          "/webauthn/login",
+        ],
+      }
+    `)
   })
 })
 

@@ -1491,7 +1491,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                             ...(capabilities.showDeposit !== undefined
                               ? { showDeposit: capabilities.showDeposit }
                               : {}),
-                            userId: capabilities.userId ?? Hex.random(16),
+                            // Without one, the ceremony binds a random one.
+                            ...(capabilities.userId !== undefined
+                              ? { userId: capabilities.userId }
+                              : {}),
                             ...(personalSign_request ? { personalSign: personalSign_request } : {}),
                           },
                           request,

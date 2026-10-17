@@ -280,9 +280,11 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
 
         // A known credential's request options are deterministic (challenge,
         // credential and RP ID), so build them locally and prompt for the
-        // passkey while the ceremony registers the challenge, not after.
+        // passkey while the ceremony registers the challenge, not after. A
+        // challenge the ceremony prefetched is registered already.
         const known = typeof credentialId === 'string' ? find(credentialId) : undefined
-        const challenge = digest ?? (known ? Hex.random(32) : undefined)
+        const challenge =
+          digest ?? (known ? (ceremony.takeChallenge?.() ?? Hex.random(32)) : undefined)
         const options_local =
           known && typeof credentialId === 'string'
             ? core_Authentication.getOptions({ challenge, credentialId, rpId: known.rpId }).options
