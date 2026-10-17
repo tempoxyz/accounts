@@ -27,5 +27,7 @@ jobs:
       - name: Build
         run: pnpm zile publish:prepare
 
+      # Runs the binary directly: `publish:prepare` rewrites package.json for
+      # publishing, so `pnpm exec` would fail its lockfile check before running.
       - name: Publish preview
-        run: pnpm exec pkg-pr-new publish --pnpm
+        run: ./node_modules/.bin/pkg-pr-new publish --pnpm
