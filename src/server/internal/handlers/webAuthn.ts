@@ -131,16 +131,23 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         excludeCredentialIds,
         name: name ?? '',
         rp: { id: rpId, name: rpId },
-        ...(userId && name ? { user: { id: new TextEncoder().encode(userId), name } } : undefined),
+        ...(userId !== undefined
+          ? { user: { id: new TextEncoder().encode(userId), name: name ?? '' } }
+          : undefined),
       })
 
       await kv.set(
         `challenge:${challenge}`,
-        { created: Date.now(), ...(name ? { name } : {}), ...(userId && name ? { userId } : {}) },
+        {
+          created: Date.now(),
+          ...(name !== undefined ? { name } : {}),
+          ...(userId !== undefined ? { userId } : {}),
+        },
         { ttl: challengeTtl },
       )
 
-      return Response.json({ options })
+      // `ttl` tells a client that fetches challenges ahead of time how long it may hold one.
+      return Response.json({ options, ttl: challengeTtl })
     } catch (error) {
       return Response.json({ error: (error as Error).message }, { status: 400 })
     }
@@ -166,17 +173,24 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       // single-use and needs no delete. Otherwise it is read here and deleted
       // after the response.
       const [stored, existing] = await Promise.all([
-        consume<{ created: number; name?: string; userId?: string }>(`challenge:${challenge}`),
+        consume<{ created: number; name?: string; userId?: string } | number>(
+          `challenge:${challenge}`,
+        ),
         kv.create ? undefined : kv.get(key),
       ])
-      if (!stored || Date.now() - stored.created > challengeTtl * 1_000) {
+      // Login challenges are stored as a bare timestamp, so they can't register.
+      if (
+        typeof stored !== 'object' ||
+        stored === null ||
+        Date.now() - stored.created > challengeTtl * 1_000
+      ) {
         // A retry whose first attempt stored the credential (and consumed the
         // challenge) but lost its response: answer as a duplicate, so the
         // client can tell it was stored.
         if (existing ?? (await kv.get(key))) throw new Error('Credential already exists')
         throw new Error('Missing or expired challenge')
       }
-      // A challenge issued without a name takes the one sent with the credential.
+      // A registration challenge issued without a name takes the one sent with the credential.
       const name = stored.name ?? name_body
       if (typeof name !== 'string') throw new Error('Missing name')
 
@@ -297,7 +311,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
       await kv.set(`challenge:${challenge}`, Date.now(), { ttl: challengeTtl })
 
-      return Response.json({ options })
+      return Response.json({ options, ttl: challengeTtl })
     } catch (error) {
       return Response.json({ error: (error as Error).message }, { status: 400 })
     }

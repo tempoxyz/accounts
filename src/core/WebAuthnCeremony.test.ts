@@ -227,9 +227,10 @@ describe('server: prefetch', () => {
 
   /**
    * Issues registration challenges `0x01`, `0x02`, … and login challenges
-   * `0x11`, `0x12`, …, and records each request's path and body.
+   * `0x11`, `0x12`, …, with a challenge TTL of `ttl` seconds (none when
+   * null), and records each request's path and body.
    */
-  function stub() {
+  function stub(ttl: number | null = 300) {
     const requests: { body: unknown; path: string }[] = []
     let logins = 0
     let registrations = 0
@@ -240,6 +241,7 @@ describe('server: prefetch', () => {
       if (path === '/login/options')
         return Response.json({
           options: { publicKey: { challenge: `0x1${++logins}`, rpId: 'example.com' } },
+          ...(ttl === null ? {} : { ttl }),
         })
       if (path === '/register/options')
         return Response.json({
@@ -249,6 +251,7 @@ describe('server: prefetch', () => {
               rp: { id: 'example.com', name: 'example.com' },
             },
           },
+          ...(ttl === null ? {} : { ttl }),
         })
       return Response.json({ credentialId: 'credential', publicKey: '0x04ab' })
     })
@@ -330,9 +333,10 @@ describe('server: prefetch', () => {
     ceremony.prefetch!()
     await prefetched(requests)
 
-    // Takes challenge `0x01`, the credential's.
+    // Takes challenge `0x01`, the credential's. Verification sends the name
+    // the options were built with, even when the caller omits it.
     await ceremony.getRegistrationOptions({ name: 'alice' })
-    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+    const { verified } = await ceremony.verifyRegistration(credential)
     await verified
 
     expect(requests.find(({ path }) => path === '/register')!.body).toMatchInlineSnapshot(`
@@ -387,6 +391,63 @@ describe('server: prefetch', () => {
           ],
         }
       `)
+  })
+
+  test('behavior: ignores challenges from a server that sends no TTL', async () => {
+    const requests = stub(null)
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    ceremony.prefetch!()
+    await prefetched(requests)
+
+    const { options } = await ceremony.getRegistrationOptions({ name: 'alice' })
+
+    expect({
+      challenge: options.publicKey!.challenge,
+      requests: requests.slice(2),
+    }).toMatchInlineSnapshot(`
+      {
+        "challenge": "0x03",
+        "requests": [
+          {
+            "body": {},
+            "path": "/register/options",
+          },
+          {
+            "body": {
+              "name": "alice",
+            },
+            "path": "/register/options",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('behavior: stops using a prefetched challenge before the server TTL runs out', async () => {
+    const requests = stub(60)
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    ceremony.prefetch!()
+    await prefetched(requests)
+
+    // A 60 s TTL leaves 48 s to use the challenge.
+    clock.mockReturnValue(now + 48_000)
+    const { options } = await ceremony.getAuthenticationOptions()
+    clock.mockRestore()
+
+    expect({
+      challenge: options.publicKey!.challenge,
+      requests: requests.slice(2).map(({ path }) => path),
+    }).toMatchInlineSnapshot(`
+      {
+        "challenge": "0x13",
+        "requests": [
+          "/login/options",
+          "/login/options",
+        ],
+      }
+    `)
   })
 
   test('behavior: without prefetch, fetches options for each ceremony', async () => {
