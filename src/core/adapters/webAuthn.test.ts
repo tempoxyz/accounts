@@ -165,6 +165,109 @@ describe('prefetched challenges', () => {
   })
 })
 
+describe('deferred login', () => {
+  const origin = 'http://localhost'
+
+  /**
+   * Provider whose deferred ceremony runs against an in-process
+   * `Handler.webAuthn`. `/login` requests wait for `release`, and answer
+   * `refuse`'s error instead when it's set.
+   */
+  function setup() {
+    const authenticator = Authenticator.create({ origin, rpId: 'localhost' })
+    vi.stubGlobal(
+      'window',
+      Object.assign(new EventTarget(), {
+        location: { hostname: 'localhost', origin },
+        navigator: { credentials: authenticator.credentials },
+      }),
+    )
+    const handler = handler_webAuthn({
+      kv: Kv.memory(),
+      origin,
+      path: '/webauthn',
+      rpId: 'localhost',
+      session: false,
+    })
+    const events: string[] = []
+    const gate = { refuse: undefined as string | undefined, release: () => {} }
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      const path = new URL(request.url).pathname
+      if (path === '/webauthn/login') {
+        events.push('login sent')
+        await new Promise<void>((resolve) => (gate.release = resolve))
+        events.push('login answered')
+        if (gate.refuse) return Response.json({ error: gate.refuse }, { status: 400 })
+      }
+      return handler.fetch(request)
+    })
+    const provider = Provider.create({
+      adapter: webAuthn({ ceremony: WebAuthnCeremony.deferred({ url: `${origin}/webauthn` }) }),
+      chains: [chain],
+      storage: Storage.memory(),
+    })
+    return { events, gate, provider }
+  }
+
+  /** Signs up, so the next connect logs in with a known passkey. */
+  async function signUp(provider: ReturnType<typeof setup>['provider']) {
+    const { accounts } = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'alice' } }],
+    })
+    return accounts[0]!.address
+  }
+
+  test('behavior: answers a login with a known passkey before the server verifies it', async () => {
+    const { events, gate, provider } = setup()
+    const address = await signUp(provider)
+
+    const login = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    events.push('connected')
+    // A disconnect waits for the login to land, so it ends that login's session.
+    const disconnected = provider
+      .request({ method: 'wallet_disconnect' })
+      .then(() => void events.push('disconnected'))
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    await disconnected
+
+    expect({ address: login.accounts[0]!.address === address, events }).toMatchInlineSnapshot(`
+      {
+        "address": true,
+        "events": [
+          "login sent",
+          "connected",
+          "login answered",
+          "disconnected",
+        ],
+      }
+    `)
+  })
+
+  test('behavior: keeps the account when the server refuses the login', async () => {
+    const { events, gate, provider } = setup()
+    const address = await signUp(provider)
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    gate.refuse = 'Unknown credential'
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    await vi.waitFor(() => expect(events).toContain('login answered'))
+    await new Promise((resolve) => setTimeout(resolve))
+
+    const accounts = await provider.request({ method: 'eth_accounts' })
+    expect(accounts[0] === address).toMatchInlineSnapshot(`true`)
+  })
+})
+
 describe('background registration', () => {
   const origin = 'http://localhost'
 

@@ -22,6 +22,7 @@ export type WebAuthnCeremony = {
   /** Verify an authentication response and extract the public key. */
   verifyAuthentication: (
     response: Authentication.Response,
+    options?: verifyAuthentication.Options | undefined,
   ) => Promise<verifyAuthentication.ReturnType>
   /** Ends the server session, if the ceremony has one. Called on `wallet_disconnect`. */
   logout?: (() => Promise<void>) | undefined
@@ -99,6 +100,19 @@ export declare namespace getAuthenticationOptions {
 }
 
 export declare namespace verifyAuthentication {
+  type Options = {
+    /**
+     * The credential the caller already knows: the challenge it signed, its
+     * public key and RP ID. A {@link deferred} ceremony checks the signature
+     * against them and verifies the login with the server in the background.
+     */
+    credential?: { challenge: Hex; publicKey: Hex; rpId: string } | undefined
+    /**
+     * Cancels background verification (see `verified`), which then rejects
+     * with the signal's reason, and can no longer issue a session.
+     */
+    signal?: AbortSignal | undefined
+  }
   type ReturnType = {
     /** The authenticated credential's ID. */
     credentialId: string
@@ -108,6 +122,12 @@ export declare namespace verifyAuthentication {
     userId?: string | undefined
     /** Username associated with the account. */
     username?: string | null | undefined
+    /**
+     * Settles once the server has verified the login and issued its session,
+     * when the ceremony verifies it in the background (see {@link deferred}).
+     * Rejects when the server refuses it.
+     */
+    verified?: Promise<void> | undefined
   }
 }
 
@@ -516,6 +536,14 @@ export declare namespace server {
  * disconnect that follows; the account stays, and a later login with the
  * passkey works if the server stored it.
  *
+ * A login with a passkey the caller knows (`verifyAuthentication`'s
+ * `credential`, which the `webAuthn` adapter passes for its stored accounts)
+ * answers once the signature checks out against the stored public key, and
+ * `POST /login` runs in the background the same way. The session it issues
+ * likewise exists only once it lands, and the adapter makes logins and
+ * disconnects wait for it. A refusal leaves the account in place: its
+ * passkey signed for that key.
+ *
  * The request is sent with `keepalive`, so it completes when the page closes
  * right after answering, but retries only run while the page is open. If the
  * server rejects the registration while the page is open, the adapter removes
@@ -538,12 +566,13 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
 
   const { ceremony: base, challenges } = create(options)
 
-  /** Posts the registration with `keepalive`, so it survives the page closing. */
-  async function register(
+  /** Posts to `path` with `keepalive`, so the request survives the page closing. */
+  async function post(
+    path: '/login' | '/register',
     body: unknown,
     signal: AbortSignal | undefined,
   ): Promise<{ publicKey?: Hex | undefined }> {
-    const response = await fetch(`${url}/register`, {
+    const response = await fetch(`${url}${path}`, {
       body: JSON.stringify(body),
       ...(credentials ? { credentials } : {}),
       headers: { 'Content-Type': 'application/json' },
@@ -571,7 +600,7 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
           for (let attempt = 0; ; attempt++)
             try {
               signal?.throwIfAborted()
-              const { publicKey } = await register(body, signal)
+              const { publicKey } = await post('/register', body, signal)
               return { publicKey, session: true }
             } catch (error) {
               if (signal?.aborted) throw signal.reason
@@ -612,6 +641,54 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
         publicKey: credential.publicKey,
         verified,
       }
+    },
+
+    async verifyAuthentication(response, options = {}) {
+      const { credential, signal } = options
+      // Without the credential's public key, only the server can verify the
+      // login, so the caller waits for it.
+      const valid =
+        credential && typeof window !== 'undefined'
+          ? (() => {
+              try {
+                return Authentication.verify(response, {
+                  challenge: credential.challenge,
+                  origin: window.location.origin,
+                  publicKey: credential.publicKey,
+                  rpId: credential.rpId,
+                })
+              } catch {
+                return false
+              }
+            })()
+          : false
+      if (!credential || !valid) return base.verifyAuthentication(response)
+      const verified = (async () => {
+        const { publicKey } = await (async () => {
+          for (let attempt = 0; ; attempt++)
+            try {
+              signal?.throwIfAborted()
+              return await post('/login', response, signal)
+            } catch (error) {
+              if (signal?.aborted) throw signal.reason
+              // As for registration. A retry of a login that reached the
+              // server finds its challenge consumed, and rejects.
+              const retryable = error instanceof TypeError || error instanceof SyntaxError
+              if (!retryable || attempt >= 2) throw error
+              await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
+            }
+        })()
+        // The app was handed the account of the key checked here. If the
+        // server knows the credential by another key, end the session it
+        // just issued and refuse the login.
+        if (publicKey?.toLowerCase() !== credential.publicKey.toLowerCase()) {
+          await base.logout?.()
+          throw new Error('Server stored a different public key')
+        }
+      })()
+      // Observed by the adapter; keep an unobserved failure from going unhandled.
+      verified.catch(() => {})
+      return { credentialId: response.id, publicKey: credential.publicKey, verified }
     },
   })
 }

@@ -315,7 +315,29 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           await signed.catch(() => {})
           return await Authentication.sign({ options })
         })()
-        const { publicKey, username } = await ceremony.verifyAuthentication(response)
+        // The known credential's public key lets a deferred ceremony check the
+        // passkey's signature itself and verify the login in the background.
+        const controller = new AbortController()
+        const { publicKey, username, verified } = await ceremony.verifyAuthentication(
+          response,
+          known && response.id === credentialId
+            ? {
+                credential: {
+                  challenge: options.publicKey!.challenge,
+                  publicKey: known.publicKey,
+                  rpId: known.rpId,
+                },
+                signal: controller.signal,
+              }
+            : { signal: controller.signal },
+        )
+        // Logins and disconnects wait for it, as for a registration. A refusal
+        // keeps the account: its passkey just signed for this public key.
+        if (verified) {
+          const promise = verified.catch(() => {})
+          pending.set(response.id, { controller, promise })
+          promise.then(() => pending.delete(response.id))
+        }
         // The server session now belongs to this login.
         registered = undefined
         // The server knows the credential, even if its registration looked
@@ -355,12 +377,13 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       },
     })(parameters)
 
-    /** Looks up a credential's RP ID from the latest registration or stored accounts. */
-    function find(credentialId: string): { rpId: string } | undefined {
-      if (registered?.credentialId === credentialId) return { rpId: registered.rpId }
+    /** Looks up a credential's public key and RP ID from the latest registration or stored accounts. */
+    function find(credentialId: string): { publicKey: Hex.Hex; rpId: string } | undefined {
+      if (registered?.credentialId === credentialId)
+        return { publicKey: registered.publicKey, rpId: registered.rpId }
       for (const account of store.getState().accounts)
         if ('credential' in account && account.credential?.id === credentialId)
-          return { rpId: account.credential.rpId }
+          return { publicKey: account.credential.publicKey, rpId: account.credential.rpId }
       return undefined
     }
 
