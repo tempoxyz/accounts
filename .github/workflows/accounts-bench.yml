@@ -79,10 +79,28 @@ jobs:
         if: ${{ !cancelled() && hashFiles('bench/report.md') != '' }}
         run: cat bench/report.md >> "$GITHUB_STEP_SUMMARY"
 
+      # Upserts one sticky comment, found by its marker, and removes older copies.
+      # The shared pr-comment action passes `--arg` to `gh api --jq`, which gh
+      # rejects, so its lookup fails and it posts a new comment on every run.
       - name: Comment on pull request
         if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('bench/report.md') != '' }}
-        uses: tempoxyz/gh-actions/actions/pr-comment@947d9a3ccb2425a9c94d563fd721cc0e33c89e26 # 2026-10-15T00-15-06Z-947d9a3c
-        with:
-          # The marker of the sticky comment. Changing it posts a new comment.
-          header: ux-bench
-          path: bench/report.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          marker='<!-- pr-comment: ux-bench -->'
+          body="$RUNNER_TEMP/accounts-bench-comment.md"
+          { cat bench/report.md; printf '\n%s\n' "$marker"; } > "$body"
+          ids="$(gh api "repos/$REPO/issues/$NUMBER/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id")"
+          latest="$(printf '%s\n' "$ids" | sed '/^$/d' | tail -n 1)"
+          if [ -n "$latest" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$latest" -F body=@"$body" > /dev/null
+          else
+            gh api -X POST "repos/$REPO/issues/$NUMBER/comments" -F body=@"$body" > /dev/null
+          fi
+          for id in $(printf '%s\n' "$ids" | sed '/^$/d' | head -n -1); do
+            gh api -X DELETE "repos/$REPO/issues/comments/$id"
+          done
