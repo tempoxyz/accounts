@@ -217,10 +217,10 @@ for (const renderer of selected)
     url.searchParams.set('adapter', adapter!)
     if (mode) url.searchParams.set('mode', mode)
     if (values.host) url.searchParams.set('host', values.host)
-    await page.goto(url.toString())
-    await page.waitForFunction(() => '__bench' in window)
 
     try {
+      await page.goto(url.toString())
+      await page.waitForFunction(() => '__bench' in window)
       for (const name of Report.cases) {
         if (name === 'login') await setup(page, 'disconnect')
         if (name === 'send') await setup(page, 'fund')
@@ -231,8 +231,9 @@ for (const renderer of selected)
       }
     } catch (error) {
       console.error(`${renderer} run ${run} failed:`, (error as Error).message)
+    } finally {
+      await context.close()
     }
-    await context.close()
   }
 const version = browser.version()
 await browser.close()

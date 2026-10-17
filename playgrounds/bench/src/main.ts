@@ -15,8 +15,18 @@ import { tempoModerato } from 'viem/tempo/chains'
 const params = new URLSearchParams(window.location.search)
 const adapter = params.get('adapter') === 'webAuthn' ? 'webAuthn' : 'tempoWallet'
 const mode = params.get('mode') === 'iframe' ? 'iframe' : 'popup'
-/** Optional wallet page override (e.g. a local or preview Tempo Wallet). */
-const host = params.get('host')
+/**
+ * Optional wallet page override (e.g. a local or preview Tempo Wallet). Only
+ * `http:` and `https:` URLs are accepted, since the iframe mount loads it eagerly.
+ */
+const host = (() => {
+  const value = params.get('host')
+  if (!value) return null
+  const url = URL.parse(value)
+  if (url?.protocol !== 'https:' && url?.protocol !== 'http:')
+    throw new Error(`Invalid host: ${value}. Use an http: or https: URL.`)
+  return url.toString()
+})()
 
 const renderer = adapter === 'webAuthn' ? 'webAuthn' : `tempoWallet/${mode}`
 
