@@ -315,16 +315,25 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
   let register_supported = true
   let login: { challenge: Hex; expires: number; rpId: string } | undefined
   let login_pending: Promise<void> | undefined
-  let register: { challenge: Hex; expires: number; rpId: string; userId: Uint8Array } | undefined
+  let register:
+    | {
+        challenge: Hex
+        expires: number
+        /** When the server's TTL runs out, after `expires`. */
+        lapses: number
+        rpId: string
+        userId: Uint8Array
+      }
+    | undefined
   let register_pending: Promise<void> | undefined
   /** Login challenges handed out by `issue`, by challenge. */
   const issued = new Map<Hex, { challenge: Hex; expires: number; rpId: string }>()
   /**
    * The name each locally built registration's options were built with, by
    * challenge, so `/register` carries the name the server didn't store. Kept
-   * until the challenge expires, so a retry sends it too.
+   * until the server's TTL runs out, so a retry or a slow prompt sends it too.
    */
-  const bound = new Map<Hex, { expires: number; name: string }>()
+  const bound = new Map<Hex, { lapses: number; name: string }>()
 
   function fill_login() {
     if (!enabled || !login_supported || login_pending || (login && Date.now() < login.expires))
@@ -368,7 +377,13 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
         const { challenge, rp, user } = options.publicKey ?? {}
         const expires = expiry(requested, ttl)
         if (challenge && rp?.id && user?.id && expires)
-          register = { challenge, expires, rpId: rp.id, userId: Base64.toBytes(user.id) }
+          register = {
+            challenge,
+            expires,
+            lapses: requested + (ttl as number) * 1_000,
+            rpId: rp.id,
+            userId: Base64.toBytes(user.id),
+          }
       } catch {
         // The ceremony fetches its own challenge instead.
       } finally {
@@ -397,7 +412,13 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
      * ceremony would wait as long for its own), and fetches the next.
      */
     async login() {
-      if (login_pending && !(login && Date.now() < login.expires)) await login_pending
+      // Without a fresh one, wait for the one in flight, or the refill this starts, rather than
+      // have the ceremony request another.
+      if (!(login && Date.now() < login.expires)) {
+        login = undefined
+        fill_login()
+        if (login_pending) await login_pending
+      }
       return take_login()
     },
     /** Takes a ready login challenge for options the caller builds itself, and fetches the next. */
@@ -417,17 +438,20 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
      * (the ceremony would wait as long for its own), and fetches the next.
      */
     async register() {
-      if (register_pending && !(register && Date.now() < register.expires)) await register_pending
+      if (!(register && Date.now() < register.expires)) {
+        register = undefined
+        fill_register()
+        if (register_pending) await register_pending
+      }
       const value = register && Date.now() < register.expires ? register : undefined
       register = undefined
       fill_register()
       return value
     },
     /** Records the name a prefetched registration challenge's options were built with. */
-    bind(value: { challenge: Hex; expires: number }, name: string) {
-      for (const [challenge, { expires }] of bound)
-        if (Date.now() >= expires) bound.delete(challenge)
-      bound.set(value.challenge, { expires: value.expires, name })
+    bind(value: { challenge: Hex; lapses: number }, name: string) {
+      for (const [challenge, { lapses }] of bound) if (Date.now() >= lapses) bound.delete(challenge)
+      bound.set(value.challenge, { lapses: value.lapses, name })
     },
     /**
      * The `/register` body: the credential, plus the name its options were

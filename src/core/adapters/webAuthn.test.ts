@@ -38,6 +38,52 @@ describe('webAuthn', () => {
   })
 })
 
+describe('sign-up userId', () => {
+  test('behavior: a custom ceremony gets a random userId for each sign-up', async () => {
+    const authenticator = Authenticator.create({ origin: 'http://localhost', rpId: 'localhost' })
+    vi.stubGlobal(
+      'window',
+      Object.assign(new EventTarget(), {
+        location: { hostname: 'localhost', origin: 'http://localhost' },
+        navigator: { credentials: authenticator.credentials },
+      }),
+    )
+    const userIds: (string | undefined)[] = []
+    const local = WebAuthnCeremony.local({ rpId: 'localhost', storage: Storage.memory() })
+    const ceremony = WebAuthnCeremony.from({
+      ...local,
+      getRegistrationOptions(parameters) {
+        userIds.push(parameters.userId)
+        return local.getRegistrationOptions(parameters)
+      },
+    })
+    const provider = Provider.create({
+      adapter: webAuthn({ ceremony }),
+      chains: [chain],
+      storage: Storage.memory(),
+    })
+
+    for (let i = 0; i < 2; i++)
+      await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { method: 'register' } }],
+      })
+
+    expect({
+      distinct: new Set(userIds).size,
+      types: userIds.map((userId) => typeof userId),
+    }).toMatchInlineSnapshot(`
+      {
+        "distinct": 2,
+        "types": [
+          "string",
+          "string",
+        ],
+      }
+    `)
+  })
+})
+
 describe('prefetched challenges', () => {
   const origin = 'http://localhost'
 

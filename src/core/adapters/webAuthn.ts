@@ -189,7 +189,12 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
 
     const base = local({
       async createAccount(parameters) {
-        const { options } = await ceremony.getRegistrationOptions(parameters)
+        const { options } = await ceremony.getRegistrationOptions({
+          ...parameters,
+          // A random `userId` by default, so passkeys with the same name don't share a user
+          // handle. Prefetching ceremonies (`WebAuthnCeremony.server`) pick their own.
+          userId: parameters.userId ?? (ceremony.prefetch ? undefined : Hex.random(16)),
+        })
         const rpId = options.publicKey?.rp.id
         if (!rpId) throw new Error('rpId is required')
         const credential = await Registration.create({ options })

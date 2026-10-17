@@ -484,7 +484,8 @@ describe('server: prefetch', () => {
     ceremony.prefetch!()
     await prefetched(requests)
 
-    // A 60 s TTL leaves 48 s to use the challenge.
+    // A 60 s TTL leaves 48 s to use the challenge. The ceremony then waits for a fresh one
+    // rather than request its own as well.
     clock.mockReturnValue(now + 48_000)
     const { options } = await ceremony.getAuthenticationOptions()
     clock.mockRestore()
@@ -494,7 +495,7 @@ describe('server: prefetch', () => {
       requests: requests.slice(2).map(({ path }) => path),
     }).toMatchInlineSnapshot(`
       {
-        "challenge": "0x13",
+        "challenge": "0x12",
         "requests": [
           "/login/options",
           "/login/options",
