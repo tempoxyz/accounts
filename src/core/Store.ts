@@ -11,6 +11,13 @@ import * as Storage from './Storage.js'
 
 const supportsStructuredClone = Symbol.for('accounts.storage.supportsStructuredClone')
 const hydration_key = Symbol.for('accounts.store.hydration')
+/**
+ * Key of the merge hints attached to each persisted state as a non-enumerable
+ * property. Storage shared between processes (`Storage.filesystem` in
+ * `accounts/cli`) reads them to merge a write with what other processes
+ * stored. Storages never serialize them.
+ */
+const hints_key = Symbol.for('accounts.store.merge')
 
 export type { Account }
 
@@ -67,8 +74,18 @@ type ZustandStore = Mutate<
 export type Store = ZustandStore & {
   /** Store-bound access-key operations. */
   accessKeys: ReturnType<typeof core_AccessKey.createManager>
-  /** Disconnects all accounts and clears locally signable access-key material. */
-  disconnect: () => void
+  /**
+   * Sets `state` for a connect of `accounts`. Storage shared between processes
+   * stores those accounts, the selection, and `auth` as given, even over a
+   * logout another process saved meanwhile. Resolves once storage has saved
+   * it, and rejects if it can't.
+   */
+  connect: (state: Partial<State>, accounts: readonly { address: string }[]) => Promise<void>
+  /**
+   * Disconnects all accounts and clears locally signable access-key material.
+   * Resolves once storage has saved the cleared state, and rejects if it can't.
+   */
+  disconnect: () => Promise<void>
 }
 
 /** Progress of a store loading its persisted state from storage. */
@@ -125,6 +142,8 @@ export function create(options: Options): Store {
       : Storage.memory({ key: 'tempo' }),
   } = options
 
+  // Intent of the write in progress (a connect or a reset), for storage shared between processes.
+  let intent: { connect?: readonly string[]; replace?: readonly string[] } | undefined
   // The load in progress. Only it can settle `hydration`.
   let load: ReturnType<typeof deferred> | undefined = deferred()
   const hydration: Hydration = { promise: load.promise, status: 'pending' }
@@ -167,12 +186,16 @@ export function create(options: Options): Store {
             }
           },
           partialize: (state) =>
-            serialize(state, {
-              keystores,
-              maxAccounts,
-              persistCredentials,
-              structuredClone: canStructuredClone(storage),
-            }),
+            Object.defineProperty(
+              serialize(state, {
+                keystores,
+                maxAccounts,
+                persistCredentials,
+                structuredClone: canStructuredClone(storage),
+              }),
+              hints_key,
+              { value: { maxAccounts, ...intent } },
+            ),
           storage,
           version: 0,
         },
@@ -180,9 +203,30 @@ export function create(options: Options): Store {
     ),
   ) as ZustandStore
   const store = state as Store
-  store.accessKeys = core_AccessKey.createManager({ keystores, state })
+  /**
+   * Sets `next`, persisting it with `intent_next` as its merge hint. Resolves
+   * once storage has saved it (the `persist` middleware returns that write).
+   */
+  async function setStateWith(next: Partial<State>, intent_next: NonNullable<typeof intent>) {
+    intent = intent_next
+    let written: unknown
+    try {
+      written = state.setState(next)
+    } finally {
+      intent = undefined
+    }
+    await written
+  }
+  /** Sets `reset` and persists its fields as replacements, so they win over any merge. */
+  const reset = (next: Partial<State>) => setStateWith(next, { replace: Object.keys(next) })
+  store.accessKeys = {
+    ...core_AccessKey.createManager({ keystores, state }),
+    clear: () => reset({ accessKeys: [] }),
+  }
+  store.connect = (next, accounts) =>
+    setStateWith(next, { connect: accounts.map((account) => account.address) })
   store.disconnect = () =>
-    state.setState({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
+    reset({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
   Object.assign(store, { [hydration_key]: hydration })
   return store
 }

@@ -448,6 +448,34 @@ describe('ready', () => {
 })
 
 describe('wallet_connect', () => {
+  test('error: fails when storage cannot save the connected account', async () => {
+    let failing = false
+    const storage = Storage.from({
+      getItem: () => null,
+      removeItem() {},
+      async setItem() {
+        if (failing) throw new Error('Storage is full.')
+      },
+    })
+    const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+      actions: {
+        async createAccount() {
+          return { accounts: [{ address }] }
+        },
+        async loadAccounts() {
+          return { accounts: [{ address }] }
+        },
+      },
+    }))
+    const provider = Provider.create({ adapter, storage })
+    await provider.ready()
+    failing = true
+
+    await expect(
+      provider.request({ method: 'wallet_connect' }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[RpcResponse.InternalError: Storage is full.]`)
+  })
+
   test('behavior: forwards allowed credential IDs to the adapter', async () => {
     const loadAccounts = vi.fn(async (_parameters?: Adapter.loadAccounts.Parameters) => ({
       accounts: [{ address }] as const,
@@ -958,6 +986,26 @@ function setupTransportWallet() {
   })
   return { provider, requests }
 }
+
+describe('wallet_disconnect', () => {
+  test('error: fails when storage cannot save the cleared state', async () => {
+    let failing = false
+    const storage = Storage.from({
+      getItem: () => null,
+      removeItem() {},
+      async setItem() {
+        if (failing) throw new Error('Storage is full.')
+      },
+    })
+    const provider = Provider.create({ storage })
+    await provider.ready()
+    failing = true
+
+    await expect(
+      provider.request({ method: 'wallet_disconnect' }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[RpcResponse.InternalError: Storage is full.]`)
+  })
+})
 
 describe('wallet_revokeAccessKey', () => {
   test.each([
