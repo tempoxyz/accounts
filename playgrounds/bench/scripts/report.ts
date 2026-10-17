@@ -1,5 +1,5 @@
 /**
- * Scores and reports UX bench samples.
+ * Scores and reports Accounts Bench samples.
  *
  * Each measurement is scored 0–100 on Lighthouse's log-normal curve: a value at
  * the metric's `good` budget scores 90, and a value at its `poor` budget scores 50.
@@ -221,7 +221,7 @@ export function markdown(
     `<img src="${base}/score-${score}.svg" width="40" height="40" alt="${score}" title="${title}">`
 
   const lines = [
-    '## ⚡ UX bench',
+    '## ⚡ Accounts Bench',
     '',
     '<table>',
     '<thead><tr><th>Renderer</th><th align="center">Score</th></tr></thead>',

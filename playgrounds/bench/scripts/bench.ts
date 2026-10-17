@@ -1,5 +1,5 @@
 /**
- * UX benchmark for the Tempo Wallet (popup and iframe) and WebAuthn adapters.
+ * Accounts Bench: UX benchmark for the Tempo Wallet (popup and iframe) and WebAuthn adapters.
  *
  * Drives the bench playground in headless Chrome with a CDP virtual WebAuthn
  * authenticator, and times register, login and send transaction per renderer.

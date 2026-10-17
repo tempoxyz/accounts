@@ -1,8 +1,8 @@
-name: UX Bench
+name: Accounts Bench
 on:
   pull_request:
     paths:
-      - .github/workflows/ux-bench.yml
+      - .github/workflows/accounts-bench.yml
       - playgrounds/bench/**
       - pnpm-lock.yaml
       - src/**
@@ -14,7 +14,7 @@ on:
         required: false
 
 concurrency:
-  group: ux-bench-${{ github.event.pull_request.number || github.run_id }}
+  group: accounts-bench-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 permissions: {}
@@ -70,5 +70,6 @@ jobs:
         if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('playgrounds/bench/report.md') != '' }}
         uses: tempoxyz/gh-actions/actions/pr-comment@947d9a3ccb2425a9c94d563fd721cc0e33c89e26 # 2026-10-15T00-15-06Z-947d9a3c
         with:
+          # The marker of the sticky comment. Changing it posts a new comment.
           header: ux-bench
           path: playgrounds/bench/report.md

@@ -1,4 +1,4 @@
-# UX bench
+# Accounts Bench
 
 Times register, login and send transaction across the account adapters:
 
@@ -64,4 +64,4 @@ The bench waits 1 s before each action, as a person does between clicks.
 
 ## CI
 
-The `UX Bench` workflow (`.github/workflows/ux-bench.yml`) runs on pull requests that change `src/`, this playground, or the lockfile. It builds the playground with the PR's SDK and runs 5 runs per renderer against the live Tempo Wallet. Then it writes the report to the job summary and keeps one comment on the pull request up to date. Run it on any branch with **Run workflow**, and set the number of runs there.
+The `Accounts Bench` workflow (`.github/workflows/accounts-bench.yml`) runs on pull requests that change `src/`, this playground, or the lockfile. It builds the playground with the PR's SDK and runs 5 runs per renderer against the live Tempo Wallet. Then it writes the report to the job summary and keeps one comment on the pull request up to date. Run it on any branch with **Run workflow**, and set the number of runs there.
