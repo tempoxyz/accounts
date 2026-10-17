@@ -107,6 +107,9 @@ overrides:
   toml@<4.2.0: 4.2.0
   tmp@<0.2.7: 0.2.7
   undici@>=7.0.0 <7.29.1: 7.29.1
+  '@actions/http-client>undici': 6.29.0
+  pkg-pr-new>query-registry: 4.3.0
+  query-registry>url-join: 5.0.0
   undici@>=8.0.0 <8.10.2: 8.10.2
   uuid@<11.1.1: 11.1.1
   valibot: 1.4.2
@@ -9704,8 +9707,8 @@ packages:
   quansync@1.0.0:
     resolution: {integrity: sha512-5xZacEEufv3HSTPQuchrvV6soaiACMFnq1H8wkVioctoH3TRha9Sz66lOxRwPK/qZj7HPiSveih9yAyh98gvqA==}
 
-  query-registry@4.4.0:
-    resolution: {integrity: sha512-zHkkkTvPW0QXEIGIBNPwO83g2PNLVXfwAlDswkrp6U1TNs7ne5a23T2Wi9ZRNb9pPxxnyXczdb9s8REGjQLTIA==}
+  query-registry@4.3.0:
+    resolution: {integrity: sha512-Fu2/yYBv8/+OHjhrJh69YVktz7SyNGD3VdeyZXcT4J1izk251L9na9BxP3cf68YRnSz6tSqCg6zimpb9AjTvZg==}
     engines: {node: '>=20'}
     peerDependencies:
       zod: ^4.0.0
@@ -10808,8 +10811,8 @@ packages:
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
-  undici@6.29.1:
-    resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
+  undici@6.29.0:
+    resolution: {integrity: sha512-R+RODBqp6i2pPflGdq+xIOUkl+RNfGgHwoinecKu/JCuf2uO06cOKoDbI2P7Dn6KcswdKwrczbU6IYJ6K8X+wg==}
     engines: {node: '>=18.17'}
 
   undici@7.29.1:
@@ -10990,8 +10993,8 @@ packages:
     peerDependencies:
       browserslist: 4.28.7
 
-  url-join@5.1.1:
-    resolution: {integrity: sha512-5+M4YX5pEFeXSdMyt3J5iXr949UC+j6yHRkZUEv6ljTusAfdCdS4pSTudnYGzYEbKkdK5xIE0E3i5xzIzoiFrQ==}
+  url-join@5.0.0:
+    resolution: {integrity: sha512-n2huDr9h9yzd6exQVnH/jU5mr+Pfx08LRXXZhkLLetAMESRj+anQsTAh940iMrIetKAmry9coFuZQ2jY8/p3WA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   urlpattern-polyfill@10.1.0:
@@ -11042,9 +11045,9 @@ packages:
     resolution: {integrity: sha512-OljLrQ9SQdOUqTaQxqL5dEfZWrXExyyWsozYlAWFawPVNuD83igl7uJD2RTkNMbniIYgt8l81eCJGIdQF7avLQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
-  validate-npm-package-name@8.0.0:
-    resolution: {integrity: sha512-SCv6OOV6Xj2/3cXy3dGmADluJTNcL3o7hZAglNPTe+WYuEuvxgJzxPrSDLZhF+CwyQOubqgecjMmTJGMVLWjYQ==}
-    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
+  validate-npm-package-name@7.0.2:
+    resolution: {integrity: sha512-hVDIBwsRruT73PbK7uP5ebUt+ezEtCmzZz3F59BSr2F6OVFnJ/6h8liuvdLrQ88Xmnk6/+xGGuq+pG9WwTuy3A==}
+    engines: {node: ^20.17.0 || >=22.9.0}
 
   valtio@1.13.2:
     resolution: {integrity: sha512-Qik0o+DSy741TmkqmRfjq+0xpZBXi/Y6+fXZLn0xNF1z/waFMbE3rkivv5Zcf9RrMUp6zswf2J7sbh2KBlba5A==}
@@ -11580,7 +11583,7 @@ snapshots:
   '@actions/http-client@4.0.1':
     dependencies:
       tunnel: 0.0.6
-      undici: 6.29.1
+      undici: 6.29.0
 
   '@actions/io@3.0.2': {}
 
@@ -23503,7 +23506,7 @@ snapshots:
       ignore: 7.0.12
       isbinaryfile: 6.0.0
       pkg-types: 2.3.1
-      query-registry: 4.4.0(zod@4.4.3)
+      query-registry: 4.3.0(zod@4.4.3)
       tinyglobby: 0.2.17
       zod: 4.4.3
 
@@ -23752,12 +23755,12 @@ snapshots:
 
   quansync@1.0.0: {}
 
-  query-registry@4.4.0(zod@4.4.3):
+  query-registry@4.3.0(zod@4.4.3):
     dependencies:
       query-string: 9.5.1
       quick-lru: 7.3.0
-      url-join: 5.1.1
-      validate-npm-package-name: 8.0.0
+      url-join: 5.0.0
+      validate-npm-package-name: 7.0.2
       zod: 4.4.3
       zod-package-json: 2.1.0(zod@4.4.3)
 
@@ -25188,7 +25191,7 @@ snapshots:
 
   undici-types@8.9.0: {}
 
-  undici@6.29.1: {}
+  undici@6.29.0: {}
 
   undici@7.29.1: {}
 
@@ -25318,7 +25321,7 @@ snapshots:
       escalade: 3.2.0
       picocolors: 1.1.1
 
-  url-join@5.1.1: {}
+  url-join@5.0.0: {}
 
   urlpattern-polyfill@10.1.0: {}
 
@@ -25358,7 +25361,7 @@ snapshots:
 
   validate-npm-package-name@5.0.1: {}
 
-  validate-npm-package-name@8.0.0: {}
+  validate-npm-package-name@7.0.2: {}
 
   valtio@1.13.2(@types/react@19.2.14)(react@19.2.8):
     dependencies:

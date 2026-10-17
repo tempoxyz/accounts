@@ -180,6 +180,11 @@ overrides:
   'tmp@<0.2.7': '0.2.7'
   # GHSA-vmh5-mc38-953g et al: undici proxy TLS/cache/WebSocket advisories.
   'undici@>=7.0.0 <7.29.1': '7.29.1'
+  # pkg-pr-new: the registry policy rejects these versions as recently published.
+  # Pin the latest earlier releases, none of which has an advisory.
+  '@actions/http-client>undici': '6.29.0'
+  'pkg-pr-new>query-registry': '4.3.0'
+  'query-registry>url-join': '5.0.0'
   'undici@>=8.0.0 <8.10.2': '8.10.2'
   'uuid@<11.1.1': '11.1.1'
   valibot: '1.4.2'
