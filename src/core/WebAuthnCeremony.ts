@@ -395,6 +395,16 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
     })()
   }
 
+  /** Whether a fresh login challenge is ready. Read through a call, so it's checked after a wait. */
+  function ready_login() {
+    return !!login && Date.now() < login.expires
+  }
+
+  /** Whether a fresh registration challenge is ready. */
+  function ready_register() {
+    return !!register && Date.now() < register.expires
+  }
+
   /** Takes the prefetched login challenge, if it's fresh, and fetches the next. */
   function take_login() {
     const value = login && Date.now() < login.expires ? login : undefined
@@ -422,7 +432,7 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
         fill_login()
         if (login_pending) await login_pending
         // A prefetch that failed isn't retried here: the ceremony requests its own instead.
-        if (!(login && Date.now() < login.expires)) return undefined
+        if (!ready_login()) return undefined
       }
       return take_login()
     },
@@ -447,7 +457,7 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
         register = undefined
         fill_register()
         if (register_pending) await register_pending
-        if (!(register && Date.now() < register.expires)) return undefined
+        if (!ready_register()) return undefined
       }
       const value = register && Date.now() < register.expires ? register : undefined
       register = undefined
