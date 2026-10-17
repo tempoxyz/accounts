@@ -87,14 +87,16 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
      * `auth`, so `wallet_disconnect` still ends a session started alongside.
      */
     function drop() {
-      const { accessKeys, accounts } = store.getState()
+      const { accessKeys, accounts, activeAccount } = store.getState()
       const kept = accounts.filter((account) => !rejected.has(account.address.toLowerCase()))
       const keys = accessKeys.filter((accessKey) => !rejected.has(accessKey.access.toLowerCase()))
       if (kept.length === accounts.length && keys.length === accessKeys.length) return
+      // Keep the active account selected, unless it is the one dropped.
+      const active = kept.indexOf(accounts[activeAccount]!)
       store.setState({
         accessKeys: keys,
         accounts: kept,
-        ...(kept.length === accounts.length ? {} : { activeAccount: 0 }),
+        activeAccount: Math.max(active, 0),
       })
     }
 

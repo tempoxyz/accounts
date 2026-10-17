@@ -289,6 +289,29 @@ describe('background registration', () => {
     expect(await provider.request({ method: 'eth_accounts' })).toEqual([account.address])
   })
 
+  test('behavior: keeps the active account when another one is dropped', async () => {
+    const { provider, verifications } = setup()
+    await register(provider, 'alice')
+    verifications[0]!.resolve()
+    await register(provider, 'bob')
+    verifications[1]!.resolve()
+    const carol = await register(provider, 'carol')
+    // The host selected a surviving account other than the first one while
+    // carol's registration was verifying.
+    const { accounts } = provider.store.getState()
+    const survivors = accounts.filter((account) => account.address !== carol.address)
+    const selected = survivors[1]!.address
+    provider.store.setState({
+      activeAccount: accounts.findIndex((account) => account.address === selected),
+    })
+
+    verifications[2]!.reject(new Error('Missing or expired challenge'))
+
+    await vi.waitFor(() => expect(provider.store.getState().accounts).toHaveLength(2))
+    const { activeAccount, accounts: kept } = provider.store.getState()
+    expect(kept[activeAccount]?.address).toBe(selected)
+  })
+
   test('behavior: does not restore a rejected credential as the last used', async () => {
     const { provider, storage, verifications } = setup()
     await register(provider, 'alice')

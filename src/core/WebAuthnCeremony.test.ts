@@ -242,7 +242,6 @@ describe('server', () => {
         {
           "credentialId": "credential",
           "publicKey": "0x04ab",
-          "username": "alice",
         }
       `)
       await vi.waitFor(() => expect(paths).toHaveLength(1))
@@ -282,33 +281,26 @@ describe('server', () => {
       `)
     })
 
-    test('behavior: retries a request that never answers', async () => {
+    test('behavior: stops waiting for a slow request without retrying it', async () => {
       vi.useFakeTimers()
-      const paths = stub([
-        // Hangs until the ceremony aborts it, as `fetch` rejects with the abort reason.
-        (init) =>
-          new Promise<Response>((_, reject) =>
-            init?.signal?.addEventListener('abort', () => reject(init.signal!.reason)),
-          ),
-        () => Response.json({ credentialId: 'credential' }),
-      ])
+      // A slow server may still store the credential, so the request is left running.
+      const paths = stub([() => new Promise<Response>(() => {})])
       const ceremony = WebAuthnCeremony.server({
         deferRegistration: true,
         url: 'https://wallet.example.com/webauthn',
       })
 
       const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
-      await vi.advanceTimersByTimeAsync(10_250)
+      await vi.advanceTimersByTimeAsync(10_000)
       vi.useRealTimers()
 
       await expect(verified).resolves.toMatchInlineSnapshot(`
         {
-          "session": true,
+          "session": false,
         }
       `)
       expect(paths).toMatchInlineSnapshot(`
         [
-          "/webauthn/register (keepalive)",
           "/webauthn/register (keepalive)",
         ]
       `)

@@ -55,8 +55,9 @@ export declare namespace verifyRegistration {
      * Settles once the server has stored the credential, when the ceremony
      * verifies the registration in the background (see
      * `server({ deferRegistration })`). Rejects when the server refuses it.
-     * `session` is `false` when a retry found the registration already
-     * processed after a lost response, so its session was never received.
+     * `session` is `false` when this client may not hold the session it
+     * issued: a retry found the registration already processed after a lost
+     * response, or the request was slow to answer.
      */
     verified?: Promise<{ session: boolean }> | undefined
   }
@@ -84,18 +85,10 @@ export declare namespace verifyAuthentication {
     userId?: string | undefined
     /** Username associated with the account. */
     username?: string | null | undefined
-    /**
-     * Settles once the server has stored the credential, when the ceremony
-     * verifies the registration in the background (see
-     * `server({ deferRegistration })`). Rejects when the server refuses it.
-     * `session` is `false` when a retry found the registration already
-     * processed after a lost response, so its session was never received.
-     */
-    verified?: Promise<{ session: boolean }> | undefined
   }
 }
 
-/** How long a background `/register` request may take before it is retried. */
+/** How long logins wait for a background `/register` request to answer. */
 const timeout_register = 10_000
 
 /** Creates a {@link WebAuthnCeremony} from a custom implementation. */
@@ -220,18 +213,20 @@ export function server(options: server.Options): WebAuthnCeremony {
         for (let attempt = 0; ; attempt++)
           try {
             // `keepalive` lets the request finish when the page closes right
-            // after answering (e.g. a wallet popup). A request that never
-            // answers is retried, so logins waiting on it are not held forever.
-            const controller = new AbortController()
-            const timer = setTimeout(
-              () => controller.abort(new TypeError('Request timed out')),
-              timeout_register,
-            )
-            await request('/register', credential, {
-              keepalive: true,
-              signal: controller.signal,
-            }).finally(() => clearTimeout(timer))
-            return { session: true }
+            // after answering (e.g. a wallet popup).
+            const sent = request('/register', credential, { keepalive: true })
+            // A request that is slow to answer may still store the credential,
+            // so it is neither aborted nor retried. Logins stop waiting for it
+            // and authenticate with the server instead of using its session.
+            let timer: ReturnType<typeof setTimeout> | undefined
+            const answered = await Promise.race([
+              sent.then(() => true),
+              new Promise<false>((resolve) => {
+                timer = setTimeout(() => resolve(false), timeout_register)
+              }),
+            ]).finally(() => clearTimeout(timer))
+            if (!answered) sent.catch(() => {})
+            return { session: answered }
           } catch (error) {
             // A retry that finds the credential means a lost earlier attempt
             // stored it: the authenticator just minted this random credential
@@ -253,7 +248,6 @@ export function server(options: server.Options): WebAuthnCeremony {
       return {
         credentialId: credential.id,
         publicKey: credential.publicKey,
-        username: options.name,
         verified,
       }
     },
@@ -270,7 +264,7 @@ export function server(options: server.Options): WebAuthnCeremony {
     async logout() {
       await fetch(`${url}/logout`, {
         method: 'POST',
-        credentials: 'include',
+        credentials: credentials ?? 'include',
       })
     },
   })
