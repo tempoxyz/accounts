@@ -1,5 +1,17 @@
 # accounts
 
+## 0.21.1
+
+### Patch Changes
+
+- b38af80: Treat a retried `eth_sendRawTransaction` or `eth_sendRawTransactionSync` that the node rejects with `already known` or `nonce too low` as successful when the node knows the transaction's hash. viem's transports retry a submission after a timeout, a network error or a 5xx response, so a transaction that landed on the first attempt could previously fail the send.
+  
+  An access-key send that times out or loses its response no longer falls back to signing the same calls with the root account, which could send them twice.
+- 5fa1ac9: Close the postMessage popup session when its popup closes. A request sent within 250 ms after the previous popup closed (for example `eth_sendTransaction` right after `wallet_connect`) no longer reaches the closed window and fails; it opens a new popup instead.
+- afddb6d: `Handler.relay` answers `eth_fillTransaction` in fewer sequential RPC rounds. It simulates the requested calls alongside the fill instead of after it, and reuses that simulation unless a swap was prepended. It skips `tempo_simulateV1` for 10 minutes after the node reports it unsupported. The autoSwap balance check reuses the fee-token balance already read during fee-token resolution.
+- 7b24e3e: Added `WebAuthnCeremony.deferred`, a `WebAuthnCeremony.server` variant that answers registration as soon as the passkey is created and verifies it with the server in the background, retrying requests that fail in transit. The `webAuthn` adapter makes logins and disconnects wait for that verification for up to 10 s, then cancels it, so it can't replace the session that follows. A registration whose server-parsed public key differs from the client's is refused, and one acknowledged without its session ends the session in place. If the server rejects the registration while the page is open, the adapter removes the account and its access keys and keeps the public key in storage; a later login with the passkey restores the account. `WebAuthnCeremony.server` now also ends its session on `wallet_disconnect` when passed as `ceremony`. `WebAuthnCeremony.server`'s `logout` now fails on an error response other than 404. `Handler.webAuthn`'s `/register` revokes the session presented with it when it issues a new one, and answers a retry after a stored registration with `Credential already exists` even when the challenge was already used.
+- 6a163eb: `Handler.webAuthn`: `/register` reads the challenge and checks for a duplicate credential in parallel, and deletes the challenge after responding when the runtime exposes `waitUntil` (pass the execution context to `handler.fetch`). Stores with `take` (e.g. `Kv.memory`, `Kv.durableObject`) now consume register and login challenges atomically, so each is single-use.
+
 ## 0.21.0
 
 ### Minor Changes
