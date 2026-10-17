@@ -386,18 +386,19 @@ describe('maybeSubmitted', () => {
     expect(AccessKeyTransaction.maybeSubmitted(result)).toMatchInlineSnapshot(`false`)
   })
 
-  test('behavior: an HTTP refusal did not land, a gateway error may have', async () => {
-    const refused = await send(
-      new HttpRequestError({ body: {}, status: 429, url: 'https://rpc.example' }),
-    )
-    const gateway = await send(
-      new HttpRequestError({ body: {}, status: 502, url: 'https://rpc.example' }),
+  test('behavior: an HTTP refusal did not land, a gateway error or rate limit may have', async () => {
+    const results = await Promise.all(
+      [401, 429, 502].map(
+        async (status) =>
+          (await send(new HttpRequestError({ body: {}, status, url: 'https://rpc.example' })))
+            .result,
+      ),
     )
 
-    expect([refused.result, gateway.result].map(AccessKeyTransaction.maybeSubmitted))
-      .toMatchInlineSnapshot(`
+    expect(results.map(AccessKeyTransaction.maybeSubmitted)).toMatchInlineSnapshot(`
       [
         false,
+        true,
         true,
       ]
     `)

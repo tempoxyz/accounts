@@ -45,9 +45,10 @@ export function maybeSubmitted(error: unknown): boolean {
   return !!error.walk(
     (e) =>
       // No response, or one that doesn't say the request was refused: a lost
-      // connection, a timeout or a gateway error. A 4xx response refused it.
+      // connection, a timeout or a gateway error. A 429 can answer a retry of
+      // an attempt that landed. Other 4xx responses refused it.
       (e instanceof HttpRequestError &&
-        (e.status === undefined || e.status === 408 || e.status >= 500)) ||
+        (e.status === undefined || e.status === 408 || e.status === 429 || e.status >= 500)) ||
       e instanceof SocketClosedError ||
       e instanceof TimeoutError ||
       e instanceof WebSocketRequestError ||
