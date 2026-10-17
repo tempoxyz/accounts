@@ -160,6 +160,9 @@ document.getElementById('send')!.addEventListener('click', () =>
       method: 'eth_sendTransactionSync',
       params: [{ calls: [call] }],
     })
+    // A reverted transfer still resolves, so it must not score as a successful send.
+    if (receipt.status !== '0x1')
+      throw new Error(`Transaction reverted: ${receipt.transactionHash}`)
     return { status: receipt.status, transactionHash: receipt.transactionHash }
   }),
 )

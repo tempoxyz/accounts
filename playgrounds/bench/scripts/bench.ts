@@ -88,9 +88,14 @@ const browser = await chromium.launch({
 
 /**
  * Adds a virtual passkey authenticator to a page. Credentials are shared through
- * `credentials`, so a popup opened later can sign with a passkey registered earlier.
+ * `credentials`, keyed by credential ID, so a popup opened later can sign with a
+ * passkey registered earlier, at its latest signature counter.
  */
-async function authenticate(context: BrowserContext, page: Page, credentials: unknown[]) {
+async function authenticate(
+  context: BrowserContext,
+  page: Page,
+  credentials: Map<string, { credentialId: string }>,
+) {
   const session = await context.newCDPSession(page)
   await session.send('WebAuthn.enable')
   const { authenticatorId } = await session.send('WebAuthn.addVirtualAuthenticator', {
@@ -103,13 +108,23 @@ async function authenticate(context: BrowserContext, page: Page, credentials: un
       transport: 'internal',
     },
   })
-  for (const credential of credentials)
+  for (const credential of credentials.values())
     await session.send('WebAuthn.addCredential', {
       authenticatorId,
       credential: credential as never,
     })
-  session.on('WebAuthn.credentialAdded', (event) => credentials.push(event.credential))
+  // An assertion increments the credential's signature counter. Keep the latest
+  // copy, so a later popup does not present a counter lower than the last one.
+  session.on('WebAuthn.credentialAdded', (event) =>
+    credentials.set(event.credential.credentialId, event.credential),
+  )
+  session.on('WebAuthn.credentialAsserted', (event) =>
+    credentials.set(event.credential.credentialId, event.credential),
+  )
 }
+
+/** Resolves once the virtual authenticator is attached to a page of the current run. */
+let attached: (page: Page) => Promise<void> = async () => {}
 
 /**
  * Clicks an app button. Returns the click time and a function that resolves with
@@ -175,6 +190,9 @@ async function step(
     throw error
   }
   const ready = Date.now() - start
+  // The passkey prompt follows the approval click, so the popup's authenticator
+  // must be attached by then. Awaited after `ready` to keep setup out of the timing.
+  if (popup) await attached(wallet as Page)
 
   if (options.case === 'register')
     await wallet.getByPlaceholder(/Email address or label/).fill(`bench-${Date.now()}`)
@@ -206,10 +224,17 @@ const samples: Sample[] = []
 for (const renderer of selected)
   for (let run = 0; run < Number(values.runs); run++) {
     const context = await browser.newContext({ ignoreHTTPSErrors: true })
-    const credentials: unknown[] = []
-    // A short-lived popup (e.g. one that only relays a disconnect) can close
-    // before the authenticator attaches. It needs no passkey, so ignore it.
-    context.on('page', (page) => void authenticate(context, page, credentials).catch(() => {}))
+    const credentials = new Map<string, { credentialId: string }>()
+    // Each page's authenticator setup, awaited before the page is used.
+    const authenticators = new WeakMap<Page, Promise<void>>()
+    context.on('page', (page) => {
+      const setup = authenticate(context, page, credentials)
+      // A short-lived popup (e.g. one that only relays a disconnect) can close
+      // before setup ends. Its rejection surfaces where the page is awaited.
+      setup.catch(() => {})
+      authenticators.set(page, setup)
+    })
+    attached = (page) => authenticators.get(page) ?? Promise.resolve()
 
     const page = await context.newPage()
     const url = new URL(values.url)
@@ -219,6 +244,7 @@ for (const renderer of selected)
     if (values.host) url.searchParams.set('host', values.host)
 
     try {
+      await attached(page)
       await page.goto(url.toString())
       await page.waitForFunction(() => '__bench' in window)
       for (const name of Report.cases) {
