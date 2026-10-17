@@ -247,11 +247,14 @@ for (const renderer of selected)
     if (mode) url.searchParams.set('mode', mode)
     if (values.host) url.searchParams.set('host', values.host)
 
+    // The case in progress, so a thrown failure is recorded against it.
+    let current: Case = Report.cases[0]
     try {
       await attached(page)
       await page.goto(url.toString())
       await page.waitForFunction(() => '__bench' in window)
       for (const name of Report.cases) {
+        current = name
         if (name === 'login') await setup(page, 'disconnect')
         if (name === 'send') await setup(page, 'fund')
         const sample = await step(context, page, { case: name, renderer, run })
@@ -260,7 +263,10 @@ for (const renderer of selected)
         if (sample.error) break
       }
     } catch (error) {
-      console.error(`${renderer} run ${run} failed:`, (error as Error).message)
+      const message = (error as Error).message
+      console.error(`${renderer} run ${run} failed:`, message)
+      // `total` is unused for a failed sample, since the summary skips failures.
+      samples.push({ case: current, error: message, renderer, run, total: 0 })
     } finally {
       await context.close()
     }

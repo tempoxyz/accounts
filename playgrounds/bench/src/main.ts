@@ -147,11 +147,13 @@ document.getElementById('login')!.addEventListener('click', () =>
 )
 
 // Untimed setup: a new account holds no fee tokens until the testnet faucet funds it.
-document
-  .getElementById('fund')!
-  .addEventListener('click', async () =>
-    run('fund', async () => Actions.faucet.fundSync(client, { account: await account() })),
-  )
+document.getElementById('fund')!.addEventListener('click', async () =>
+  run('fund', async () => {
+    // Receipts hold bigint fields, which the JSON timeline cannot serialize.
+    const receipts = await Actions.faucet.fundSync(client, { account: await account() })
+    return receipts.map((receipt) => receipt.transactionHash)
+  }),
+)
 
 document.getElementById('send')!.addEventListener('click', () =>
   run('send', async () => {
