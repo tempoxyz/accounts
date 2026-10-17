@@ -110,6 +110,11 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
   const router = from(rest)
 
+  /** Reads a challenge, consuming it atomically when the store implements `take`. */
+  function consume<value>(key: string) {
+    return kv.take ? kv.take<value>(key) : kv.get<value>(key)
+  }
+
   router.post(`${path}/register/options`, async (c) => {
     try {
       const body = await c.req.raw.json()
@@ -151,8 +156,11 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       const key = `credential:${credentialId}`
       // Without an atomic `create`, duplicates are rejected by a read before
       // the write. Run that read alongside the challenge read.
+      // A store with `take` consumes the challenge atomically, so it is
+      // single-use and needs no delete. Otherwise it is read here and deleted
+      // after the response.
       const [stored, existing] = await Promise.all([
-        kv.get<{ created: number; name: string; userId?: string }>(`challenge:${challenge}`),
+        consume<{ created: number; name: string; userId?: string }>(`challenge:${challenge}`),
         kv.create ? undefined : kv.get(key),
       ])
       if (!stored || Date.now() - stored.created > challengeTtl * 1_000)
@@ -196,9 +204,10 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
           throw error
         }
       })()
-      // The challenge expires on its own, and replaying it cannot register the
-      // same credential twice, so its deletion does not hold the response.
-      await defer(c, kv.delete(`challenge:${challenge}`))
+      // Without `take`, the challenge was only read. It expires on its own, and
+      // replaying it cannot register the same credential twice, so its deletion
+      // does not hold the response.
+      if (!kv.take) await defer(c, kv.delete(`challenge:${challenge}`))
 
       // Successful registration is also a successful authentication for
       // the freshly-minted credential. Issue a session here so the
@@ -286,7 +295,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
 
       const [stored, credentialData] = await Promise.all([
-        kv.get<number>(`challenge:${challenge}`),
+        consume<number>(`challenge:${challenge}`),
         kv.get<{ publicKey: string; userId?: string }>(`credential:${response.id}`),
       ])
       if (!stored || Date.now() - stored > challengeTtl * 1_000)
@@ -321,7 +330,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
           })
           if (result) hookResponse = result
         } catch (error) {
-          await kv.delete(`challenge:${challenge}`)
+          if (!kv.take) await kv.delete(`challenge:${challenge}`)
           return Response.json(
             { error: error instanceof Error ? error.message : 'authentication rejected' },
             { status: 401 },
@@ -333,7 +342,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       // verification. No token, no cookie, no kv write. Useful for
       // hosts that mint their own session in `onAuthenticate` (e.g. JWTs).
       if (!session) {
-        await kv.delete(`challenge:${challenge}`)
+        if (!kv.take) await kv.delete(`challenge:${challenge}`)
         return Session.mergeResponse(
           {
             credentialId,
@@ -355,7 +364,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       const token = Session.generateToken()
       await Promise.all([
         kv.set(sessionKey(token), payload, { ttl: sessionTtl }),
-        kv.delete(`challenge:${challenge}`),
+        kv.take ? undefined : kv.delete(`challenge:${challenge}`),
       ])
 
       const json = {
@@ -436,12 +445,15 @@ export declare namespace webAuthn {
      * duplicates atomically. Otherwise, registration falls back to
      * best-effort `get` then `set` storage.
      *
-     * On runtimes with `waitUntil` (e.g. Cloudflare Workers), pass the
-     * execution context (`handler.fetch(request, env, ctx)`) so
-     * `/register` deletes its challenge after responding. Registration
-     * challenges may outlive their use because a replay cannot register the
-     * same credential twice. Login challenges are single-use, so `/login`
-     * deletes them before responding.
+     * When `take` is available, challenges are consumed atomically and are
+     * strictly single-use. Otherwise they are read, then deleted: on
+     * runtimes with `waitUntil` (e.g. Cloudflare Workers), pass the execution
+     * context (`handler.fetch(request, env, ctx)`) so `/register` deletes its
+     * challenge after responding, while `/login` deletes its challenge before
+     * responding. Without `take` that deletion is best-effort: concurrent
+     * requests can read a challenge before it is deleted. With `create`, a
+     * registration challenge replayed in that window cannot register the same
+     * credential twice.
      */
     kv: Kv.Kv
     /**
