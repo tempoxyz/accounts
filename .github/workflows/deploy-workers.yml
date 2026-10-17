@@ -35,7 +35,7 @@ jobs:
           - name: Wagmi
             directory: playgrounds/wagmi
           - name: Bench
-            directory: playgrounds/bench
+            directory: bench
 
     steps:
       - name: Secure runner

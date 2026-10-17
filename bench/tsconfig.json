@@ -9,8 +9,8 @@
     "skipLibCheck": true,
     "types": ["vp/client", "node"],
     "paths": {
-      "accounts": ["../../src/index.ts"],
-      "accounts/*": ["../../src/*"]
+      "accounts": ["../src/index.ts"],
+      "accounts/*": ["../src/*"]
     }
   },
   "include": ["src", "scripts"]

@@ -1,11 +1,11 @@
 /**
  * Accounts Bench: UX benchmark for the Tempo Wallet (popup and iframe) and WebAuthn adapters.
  *
- * Drives the bench playground in headless Chrome with a CDP virtual WebAuthn
+ * Drives the bench app in headless Chrome with a CDP virtual WebAuthn
  * authenticator, and times register, login and send transaction per renderer.
  *
- * Usage: pnpm --filter bench-playground bench [options]
- *   --url <url>              Bench playground URL. @default http://localhost:5180
+ * Usage: pnpm --filter bench bench [options]
+ *   --url <url>              Bench app URL. @default http://localhost:5180
  *   --runs <n>               Runs per renderer. @default 3
  *   --renderers <list>       Comma-separated renderers. @default all
  *                            (tempoWallet/popup, tempoWallet/iframe, webAuthn)

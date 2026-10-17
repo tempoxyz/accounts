@@ -11,7 +11,7 @@ Times register, login and send transaction across the account adapters:
 The app runs on Tempo Testnet (Moderato). Each action records a timeline relative to the click (`window.open`, wallet frames, callback, popup close). The page renders it and exposes it as `window.__bench`.
 
 ```sh
-pnpm --filter bench-playground dev
+pnpm --filter bench dev
 ```
 
 - `?adapter=tempoWallet|webAuthn` selects the adapter. Default: `tempoWallet`.
@@ -27,9 +27,9 @@ pnpm --filter bench-playground dev
 3. **send**: the testnet faucet funds the account (untimed), then `eth_sendTransactionSync` transfers 1 unit of pathUSD. The bench clicks the wallet's approval button.
 
 ```sh
-pnpm --filter bench-playground dev &
-pnpm --filter bench-playground bench --runs 5
-pnpm --filter bench-playground bench --url https://<preview-url> --renderers tempoWallet/iframe
+pnpm --filter bench dev &
+pnpm --filter bench bench --runs 5
+pnpm --filter bench bench --url https://<preview-url> --renderers tempoWallet/iframe
 ```
 
 Each case reports three metrics. Tempo Wallet renderers report all three, and WebAuthn reports only Total:
@@ -47,7 +47,7 @@ Each metric's median is scored from 0 to 100 on Lighthouse's log-normal curve, a
 The report shows each score as a ring: green from 90, orange from 50, red below 50. The rings are the SVGs in `badges/`, which the report loads from raw.githubusercontent.com at the benchmarked commit. After changing `Report.ring`, regenerate them:
 
 ```sh
-pnpm --filter bench-playground badges
+pnpm --filter bench badges
 ```
 
 ## Options
@@ -64,4 +64,4 @@ The bench waits 1 s before each action, as a person does between clicks.
 
 ## CI
 
-The `Accounts Bench` workflow (`.github/workflows/accounts-bench.yml`) runs on pull requests that change `src/`, this playground, or the lockfile. It builds the playground with the PR's SDK and runs 5 runs per renderer against the live Tempo Wallet. Then it writes the report to the job summary and keeps one comment on the pull request up to date. Run it on any branch with **Run workflow**, and set the number of runs there.
+The `Accounts Bench` workflow (`.github/workflows/accounts-bench.yml`) runs on pull requests that change `src/`, `bench/`, or the lockfile. It builds the bench app with the PR's SDK and runs 5 runs per renderer against the live Tempo Wallet. Then it writes the report to the job summary and keeps one comment on the pull request up to date. Run it on any branch with **Run workflow**, and set the number of runs there.

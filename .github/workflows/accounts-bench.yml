@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/accounts-bench.yml
-      - playgrounds/bench/**
+      - bench/**
       - pnpm-lock.yaml
       - src/**
   workflow_dispatch:
@@ -41,13 +41,13 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
 
-      - name: Build bench playground
-        run: pnpm --filter bench-playground build
+      - name: Build bench app
+        run: pnpm --filter bench build
 
       # Serves the PR's SDK build locally and benchmarks it against the live
       # Tempo Wallet on Tempo Testnet, with the runner's preinstalled Chrome.
       - name: Run bench
-        working-directory: playgrounds/bench
+        working-directory: bench
         env:
           BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           BENCH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -56,20 +56,20 @@ jobs:
           pnpm preview > preview.log 2>&1 &
           for _ in $(seq 1 30); do curl -fsS http://localhost:5180 > /dev/null && break; sleep 1; done
           if ! curl -fsS http://localhost:5180 > /dev/null; then
-            echo "::error::The bench playground preview did not start."
+            echo "::error::The bench app preview did not start."
             cat preview.log
             exit 1
           fi
           pnpm bench --runs "$RUNS" --json samples.json --markdown report.md
 
       - name: Write job summary
-        if: ${{ !cancelled() && hashFiles('playgrounds/bench/report.md') != '' }}
-        run: cat playgrounds/bench/report.md >> "$GITHUB_STEP_SUMMARY"
+        if: ${{ !cancelled() && hashFiles('bench/report.md') != '' }}
+        run: cat bench/report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on pull request
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('playgrounds/bench/report.md') != '' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('bench/report.md') != '' }}
         uses: tempoxyz/gh-actions/actions/pr-comment@947d9a3ccb2425a9c94d563fd721cc0e33c89e26 # 2026-10-15T00-15-06Z-947d9a3c
         with:
           # The marker of the sticky comment. Changing it posts a new comment.
           header: ux-bench
-          path: playgrounds/bench/report.md
+          path: bench/report.md

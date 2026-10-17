@@ -2,7 +2,7 @@
  * Writes the score rings that the Accounts Bench report links to, one SVG per score
  * from 0 to 100, to `badges/`. Run it after changing `Report.ring`.
  *
- * Usage: pnpm --filter bench-playground badges
+ * Usage: pnpm --filter bench badges
  */
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'

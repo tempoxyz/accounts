@@ -203,6 +203,7 @@ overrides:
 
 packages:
   - .
+  - bench
   - examples/*
   - playgrounds/*
   - ref-impls/*

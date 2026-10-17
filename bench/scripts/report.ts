@@ -216,7 +216,7 @@ export function markdown(
   const { browser, commit, repository, runUrl, walletHost } = options
 
   // Rings load from the benchmarked commit, so a report always matches its rings.
-  const base = `https://raw.githubusercontent.com/${repository}/${commit ?? 'main'}/playgrounds/bench/badges`
+  const base = `https://raw.githubusercontent.com/${repository}/${commit ?? 'main'}/bench/badges`
   const img = (score: number, title: string) =>
     `<img src="${base}/score-${score}.svg" width="40" height="40" alt="${score}" title="${title}">`
 
