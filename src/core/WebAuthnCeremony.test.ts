@@ -212,16 +212,11 @@ describe('server', () => {
 describe('deferred', () => {
   const credential = { id: 'credential', publicKey: '0x04ab' } as never
 
-  /**
-   * Answers each `/register` with the next of `responses` and `/logout` with
-   * 204, recording the paths.
-   */
+  /** Answers each `/register` with the next of `responses`, recording the paths. */
   function stub(responses: ((init?: RequestInit) => Response | Promise<Response>)[]) {
     const paths: string[] = []
     vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
-      const { pathname } = new URL(input)
-      paths.push(`${pathname}${init?.keepalive ? ' (keepalive)' : ''}`)
-      if (pathname.endsWith('/logout')) return new Response(null, { status: 204 })
+      paths.push(`${new URL(input).pathname}${init?.keepalive ? ' (keepalive)' : ''}`)
       return await responses.shift()!(init)
     })
     return paths
@@ -249,14 +244,7 @@ describe('deferred', () => {
         "publicKey": "0x04ab",
       }
     `)
-    await vi.waitFor(() => expect(paths).toHaveLength(2))
-    // The earlier session ends before the registration is sent.
-    expect(paths).toMatchInlineSnapshot(`
-      [
-        "/webauthn/logout",
-        "/webauthn/register (keepalive)",
-      ]
-    `)
+    await vi.waitFor(() => expect(paths).toHaveLength(1))
     release()
     await expect(verified).resolves.toMatchInlineSnapshot(`
       {
@@ -271,6 +259,7 @@ describe('deferred', () => {
       () => new Response('Bad Gateway', { status: 502 }),
       // The first attempt registered the credential before its response was lost.
       () => Response.json({ error: 'Credential already exists' }, { status: 400 }),
+      () => new Response(null, { status: 204 }),
     ])
     const ceremony = WebAuthnCeremony.deferred({
       url: 'https://wallet.example.com/webauthn',
@@ -285,10 +274,10 @@ describe('deferred', () => {
     `)
     expect(paths).toMatchInlineSnapshot(`
       [
+        "/webauthn/register (keepalive)",
+        "/webauthn/register (keepalive)",
+        "/webauthn/register (keepalive)",
         "/webauthn/logout",
-        "/webauthn/register (keepalive)",
-        "/webauthn/register (keepalive)",
-        "/webauthn/register (keepalive)",
       ]
     `)
   })
@@ -323,8 +312,50 @@ describe('deferred', () => {
     )
   })
 
+  test('behavior: a retry without the session ends the session in place', async () => {
+    const paths = stub([
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      () => Response.json({ error: 'Credential already exists' }, { status: 400 }),
+      () => new Response(null, { status: 204 }),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({ url: 'https://wallet.example.com/webauthn' })
+
+    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+    await expect(verified).resolves.toMatchInlineSnapshot(`
+      {
+        "session": false,
+      }
+    `)
+    expect(paths).toMatchInlineSnapshot(`
+      [
+        "/webauthn/register (keepalive)",
+        "/webauthn/register (keepalive)",
+        "/webauthn/logout",
+      ]
+    `)
+  })
+
+  test('error: a retry without the session rejects when it cannot end the session in place', async () => {
+    stub([
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      () => Response.json({ error: 'Credential already exists' }, { status: 400 }),
+      () => Promise.reject(new TypeError('Failed to fetch')),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({ url: 'https://wallet.example.com/webauthn' })
+
+    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+    await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[TypeError: Failed to fetch]`,
+    )
+  })
+
   test('error: rejects when the server stored a different public key', async () => {
-    const paths = stub([() => Response.json({ credentialId: 'credential', publicKey: '0x04cd' })])
+    const paths = stub([
+      () => Response.json({ credentialId: 'credential', publicKey: '0x04cd' }),
+      () => new Response(null, { status: 204 }),
+    ])
     const ceremony = WebAuthnCeremony.deferred({ url: 'https://wallet.example.com/webauthn' })
 
     const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
@@ -334,7 +365,6 @@ describe('deferred', () => {
     )
     expect(paths).toMatchInlineSnapshot(`
       [
-        "/webauthn/logout",
         "/webauthn/register (keepalive)",
         "/webauthn/logout",
       ]
@@ -355,10 +385,10 @@ describe('deferred', () => {
       name: 'alice',
       signal: controller.signal,
     })
-    await vi.waitFor(() => expect(paths).toHaveLength(2))
+    await vi.waitFor(() => expect(paths).toHaveLength(1))
     controller.abort(new Error('Cancelled'))
 
     await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: Cancelled]`)
-    expect(paths).toHaveLength(2)
+    expect(paths).toHaveLength(1)
   })
 })

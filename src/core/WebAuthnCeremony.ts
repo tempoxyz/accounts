@@ -296,10 +296,6 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
     async verifyRegistration(credential, options = {}) {
       const { signal } = options
       const verified = (async () => {
-        // Any session in place belongs to an earlier sign-in, not this account.
-        // End it first, so requests sent before this registration's session
-        // exists fail instead of running as that account.
-        await base.logout?.().catch(() => {})
         const { publicKey, session } = await (async () => {
           for (let attempt = 0; ; attempt++)
             try {
@@ -330,6 +326,10 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
           await base.logout?.().catch(() => {})
           throw new Error('Server stored a different public key')
         }
+        // Any session still in place belongs to an earlier sign-in, not this
+        // account, so end it rather than let requests run as that account. If
+        // that fails, so does verification, and the adapter drops the account.
+        if (!session) await base.logout?.()
         return { session }
       })()
       // Observed by the adapter; keep an unobserved failure from going unhandled.

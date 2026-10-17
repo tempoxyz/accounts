@@ -17,7 +17,7 @@ const ceremony = WebAuthnCeremony.deferred({ url: 'https://example.com/webauthn'
 
 ## Trade-offs
 
-- The server session exists only once the server has stored the passkey, so a server request the app sends right after sign-up may not be signed in yet. Any earlier session is ended before the passkey is sent, so such a request never runs as a different account. The [`webAuthn`](/docs/api/webAuthn) adapter makes sign-ins and sign-outs wait for it, for up to 10 seconds. A registration still running after that is cancelled, so it can't replace the session that follows.
+- The server session exists only once the server has stored the passkey, so a server request the app sends right after sign-up may not be signed in yet. The [`webAuthn`](/docs/api/webAuthn) adapter makes sign-ins and sign-outs wait for it, for up to 10 seconds. A registration still running after that is cancelled, so it can't replace the session that follows.
 - If the server refuses the sign-up while the page is open, the adapter removes the account and keeps its public key on the device. A later sign-in with the passkey restores the account if the server did store it.
 - A refusal that arrives after the page closed goes unnoticed. Use this ceremony where the page outlives the request and every server request waits for it, such as an embedded iframe.
 
