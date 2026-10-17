@@ -1018,7 +1018,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                       params: undefined,
                     })
 
-                    store.setState({ accounts: resolveAccounts(accounts), activeAccount: 0 })
+                    store.connect(
+                      { accounts: resolveAccounts(accounts), activeAccount: 0 },
+                      accounts,
+                    )
 
                     return accounts.map(
                       (a) => a.address,
@@ -1512,19 +1515,24 @@ export function create(options: create.Options = {}): create.ReturnType {
                       )
                     })()
 
-                    store.setState({
-                      accounts: resolveAccounts(accounts),
-                      activeAccount: 0,
-                      // Persist absolutized auth URLs so a later
-                      // `wallet_disconnect` can hit logout even when the
-                      // URL was passed per-call. Always overwrite (never
-                      // merge) so a connect WITHOUT auth clears stale
-                      // state from a prior connect — otherwise a later
-                      // disconnect could POST to a logout URL the
-                      // current page never opted into.
-                      auth:
-                        auth_request && typeof auth_request === 'object' ? auth_request : undefined,
-                    })
+                    store.connect(
+                      {
+                        accounts: resolveAccounts(accounts),
+                        activeAccount: 0,
+                        // Persist absolutized auth URLs so a later
+                        // `wallet_disconnect` can hit logout even when the
+                        // URL was passed per-call. Always overwrite (never
+                        // merge) so a connect WITHOUT auth clears stale
+                        // state from a prior connect — otherwise a later
+                        // disconnect could POST to a logout URL the
+                        // current page never opted into.
+                        auth:
+                          auth_request && typeof auth_request === 'object'
+                            ? auth_request
+                            : undefined,
+                      },
+                      accounts,
+                    )
 
                     const accountAddress = accounts[0]?.address
                     await savePreparedAccessKey({

@@ -224,6 +224,33 @@ describe('lock', () => {
     `)
   })
 
+  test('behavior: takes over the entry of a terminated thread before the wait ends', async () => {
+    const path = await createPath()
+    const script = join(dirname(path), 'holder.mjs')
+    await writeFile(
+      script,
+      `
+        import { parentPort } from 'node:worker_threads'
+        import { lock } from ${JSON.stringify(moduleUrl('src/cli/internal/lock.ts'))}
+        await lock(${JSON.stringify(path)}, () => {
+          parentPort.postMessage('locked')
+          return new Promise(() => setInterval(() => {}, 60_000))
+        })
+      `,
+    )
+    const worker = new Worker(script, { execArgv: ['--import', 'tsx'] })
+    await new Promise((resolve, reject) => {
+      worker.once('message', resolve)
+      worker.once('error', reject)
+    })
+    await worker.terminate()
+
+    // The wait defaults to outlast `stale`, so the abandoned entry is taken over.
+    await expect(lock(path, async () => 'locked', { stale: 200 })).resolves.toMatchInlineSnapshot(
+      `"locked"`,
+    )
+  })
+
   test('behavior: removes directories left by owners that exited', async () => {
     const path = await createPath()
     const dead = await deadPid()

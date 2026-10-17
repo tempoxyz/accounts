@@ -33,6 +33,7 @@ const key_1 = accessKey(root, '0x00000000000000000000000000000000000000b1')
 const key_2 = accessKey(root, '0x00000000000000000000000000000000000000b2')
 const key_3 = accessKey(root_3, '0x00000000000000000000000000000000000000b3', 42431)
 const key_4 = accessKey(root_4, '0x00000000000000000000000000000000000000b4')
+const key_5 = accessKey(root_2, '0x00000000000000000000000000000000000000b5')
 
 const labels: Record<string, string> = {
   [root]: 'root',
@@ -43,6 +44,7 @@ const labels: Record<string, string> = {
   [key_2.address]: 'key_2',
   [key_3.address]: 'key_3',
   [key_4.address]: 'key_4',
+  [key_5.address]: 'key_5',
 }
 
 type State = Pick<Store.State, 'accessKeys' | 'accounts' | 'activeAccount' | 'auth' | 'chainId'>
@@ -272,7 +274,7 @@ describe('filesystem', () => {
         a: (state) => ({ ...state, activeAccount: 0 }),
       },
       {
-        name: 'keeps the account this process selected after another process removed it',
+        name: "keeps the file's selection when this process selected an account another removed",
         b: (state) => ({ ...state, accounts: [{ address: root_2 }], activeAccount: 0 }),
         a: (state) => ({ ...state, activeAccount: 0 }),
       },
@@ -419,18 +421,6 @@ describe('filesystem', () => {
           "active": null,
           "chainId": 4217,
         },
-        "keeps the account this process selected after another process removed it": {
-          "accessKeys": [
-            "key_1",
-            "key_2",
-          ],
-          "accounts": [
-            "root",
-            "root_2",
-          ],
-          "active": "root",
-          "chainId": 4217,
-        },
         "keeps the account this process selected when another process adds one": {
           "accessKeys": [
             "key_3",
@@ -460,6 +450,17 @@ describe('filesystem', () => {
           ],
           "active": "root_4",
           "chainId": 42431,
+        },
+        "keeps the file's selection when this process selected an account another removed": {
+          "accessKeys": [
+            "key_1",
+            "key_2",
+          ],
+          "accounts": [
+            "root_2",
+          ],
+          "active": "root_2",
+          "chainId": 4217,
         },
         "keeps the selection when neither process changed it": {
           "accessKeys": [
@@ -580,6 +581,10 @@ describe('filesystem', () => {
   })
 
   test('behavior: merges the writes of two provider stores', async () => {
+    /** A login through `wallet_connect`: `root_3` with `key_3` on chain 42431. */
+    const connect = (store: Store.Store) =>
+      store.connect(login(store.getState()), [{ address: root_3 }])
+
     // Two stores on one file stand in for two CLI processes. B acts first, then A.
     const rows: {
       name: string
@@ -589,13 +594,13 @@ describe('filesystem', () => {
     }[] = [
       {
         name: 'keeps a login from another store while removing a different key',
-        b: (store) => store.setState(login(store.getState())),
+        b: connect,
         a: (store) =>
           store.accessKeys.remove({ account: root, accessKey: key_1.address, chainId: 4217 }),
       },
       {
         name: 'clears accounts and keys another store added on disconnect',
-        b: (store) => store.setState(login(store.getState())),
+        b: connect,
         a: (store) => store.disconnect(),
       },
       {
@@ -604,15 +609,40 @@ describe('filesystem', () => {
         a: (store) => store.setState(withExpiry(store.getState(), key_1, 200)),
       },
       {
+        name: 'keeps a disconnect over a stale selection',
+        b: (store) => store.disconnect(),
+        a: (store) => store.setState({ activeAccount: 0 }),
+      },
+      {
+        name: 'keeps a reconnect to the same account after another store disconnected',
+        b: (store) => store.disconnect(),
+        a: (store) => {
+          store.connect({ accounts: [{ address: root_2 }], activeAccount: 0 }, [
+            { address: root_2 },
+          ])
+          store.setState({ accessKeys: [key_5, ...store.getState().accessKeys] })
+        },
+      },
+      {
         name: 'clears keys another store added when clearing keys',
-        b: (store) => store.setState(login(store.getState())),
+        b: connect,
         a: (store) => store.accessKeys.clear(),
       },
       {
         name: 'stores at most maxAccounts after concurrent logins',
         maxAccounts: 2,
-        b: (store) => store.setState(login(store.getState())),
-        a: (store) => store.setState(login(store.getState(), root_4, key_4, 4217)),
+        b: connect,
+        a: (store) =>
+          store.connect(login(store.getState(), root_4, key_4, 4217), [{ address: root_4 }]),
+      },
+      {
+        name: 'keeps a reconnect and another login within maxAccounts',
+        maxAccounts: 2,
+        b: connect,
+        a: (store) =>
+          store.connect({ accounts: [{ address: root_2 }], activeAccount: 0 }, [
+            { address: root_2 },
+          ]),
       },
     ]
 
@@ -657,6 +687,12 @@ describe('filesystem', () => {
           "active": null,
           "chainId": 4217,
         },
+        "keeps a disconnect over a stale selection": {
+          "accessKeys": [],
+          "accounts": [],
+          "active": null,
+          "chainId": 4217,
+        },
         "keeps a login from another store while removing a different key": {
           "accessKeys": [
             "key_3",
@@ -669,6 +705,29 @@ describe('filesystem', () => {
           ],
           "active": "root_3",
           "chainId": 42431,
+        },
+        "keeps a reconnect and another login within maxAccounts": {
+          "accessKeys": [
+            "key_3",
+            "key_1",
+            "key_2",
+          ],
+          "accounts": [
+            "root_2",
+            "root_3",
+          ],
+          "active": "root_2",
+          "chainId": 42431,
+        },
+        "keeps a reconnect to the same account after another store disconnected": {
+          "accessKeys": [
+            "key_5",
+          ],
+          "accounts": [
+            "root_2",
+          ],
+          "active": "root_2",
+          "chainId": 4217,
         },
         "stores at most maxAccounts after concurrent logins": {
           "accessKeys": [

@@ -42,8 +42,9 @@ export function defaultPath(): string {
  * process has written the file, a write stores exactly the given value, and a
  * write from an adapter that has not read or written the item replaces it.
  *
- * The lock is a `<path>.lock` directory. A writer takes it over from a process
- * that has exited, and waits up to 10 seconds for one that is still running.
+ * The lock is a `<path>.lock` directory, held only for the read, merge, and
+ * write. A writer takes it over from a process that has exited, or once it is
+ * 30 seconds old, and gives up after 35 seconds.
  */
 export function filesystem(options: filesystem.Options = {}): Storage.Storage {
   const path = expandPath(options.path ?? defaultPath())
@@ -178,19 +179,40 @@ async function update(path: string, fn: (value: Record<string, unknown>) => void
 
 /**
  * Applies the changes `next` makes to `base` onto `current`, the item as the
- * file holds it now.
+ * file holds it now. `base` is the item as this adapter last read or wrote it.
  *
- * A provider store item (`{ state, version }`) merges per state field: a field
- * `next` left as `base` had it keeps `current`'s value, and one it changed
- * takes `next`'s, so when both changed a field the later write wins it. A
- * field missing from a state is a removed field. Collections merge per record
- * by identity, and the active account and `auth` follow {@link mergeActive}.
- * Any other item is replaced by `next`.
+ * If `current` still equals `base`, or the item is not a provider store item
+ * (`{ state, version }`) of the same version, `next` is stored as given.
+ * Otherwise state fields merge by these rules, so the latest explicit intent
+ * wins and ordinary writes only apply what they changed:
+ *
+ * 1. Resets win. Fields a disconnect or `accessKeys.clear()` resets
+ *    (`hints.replace`) are stored as `next` has them, clearing records any
+ *    other process added.
+ * 2. Scalars merge three-way. A field `next` left as `base` had it keeps
+ *    `current`'s value, including `current` having removed it (a missing field
+ *    is a removed field). A field `next` changed or removed takes `next`'s, so
+ *    when both changed it, the later write wins.
+ * 3. `accounts` and `accessKeys` merge per record by identity. A record `next`
+ *    added (absent from `base`) is stored, first. A record `next` changed takes
+ *    `next`'s version in place, and one it removed is removed. A record that
+ *    was in `base` but that another process removed stays removed, even if
+ *    `next` changed it.
+ * 4. A connect asserts its accounts (`hints.connect`): they are stored, first,
+ *    even if another process removed them or logged out meanwhile.
+ * 5. The active account is resolved by address. When `next` changed the
+ *    selection or is a connect, its selected account stays selected if
+ *    stored; otherwise `current`'s selection stays if stored, else `next`'s.
+ *    The index is `0` only when neither account is stored.
+ * 6. `auth` belongs to the selected login: when `next`'s selection is kept
+ *    because `next` changed it or connected, `next`'s `auth` is stored.
+ * 7. Past `hints.maxAccounts`, the oldest (last) accounts are evicted, never
+ *    the active one.
  */
 function merge(base: unknown, current: unknown, next: unknown, hints: merge.Hints = {}): unknown {
   if (isDeepStrictEqual(current, base) || !isItem(next)) return next
   if (current !== null && (!isItem(current) || current.version !== next.version)) return next
-  const { maxAccounts, replace = [] } = hints
+  const { connect, maxAccounts, replace = [] } = hints
   const state_base = isItem(base) ? base.state : {}
   const state_current = isItem(current) ? current.state : {}
   const state: Record<string, unknown> = {}
@@ -208,19 +230,28 @@ function merge(base: unknown, current: unknown, next: unknown, hints: merge.Hint
   if (typeof next.state.activeAccount !== 'number' || replace.includes('activeAccount'))
     return { ...next, state }
 
-  const ours = activeAddress(next.state) !== activeAddress(state_base)
-  const { accounts, activeAccount } = mergeActive(
-    state_current,
-    next.state,
-    list(state.accounts),
-    ours,
-  )
-  // `auth` belongs to the login whose selection is kept, so a later login without it clears it.
-  if (ours && !replace.includes('auth')) {
+  const ids_connect = new Set((connect ?? []).map((address) => address.toLowerCase()))
+  const ids_merged = new Set(list(state.accounts).map(identities.accounts))
+  const asserted = list(next.state.accounts).filter((account) => {
+    const id = identities.accounts(account)
+    return ids_connect.has(id) && !ids_merged.has(id)
+  })
+  const accounts = [...asserted, ...list(state.accounts)]
+
+  const selected = activeAddress(next.state)
+  const ours = !!connect || selected !== activeAddress(state_base)
+  const indexOf = (address: string | undefined) =>
+    accounts.findIndex((account) => identities.accounts(account) === address)
+  const candidates = ours
+    ? [selected, activeAddress(state_current)]
+    : [activeAddress(state_current), selected]
+  const active = candidates.find((address) => indexOf(address) !== -1)
+  const activeAccount = Math.max(indexOf(active), 0)
+
+  if (ours && active === selected && !replace.includes('auth')) {
     delete state.auth
     if (typeof next.state.auth !== 'undefined') state.auth = next.state.auth
   }
-  // Like the store, evict the oldest (last) accounts past `maxAccounts`, never the active one.
   if (maxAccounts && accounts.length > maxAccounts) {
     const kept = activeAccount < maxAccounts ? maxAccounts : maxAccounts - 1
     state.accounts = accounts.filter((_, i) => i === activeAccount || i < kept)
@@ -232,41 +263,13 @@ function merge(base: unknown, current: unknown, next: unknown, hints: merge.Hint
 declare namespace merge {
   /** Hints from the provider store on how to merge its persisted state. */
   type Hints = {
+    /** Addresses of the accounts this write connects. */
+    connect?: readonly string[] | undefined
     /** Maximum number of accounts to store. */
     maxAccounts?: number | undefined
     /** State fields this write resets (e.g. a disconnect): stored as given, never merged. */
     replace?: readonly string[] | undefined
   }
-}
-
-/**
- * Picks the merged active account by address, and its index in `accounts`.
- *
- * - When this process changed the selection (`ours`), its account stays
- *   selected. If another process removed that account meanwhile but left
- *   other accounts, it is stored again, first: an explicit later selection
- *   wins over an eviction. A logout, which leaves no accounts, still wins.
- * - Otherwise the file's selection stays. If this process removed that
- *   account, this process's own selection is used instead.
- * - The index is `0` only when no selected account is stored.
- */
-function mergeActive(
-  current: Record<string, unknown>,
-  next: Record<string, unknown>,
-  accounts: readonly unknown[],
-  ours: boolean,
-): { accounts: readonly unknown[]; activeAccount: number } {
-  const selected = activeAddress(next)
-  const indexOf = (address: string | undefined) =>
-    accounts.findIndex((account) => identities.accounts(account) === address)
-  if (ours) {
-    if (selected === undefined || indexOf(selected) !== -1 || list(current.accounts).length === 0)
-      return { accounts, activeAccount: Math.max(indexOf(selected), 0) }
-    const account = list(next.accounts)[next.activeAccount as number]
-    return { accounts: [account, ...accounts], activeAccount: 0 }
-  }
-  const active = [activeAddress(current), selected].find((address) => indexOf(address) !== -1)
-  return { accounts, activeAccount: Math.max(indexOf(active), 0) }
 }
 
 function mergeField(key: string, base: unknown, current: unknown, next: unknown): unknown {

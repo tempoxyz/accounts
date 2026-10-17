@@ -17,14 +17,9 @@ const owners = ((globalThis as Record<symbol, Set<string> | undefined>)[
 const contended = new Set(['EACCES', 'EEXIST', 'ENOTDIR', 'ENOTEMPTY', 'EPERM'])
 
 /**
- * Age in milliseconds past which an entry of a running process counts as
- * stale. Holders keep the lock for one read, merge, and write: milliseconds.
- */
-const stale = 30_000
-
-/**
  * Runs `fn` while holding an exclusive cross-process lock on `path`. Keep `fn`
- * short: another writer may take over a lock held for over 30 seconds.
+ * short: another writer may take over a lock held for over 30 seconds
+ * (`stale`).
  *
  * The lock is a directory at `<path>.lock` holding one entry named after its
  * owner token (`<pid>-<threadId>-<random>`). A writer builds its own directory
@@ -41,23 +36,26 @@ const stale = 30_000
  * 30 seconds can lose its write. That is the trade-off for never leaving every
  * later write failing until someone deletes the lock by hand.
  *
- * Waits up to `timeout` for a live holder, then throws {@link TimeoutError}.
+ * Waits up to `timeout`, by default 5 seconds past `stale` so that any
+ * abandoned entry is taken over first, then throws {@link TimeoutError}.
  */
 export async function lock<value>(
   path: string,
   fn: () => Promise<value>,
   options: lock.Options = {},
 ): Promise<value> {
-  const { timeout = 10_000 } = options
+  // A waiter outlasts the stale bound, so an abandoned entry it cannot attribute to an exited
+  // process (another thread's, or a reused process ID's) is taken over before the wait ends.
+  const { stale = 30_000, timeout = stale + 5_000 } = options
   const path_lock = `${path}.lock`
   const owner = `${process.pid}-${threadId}-${randomBytes(8).toString('hex')}`
   const deadline = Date.now() + timeout
 
   owners.add(owner)
   try {
-    await prune(path_lock)
+    await prune(path_lock, stale)
     while (!(await acquire(path_lock, owner))) {
-      const holders = await reclaim(path_lock)
+      const holders = await reclaim(path_lock, stale)
       if (holders.length === 0) await rmdir(path_lock).catch(() => undefined)
       if (Date.now() >= deadline) throw new TimeoutError(path_lock, holders, timeout)
       await sleep(10)
@@ -79,7 +77,13 @@ export async function lock<value>(
 export declare namespace lock {
   /** Options for {@link lock}. */
   type Options = {
-    /** Milliseconds to wait for a live holder to release the lock. @default 10_000 */
+    /**
+     * Age in milliseconds past which an entry of a running process, or of
+     * another thread of this one, is taken over. Holders keep the lock for one
+     * read, merge, and write: milliseconds. @default 30_000
+     */
+    stale?: number | undefined
+    /** Milliseconds to wait for the lock. @default stale + 5_000 */
     timeout?: number | undefined
   }
 }
@@ -122,7 +126,7 @@ async function acquire(path: string, owner: string): Promise<boolean> {
  * Takes over the stale entries of the lock directory at `path`, and returns a
  * description of each remaining holder.
  */
-async function reclaim(path: string): Promise<readonly string[]> {
+async function reclaim(path: string, stale: number): Promise<readonly string[]> {
   const names = await readdir(path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return []
     return undefined
@@ -130,7 +134,7 @@ async function reclaim(path: string): Promise<readonly string[]> {
   if (!names) return ['an unknown owner']
   const holders: string[] = []
   for (const name of names) {
-    if (!(await isStale(join(path, name)))) {
+    if (!(await isStale(join(path, name), stale))) {
       holders.push(/^\d+-/.test(name) ? `process ${name.split('-')[0]}` : name)
       continue
     }
@@ -146,13 +150,13 @@ async function reclaim(path: string): Promise<readonly string[]> {
  * Removes what stale owners left next to the lock directory at `path`: staged
  * directories (`<path>.<owner>`) and tombstones (`<path>.<owner>.<random>.stale`).
  */
-async function prune(path: string) {
+async function prune(path: string, stale: number) {
   const prefix = `${basename(path)}.`
   const names = await readdir(dirname(path)).catch(() => [])
   for (const name of names) {
     if (!name.startsWith(prefix)) continue
     const leftover = join(dirname(path), name)
-    if (await isStale(leftover, name.slice(prefix.length)))
+    if (await isStale(leftover, stale, name.slice(prefix.length)))
       await rm(leftover, { force: true, recursive: true }).catch(() => undefined)
   }
 }
@@ -160,10 +164,10 @@ async function prune(path: string) {
 /**
  * Returns whether the entry at `path`, named after an owner token, can be
  * taken over: its process no longer exists, or the entry is older than
- * {@link stale}. Entries of other threads of this process, and names that are
+ * `stale` milliseconds. Entries of other threads of this process, and names that are
  * not owner tokens, only go stale by age.
  */
-async function isStale(path: string, name = basename(path)): Promise<boolean> {
+async function isStale(path: string, stale: number, name = basename(path)): Promise<boolean> {
   const match = /^(\d+)-(\d+)-[0-9a-f]+$/.exec(name)
   if (match) {
     const pid = Number(match[1])

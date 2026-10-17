@@ -74,6 +74,12 @@ type ZustandStore = Mutate<
 export type Store = ZustandStore & {
   /** Store-bound access-key operations. */
   accessKeys: ReturnType<typeof core_AccessKey.createManager>
+  /**
+   * Sets `state` for a connect of `accounts`. Storage shared between processes
+   * stores those accounts, the selection, and `auth` as given, even over a
+   * logout another process saved meanwhile.
+   */
+  connect: (state: Partial<State>, accounts: readonly { address: string }[]) => void
   /** Disconnects all accounts and clears locally signable access-key material. */
   disconnect: () => void
 }
@@ -132,8 +138,8 @@ export function create(options: Options): Store {
       : Storage.memory({ key: 'tempo' }),
   } = options
 
-  // Fields the write in progress resets. Shared storage stores them as given instead of merging.
-  let replace: readonly string[] | undefined
+  // Intent of the write in progress (a connect or a reset), for storage shared between processes.
+  let intent: { connect?: readonly string[]; replace?: readonly string[] } | undefined
   // The load in progress. Only it can settle `hydration`.
   let load: ReturnType<typeof deferred> | undefined = deferred()
   const hydration: Hydration = { promise: load.promise, status: 'pending' }
@@ -184,7 +190,7 @@ export function create(options: Options): Store {
                 structuredClone: canStructuredClone(storage),
               }),
               hints_key,
-              { value: { maxAccounts, replace } },
+              { value: { maxAccounts, ...intent } },
             ),
           storage,
           version: 0,
@@ -193,21 +199,25 @@ export function create(options: Options): Store {
     ),
   ) as ZustandStore
   const store = state as Store
-  /** Sets `reset` and persists its fields as replacements, so they win over any merge. */
-  function setReset(reset: Partial<State>) {
-    replace = Object.keys(reset)
+  /** Sets `next`, persisting it with `intent_next` as its merge hint. */
+  function setStateWith(next: Partial<State>, intent_next: NonNullable<typeof intent>) {
+    intent = intent_next
     try {
-      state.setState(reset)
+      state.setState(next)
     } finally {
-      replace = undefined
+      intent = undefined
     }
   }
+  /** Sets `reset` and persists its fields as replacements, so they win over any merge. */
+  const reset = (next: Partial<State>) => setStateWith(next, { replace: Object.keys(next) })
   store.accessKeys = {
     ...core_AccessKey.createManager({ keystores, state }),
-    clear: () => setReset({ accessKeys: [] }),
+    clear: () => reset({ accessKeys: [] }),
   }
+  store.connect = (next, accounts) =>
+    setStateWith(next, { connect: accounts.map((account) => account.address) })
   store.disconnect = () =>
-    setReset({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
+    reset({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
   Object.assign(store, { [hydration_key]: hydration })
   return store
 }
