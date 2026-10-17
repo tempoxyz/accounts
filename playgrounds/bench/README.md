@@ -44,11 +44,11 @@ Each case reports three metrics. Tempo Wallet renderers report all three, and We
 
 Each metric's median is scored from 0 to 100 on Lighthouse's log-normal curve, against the budgets in `scripts/report.ts`. A value at the **good** budget scores 90, and a value at the **poor** budget scores 50. A case score weights Total twice as much as Wallet ready and Confirm. A renderer score is the mean of its case scores.
 
-| Score  | Rating        |
-| ------ | ------------- |
-| 90–100 | 🟢 Good       |
-| 50–89  | 🟠 Needs work |
-| 0–49   | 🔴 Poor       |
+The report shows each score as a ring: green from 90, orange from 50, red below 50. The rings are the SVGs in `badges/`, which the report loads from raw.githubusercontent.com at the benchmarked commit. After changing `Report.ring`, regenerate them:
+
+```sh
+pnpm --filter bench-playground badges
+```
 
 ## Options
 

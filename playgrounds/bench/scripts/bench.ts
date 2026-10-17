@@ -275,6 +275,7 @@ if (values.markdown)
     Report.markdown(summary, {
       browser: `Chrome ${version}`,
       commit: process.env.BENCH_COMMIT,
+      repository: process.env.GITHUB_REPOSITORY ?? 'tempoxyz/accounts',
       runUrl: process.env.BENCH_RUN_URL,
       walletHost: values.host ?? 'https://wallet.tempo.xyz',
     }),

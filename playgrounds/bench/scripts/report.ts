@@ -144,11 +144,45 @@ export function summarize(
 /** Output of {@link summarize}. */
 export type Summary = ReturnType<typeof summarize>
 
-/** Returns the Lighthouse color for a score. */
-function badge(score: number) {
-  if (score >= 90) return '🟢'
-  if (score >= 50) return '🟠'
-  return '🔴'
+/** Ring colors per Lighthouse rating, for light and dark color schemes. */
+const colors = {
+  good: {
+    dark: { range: '#22c55e', track: '#14532d' },
+    light: { range: '#16a34a', track: '#86efac' },
+  },
+  poor: {
+    dark: { range: '#ef4444', track: '#7f1d1d' },
+    light: { range: '#dc2626', track: '#fca5a5' },
+  },
+  work: {
+    dark: { range: '#f97316', track: '#92310a' },
+    light: { range: '#ea580c', track: '#fdba74' },
+  },
+} as const
+
+/** Returns the Lighthouse rating for a score: 90–100 good, 50–89 needs work, 0–49 poor. */
+function rating(score: number) {
+  if (score >= 90) return 'good'
+  if (score >= 50) return 'work'
+  return 'poor'
+}
+
+/**
+ * Renders a 40 × 40 score ring as SVG: a track, an arc covering the score and the
+ * score in the middle. `scripts/badges.ts` writes one file per score to `badges/`.
+ */
+export function ring(score: number) {
+  const { dark, light } = colors[rating(score)]
+  const circumference = 2 * Math.PI * 19.2
+  const offset = (circumference * (1 - score / 100)).toFixed(4)
+  return [
+    '<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">',
+    `<style>@media (prefers-color-scheme:dark){.track{stroke:${dark.track}}.range{stroke:${dark.range}}.text{fill:#fafafa}}</style>`,
+    `<circle class="track" cx="20" cy="20" r="19.0625" fill="none" stroke="${light.track}" stroke-width="0.625"/>`,
+    `<circle class="range" cx="20" cy="20" r="19.2" fill="none" stroke="${light.range}" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="${circumference.toFixed(4)}" stroke-dashoffset="${offset}" transform="rotate(-90 20 20)"/>`,
+    `<text class="text" x="20" y="20" fill="#111111" dy="0.36em" style="font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:${score === 100 ? 13 : 15}px;text-anchor:middle">${score}</text>`,
+    '</svg>',
+  ].join('')
 }
 
 /** Flattens a summary into rows for `console.table`. */
@@ -173,23 +207,38 @@ export function markdown(
   options: {
     browser: string
     commit?: string | undefined
+    /** GitHub repository that hosts the score rings, as `owner/name`. */
+    repository: string
     runUrl?: string | undefined
     walletHost: string
   },
 ) {
-  const { browser, commit, runUrl, walletHost } = options
+  const { browser, commit, repository, runUrl, walletHost } = options
 
-  const cell = (value: { score: number; value: number } | undefined) =>
-    value ? `${badge(value.score)} ${value.score} · ${value.value} ms` : '–'
+  // Rings load from the benchmarked commit, so a report always matches its rings.
+  const base = `https://raw.githubusercontent.com/${repository}/${commit ?? 'main'}/playgrounds/bench/badges`
+  const img = (score: number, title: string) =>
+    `<img src="${base}/score-${score}.svg" width="40" height="40" alt="${score}" title="${title}">`
 
   const lines = [
     '## ⚡ UX bench',
     '',
-    '| Renderer | Score |',
-    '| --- | --- |',
-    ...summary.overall.map(
-      (entry) => `| ${names[entry.renderer]} | ${badge(entry.score)} **${entry.score}** |`,
-    ),
+    '<table>',
+    '<thead><tr><th>Renderer</th><th align="center">Score</th>' +
+      cases.map((name) => `<th align="center">${name}</th>`).join('') +
+      '</tr></thead>',
+    '<tbody>',
+    ...summary.overall.map((entry) => {
+      const rows = summary.rows.filter((row) => row.renderer === entry.renderer)
+      const scores = rows.map((row) => {
+        if (!row.ok) return '<td align="center">–</td>'
+        const total = row.values.total
+        return `<td align="center">${img(row.score, `${row.case}: ${row.score}`)}${total ? `<br><sub>${total.value} ms</sub>` : ''}</td>`
+      })
+      return `<tr><td>${names[entry.renderer]}</td><td align="center">${img(entry.score, `${names[entry.renderer]}: ${entry.score}`)}</td>${scores.join('')}</tr>`
+    }),
+    '</tbody>',
+    '</table>',
     '',
   ]
 
@@ -197,15 +246,27 @@ export function markdown(
     const rows = summary.rows.filter((row) => row.renderer === entry.renderer)
     const columns = metrics.filter((metric) => rows.some((row) => row.values[metric]))
     lines.push(
-      `### ${names[entry.renderer]}`,
+      `<details><summary><b>${names[entry.renderer]}</b></summary>`,
       '',
-      `| Case | ${columns.map((metric) => labels[metric].name).join(' | ')} | Score | Runs |`,
-      `| --- | ${columns.map(() => '---').join(' | ')} | --- | --- |`,
+      '<table>',
+      '<thead><tr><th>Case</th>' +
+        columns.map((metric) => `<th align="center">${labels[metric].name}</th>`).join('') +
+        '<th align="center">Score</th><th align="center">Runs</th></tr></thead>',
+      '<tbody>',
       ...rows.map((row) => {
-        const status = row.ok === row.runs ? `${row.ok}/${row.runs}` : `⚠️ ${row.ok}/${row.runs}`
-        const total = row.ok ? `${badge(row.score)} **${row.score}**` : '–'
-        return `| ${row.case} | ${columns.map((metric) => cell(row.values[metric])).join(' | ')} | ${total} | ${status} |`
+        const cells = columns.map((metric) => {
+          const value = row.values[metric]
+          if (!value) return '<td align="center">–</td>'
+          return `<td align="center">${img(value.score, `${labels[metric].name}: ${value.value} ms`)}<br><sub>${value.value} ms</sub></td>`
+        })
+        const score = row.ok ? img(row.score, `${row.case}: ${row.score}`) : '–'
+        const runs = row.ok === row.runs ? `${row.ok}/${row.runs}` : `⚠️ ${row.ok}/${row.runs}`
+        return `<tr><td>${row.case}</td>${cells.join('')}<td align="center">${score}</td><td align="center">${runs}</td></tr>`
       }),
+      '</tbody>',
+      '</table>',
+      '',
+      '</details>',
       '',
     )
   }
@@ -219,7 +280,7 @@ export function markdown(
   lines.push(
     '<details><summary>Scoring</summary>',
     '',
-    "Each value is the median of the passing runs. It is scored 0–100 on Lighthouse's log-normal curve: the **good** budget scores 90 and the **poor** budget scores 50. 🟢 90–100 · 🟠 50–89 · 🔴 0–49. A case score weights Total twice as much as Wallet ready and Confirm.",
+    "Each value is the median of the passing runs. It is scored 0–100 on Lighthouse's log-normal curve: the **good** budget scores 90 and the **poor** budget scores 50. Rings are green from 90, orange from 50 and red below 50. A case score weights Total twice as much as Wallet ready and Confirm. The milliseconds under a case score are its Total.",
     '',
     '| Metric | Measures | register / login (good · poor) | send (good · poor) |',
     '| --- | --- | --- | --- |',

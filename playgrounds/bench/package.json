@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "badges": "tsx scripts/badges.ts",
     "bench": "tsx scripts/bench.ts",
     "build": "tsc --noEmit && vp build",
     "check:types": "tsc --noEmit",
