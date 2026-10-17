@@ -38,14 +38,27 @@ jobs:
         with:
           persist-credentials: false
 
+      # The baseline: main's SDK source (the PR's base commit), built with this
+      # PR's bench app so both sides run the same harness.
+      - name: Clone base SDK
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: base
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha || 'main' }}
+          sparse-checkout: src
+
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
 
-      - name: Build bench app
-        run: pnpm --filter bench build
+      # Both apps share one origin, since the wallet treats a new origin differently.
+      - name: Build bench apps
+        run: |
+          pnpm --filter bench build
+          ACCOUNTS_SRC="$GITHUB_WORKSPACE/base/src" pnpm --filter bench exec vp build --base /base/ --outDir dist/base --emptyOutDir
 
-      # Serves the PR's SDK build locally and benchmarks it against the live
-      # Tempo Wallet on Tempo Testnet, with the runner's preinstalled Chrome.
+      # Serves both apps locally and benchmarks them against the live Tempo Wallet
+      # on Tempo Testnet, with the runner's preinstalled Chrome.
       - name: Run bench
         working-directory: bench
         env:
@@ -54,13 +67,13 @@ jobs:
           RUNS: ${{ inputs.runs || '5' }}
         run: |
           pnpm preview > preview.log 2>&1 &
-          for _ in $(seq 1 30); do curl -fsS http://localhost:5180 > /dev/null && break; sleep 1; done
-          if ! curl -fsS http://localhost:5180 > /dev/null; then
+          for _ in $(seq 1 30); do curl -fsS http://localhost:5180/base/ > /dev/null && break; sleep 1; done
+          if ! curl -fsS http://localhost:5180 > /dev/null || ! curl -fsS http://localhost:5180/base/ > /dev/null; then
             echo "::error::The bench app preview did not start."
             cat preview.log
             exit 1
           fi
-          pnpm bench --runs "$RUNS" --json samples.json --markdown report.md
+          BENCH_BASE_COMMIT="$(git -C ../base rev-parse HEAD)" pnpm bench --runs "$RUNS" --baseline http://localhost:5180/base/ --json samples.json --markdown report.md
 
       - name: Write job summary
         if: ${{ !cancelled() && hashFiles('bench/report.md') != '' }}

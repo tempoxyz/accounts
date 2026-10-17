@@ -56,12 +56,27 @@ The bench waits 1 s before each action, as a person does between clicks.
 
 | Option or variable        | Effect                                                           |
 | ------------------------- | ---------------------------------------------------------------- |
+| `--baseline <url>`        | Also measures a baseline app and compares against it             |
 | `--json <path>`           | Writes every sample as JSON                                      |
 | `--markdown <path>`       | Writes the scored Markdown report                                |
 | `CHROME_PATH`             | Uses a specific browser binary                                   |
 | `BENCH_SCREENSHOTS=<dir>` | Captures the wallet when a step fails                            |
 | `BENCH_NO_SANDBOX=1`      | Disables Chrome's sandbox, only in containers that cannot run it |
 
+## Comparison with main
+
+With `--baseline`, each run measures the head app and the baseline app, alternating which goes first. The report adds a **vs main** column to the scores, and a **Total vs main** column to the timings. 🟢 or 🔴 marks a Total change only when every run of one app beats every run of the other and the medians differ by 50 ms or more. Network and block-inclusion noise is large, so a smaller or overlapping difference stays unmarked.
+
+Serve both apps from one origin, since the wallet treats a new origin differently. `ACCOUNTS_SRC` builds the bench app against another SDK source, such as a checkout of main:
+
+```sh
+git worktree add ../accounts-main main
+pnpm --filter bench build
+ACCOUNTS_SRC=$PWD/../accounts-main/src pnpm --filter bench exec vp build --base /base/ --outDir dist/base --emptyOutDir
+pnpm --filter bench preview &
+pnpm bench --baseline http://localhost:5180/base/
+```
+
 ## CI
 
-The `Accounts Bench` workflow (`.github/workflows/accounts-bench.yml`) runs on pull requests that change `src/`, `bench/`, or the lockfile. It builds the bench app with the PR's SDK and runs 5 runs per renderer against the live Tempo Wallet. Then it writes the report to the job summary and keeps one comment on the pull request up to date. Run it on any branch with **Run workflow**, and set the number of runs there.
+The `Accounts Bench` workflow (`.github/workflows/accounts-bench.yml`) runs on pull requests that change `src/`, `bench/`, or the lockfile. It builds the bench app twice, once with the PR's SDK and once with the base commit's SDK, and runs 5 runs per renderer of each against the live Tempo Wallet. Then it writes the report to the job summary and keeps one comment on the pull request up to date. Run it on any branch with **Run workflow**, and set the number of runs there.
