@@ -182,8 +182,13 @@ export declare namespace local {
 export function server(options: server.Options): WebAuthnCeremony {
   const { credentials, deferRegistration = false, url } = options
 
-  async function request<returnType>(path: string, body: unknown): Promise<returnType> {
+  async function request<returnType>(
+    path: string,
+    body: unknown,
+    init: RequestInit = {},
+  ): Promise<returnType> {
     const response = await fetch(`${url}${path}`, {
+      ...init,
       body: JSON.stringify(body),
       ...(credentials ? { credentials } : {}),
       headers: { 'Content-Type': 'application/json' },
@@ -205,7 +210,9 @@ export function server(options: server.Options): WebAuthnCeremony {
       const verified = (async () => {
         for (let attempt = 0; ; attempt++)
           try {
-            await request('/register', credential)
+            // `keepalive` lets the request finish when the page closes right
+            // after answering (e.g. a wallet popup).
+            await request('/register', credential, { keepalive: true })
             return
           } catch (error) {
             // The authenticator just minted this random credential ID, so a
@@ -253,7 +260,10 @@ export declare namespace server {
      * Trade-offs: the server session (e.g. `Handler.webAuthn`'s cookie)
      * exists only once verification completes, so server requests the app
      * makes right after registering may not be authenticated yet. The
-     * `webAuthn` adapter makes logins and disconnects wait for it. If the
+     * `webAuthn` adapter makes logins and disconnects wait for it. The request
+     * is sent with `keepalive`, so it completes when the page closes right
+     * after answering (a popup), but retries only run while the page is open.
+     * If the
      * server rejects the registration, the adapter removes the account (an
      * `accountsChanged` event) and keeps its public key in storage under
      * `registration:<credentialId>`.

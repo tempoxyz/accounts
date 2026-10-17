@@ -214,8 +214,8 @@ describe('server', () => {
     /** Answers each `/register` with the next of `responses`, recording the paths. */
     function stub(responses: (() => Response | Promise<Response>)[]) {
       const paths: string[] = []
-      vi.stubGlobal('fetch', async (input: string | URL) => {
-        paths.push(new URL(input).pathname)
+      vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+        paths.push(`${new URL(input).pathname}${init?.keepalive ? ' (keepalive)' : ''}`)
         return await responses.shift()!()
       })
       return paths
@@ -267,9 +267,9 @@ describe('server', () => {
       await expect(verified).resolves.toBeUndefined()
       expect(paths).toMatchInlineSnapshot(`
         [
-          "/webauthn/register",
-          "/webauthn/register",
-          "/webauthn/register",
+          "/webauthn/register (keepalive)",
+          "/webauthn/register (keepalive)",
+          "/webauthn/register (keepalive)",
         ]
       `)
     })
