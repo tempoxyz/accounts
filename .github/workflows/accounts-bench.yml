@@ -1,6 +1,8 @@
 name: Accounts Bench
 on:
   pull_request:
+    # `edited` reruns the bench when the `Bench wallet:` line in the body changes.
+    types: [opened, synchronize, reopened, edited]
     paths:
       - .github/workflows/accounts-bench.yml
       - bench/**
@@ -11,6 +13,9 @@ on:
       runs:
         default: '5'
         description: Runs per renderer
+        required: false
+      wallet:
+        description: Wallet page to bench against, e.g. a wallet PR preview's /post-message. Default is the live Tempo Wallet.
         required: false
 
 concurrency:
@@ -58,14 +63,28 @@ jobs:
           ACCOUNTS_SRC="$GITHUB_WORKSPACE/base/src" pnpm --filter bench exec vp build --base /base/ --outDir dist/base --emptyOutDir
 
       # Serves both apps locally and benchmarks them against the live Tempo Wallet
-      # on Tempo Testnet, with the runner's preinstalled Chrome.
+      # on Tempo Testnet, with the runner's preinstalled Chrome. A `wallet` input,
+      # or a `Bench wallet: <url>` line in the PR body, points both apps at a wallet
+      # PR preview instead. Only preview URLs are accepted.
       - name: Run bench
         working-directory: bench
         env:
           BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           BENCH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_BODY: ${{ github.event.pull_request.body }}
           RUNS: ${{ inputs.runs || '5' }}
+          WALLET: ${{ inputs.wallet }}
         run: |
+          wallet="${WALLET:-$(printf '%s\n' "$PR_BODY" | tr -d '\r' | sed -n 's/^Bench wallet: *//p' | head -n 1)}"
+          host=()
+          if [ -n "$wallet" ]; then
+            if ! printf '%s' "$wallet" | grep -Eq '^https://[a-z0-9-]+-wallet-preview\.porto\.workers\.dev/post-message$'; then
+              echo "::error::Bench wallet must be a wallet PR preview, like https://<hash>-wallet-preview.porto.workers.dev/post-message."
+              exit 1
+            fi
+            host=(--host "$wallet")
+          fi
+
           pnpm preview > preview.log 2>&1 &
           for _ in $(seq 1 30); do curl -fsS http://localhost:5180/base/ > /dev/null && break; sleep 1; done
           if ! curl -fsS http://localhost:5180 > /dev/null || ! curl -fsS http://localhost:5180/base/ > /dev/null; then
@@ -73,7 +92,7 @@ jobs:
             cat preview.log
             exit 1
           fi
-          BENCH_BASE_COMMIT="$(git -C ../base rev-parse HEAD)" pnpm bench --runs "$RUNS" --baseline http://localhost:5180/base/ --json samples.json --markdown report.md
+          BENCH_BASE_COMMIT="$(git -C ../base rev-parse HEAD)" pnpm bench --runs "$RUNS" --baseline http://localhost:5180/base/ --json samples.json --markdown report.md "${host[@]}"
 
       - name: Write job summary
         if: ${{ !cancelled() && hashFiles('bench/report.md') != '' }}

@@ -80,3 +80,11 @@ pnpm bench --baseline http://localhost:5180/base/
 ## CI
 
 The `Accounts Bench` workflow (`.github/workflows/accounts-bench.yml`) runs on pull requests that change `src/`, `bench/`, or the lockfile. It builds the bench app twice, once with the PR's SDK and once with the base commit's SDK, and runs 5 runs per renderer of each against the live Tempo Wallet. Then it writes the report to the job summary and keeps one comment on the pull request up to date. Run it on any branch with **Run workflow**, and set the number of runs there.
+
+To bench a wallet change before it ships, point both apps at the wallet PR's preview. Set the `wallet` input on **Run workflow**, or add a line like this to the pull request body:
+
+```
+Bench wallet: https://<hash>-wallet-preview.porto.workers.dev/post-message
+```
+
+Only wallet preview URLs are accepted. The report names the wallet it ran against.
