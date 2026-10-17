@@ -70,9 +70,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       | { credentialId: string; publicKey: Hex.Hex; rpId: string; time: number; username?: string }
       | undefined
 
-    // Server registrations still in flight, by credential ID. Each settles once
+    // Server verifications still in flight (registrations and deferred logins). Each settles once
     // the server acknowledges or rejects the credential, or once it's cancelled.
-    const pending = new Map<string, { controller: AbortController; promise: Promise<void> }>()
+    const pending = new Set<{ controller: AbortController; promise: Promise<void> }>()
     // Account addresses of credentials the server rejected. Their accounts and
     // access keys are dropped whenever they show up in the store, including
     // ones stored after the rejection (e.g. while a sign-up's signature prompt
@@ -154,10 +154,12 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           throw error
         },
       )
-      pending.set(credential.id, { controller, promise })
+      // One entry per verification, so overlapping ones for a credential are all waited for.
+      const entry = { controller, promise }
+      pending.add(entry)
       promise.then(
-        () => pending.delete(credential.id),
-        () => pending.delete(credential.id),
+        () => pending.delete(entry),
+        () => pending.delete(entry),
       )
     }
 
