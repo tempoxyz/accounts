@@ -163,15 +163,46 @@ describe('background registration', () => {
     expect(await storage.getItem('lastCredentialId')).toMatchInlineSnapshot(`"previous"`)
   })
 
-  test('behavior: removes an account rejected before it is connected', async () => {
+  test('error: fails a sign-up rejected before it answers', async () => {
     const { provider } = setup({ reject: new Error('Authenticator not allowed') })
 
-    await register(provider)
-
-    await vi.waitFor(async () =>
-      expect(await provider.request({ method: 'eth_accounts' })).toEqual([]),
+    await expect(
+      provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            capabilities: { method: 'register', name: 'alice', digest: `0x${'1'.repeat(64)}` },
+          } as never,
+        ],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InternalError: Authenticator not allowed]`,
     )
     expect(provider.store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: a late rejection emits accountsChanged', async () => {
+    const { provider, verifications } = setup()
+    await register(provider)
+    // A SIWE session started by the same connect.
+    provider.store.setState({ auth: { logout: 'https://app.example/auth/logout' } })
+    const events: unknown[] = []
+    provider.on('accountsChanged', (accounts) => events.push(accounts))
+
+    verifications[0]!.reject(new Error('Missing or expired challenge'))
+
+    await vi.waitFor(() => expect(events).toHaveLength(1))
+    expect(events).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `)
+    // Kept, so `wallet_disconnect` still ends that session.
+    expect(provider.store.getState().auth).toMatchInlineSnapshot(`
+      {
+        "logout": "https://app.example/auth/logout",
+      }
+    `)
   })
 
   test('behavior: a login with a rejected credential restores its account', async () => {
@@ -212,6 +243,7 @@ describe('background registration', () => {
       ],
     })
 
+    await vi.waitFor(() => expect(provider.store.getState().accessKeys).toHaveLength(0))
     const { accessKeys, accounts } = provider.store.getState()
     expect({ accessKeys, accounts }).toMatchInlineSnapshot(`
       {

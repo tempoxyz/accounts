@@ -94,8 +94,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     // ones stored after the rejection (e.g. while a sign-up's signature prompt
     // was still open). A later login with the credential clears it.
     const rejected = new Set<string>()
+    // Dropped after the update that added them, so the provider emits both.
     store.subscribe(() => {
-      if (rejected.size > 0) drop()
+      if (rejected.size > 0) queueMicrotask(drop)
     })
 
     // A registration whose page closed before the server answered leaves its
@@ -117,13 +118,15 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         )
     })().catch(() => {})
 
-    /** Removes accounts of rejected credentials, with their access keys. */
+    /**
+     * Removes accounts of rejected credentials, with their access keys. Keeps
+     * `auth`, so `wallet_disconnect` still ends a session started alongside.
+     */
     function drop() {
       const { accessKeys, accounts } = store.getState()
       const kept = accounts.filter((account) => !rejected.has(account.address.toLowerCase()))
       const keys = accessKeys.filter((accessKey) => !rejected.has(accessKey.access.toLowerCase()))
       if (kept.length === accounts.length && keys.length === accessKeys.length) return
-      if (kept.length === 0) return store.disconnect()
       store.setState({
         accessKeys: keys,
         accounts: kept,
@@ -157,6 +160,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       const { address } = Account.fromWebAuthnP256(credential)
       rejected.add(address.toLowerCase())
       if (registered?.credentialId === credential.id) registered = undefined
+      drop()
       // Keep the public key on this device, so the account can be recovered.
       await storage.setItem(`registration:${credential.id}`, {
         name,
@@ -167,7 +171,6 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         if (previous) await storage.setItem('lastCredentialId', previous)
         else await storage.removeItem('lastCredentialId')
       await mark(credential.id, undefined)
-      drop()
     }
 
     /** Tracks a registration the ceremony verifies in the background. */
@@ -230,6 +233,10 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         const { publicKey, username, verified } = await ceremony.verifyRegistration(credential, {
           name: parameters.name,
         })
+        let failure: { error: unknown } | undefined
+        verified?.catch((error) => {
+          failure = { error }
+        })
         registered = {
           credentialId: credential.id,
           publicKey,
@@ -251,6 +258,10 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         }
         await storage.setItem('lastCredentialId', credential.id)
         const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
+        const signed = signature ? await signature : undefined
+        // Rejected while the signature prompt was open: fail the sign-up, as
+        // without `deferRegistration`.
+        if (failure) throw failure.error
         return {
           accounts: [
             {
@@ -260,7 +271,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
               credential: { id: credential.id, publicKey, rpId },
             },
           ],
-          ...(signature ? { signature: await signature } : {}),
+          ...(signed ? { signature: signed } : {}),
           username,
         }
       },
