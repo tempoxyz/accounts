@@ -271,7 +271,10 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
   const { credentials, url } = options
 
   /** Posts the registration with `keepalive`, so it survives the page closing. */
-  async function register(credential: Registration.Credential, signal: AbortSignal | undefined) {
+  async function register(
+    credential: Registration.Credential,
+    signal: AbortSignal | undefined,
+  ): Promise<{ publicKey?: Hex | undefined }> {
     const response = await fetch(`${url}/register`, {
       body: JSON.stringify(credential),
       ...(credentials ? { credentials } : {}),
@@ -282,35 +285,51 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
     })
     const json = await response.json()
     if (!response.ok) throw new Error((json as { error?: string }).error ?? 'Request failed')
+    return json as { publicKey?: Hex | undefined }
   }
 
+  const base = server(options)
+
   return from({
-    ...server(options),
+    ...base,
 
     async verifyRegistration(credential, options = {}) {
       const { signal } = options
       const verified = (async () => {
-        for (let attempt = 0; ; attempt++)
-          try {
-            signal?.throwIfAborted()
-            await register(credential, signal)
-            return { session: true }
-          } catch (error) {
-            if (signal?.aborted) throw signal.reason
-            // A retry that finds the credential means a lost earlier attempt
-            // stored it: the authenticator just minted this random credential
-            // ID. Count it as acknowledged, without the session that attempt
-            // issued. A consumed challenge does not prove that (it may have
-            // expired), so it rejects; a later login recovers the account if
-            // the server did store it.
-            if (attempt > 0 && (error as Error).message === 'Credential already exists')
-              return { session: false }
-            // `fetch` failures and non-JSON (e.g. gateway) responses can be
-            // retried; a JSON error is the server's answer.
-            const retryable = error instanceof TypeError || error instanceof SyntaxError
-            if (!retryable || attempt >= 2) throw error
-            await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
-          }
+        const { publicKey, session } = await (async () => {
+          for (let attempt = 0; ; attempt++)
+            try {
+              signal?.throwIfAborted()
+              const { publicKey } = await register(credential, signal)
+              return { publicKey, session: true }
+            } catch (error) {
+              if (signal?.aborted) throw signal.reason
+              // A retry that finds the credential means a lost earlier attempt
+              // stored it: the authenticator just minted this random credential
+              // ID. Count it as acknowledged, without the session that attempt
+              // issued. A consumed challenge does not prove that (it may have
+              // expired), so it rejects; a later login recovers the account if
+              // the server did store it.
+              if (attempt > 0 && (error as Error).message === 'Credential already exists')
+                return { publicKey: undefined, session: false }
+              // `fetch` failures and non-JSON (e.g. gateway) responses can be
+              // retried; a JSON error is the server's answer.
+              const retryable = error instanceof TypeError || error instanceof SyntaxError
+              if (!retryable || attempt >= 2) throw error
+              await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
+            }
+        })()
+        // The app was handed the address of the key the client parsed. If the
+        // server parsed another one from the attestation, that address isn't
+        // the stored account's: end its session and refuse the registration.
+        if (publicKey && publicKey.toLowerCase() !== credential.publicKey.toLowerCase()) {
+          await base.logout?.().catch(() => {})
+          throw new Error('Server stored a different public key')
+        }
+        // Any session still in place belongs to an earlier sign-in, not this
+        // account, so end it rather than let requests run as that account.
+        if (!session) await base.logout?.().catch(() => {})
+        return { session }
       })()
       // Observed by the adapter; keep an unobserved failure from going unhandled.
       verified.catch(() => {})

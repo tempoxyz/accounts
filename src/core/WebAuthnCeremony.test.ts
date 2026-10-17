@@ -259,6 +259,7 @@ describe('deferred', () => {
       () => new Response('Bad Gateway', { status: 502 }),
       // The first attempt registered the credential before its response was lost.
       () => Response.json({ error: 'Credential already exists' }, { status: 400 }),
+      () => new Response(null, { status: 204 }),
     ])
     const ceremony = WebAuthnCeremony.deferred({
       url: 'https://wallet.example.com/webauthn',
@@ -276,6 +277,7 @@ describe('deferred', () => {
         "/webauthn/register (keepalive)",
         "/webauthn/register (keepalive)",
         "/webauthn/register (keepalive)",
+        "/webauthn/logout",
       ]
     `)
   })
@@ -308,6 +310,50 @@ describe('deferred', () => {
     await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: Missing or expired challenge]`,
     )
+  })
+
+  test('behavior: a retry without the session ends the session in place', async () => {
+    const paths = stub([
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      () => Response.json({ error: 'Credential already exists' }, { status: 400 }),
+      () => new Response(null, { status: 204 }),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({ url: 'https://wallet.example.com/webauthn' })
+
+    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+    await expect(verified).resolves.toMatchInlineSnapshot(`
+      {
+        "session": false,
+      }
+    `)
+    expect(paths).toMatchInlineSnapshot(`
+      [
+        "/webauthn/register (keepalive)",
+        "/webauthn/register (keepalive)",
+        "/webauthn/logout",
+      ]
+    `)
+  })
+
+  test('error: rejects when the server stored a different public key', async () => {
+    const paths = stub([
+      () => Response.json({ credentialId: 'credential', publicKey: '0x04cd' }),
+      () => new Response(null, { status: 204 }),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({ url: 'https://wallet.example.com/webauthn' })
+
+    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+    await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Server stored a different public key]`,
+    )
+    expect(paths).toMatchInlineSnapshot(`
+      [
+        "/webauthn/register (keepalive)",
+        "/webauthn/logout",
+      ]
+    `)
   })
 
   test('error: a cancelled verification rejects without retrying', async () => {
