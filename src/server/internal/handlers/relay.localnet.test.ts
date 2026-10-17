@@ -1,6 +1,6 @@
 import type { RpcRequest } from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
-import { parseUnits, type Address, type BaseError } from 'viem'
+import { custom, MethodNotFoundRpcError, parseUnits, type Address, type BaseError } from 'viem'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
 import { Actions, Addresses, Capabilities, Tick, Transaction, VirtualAddress } from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
@@ -1685,6 +1685,72 @@ describe('behavior: path C — no sponsorship', () => {
     expect(result.transaction.nonce).toBeDefined()
     expect(result.capabilities?.fee).toBeDefined()
     expect(result.capabilities?.sponsored).toBe(false)
+  })
+})
+
+describe('behavior: simulation', () => {
+  /** Relays through a transport that records each upstream request's start and end. */
+  async function serve(options: { tempoSimulate?: boolean | undefined } = {}) {
+    const upstream = http()({ chain, retryCount: 0 })
+    const events: string[] = []
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        resolveTokens: () => localnetTokens,
+        transports: {
+          [chain.id]: custom({
+            async request({ method, params }) {
+              events.push(`start ${method}`)
+              try {
+                if (method === 'tempo_simulateV1' && options.tempoSimulate === false)
+                  throw new MethodNotFoundRpcError(new Error('Method not found'))
+                return await upstream.request({ method, params } as never)
+              } finally {
+                events.push(`end ${method}`)
+              }
+            },
+          }),
+        },
+      }).listener,
+    )
+    return { client: getClient({ transport: http(server.url) }), events, server }
+  }
+
+  test('behavior: skips tempo_simulateV1 once the node reports it unsupported', async () => {
+    const { client, events, server } = await serve({ tempoSimulate: false })
+    try {
+      const results = []
+      for (const _ of [1, 2])
+        results.push(
+          await fillTransaction(client, { account: userAccount.address, calls: [transferCall()] }),
+        )
+
+      expect(events.filter((event) => event === 'start tempo_simulateV1')).toHaveLength(1)
+      expect(events.filter((event) => event === 'start eth_simulateV1')).toHaveLength(2)
+      for (const result of results)
+        expect(findDiffs(result.capabilities?.balanceDiffs, userAccount.address)).toBeDefined()
+    } finally {
+      server.close()
+    }
+  })
+
+  test('behavior: simulates the requested calls alongside the fill', async () => {
+    const { client, events, server } = await serve()
+    try {
+      const result = await fillTransaction(client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+
+      expect(events.indexOf('start tempo_simulateV1')).toBeLessThan(
+        events.indexOf('end eth_fillTransaction'),
+      )
+      expect(events.filter((event) => event === 'start tempo_simulateV1')).toHaveLength(1)
+      expect(findDiffs(result.capabilities?.balanceDiffs, userAccount.address)).toBeDefined()
+    } finally {
+      server.close()
+    }
   })
 })
 

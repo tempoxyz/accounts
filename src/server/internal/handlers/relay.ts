@@ -181,6 +181,19 @@ export function relay(options: relay.Options = {}): Handler {
             ...(sponsoredFeeToken ? { feeToken: sponsoredFeeToken } : {}),
           }
 
+          // Simulation needs only the calls, so start it alongside the fill. It is used when the
+          // fill keeps the requested calls (no swap prepended), and its failure only surfaces then.
+          const calls_requested = extractCalls(baseTx)
+          const simulation_early =
+            features.simulate && requireBalanceDiffs && calls_requested.length > 0
+              ? simulate(client, {
+                  account: from === zeroAddress ? undefined : from,
+                  calls: calls_requested,
+                  kv,
+                })
+              : undefined
+          void simulation_early?.catch(() => {})
+
           let filled: Awaited<ReturnType<typeof fill>>
           let sponsored = false
           let feeToken = sponsoredFeeToken
@@ -243,6 +256,8 @@ export function relay(options: relay.Options = {}): Handler {
                 const result = await fill(client, {
                   autoSwap,
                   feeToken: token,
+                  // Fee-token resolution already read these balances.
+                  getBalance: (token) => balances.get(token.toLowerCase()),
                   kv,
                   resolveFeeToken: resolveFeeTokenForSwap,
                   transaction: { ...normalized, chainId, ...(token ? { feeToken: token } : {}) },
@@ -405,6 +420,7 @@ export function relay(options: relay.Options = {}): Handler {
                   gas: transaction_filled.gas,
                   kv,
                   maxFeePerGas: transaction_filled.maxFeePerGas,
+                  simulation: sameCalls(calls, calls_requested) ? simulation_early : undefined,
                 })
               const fee = await computeFee(client, {
                 feeToken,
@@ -837,10 +853,11 @@ async function fill(client: Client, options: fill.Options) {
         : 0n
       if (fromAddress && resolvedFeeToken && gas > 0n && maxFeePerGas > 0n) {
         const [balance, metadata] = await Promise.all([
-          Actions.token
-            .getBalance(client, { account: fromAddress, token: resolvedFeeToken })
-            .then(({ amount }) => amount)
-            .catch(() => 0n),
+          options.getBalance?.(resolvedFeeToken) ??
+            Actions.token
+              .getBalance(client, { account: fromAddress, token: resolvedFeeToken })
+              .then(({ amount }) => amount)
+              .catch(() => 0n),
           resolveTokenMetadata(client, { token: resolvedFeeToken, kv }).catch(() => undefined),
         ])
         if (metadata) {
@@ -885,6 +902,8 @@ declare namespace fill {
   type Options = {
     autoSwap?: { slippage: number } | undefined
     feeToken?: Address | undefined
+    /** The sender's balance of a token, when already read (e.g. during fee-token resolution). */
+    getBalance?: ((token: Address) => Promise<bigint> | undefined) | undefined
     kv?: Kv.Kv | undefined
     resolveFeeToken?: ((insufficientToken: Address) => Promise<Address | undefined>) | undefined
     transaction: Record<string, unknown>
@@ -1087,9 +1106,35 @@ function extractCalls(transaction: Record<string, unknown>): readonly Call[] {
   ] as readonly Call[]
 }
 
+/** Whether two call lists are the same calls, whatever the encoding of their values. */
+function sameCalls(a: readonly Call[], b: readonly Call[]) {
+  const value = (v: unknown) =>
+    typeof v === 'bigint' ? v : typeof v === 'string' && v !== '0x' ? BigInt(v) : 0n
+  return (
+    a.length === b.length &&
+    a.every(
+      (call, i) =>
+        call.to?.toLowerCase() === b[i]!.to?.toLowerCase() &&
+        (call.data ?? '0x').toLowerCase() === (b[i]!.data ?? '0x').toLowerCase() &&
+        value(call.value) === value(b[i]!.value),
+    )
+  )
+}
+
 // TODO: cleanup/remove
 async function simulate(client: Client, options: simulate.Options) {
-  const { account, calls } = options
+  const { account, calls, kv } = options
+  // Nodes without `tempo_simulateV1` answer every fill with "method not found", so skip it for a
+  // while once seen rather than spend a round trip on it each time.
+  const unsupported = `simulate.tempoUnsupported:${client.chain?.id ?? 0}`
+  async function fallback() {
+    const { results } = await simulateCalls(client, {
+      ...(account ? { account } : {}),
+      calls: calls as Call[],
+    })
+    return { results, tokenMetadata: undefined }
+  }
+  if (kv && (await kv.get(unsupported).catch(() => undefined))) return fallback()
   try {
     return await Actions.simulate.simulateCalls(client, {
       ...(account ? { account } : {}),
@@ -1104,11 +1149,8 @@ async function simulate(client: Client, options: simulate.Options) {
       (error as { code?: number | undefined }).code ??
       (error as { cause?: { code?: number | undefined } | undefined }).cause?.code
     if (code !== -32601) throw error
-    const { results } = await simulateCalls(client, {
-      ...(account ? { account } : {}),
-      calls: calls as Call[],
-    })
-    return { results, tokenMetadata: undefined }
+    await kv?.set(unsupported, true, { ttl: 10 * 60 }).catch(() => {})
+    return fallback()
   }
 }
 
@@ -1116,6 +1158,7 @@ declare namespace simulate {
   type Options = {
     account?: Address | undefined
     calls: readonly Call[]
+    kv?: Kv.Kv | undefined
   }
 }
 
@@ -1123,10 +1166,12 @@ async function simulateAndParseDiffs(client: Client, options: simulateAndParseDi
   const { account, calls, swap, feeToken, gas, kv, maxFeePerGas } = options
 
   try {
-    const { results, tokenMetadata } = await simulate(client, {
-      account: account === zeroAddress ? undefined : account,
-      calls,
-    })
+    const { results, tokenMetadata } = await (options.simulation ??
+      simulate(client, {
+        account: account === zeroAddress ? undefined : account,
+        calls,
+        kv,
+      }))
 
     // Collect all logs across all call results.
     const logs: (typeof results)[number]['logs'] = []
@@ -1171,6 +1216,8 @@ declare namespace simulateAndParseDiffs {
     gas?: bigint | undefined
     kv?: Kv.Kv | undefined
     maxFeePerGas?: bigint | undefined
+    /** A simulation of `calls` already in flight, started before the fill. */
+    simulation?: ReturnType<typeof simulate> | undefined
   }
 }
 
