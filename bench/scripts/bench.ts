@@ -289,11 +289,14 @@ async function measure(options: { renderer: Renderer; run: number; url: string }
   if (mode) url.searchParams.set('mode', mode)
   if (values.host) url.searchParams.set('host', values.host)
 
+  // The case in progress, which a failure outside a case's own recovery is recorded against.
+  let current = ordered[0]!
   try {
     await attached(page)
     await page.goto(url.toString())
     await page.waitForFunction(() => '__bench' in window)
     for (const [index, name] of ordered.entries()) {
+      current = name
       const sample = await (async (): Promise<Sample> => {
         try {
           // Every connect after the first starts signed out, so it requests its capabilities
@@ -318,10 +321,10 @@ async function measure(options: { renderer: Renderer; run: number; url: string }
       if (sample.error && (Report.core as readonly Case[]).includes(name)) break
     }
   } catch (error) {
-    // The app never loaded, so every selected case fails.
+    // The app failed to load or to recover, so this run ends here.
     const message = (error as Error).message
-    console.error(`${renderer} run ${run} failed:`, message)
-    results.push({ case: ordered[0]!, error: message, renderer, run, total: 0 })
+    console.error(`${renderer} run ${run} ${current} failed:`, message)
+    results.push({ case: current, error: message, renderer, run, total: 0 })
   } finally {
     await context.close()
   }

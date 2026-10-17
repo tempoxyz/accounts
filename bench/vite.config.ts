@@ -17,26 +17,26 @@ const src = process.env.ACCOUNTS_SRC
 function auth(): Plugin {
   const handler = Handler.auth({
     getClient: () => createClient({ chain: tempoModerato, transport: http() }),
-    origin: `http://localhost:${port}`,
     path: '/auth',
+    // Binds each challenge to the host the page was served from (localhost, 127.0.0.1, a LAN IP).
+    trustProxy: true,
   })
   const listener = (req: { url?: string | undefined }, res: unknown, next: () => void) => {
     if (req.url === '/auth' || req.url?.startsWith('/auth/')) return handler.listener(req, res)
     next()
   }
-  return {
-    configurePreviewServer: (server) => void server.middlewares.use(listener),
-    configureServer: (server) => void server.middlewares.use(listener),
-    name: 'bench-auth',
-  }
+  // Mounted ahead of Vite's own middlewares, whose localhost-only CORS would otherwise answer the
+  // Tempo Wallet page's preflight. `Handler.auth` sends its own CORS headers, on `/auth` only.
+  const mount = (server: { middlewares: { stack: { handle: unknown; route: string }[] } }) =>
+    void server.middlewares.stack.unshift({ handle: listener, route: '' })
+  return { configurePreviewServer: mount, configureServer: mount, name: 'bench-auth' }
 }
 
 export default defineConfig({
   plugins: [auth()],
-  // The Tempo Wallet page fetches the SIWE challenge from its own origin.
-  preview: { cors: true, port, strictPort: true },
+  preview: { port, strictPort: true },
   ...(src
     ? { resolve: { alias: [{ find: /^accounts$/, replacement: path.resolve(src, 'index.ts') }] } }
     : {}),
-  server: { cors: true, port, strictPort: true },
+  server: { port, strictPort: true },
 })
