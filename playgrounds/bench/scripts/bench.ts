@@ -64,6 +64,10 @@ const { values } = parseArgs({
   },
 })
 
+const runs = Number(values.runs)
+if (!Number.isInteger(runs) || runs < 1)
+  throw new Error(`Invalid --runs: ${values.runs}. Use a positive integer.`)
+
 const selected = values.renderers.split(',').map((renderer) => {
   if (!Report.renderers.includes(renderer as Renderer))
     throw new Error(`Unknown renderer: ${renderer}`)
@@ -222,7 +226,7 @@ async function screenshot(page: Page, name: string) {
 
 const samples: Sample[] = []
 for (const renderer of selected)
-  for (let run = 0; run < Number(values.runs); run++) {
+  for (let run = 0; run < runs; run++) {
     const context = await browser.newContext({ ignoreHTTPSErrors: true })
     const credentials = new Map<string, { credentialId: string }>()
     // Each page's authenticator setup, awaited before the page is used.
@@ -266,7 +270,7 @@ await browser.close()
 
 if (values.json) await fs.writeFile(values.json, JSON.stringify(samples, null, 2))
 
-const summary = Report.summarize(samples, { renderers: selected, runs: Number(values.runs) })
+const summary = Report.summarize(samples, { renderers: selected, runs })
 console.table(Report.table(summary))
 
 if (values.markdown)
@@ -280,3 +284,10 @@ if (values.markdown)
       walletHost: values.host ?? 'https://wallet.tempo.xyz',
     }),
   )
+
+// Individual failures are part of the report, but a run with no passing sample
+// measured nothing (e.g. the app never loaded), so it must not pass.
+if (!samples.some((sample) => !sample.error)) {
+  console.error('No sample passed.')
+  process.exitCode = 1
+}

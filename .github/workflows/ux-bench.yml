@@ -55,6 +55,11 @@ jobs:
         run: |
           pnpm preview > preview.log 2>&1 &
           for _ in $(seq 1 30); do curl -fsS http://localhost:5180 > /dev/null && break; sleep 1; done
+          if ! curl -fsS http://localhost:5180 > /dev/null; then
+            echo "::error::The bench playground preview did not start."
+            cat preview.log
+            exit 1
+          fi
           pnpm bench --runs "$RUNS" --json samples.json --markdown report.md
 
       - name: Write job summary
