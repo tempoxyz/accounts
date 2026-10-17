@@ -1018,7 +1018,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       params: undefined,
                     })
 
-                    store.connect(
+                    await store.connect(
                       { accounts: resolveAccounts(accounts), activeAccount: 0 },
                       accounts,
                     )
@@ -1515,7 +1515,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       )
                     })()
 
-                    store.connect(
+                    await store.connect(
                       {
                         accounts: resolveAccounts(accounts),
                         activeAccount: 0,

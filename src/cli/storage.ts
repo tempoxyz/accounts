@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from 'node:util'
 import { Json } from 'ox'
 
 import * as Storage from '../core/Storage.js'
-import { lock } from './internal/lock.js'
+import { assertPrivate, lock } from './internal/lock.js'
 
 const mode_directory = 0o700
 const mode_file = 0o600
@@ -44,9 +44,11 @@ export function defaultPath(): string {
  *
  * The lock is a `<path>.lock` directory, held only for the read, merge, and
  * write. A writer takes it over from a process that has exited, or once it is
- * 30 seconds old, and gives up after 35 seconds. The file's directory must not
- * be writable by every user or owned by another user (the default
- * `~/.tempo/wallet` is private), or writes fail with `Lock.UnusableError`.
+ * 30 seconds old, and gives up after 35 seconds. Unless the process runs as
+ * root, the file's directory must be owned by this user or root, and if every
+ * user can write to it, it must be sticky (like `/tmp`); otherwise reads and
+ * writes fail with `Lock.UnusableError`. The default `~/.tempo/wallet` is
+ * private.
  */
 export function filesystem(options: filesystem.Options = {}): Storage.Storage {
   const path = expandPath(options.path ?? defaultPath())
@@ -71,6 +73,8 @@ export function filesystem(options: filesystem.Options = {}): Storage.Storage {
     {
       async getItem<value>(name: string): Promise<value | null> {
         return await enqueue(async () => {
+          // Fail on load rather than on the first save, which may follow a login.
+          await assertPrivate(dirname(path), `${path}.lock`)
           const value = (await read(path))[name] ?? null
           bases.set(name, structuredClone(value))
           return value as value | null
@@ -210,6 +214,8 @@ async function update(path: string, fn: (value: Record<string, unknown>) => void
  *    because `next` changed it or connected, `next`'s `auth` is stored.
  * 7. Past `hints.maxAccounts`, the oldest (last) accounts are evicted, never
  *    the active one.
+ * 8. An access key `next` added is stored only with its account, so a write
+ *    from before another process's logout can't put key material back.
  */
 function merge(base: unknown, current: unknown, next: unknown, hints: merge.Hints = {}): unknown {
   if (isDeepStrictEqual(current, base) || !isItem(next)) return next
@@ -239,6 +245,13 @@ function merge(base: unknown, current: unknown, next: unknown, hints: merge.Hint
     return ids_connect.has(id) && !ids_merged.has(id)
   })
   const accounts = [...asserted, ...list(state.accounts)]
+
+  const ids_account = new Set(accounts.map(identities.accounts))
+  const ids_key = new Set(list(state_current.accessKeys).map(identities.accessKeys))
+  if (Array.isArray(state.accessKeys) && !replace.includes('accessKeys'))
+    state.accessKeys = state.accessKeys.filter(
+      (key) => ids_key.has(identities.accessKeys(key)) || ids_account.has(field(key, 'access')),
+    )
 
   const selected = activeAddress(next.state)
   const ours = !!connect || selected !== activeAddress(state_base)

@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { threadId, Worker } from 'node:worker_threads'
-import { describe, expect, test } from 'vp/test'
+import { describe, expect, test, vi } from 'vp/test'
 
 import { moduleUrl, run } from '../../../test/process.js'
 import { lock } from './lock.js'
@@ -311,10 +311,6 @@ describe('lock', () => {
         setup: (path) => chmod(dirname(path), 0o777),
       },
       {
-        name: 'sticky directory writable by every user',
-        setup: (path) => chmod(dirname(path), 0o1777),
-      },
-      {
         name: 'lock that is a symbolic link',
         setup: async (path) => {
           const target = await mkdtemp(join(tmpdir(), 'accounts-lock-target-'))
@@ -374,14 +370,38 @@ describe('lock', () => {
           "message": "Cannot use the lock at <dir>/store.json.lock: it is not a directory.",
           "name": "Lock.UnusableError",
         },
-        "sticky directory writable by every user": {
-          "fast": true,
-          "message": "Cannot use the lock at <dir>/store.json.lock: <dir> is writable by every user.",
-          "name": "Lock.UnusableError",
-        },
       }
     `)
   })
+
+  test.skipIf(process.platform === 'win32')(
+    'behavior: works in a sticky directory writable by every user, like /tmp',
+    async () => {
+      const path = await createPath()
+      await chmod(dirname(path), 0o1777)
+
+      const result = await lock(path, async () => 'locked')
+      await chmod(dirname(path), 0o700)
+
+      expect(result).toMatchInlineSnapshot(`"locked"`)
+    },
+  )
+
+  test.skipIf(process.platform === 'win32')(
+    'behavior: skips the directory checks for root, which can write anywhere',
+    async () => {
+      const path = await createPath()
+      await chmod(dirname(path), 0o777)
+      const getuid = vi.spyOn(process, 'getuid').mockReturnValue(0)
+
+      try {
+        await expect(lock(path, async () => 'locked')).resolves.toMatchInlineSnapshot(`"locked"`)
+      } finally {
+        getuid.mockRestore()
+        await chmod(dirname(path), 0o700)
+      }
+    },
+  )
 
   // Root reads any directory, so the lock below would be readable.
   test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(

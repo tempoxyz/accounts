@@ -42,11 +42,11 @@ const contended = new Set(['EACCES', 'EEXIST', 'ENOTDIR', 'ENOTEMPTY', 'EPERM'])
  * Waits up to `timeout`, by default 5 seconds past `stale` so that any
  * abandoned entry is taken over first, then throws {@link TimeoutError}.
  *
- * Only this user (or root) may be able to create entries next to `path`, or
- * another user could plant `<path>.lock`. The lock throws
- * {@link UnusableError} instead of waiting when the directory is writable by
- * every user or owned by another user, or when `<path>.lock` is not a
- * directory of this user's that holds only owner entries.
+ * No other user may be able to replace this user's entries next to `path`
+ * (see {@link assertPrivate}), and `<path>.lock` must be a directory of this
+ * user's (or root's) holding only owner entries. Otherwise the lock throws
+ * {@link UnusableError} instead of waiting, so a planted lock or symbolic link
+ * is never read or emptied.
  */
 export async function lock<value>(
   path: string,
@@ -125,12 +125,23 @@ export class UnusableError extends Error {
   }
 }
 
-/** Throws unless only this user (or root) can create entries in `directory`. */
-async function assertPrivate(directory: string, path: string) {
-  if (typeof process.getuid !== 'function') return
-  const info = await stat(directory)
-  if (info.mode & 0o002) throw new UnusableError(path, `${directory} is writable by every user`)
-  if (info.uid !== process.getuid() && info.uid !== 0)
+/**
+ * Throws {@link UnusableError} for the lock at `path` unless no other user can
+ * replace this user's entries in `directory`: it must be owned by this user or
+ * root, and if every user can write to it, it must be sticky (like `/tmp`).
+ * Root, which can write anywhere, and a missing directory pass.
+ */
+export async function assertPrivate(directory: string, path: string) {
+  const uid = process.getuid?.()
+  if (uid === undefined || uid === 0) return
+  const info = await stat(directory).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return undefined
+    throw error
+  })
+  if (!info) return
+  if (info.mode & 0o002 && !(info.mode & 0o1000))
+    throw new UnusableError(path, `${directory} is writable by every user`)
+  if (info.uid !== uid && info.uid !== 0)
     throw new UnusableError(path, `${directory} is owned by another user`)
 }
 
@@ -166,7 +177,8 @@ async function reclaim(path: string, stale: number): Promise<readonly string[]> 
   })
   if (!info) return []
   if (!info.isDirectory()) throw new UnusableError(path, 'it is not a directory')
-  if (typeof process.getuid === 'function' && info.uid !== process.getuid())
+  const uid = process.getuid?.()
+  if (uid !== undefined && uid !== 0 && info.uid !== uid && info.uid !== 0)
     throw new UnusableError(path, 'it is owned by another user')
   const names = await readdir(path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return []

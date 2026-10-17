@@ -34,6 +34,7 @@ const key_2 = accessKey(root, '0x00000000000000000000000000000000000000b2')
 const key_3 = accessKey(root_3, '0x00000000000000000000000000000000000000b3', 42431)
 const key_4 = accessKey(root_4, '0x00000000000000000000000000000000000000b4')
 const key_5 = accessKey(root_2, '0x00000000000000000000000000000000000000b5')
+const key_6 = accessKey(root, '0x00000000000000000000000000000000000000b6')
 
 const labels: Record<string, string> = {
   [root]: 'root',
@@ -45,6 +46,7 @@ const labels: Record<string, string> = {
   [key_3.address]: 'key_3',
   [key_4.address]: 'key_4',
   [key_5.address]: 'key_5',
+  [key_6.address]: 'key_6',
 }
 
 type State = Pick<Store.State, 'accessKeys' | 'accounts' | 'activeAccount' | 'auth' | 'chainId'>
@@ -228,6 +230,33 @@ describe('filesystem', () => {
     `)
   })
 
+  test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'error: fails to load from a directory other users can replace entries in',
+    async () => {
+      const path = await createPath()
+      await Storage.filesystem({ key: 'test', path }).setItem('store', {
+        state: initial,
+        version: 0,
+      })
+      await chmod(dirname(path), 0o777)
+
+      const result = await Promise.resolve(
+        Storage.filesystem({ key: 'test', path }).getItem('store'),
+      ).catch((error: Error) => ({
+        message: error.message.replaceAll(dirname(path), '<dir>'),
+        name: error.name,
+      }))
+      await chmod(dirname(path), 0o700)
+
+      expect(result).toMatchInlineSnapshot(`
+        {
+          "message": "Cannot use the lock at <dir>/store.json.lock: <dir> is writable by every user.",
+          "name": "Lock.UnusableError",
+        }
+      `)
+    },
+  )
+
   test('behavior: merges concurrent writes per field and record', async () => {
     // Two adapters on one file stand in for two processes that load the store at the same time.
     // B writes first, then A. A `fresh` A writes without reading the file first.
@@ -256,7 +285,7 @@ describe('filesystem', () => {
       {
         name: 'adds a new key while another process removes a different one',
         b: (state) => without(state, key_2),
-        a: (state) => ({ ...state, accessKeys: [key_3, ...state.accessKeys] }),
+        a: (state) => ({ ...state, accessKeys: [key_6, ...state.accessKeys] }),
       },
       {
         name: 'leaves out a record another process removed, even if this process changed it',
@@ -314,6 +343,11 @@ describe('filesystem', () => {
         a: (state) => withExpiry(state, key_1, 200),
       },
       {
+        name: 'keeps a logout from another process over a stale new key',
+        b: (state) => ({ ...state, accessKeys: [], accounts: [], activeAccount: 0 }),
+        a: (state) => ({ ...state, accessKeys: [key_6, ...state.accessKeys] }),
+      },
+      {
         name: 'keeps a logout from another process over a stale selection',
         b: (state) => ({ ...state, accessKeys: [], accounts: [], activeAccount: 0 }),
         a: (state) => ({ ...state, activeAccount: 0 }),
@@ -354,7 +388,7 @@ describe('filesystem', () => {
       {
         "adds a new key while another process removes a different one": {
           "accessKeys": [
-            "key_3",
+            "key_6",
             "key_1",
           ],
           "accounts": [
@@ -410,6 +444,12 @@ describe('filesystem', () => {
           "chainId": 4217,
         },
         "keeps a logout from another process over a stale key change": {
+          "accessKeys": [],
+          "accounts": [],
+          "active": null,
+          "chainId": 4217,
+        },
+        "keeps a logout from another process over a stale new key": {
           "accessKeys": [],
           "accounts": [],
           "active": null,
@@ -609,6 +649,11 @@ describe('filesystem', () => {
         a: (store) => store.setState(withExpiry(store.getState(), key_1, 200)),
       },
       {
+        name: 'keeps a disconnect over a stale new key',
+        b: (store) => store.disconnect(),
+        a: (store) => store.setState({ accessKeys: [key_6, ...store.getState().accessKeys] }),
+      },
+      {
         name: 'keeps a disconnect over a stale selection',
         b: (store) => store.disconnect(),
         a: (store) => store.setState({ activeAccount: 0 }),
@@ -682,6 +727,12 @@ describe('filesystem', () => {
           "chainId": 42431,
         },
         "keeps a disconnect over a stale key change": {
+          "accessKeys": [],
+          "accounts": [],
+          "active": null,
+          "chainId": 4217,
+        },
+        "keeps a disconnect over a stale new key": {
           "accessKeys": [],
           "accounts": [],
           "active": null,

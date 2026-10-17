@@ -77,9 +77,10 @@ export type Store = ZustandStore & {
   /**
    * Sets `state` for a connect of `accounts`. Storage shared between processes
    * stores those accounts, the selection, and `auth` as given, even over a
-   * logout another process saved meanwhile.
+   * logout another process saved meanwhile. Resolves once storage has saved
+   * it, and rejects if it can't.
    */
-  connect: (state: Partial<State>, accounts: readonly { address: string }[]) => void
+  connect: (state: Partial<State>, accounts: readonly { address: string }[]) => Promise<void>
   /**
    * Disconnects all accounts and clears locally signable access-key material.
    * Resolves once storage has saved the cleared state, and rejects if it can't.
