@@ -501,8 +501,11 @@ describe('rawTransactionTransport', () => {
    * fails in transit (e.g. a 502 after the node took it), so viem retries it
    * and the node rejects the copy with `rejection`.
    */
-  function flaky(rejection: string, options: { known?: boolean | undefined } = {}) {
-    const { known = true } = options
+  function flaky(
+    rejection: string,
+    options: { known?: boolean | undefined; mined?: boolean | undefined } = {},
+  ) {
+    const { known = true, mined = true } = options
     const requests: string[] = []
     let accepted = false
     const transport = custom({
@@ -517,7 +520,7 @@ describe('rawTransactionTransport', () => {
         }
         const found = known && (params as readonly unknown[])[0] === hash
         if (method === 'eth_getTransactionByHash') return found ? { hash } : null
-        if (method === 'eth_getTransactionReceipt') return found ? receipt : null
+        if (method === 'eth_getTransactionReceipt') return found && mined ? receipt : null
         return null
       },
     })
@@ -531,6 +534,19 @@ describe('rawTransactionTransport', () => {
       transports: { [tempo.id]: transport },
     })
   }
+
+  test('behavior: waits for the receipt no longer than the sync timeout', async () => {
+    const { transport } = flaky('already known', { mined: false })
+    const start = Date.now()
+
+    await expect(
+      client(transport).request({
+        method: 'eth_sendRawTransactionSync' as never,
+        params: [serialized, 300] as never,
+      }),
+    ).rejects.toThrowError('already known')
+    expect(Date.now() - start).toBeLessThan(5_000)
+  })
 
   test('behavior: resolves a retried sync submission the node already knows', async () => {
     const { requests, transport } = flaky('already known')

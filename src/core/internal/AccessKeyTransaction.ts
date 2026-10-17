@@ -44,12 +44,19 @@ export function maybeSubmitted(error: unknown): boolean {
   if (!(error instanceof BaseError)) return true
   return !!error.walk(
     (e) =>
-      e instanceof HttpRequestError ||
+      // No response, or one that doesn't say the request was refused: a lost
+      // connection, a timeout or a gateway error. A 4xx response refused it.
+      (e instanceof HttpRequestError &&
+        (e.status === undefined || e.status === 408 || e.status >= 500)) ||
       e instanceof SocketClosedError ||
       e instanceof TimeoutError ||
       e instanceof WebSocketRequestError ||
       // EIP-7966: added to the mempool, but not included within the timeout.
-      (e as { code?: unknown }).code === 4,
+      (e as { code?: unknown }).code === 4 ||
+      // A retry the node rejected as a duplicate that couldn't be confirmed
+      // (see `Client`'s raw transaction transport): an earlier attempt may
+      // have landed.
+      /already known|known transaction|nonce too low|already imported/i.test((e as Error).message),
   )
 }
 
