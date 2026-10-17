@@ -1,4 +1,4 @@
-import { Base64, Bytes, Hex as ox_Hex } from 'ox'
+import { Base64, Bytes, Hex as core_Hex } from 'ox'
 import type { Hex } from 'viem'
 import { Authentication, Registration } from 'webauthx/server'
 
@@ -44,7 +44,11 @@ export declare namespace getRegistrationOptions {
     excludeCredentialIds?: readonly string[] | undefined
     /** Credential display name (e.g. `"alice"`). */
     name: string
-    /** Opaque user identifier. Encoded as `user.id` in the WebAuthn creation options. */
+    /**
+     * Opaque user identifier. Encoded as `user.id` in the WebAuthn creation
+     * options. A random one when omitted (`Handler.webAuthn` picks it for
+     * {@link server} ceremonies).
+     */
     userId?: string | undefined
   }
   type ReturnType = { options: Registration.Options }
@@ -135,7 +139,8 @@ export function local(options: local.Options = {}): WebAuthnCeremony {
         excludeCredentialIds: excludeCredentialIds as string[] | undefined,
         name,
         rp: { id: rpId, name: rpId },
-        user: userId ? { id: Bytes.fromString(userId), name } : undefined,
+        // A random `userId` by default, so passkeys with the same name don't replace each other.
+        user: { id: Bytes.fromString(userId || core_Hex.random(16)), name },
       })
       return { options }
     },
@@ -219,17 +224,18 @@ function create(options: server.Options) {
   const ceremony = from({
     async getRegistrationOptions(parameters) {
       const { excludeCredentialIds, name, userId } = parameters
-      const ready = challenges.take('register')
+      // The server binds a `userId` when it issues the challenge, so a
+      // prefetched one only serves sign-ups that leave it to the server.
+      const ready = userId === undefined ? challenges.register() : undefined
       if (!ready) return request('/register/options', { excludeCredentialIds, name, userId })
-      challenges.bind(ready.challenge, { name, ...(userId !== undefined ? { userId } : {}) })
+      challenges.bind(ready, name)
       return {
         options: Registration.getOptions({
           challenge: ready.challenge,
           excludeCredentialIds: excludeCredentialIds as string[] | undefined,
           name,
           rp: { id: ready.rpId, name: ready.rpId },
-          // Encoded like `Handler.webAuthn`'s `/register/options`.
-          ...(userId !== undefined ? { user: { id: Bytes.fromString(userId), name } } : undefined),
+          user: { id: ready.userId, name },
         }).options,
       }
     },
@@ -240,7 +246,7 @@ function create(options: server.Options) {
 
     async getAuthenticationOptions(parameters = {}) {
       const { challenge, credentialId, mediation } = parameters
-      const ready = challenge ? challenges.issued(challenge) : challenges.take('login')
+      const ready = challenge ? challenges.issued(challenge) : challenges.login()
       if (!ready) return request('/login/options', { challenge, credentialId, mediation })
       const { options } = Authentication.getOptions({
         challenge: ready.challenge,
@@ -253,7 +259,7 @@ function create(options: server.Options) {
     prefetch: challenges.warm,
 
     takeChallenge() {
-      return challenges.take('login', { issue: true })?.challenge
+      return challenges.issue()?.challenge
     },
 
     async verifyAuthentication(response) {
@@ -277,10 +283,19 @@ function create(options: server.Options) {
  * How long before the server's challenge TTL runs out a prefetched challenge
  * stops being used, so the ceremony that takes it can finish in time.
  */
-const prefetchMargin = 60_000
+const margin = 60_000
 
-/** A challenge the server issued ahead of the ceremony that uses it. */
-type Prefetched = { challenge: Hex; expires: number; rpId: string }
+/**
+ * When a challenge requested at `requested` stops being used. Undefined for a
+ * server that doesn't send its TTL (it predates prefetching, so it can't take
+ * a nameless registration challenge either).
+ */
+function expiry(requested: number, ttl: unknown) {
+  if (typeof ttl !== 'number' || !Number.isFinite(ttl)) return undefined
+  // Leave a fifth of a short TTL, so a 1-minute TTL still leaves 48 s.
+  const value = requested + ttl * 1_000 - Math.min(margin, ttl * 200)
+  return value > Date.now() ? value : undefined
+}
 
 /**
  * Holds one login and one registration challenge fetched ahead of time, once
@@ -288,93 +303,105 @@ type Prefetched = { challenge: Hex; expires: number; rpId: string }
  */
 function prefetcher(request: <returnType>(path: string, body: unknown) => Promise<returnType>) {
   let enabled = false
-  const ready: { login?: Prefetched | undefined; register?: Prefetched | undefined } = {}
-  const pending: { login?: Promise<void> | undefined; register?: Promise<void> | undefined } = {}
-  /** Login challenges handed out by `take(…, { issue: true })`, by challenge. */
-  const issued_login = new Map<Hex, Prefetched>()
+  let login: { challenge: Hex; expires: number; rpId: string } | undefined
+  let login_pending: Promise<void> | undefined
+  let register: { challenge: Hex; expires: number; rpId: string; userId: Uint8Array } | undefined
+  let register_pending: Promise<void> | undefined
+  /** Login challenges handed out by `issue`, by challenge. */
+  const issued = new Map<Hex, { challenge: Hex; expires: number; rpId: string }>()
   /**
-   * The name and `userId` each locally built registration's options were
-   * built with, by challenge, so `/register` carries what the server didn't store.
+   * The name each locally built registration's options were built with, by
+   * challenge, so `/register` carries the name the server didn't store. Kept
+   * until the challenge expires, so a retry sends it too.
    */
-  const bound = new Map<Hex, { name: string; userId?: string | undefined }>()
+  const bound = new Map<Hex, { expires: number; name: string }>()
 
-  function fresh(value: Prefetched | undefined) {
-    return value && Date.now() < value.expires ? value : undefined
-  }
-
-  /**
-   * When a challenge requested at `requested` stops being used. Undefined for
-   * a server that doesn't send its TTL (it predates prefetching, so it can't
-   * take a nameless registration challenge either).
-   */
-  function expires(requested: number, ttl: unknown) {
-    if (typeof ttl !== 'number' || !Number.isFinite(ttl)) return undefined
-    // Leave a fifth of a short TTL, so a 1-minute TTL still leaves 48 s.
-    const value = requested + ttl * 1_000 - Math.min(prefetchMargin, ttl * 200)
-    return value > Date.now() ? value : undefined
-  }
-
-  function fill(kind: 'login' | 'register') {
-    if (!enabled || pending[kind] || fresh(ready[kind])) return
-    pending[kind] = (async () => {
+  function fill_login() {
+    if (!enabled || login_pending || (login && Date.now() < login.expires)) return
+    login_pending = (async () => {
       // The server starts the TTL before it answers, so count from the request.
       const requested = Date.now()
       try {
-        if (kind === 'login') {
-          const { options, ttl } = await request<{
-            options: Authentication.Options
-            ttl?: unknown
-          }>('/login/options', {})
-          const { challenge, rpId } = options.publicKey ?? {}
-          const until = expires(requested, ttl)
-          if (challenge && rpId && until) ready.login = { challenge, expires: until, rpId }
-        } else {
-          const { options, ttl } = await request<{
-            options: Registration.Options
-            ttl?: unknown
-          }>('/register/options', {})
-          const { challenge, rp } = options.publicKey ?? {}
-          const until = expires(requested, ttl)
-          if (challenge && rp?.id && until)
-            ready.register = { challenge, expires: until, rpId: rp.id }
-        }
+        const { options, ttl } = await request<{ options: Authentication.Options; ttl?: unknown }>(
+          '/login/options',
+          {},
+        )
+        const { challenge, rpId } = options.publicKey ?? {}
+        const expires = expiry(requested, ttl)
+        if (challenge && rpId && expires) login = { challenge, expires, rpId }
       } catch {
         // The ceremony fetches its own challenge instead.
       } finally {
-        pending[kind] = undefined
+        login_pending = undefined
       }
     })()
+  }
+
+  function fill_register() {
+    if (!enabled || register_pending || (register && Date.now() < register.expires)) return
+    register_pending = (async () => {
+      const requested = Date.now()
+      try {
+        const { options, ttl } = await request<{ options: Registration.Options; ttl?: unknown }>(
+          '/register/options',
+          {},
+        )
+        const { challenge, rp, user } = options.publicKey ?? {}
+        const expires = expiry(requested, ttl)
+        if (challenge && rp?.id && user?.id && expires)
+          register = { challenge, expires, rpId: rp.id, userId: Base64.toBytes(user.id) }
+      } catch {
+        // The ceremony fetches its own challenge instead.
+      } finally {
+        register_pending = undefined
+      }
+    })()
+  }
+
+  /** Takes the prefetched login challenge, if it's fresh, and fetches the next. */
+  function take_login() {
+    const value = login && Date.now() < login.expires ? login : undefined
+    login = undefined
+    fill_login()
+    return value
   }
 
   return {
     /** Starts prefetching. */
     warm() {
       enabled = true
-      fill('login')
-      fill('register')
+      fill_login()
+      fill_register()
     },
-    /** Takes a fresh prefetched challenge, if one is ready, and fetches the next. */
-    take(kind: 'login' | 'register', options: { issue?: boolean } = {}) {
-      const value = fresh(ready[kind])
-      ready[kind] = undefined
-      fill(kind)
-      if (!value) return undefined
-      if (kind === 'login' && options.issue) issued_login.set(value.challenge, value)
+    login: take_login,
+    /** Takes a login challenge, like `login`, for options the caller builds itself. */
+    issue() {
+      const value = take_login()
+      if (value) issued.set(value.challenge, value)
       return value
     },
-    /** The prefetched login challenge `take` issued, if `challenge` is one. */
+    /** The prefetched login challenge `issue` handed out, if `challenge` is one and still fresh. */
     issued(challenge: Hex) {
-      const value = issued_login.get(challenge)
-      issued_login.delete(challenge)
-      return fresh(value)
+      const value = issued.get(challenge)
+      issued.delete(challenge)
+      return value && Date.now() < value.expires ? value : undefined
     },
-    /** Records what a prefetched registration challenge's options were built with. */
-    bind(challenge: Hex, value: { name: string; userId?: string | undefined }) {
-      bound.set(challenge, value)
+    /** Takes the prefetched registration challenge, if it's fresh, and fetches the next. */
+    register() {
+      const value = register && Date.now() < register.expires ? register : undefined
+      register = undefined
+      fill_register()
+      return value
+    },
+    /** Records the name a prefetched registration challenge's options were built with. */
+    bind(value: { challenge: Hex; expires: number }, name: string) {
+      for (const [challenge, { expires }] of bound)
+        if (Date.now() >= expires) bound.delete(challenge)
+      bound.set(value.challenge, { expires: value.expires, name })
     },
     /**
-     * The `/register` body: the credential, plus the name and `userId` its
-     * options were built with when its challenge was prefetched.
+     * The `/register` body: the credential, plus the name its options were
+     * built with when its challenge was prefetched.
      */
     body(credential: Registration.Credential) {
       if (bound.size === 0) return credential
@@ -383,15 +410,14 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
           const { challenge } = JSON.parse(
             Bytes.toString(Base64.toBytes(credential.clientDataJSON)),
           ) as { challenge: string }
-          return ox_Hex.fromBytes(Base64.toBytes(challenge))
+          return core_Hex.fromBytes(Base64.toBytes(challenge))
         } catch {
           return undefined
         }
       })()
       const value = challenge ? bound.get(challenge) : undefined
-      if (!challenge || !value) return credential
-      bound.delete(challenge)
-      return { ...credential, ...value }
+      if (!value) return credential
+      return { ...credential, name: value.name }
     },
   }
 }

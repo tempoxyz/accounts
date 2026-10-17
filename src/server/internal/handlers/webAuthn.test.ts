@@ -1,3 +1,4 @@
+import { Base64 } from 'ox'
 import { vi } from 'vitest'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 import { Registration } from 'webauthx/server'
@@ -46,21 +47,28 @@ describe('POST /register/options', () => {
       options: Registration.Options
       ttl: number
     }
-    const { created, ...stored } = (await kv.get<{ created: number }>(
+    const { created, userId, ...stored } = (await kv.get<{ created: number; userId: string }>(
       `challenge:${options.publicKey!.challenge}`,
     ))!
-    expect({ created: typeof created, status: response.status, stored, ttl })
-      .toMatchInlineSnapshot(`
+    expect({
+      created: typeof created,
+      status: response.status,
+      stored,
+      ttl,
+      // A random one, bound as the options' `user.id`.
+      userId: options.publicKey!.user.id === Base64.fromString(userId, { pad: false, url: true }),
+    }).toMatchInlineSnapshot(`
         {
           "created": "number",
           "status": 200,
           "stored": {},
           "ttl": 300,
+          "userId": true,
         }
       `)
   })
 
-  test('behavior: binds an empty name and a userId sent without a name', async () => {
+  test('behavior: binds an empty name, and a userId sent without a name', async () => {
     const kv = Kv.memory()
     const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost' })
     const options = async (body: unknown) => {
@@ -71,25 +79,20 @@ describe('POST /register/options', () => {
         }),
       )
       const { options } = (await response.json()) as { options: Registration.Options }
-      const { created: _, ...stored } = (await kv.get<{ created: number }>(
+      const { created: _, ...stored } = (await kv.get<{ created: number; name?: string }>(
         `challenge:${options.publicKey!.challenge}`,
       ))!
       return { stored, user: options.publicKey!.user }
     }
+    const { stored, user } = await options({ name: '' })
     expect({
-      empty: await options({ name: '' }),
+      empty: { name: stored.name, user: user.name },
       userId: await options({ userId: 'user-1' }),
     }).toMatchInlineSnapshot(`
       {
         "empty": {
-          "stored": {
-            "name": "",
-          },
-          "user": {
-            "displayName": "",
-            "id": "xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e_rYBF2FpHA",
-            "name": "",
-          },
+          "name": "",
+          "user": "",
         },
         "userId": {
           "stored": {
@@ -189,18 +192,20 @@ describe('POST /register', () => {
     }
   }
 
-  test('behavior: a prefetched challenge takes the name and userId sent with the credential', async () => {
-    expect(await register({}, { name: 'alice', userId: 'user-1' })).toMatchInlineSnapshot(`
-      {
-        "body": undefined,
-        "name": "alice",
-        "status": 200,
-        "userId": "dXNlci0x",
-      }
-    `)
+  test('behavior: a challenge issued without a name takes the one sent with the credential', async () => {
+    // The `userId` stays the one bound when the challenge was issued.
+    expect(await register({ userId: 'user-1' }, { name: 'alice', userId: 'user-2' }))
+      .toMatchInlineSnapshot(`
+        {
+          "body": undefined,
+          "name": "alice",
+          "status": 200,
+          "userId": "dXNlci0x",
+        }
+      `)
   })
 
-  test('behavior: the name and userId the challenge was issued with win', async () => {
+  test('behavior: the name the challenge was issued with wins', async () => {
     expect(await register({ name: 'Test', userId: 'user-1' }, { name: 'alice', userId: 'user-2' }))
       .toMatchInlineSnapshot(`
       {
@@ -210,18 +215,6 @@ describe('POST /register', () => {
         "userId": "dXNlci0x",
       }
     `)
-  })
-
-  test('behavior: a challenge issued with a userId ignores the name and userId sent with the credential', async () => {
-    expect(await register({ userId: 'user-1' }, { name: 'alice', userId: 'user-2' }))
-      .toMatchInlineSnapshot(`
-        {
-          "body": undefined,
-          "name": "",
-          "status": 200,
-          "userId": "dXNlci0x",
-        }
-      `)
   })
 
   test('error: a login challenge cannot register', async () => {

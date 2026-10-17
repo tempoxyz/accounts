@@ -118,31 +118,28 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
   router.post(`${path}/register/options`, async (c) => {
     try {
       const body = await c.req.raw.json()
-      const { excludeCredentialIds, name, userId } = body as {
+      const { excludeCredentialIds, name } = body as {
         excludeCredentialIds?: string[]
         name?: string
         userId?: string
       }
+      // The `userId` is always bound here, so a client can't choose it at
+      // `/register`. Without one, the challenge gets a random one.
+      const userId = (body as { userId?: string }).userId ?? Hex.random(16)
 
-      // Without a name or `userId`, the challenge is issued ahead of the
-      // sign-up (see `WebAuthnCeremony.server`'s `prefetch`): the client builds
-      // the options itself and sends both with `/register`.
+      // Without a name, the challenge is issued ahead of the sign-up (see
+      // `WebAuthnCeremony.server`'s `prefetch`): the client builds the options
+      // itself, with the `user.id` issued here, and sends the name with `/register`.
       const { challenge, options } = Registration.getOptions({
         excludeCredentialIds,
         name: name ?? '',
         rp: { id: rpId, name: rpId },
-        ...(userId !== undefined
-          ? { user: { id: new TextEncoder().encode(userId), name: name ?? '' } }
-          : undefined),
+        user: { id: new TextEncoder().encode(userId), name: name ?? '' },
       })
 
       await kv.set(
         `challenge:${challenge}`,
-        {
-          created: Date.now(),
-          ...(name !== undefined ? { name } : {}),
-          ...(userId !== undefined ? { userId } : {}),
-        },
+        { created: Date.now(), ...(name !== undefined ? { name } : {}), userId },
         { ttl: challengeTtl },
       )
 
@@ -155,14 +152,10 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
   router.post(`${path}/register`, async (c) => {
     try {
-      const {
-        name: name_body,
-        userId: userId_body,
-        ...credential
-      } = (await c.req.raw.json()) as Registration_Types.Credential & {
-        name?: string | undefined
-        userId?: string | undefined
-      }
+      const { name: name_body, ...credential } =
+        (await c.req.raw.json()) as Registration_Types.Credential & {
+          name?: string | undefined
+        }
       const deserialized = Credential.deserialize(credential)
 
       const clientData = JSON.parse(
@@ -194,15 +187,10 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         if (existing ?? (await kv.get(key))) throw new Error('Credential already exists')
         throw new Error('Missing or expired challenge')
       }
-      // A registration challenge issued with neither a name nor a `userId` was
-      // fetched ahead of the sign-up, so it takes both from the credential's
-      // request, as `/register/options` would have.
-      const prefetched = stored.name === undefined && stored.userId === undefined
-      const name = prefetched ? name_body : (stored.name ?? '')
+      // A registration challenge issued without a name was fetched ahead of
+      // the sign-up, so it takes the one sent with the credential.
+      const name = stored.name ?? name_body
       if (typeof name !== 'string') throw new Error('Missing name')
-      const userId_raw = prefetched ? userId_body : stored.userId
-      if (userId_raw !== undefined && typeof userId_raw !== 'string')
-        throw new Error('Invalid userId')
 
       const result = Registration.verify(credential, {
         challenge,
@@ -215,8 +203,8 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       // Base64url-encode the userId we registered with so it matches
       // the `userHandle` shape the authenticator emits on `/login`.
       // Callers see a consistent identifier across both flows.
-      const userId = userId_raw
-        ? Base64.fromBytes(Bytes.fromString(userId_raw), { pad: false, url: true })
+      const userId = stored.userId
+        ? Base64.fromBytes(Bytes.fromString(stored.userId), { pad: false, url: true })
         : undefined
       const value = { publicKey, ...(userId ? { userId } : {}) }
       const created = await (async () => {
@@ -514,7 +502,7 @@ export declare namespace webAuthn {
       name: string
       publicKey: string
       request: Request
-      /** The `userId` provided during `/register/options`, if any. */
+      /** The `userId` provided during `/register/options`, or the random one it bound when none was. */
       userId?: string | undefined
     }) => Response | Promise<Response> | void | Promise<void>
     /**

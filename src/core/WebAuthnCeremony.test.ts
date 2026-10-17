@@ -249,6 +249,7 @@ describe('server: prefetch', () => {
             publicKey: {
               challenge: `0x0${++registrations}`,
               rp: { id: 'example.com', name: 'example.com' },
+              user: { id: 'dXNlci0x', name: '' },
             },
           },
           ...(ttl === null ? {} : { ttl }),
@@ -327,15 +328,15 @@ describe('server: prefetch', () => {
     `)
   })
 
-  test('behavior: sends the name and userId with a registration whose challenge was prefetched', async () => {
+  test('behavior: sends the name with a registration whose challenge was prefetched', async () => {
     const requests = stub()
     const ceremony = WebAuthnCeremony.deferred({ url: 'https://example.com/webauthn' })
     ceremony.prefetch!()
     await prefetched(requests)
 
-    // Takes challenge `0x01`, the credential's. Verification sends what the
-    // options were built with, even when the caller omits the name.
-    const { options } = await ceremony.getRegistrationOptions({ name: 'alice', userId: 'user-1' })
+    // Takes challenge `0x01`, the credential's, with the `user.id` the server
+    // bound. Verification sends the name, even when the caller omits it.
+    const { options } = await ceremony.getRegistrationOptions({ name: 'alice' })
     const { verified } = await ceremony.verifyRegistration(credential)
     await verified
 
@@ -351,7 +352,6 @@ describe('server: prefetch', () => {
           "id": "credential",
           "name": "alice",
           "publicKey": "0x04ab",
-          "userId": "user-1",
         },
         "user": {
           "displayName": "alice",
@@ -359,6 +359,27 @@ describe('server: prefetch', () => {
           "name": "alice",
         },
       }
+    `)
+  })
+
+  test('behavior: a sign-up with its own userId requests its own options', async () => {
+    const requests = stub()
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    ceremony.prefetch!()
+    await prefetched(requests)
+
+    await ceremony.getRegistrationOptions({ name: 'alice', userId: 'user-2' })
+
+    expect(requests.slice(2)).toMatchInlineSnapshot(`
+      [
+        {
+          "body": {
+            "name": "alice",
+            "userId": "user-2",
+          },
+          "path": "/register/options",
+        },
+      ]
     `)
   })
 
