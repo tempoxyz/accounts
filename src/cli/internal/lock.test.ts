@@ -120,29 +120,24 @@ describe('lock', () => {
     `)
   })
 
-  test('behavior: leaves nothing behind when killed while waiting', async () => {
+  test('behavior: cleans up after processes killed holding or waiting for the lock', async () => {
     const path = await createPath()
-    const live = run(holder(path))
-    await live.waitFor('locked')
+    const killed = run(holder(path))
+    await killed.waitFor('locked')
 
-    try {
-      const waiter = run(`
+    const waiters = Array.from({ length: 4 }, () =>
+      run(`
         import { lock } from ${JSON.stringify(moduleUrl('src/cli/internal/lock.ts'))}
         process.stdout.write('waiting\\n')
         await lock(${JSON.stringify(path)}, async () => {})
-      `)
-      await waiter.waitFor('waiting')
-      await sleep(100)
-      await waiter.kill()
+      `),
+    )
+    await Promise.all(waiters.map((x) => x.waitFor('waiting')))
+    await sleep(100)
+    await Promise.all([killed, ...waiters].map((x) => x.kill()))
 
-      expect(await readdir(dirname(path))).toMatchInlineSnapshot(`
-        [
-          "store.json.lock",
-        ]
-      `)
-    } finally {
-      await live.kill()
-    }
+    await lock(path, async () => {})
+    expect(await readdir(dirname(path))).toMatchInlineSnapshot(`[]`)
   })
 
   test('error: times out while a live process holds the lock', async () => {

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { mkdir, readdir, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 /** Owner entries this process has created and not yet released. */
@@ -38,6 +38,7 @@ export async function lock<value>(
   const deadline = Date.now() + timeout
 
   owners.add(owner)
+  await prune(path_lock)
   try {
     while (!(await acquire(path_lock, owner))) {
       const holders = await reclaim(path_lock)
@@ -113,16 +114,30 @@ async function reclaim(path: string): Promise<readonly string[]> {
   if (!names) return ['an unknown owner']
   const holders: string[] = []
   for (const name of names) {
-    const pid = Number(name.split('-')[0])
-    if (alive(name, pid)) holders.push(Number.isSafeInteger(pid) ? `process ${pid}` : name)
-    else await unlink(join(path, name)).catch(() => undefined)
+    if (!alive(name)) await unlink(join(path, name)).catch(() => undefined)
+    else if (/^\d+-/.test(name)) holders.push(`process ${name.split('-')[0]}`)
+    else holders.push(name)
   }
   return holders
 }
 
-/** Returns whether the owner of a lock entry may still exist. Unknown entries count as live. */
-function alive(name: string, pid: number): boolean {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return true
+/**
+ * Deletes staged lock directories (`<path>.<owner>`) left by processes killed
+ * while trying to take the lock. Like lock entries, their names are never
+ * reused, so only a dead owner's directory is ever deleted.
+ */
+async function prune(path: string) {
+  const prefix = `${basename(path)}.`
+  const names = await readdir(dirname(path)).catch(() => [])
+  for (const name of names)
+    if (name.startsWith(prefix) && !alive(name.slice(prefix.length)))
+      await rm(join(dirname(path), name), { force: true, recursive: true }).catch(() => undefined)
+}
+
+/** Returns whether a lock entry's owner (`<pid>-<random>`) may still exist. Unknown ones count as live. */
+function alive(name: string): boolean {
+  const pid = Number(name.split('-')[0])
+  if (!/^\d+-/.test(name) || !Number.isSafeInteger(pid) || pid <= 0) return true
   if (pid === process.pid) return owners.has(name)
   try {
     process.kill(pid, 0)
