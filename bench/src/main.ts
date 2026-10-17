@@ -152,9 +152,12 @@ for (const method of ['register', 'login'] as const)
             ...(siwe ? { auth: '/auth' } : {}),
             ...(key
               ? {
+                  // Scoped like a third-party app's key: wallets other than wallet.tempo.xyz
+                  // (e.g. PR previews) trust no other origin, and reject a key without scopes.
                   authorizeAccessKey: {
                     expiry: Math.floor(Date.now() / 1000) + 60 * 60,
                     limits: [{ limit: numberToHex(1_000_000), token: pathUsd }],
+                    scopes: [{ address: pathUsd, selector: 'transfer(address,uint256)' }],
                   },
                 }
               : {}),
