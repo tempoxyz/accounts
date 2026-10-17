@@ -1,6 +1,6 @@
 # Accounts Bench
 
-Times register, login and send transaction across the account adapters:
+Times register, login and send transaction across the account adapters, plus a connect matrix: register and login with Sign-In with Ethereum, an access key, or both.
 
 | Renderer             | Adapter                                            | Wallet UI                  |
 | -------------------- | -------------------------------------------------- | -------------------------- |
@@ -18,6 +18,8 @@ pnpm --filter bench dev
 - `?mode=popup|iframe` selects the Tempo Wallet mount. Default: `popup`.
 - `?host=<url>` points the Tempo Wallet renderers at another wallet page.
 
+The dev and preview servers also serve `Handler.auth` at `/auth`, which the SIWE cases sign in to. The deployed bench worker serves static files only, so its SIWE cases fail.
+
 ## Benchmark
 
 `scripts/bench.ts` drives the app in headless Chrome. A CDP virtual WebAuthn authenticator approves every passkey prompt, and its credentials are shared with each popup. Per renderer and run, it uses a fresh browser context and runs:
@@ -25,6 +27,12 @@ pnpm --filter bench dev
 1. **register**: `wallet_connect` with `method: 'register'`. The bench fills the label and clicks **Create account**.
 2. **login**: `wallet_disconnect` (untimed), then `wallet_connect` with `method: 'login'`. The bench clicks **Continue with passkey**.
 3. **send**: the testnet faucet funds the account (untimed), then `eth_sendTransactionSync` transfers 1 unit of pathUSD. The bench clicks the wallet's approval button.
+4. **Connect matrix**: each case starts with `wallet_disconnect` (untimed), so it requests its capabilities afresh. It runs after `send`, so an access key never signs the send.
+   - `register-siwe`, `login-siwe`: adds `auth: '/auth'`. The case fails unless the result carries the SIWE session.
+   - `register-key`, `login-key`: adds `authorizeAccessKey` (1 pathUSD limit, 1 hour expiry). The case fails unless the result carries the key authorization.
+   - `register-siwe-key`, `login-siwe-key`: both.
+
+   Access-key cases may show an **Authorize Spend** screen after the first click. The bench approves it, and that screen counts toward Confirm. A failing matrix case is recorded and the run continues, while a failing register, login or send ends the run.
 
 ```sh
 pnpm --filter bench dev &
@@ -42,7 +50,7 @@ Each case reports three metrics. Tempo Wallet renderers report all three, and We
 
 ## Scores
 
-Each metric's median is scored from 0 to 100 on Lighthouse's log-normal curve, against the budgets in `scripts/report.ts`. A value at the **good** budget scores 90, and a value at the **poor** budget scores 50. A case score weights Total twice as much as Wallet ready and Confirm. A renderer score is the mean of its case scores.
+Each metric's median is scored from 0 to 100 on Lighthouse's log-normal curve, against the budgets in `scripts/report.ts`. A value at the **good** budget scores 90, and a value at the **poor** budget scores 50. A case score weights Total twice as much as Wallet ready and Confirm. Matrix cases use the budgets of their base method (`register` or `login`). A renderer score is the mean of its case scores, matrix cases included.
 
 The report shows each score as a ring: green from 90, orange from 50, red below 50. The rings are the SVGs in `badges/`, which the report loads from raw.githubusercontent.com at the benchmarked commit. After changing `Report.ring`, regenerate them:
 
@@ -56,6 +64,7 @@ The bench sends each action as soon as the previous one returns, with no pause b
 
 | Option or variable        | Effect                                                           |
 | ------------------------- | ---------------------------------------------------------------- |
+| `--cases <list>`          | Runs only these cases, in report order (login needs a register)  |
 | `--baseline <url>`        | Also measures a baseline app and compares against it             |
 | `--json <path>`           | Writes every sample as JSON                                      |
 | `--markdown <path>`       | Writes the scored Markdown report                                |

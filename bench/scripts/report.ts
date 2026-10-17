@@ -9,9 +9,33 @@
 export const renderers = ['tempoWallet/popup', 'tempoWallet/iframe', 'webAuthn'] as const
 export type Renderer = (typeof renderers)[number]
 
-/** Benchmarked cases, in run order. Each case depends on the state the previous one leaves. */
-export const cases = ['register', 'login', 'send'] as const
+/**
+ * Benchmarked cases, in run order. `register`, `login` and `send` each depend on the state the
+ * previous one leaves. The connect matrix follows: register or log in with Sign-In with Ethereum
+ * (`-siwe`), an access-key authorization (`-key`), or both.
+ */
+export const cases = [
+  'register',
+  'login',
+  'send',
+  'register-siwe',
+  'register-key',
+  'register-siwe-key',
+  'login-siwe',
+  'login-key',
+  'login-siwe-key',
+] as const
 export type Case = (typeof cases)[number]
+
+/** Cases a run depends on: when one fails, the rest of that run is skipped. */
+export const core = ['register', 'login', 'send'] as const satisfies readonly Case[]
+
+/** The core case a case extends, which sets its wallet approval and budgets. */
+export function kind(name: Case): (typeof core)[number] {
+  if (name.startsWith('register')) return 'register'
+  if (name.startsWith('login')) return 'login'
+  return 'send'
+}
 
 /** Timed metrics, in report order. */
 export const metrics = ['ready', 'confirm', 'total'] as const
@@ -67,7 +91,7 @@ export const budgets = {
     ready: { good: 100, poor: 800 },
     total: { good: 1_000, poor: 4_000 },
   },
-} as const satisfies Record<Case, Record<Metric, { good: number; poor: number }>>
+} as const satisfies Record<(typeof core)[number], Record<Metric, { good: number; poor: number }>>
 
 /** Weight of each metric in a case score. Metrics a renderer lacks are left out. */
 const weights = { confirm: 1, ready: 1, total: 2 } as const satisfies Record<Metric, number>
@@ -103,17 +127,18 @@ function median(values: readonly (number | undefined)[]) {
 /** Summarizes samples per renderer and case: the p50 of each metric and its score. */
 export function summarize(
   samples: readonly Sample[],
-  options: { renderers: readonly Renderer[]; runs: number },
+  options: { cases?: readonly Case[] | undefined; renderers: readonly Renderer[]; runs: number },
 ) {
+  const { cases: selected = cases } = options
   const rows = options.renderers.flatMap((renderer) =>
-    cases.map((name) => {
+    selected.map((name) => {
       const group = samples.filter((sample) => sample.renderer === renderer && sample.case === name)
       const ok = group.filter((sample) => !sample.error)
       const values = Object.fromEntries(
         metrics.map((metric) => {
           const value = median(ok.map((sample) => sample[metric]))
           if (value === undefined) return [metric, undefined]
-          return [metric, { score: score(value, budgets[name][metric]), value }]
+          return [metric, { score: score(value, budgets[kind(name)][metric]), value }]
         }),
       ) as Record<Metric, { score: number; value: number } | undefined>
       const scored = metrics.filter((metric) => values[metric])
@@ -318,7 +343,7 @@ export function markdown(
     '',
     "Each value is the median of the passing runs. It is scored 0–100 on Lighthouse's log-normal curve: the **good** budget scores 90 and the **poor** budget scores 50. Rings are green from 90, orange from 50 and red below 50. A case score weights Total twice as much as Wallet ready and Confirm, and a renderer score is the mean of its case scores.",
     '',
-    '| Metric | Measures | register / login (good · poor) | send (good · poor) |',
+    '| Metric | Measures | register / login, with any SIWE or access key (good · poor) | send (good · poor) |',
     '| --- | --- | --- | --- |',
     ...metrics.map((metric) => {
       const auth = budgets.register[metric]
@@ -326,7 +351,7 @@ export function markdown(
       return `| ${labels[metric].name} | ${labels[metric].description} | ${auth.good} · ${auth.poor} ms | ${send.good} · ${send.poor} ms |`
     }),
     '',
-    '`send` runs `eth_sendTransactionSync`, so it includes block inclusion on Tempo Testnet (Moderato).',
+    "`send` runs `eth_sendTransactionSync`, so it includes block inclusion on Tempo Testnet (Moderato). `-siwe` cases sign in to the bench app's `Handler.auth` server, and `-key` cases also authorize an access key.",
     '',
     "**vs main** runs the same bench against main's SDK in the same job, alternating which app goes first in each run, so both see the same network. 🟢 and 🔴 mark a Total change only when every run of one app beats every run of the other and the medians differ by 50 ms or more. A score change is marked when its cases agree.",
     '',

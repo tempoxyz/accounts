@@ -7,7 +7,7 @@ import {
   webAuthn,
   WebAuthnCeremony,
 } from 'accounts'
-import { createClient, http } from 'viem'
+import { createClient, http, numberToHex } from 'viem'
 import { Actions } from 'viem/tempo'
 import { tempoModerato } from 'viem/tempo/chains'
 
@@ -128,23 +128,42 @@ async function run(action: string, fn: () => Promise<unknown>) {
   await render()
 }
 
-document.getElementById('register')!.addEventListener('click', () =>
-  run('register', () =>
-    provider.request({
-      method: 'wallet_connect',
-      params: [{ capabilities: { method: 'register', name: `bench-${Date.now()}` } }],
-    }),
-  ),
-)
-
-document.getElementById('login')!.addEventListener('click', () =>
-  run('login', () =>
-    provider.request({
-      method: 'wallet_connect',
-      params: [{ capabilities: { method: 'login' } }],
-    }),
-  ),
-)
+/**
+ * Connect cases: register or log in, optionally with Sign-In with Ethereum (`auth`, served by
+ * this app's `/auth`) and an access-key authorization. The button and case ID is the method,
+ * then `-siwe` and `-key` when set (e.g. `login-siwe-key`).
+ */
+for (const method of ['register', 'login'] as const)
+  for (const siwe of [false, true])
+    for (const key of [false, true]) {
+      const action = [method, siwe && 'siwe', key && 'key'].filter(Boolean).join('-')
+      document.getElementById(action)?.addEventListener('click', () =>
+        run(action, async () => {
+          const capabilities = {
+            ...(method === 'register' ? { method, name: `bench-${Date.now()}` } : { method }),
+            ...(siwe ? { auth: '/auth' } : {}),
+            ...(key
+              ? {
+                  authorizeAccessKey: {
+                    expiry: Math.floor(Date.now() / 1000) + 60 * 60,
+                    limits: [{ limit: numberToHex(1_000_000), token: pathUsd }],
+                  },
+                }
+              : {}),
+          }
+          const result = await provider.request({
+            method: 'wallet_connect',
+            params: [{ capabilities } as never],
+          })
+          // A connect that drops a requested capability must not score as a pass.
+          const account = result.accounts[0]?.capabilities
+          if (siwe && !account?.auth) throw new Error('Connected without a SIWE session.')
+          if (key && !account?.keyAuthorization)
+            throw new Error('Connected without an access key authorization.')
+          return result
+        }),
+      )
+    }
 
 // Untimed setup: a new account holds no fee tokens until the testnet faucet funds it.
 document.getElementById('fund')!.addEventListener('click', async () =>
