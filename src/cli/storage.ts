@@ -11,6 +11,12 @@ const mode_directory = 0o700
 const mode_file = 0o600
 const operations = new Map<string, Promise<void>>()
 
+/**
+ * Merge hints the provider store attaches to each persisted state under this
+ * symbol (see `Store.create`). Like any symbol key, it is never written.
+ */
+const hints_key = Symbol.for('accounts.store.merge')
+
 /** Identity of each record in the provider store's collections. */
 const identities = {
   accessKeys: (key: unknown) =>
@@ -30,8 +36,11 @@ export function defaultPath(): string {
  * the file, re-reads it, and merges in only what this adapter changed since it
  * last read or wrote the item, so a write never undoes another process's
  * change made in the meantime. A provider store item merges per state field,
- * and its `accounts` and `accessKeys` merge per record. When no other process
- * has written the file, a write stores exactly the given value.
+ * and its `accounts` and `accessKeys` merge per record. A disconnect replaces
+ * what it clears instead, so accounts and keys another process added are
+ * cleared too, and the store's `maxAccounts` still holds. When no other
+ * process has written the file, a write stores exactly the given value, and a
+ * write from an adapter that has not read or written the item replaces it.
  *
  * The lock is a `<path>.lock` directory. A writer takes it over from a process
  * that has exited, and waits up to 10 seconds for one that is still running.
@@ -73,11 +82,17 @@ export function filesystem(options: filesystem.Options = {}): Storage.Storage {
         })
       },
       async setItem(name, item) {
+        const hints = isItem(item)
+          ? ((item.state as Record<symbol, unknown>)[hints_key] as merge.Hints | undefined)
+          : undefined
         // The value as it reads back from the file, so it compares equal to what other writes leave.
         const next = typeof item === 'undefined' ? item : Json.parse(Json.stringify(item))
         await enqueue(async () => {
           await update(path, (value) => {
-            value[name] = merge(bases.get(name) ?? null, value[name] ?? null, next)
+            // An item this adapter never read or wrote has no base to merge against: replace it.
+            value[name] = bases.has(name)
+              ? merge(bases.get(name), value[name] ?? null, next, hints)
+              : next
           })
           bases.set(name, next)
         })
@@ -167,13 +182,15 @@ async function update(path: string, fn: (value: Record<string, unknown>) => void
  *
  * A provider store item (`{ state, version }`) merges per state field: a field
  * `next` left as `base` had it keeps `current`'s value, and one it changed
- * takes `next`'s, so when both changed a field the later write wins it.
- * Collections merge per record by identity, and `activeAccount` follows the
- * address it points to. Any other item is replaced by `next`.
+ * takes `next`'s, so when both changed a field the later write wins it. A
+ * field missing from a state is a removed field. Collections merge per record
+ * by identity, and the active account and `auth` follow {@link mergeActive}.
+ * Any other item is replaced by `next`.
  */
-function merge(base: unknown, current: unknown, next: unknown): unknown {
+function merge(base: unknown, current: unknown, next: unknown, hints: merge.Hints = {}): unknown {
   if (isDeepStrictEqual(current, base) || !isItem(next)) return next
   if (current !== null && (!isItem(current) || current.version !== next.version)) return next
+  const { maxAccounts, replace = [] } = hints
   const state_base = isItem(base) ? base.state : {}
   const state_current = isItem(current) ? current.state : {}
   const state: Record<string, unknown> = {}
@@ -183,20 +200,73 @@ function merge(base: unknown, current: unknown, next: unknown): unknown {
     ...Object.keys(state_base),
   ])
   for (const key of keys) {
-    const value = mergeField(key, state_base[key], state_current[key], next.state[key])
+    const value = replace.includes(key)
+      ? next.state[key]
+      : mergeField(key, state_base[key], state_current[key], next.state[key])
     if (typeof value !== 'undefined') state[key] = value
   }
-  if (typeof next.state.activeAccount === 'number') {
-    const active =
-      activeAddress(next.state) === activeAddress(state_base)
-        ? activeAddress(state_current)
-        : activeAddress(next.state)
-    const index = list(state.accounts).findIndex(
-      (account) => identities.accounts(account) === active,
-    )
-    state.activeAccount = Math.max(index, 0)
+  if (typeof next.state.activeAccount !== 'number' || replace.includes('activeAccount'))
+    return { ...next, state }
+
+  const ours = activeAddress(next.state) !== activeAddress(state_base)
+  const { accounts, activeAccount } = mergeActive(
+    state_current,
+    next.state,
+    list(state.accounts),
+    ours,
+  )
+  // `auth` belongs to the login whose selection is kept, so a later login without it clears it.
+  if (ours && !replace.includes('auth')) {
+    delete state.auth
+    if (typeof next.state.auth !== 'undefined') state.auth = next.state.auth
   }
+  // Like the store, evict the oldest (last) accounts past `maxAccounts`, never the active one.
+  if (maxAccounts && accounts.length > maxAccounts) {
+    const kept = activeAccount < maxAccounts ? maxAccounts : maxAccounts - 1
+    state.accounts = accounts.filter((_, i) => i === activeAccount || i < kept)
+    state.activeAccount = Math.min(activeAccount, kept)
+  } else Object.assign(state, { accounts, activeAccount })
   return { ...next, state }
+}
+
+declare namespace merge {
+  /** Hints from the provider store on how to merge its persisted state. */
+  type Hints = {
+    /** Maximum number of accounts to store. */
+    maxAccounts?: number | undefined
+    /** State fields this write resets (e.g. a disconnect): stored as given, never merged. */
+    replace?: readonly string[] | undefined
+  }
+}
+
+/**
+ * Picks the merged active account by address, and its index in `accounts`.
+ *
+ * - When this process changed the selection (`ours`), its account stays
+ *   selected. If another process removed that account meanwhile but left
+ *   other accounts, it is stored again, first: an explicit later selection
+ *   wins over an eviction. A logout, which leaves no accounts, still wins.
+ * - Otherwise the file's selection stays. If this process removed that
+ *   account, this process's own selection is used instead.
+ * - The index is `0` only when no selected account is stored.
+ */
+function mergeActive(
+  current: Record<string, unknown>,
+  next: Record<string, unknown>,
+  accounts: readonly unknown[],
+  ours: boolean,
+): { accounts: readonly unknown[]; activeAccount: number } {
+  const selected = activeAddress(next)
+  const indexOf = (address: string | undefined) =>
+    accounts.findIndex((account) => identities.accounts(account) === address)
+  if (ours) {
+    if (selected === undefined || indexOf(selected) !== -1 || list(current.accounts).length === 0)
+      return { accounts, activeAccount: Math.max(indexOf(selected), 0) }
+    const account = list(next.accounts)[next.activeAccount as number]
+    return { accounts: [account, ...accounts], activeAccount: 0 }
+  }
+  const active = [activeAddress(current), selected].find((address) => indexOf(address) !== -1)
+  return { accounts, activeAccount: Math.max(indexOf(active), 0) }
 }
 
 function mergeField(key: string, base: unknown, current: unknown, next: unknown): unknown {
@@ -209,8 +279,9 @@ function mergeField(key: string, base: unknown, current: unknown, next: unknown)
 
 /**
  * Applies the records `next` adds, changes, and removes relative to `base` to
- * `current`. Changed records keep their place in `current`; records `current`
- * lacks come first, as the store adds new records.
+ * `current`. Changed records keep their place in `current`, and added records
+ * come first, as the store adds new records. A record another process removed
+ * stays removed, even if this process changed it.
  */
 function mergeRecords(
   base: readonly unknown[],
@@ -224,7 +295,7 @@ function mergeRecords(
   const changed = (id: string) =>
     records_next.has(id) && !isDeepStrictEqual(records_next.get(id), records_base.get(id))
   const added = next.filter(
-    (record) => changed(identity(record)) && !ids_current.has(identity(record)),
+    (record) => !records_base.has(identity(record)) && !ids_current.has(identity(record)),
   )
   const kept = current.flatMap((record) => {
     const id = identity(record)

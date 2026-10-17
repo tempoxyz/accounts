@@ -1,29 +1,45 @@
 import { randomBytes } from 'node:crypto'
-import { mkdir, readdir, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { threadId } from 'node:worker_threads'
 
-/** Owner entries this process has created and not yet released. */
-const owners = new Set<string>()
+/**
+ * Owner tokens this thread holds or is acquiring. Shared by every copy of this
+ * module loaded in the thread, so one copy never mistakes another's entry for
+ * a dead owner's.
+ */
+const owners = ((globalThis as Record<symbol, Set<string> | undefined>)[
+  Symbol.for('accounts.storage.lock')
+] ??= new Set<string>())
 
 /** `rename` errors that mean the lock directory already exists. */
 const contended = new Set(['EACCES', 'EEXIST', 'ENOTDIR', 'ENOTEMPTY', 'EPERM'])
 
 /**
- * Runs `fn` while holding an exclusive cross-process lock on `path`.
+ * Age in milliseconds past which an entry of a running process counts as
+ * stale. Holders keep the lock for one read, merge, and write: milliseconds.
+ */
+const stale = 30_000
+
+/**
+ * Runs `fn` while holding an exclusive cross-process lock on `path`. Keep `fn`
+ * short: another writer may take over a lock held for over 30 seconds.
  *
  * The lock is a directory at `<path>.lock` holding one entry named after its
- * owner (`<pid>-<random>`). A writer builds its own directory with its entry
- * inside, then renames it into place. The rename only succeeds while
- * `<path>.lock` is absent or empty, so a held lock, which always holds its
- * owner's entry, can't be taken.
+ * owner token (`<pid>-<threadId>-<random>`). A writer builds its own directory
+ * with its entry inside, then renames it into place. The rename only succeeds
+ * while `<path>.lock` is absent or empty, so a held lock, which always holds
+ * its owner's entry, can't be taken.
  *
- * A writer that finds the lock held by a process that no longer exists
- * deletes that owner's entry by name, then the empty directory. Entry names
- * are never reused, so this can only ever delete the dead owner's entry, and
- * `rmdir` refuses a directory that another writer has meanwhile filled. No
- * live holder's lock is ever deleted. This relies on every writer sharing one
- * process ID namespace.
+ * A waiting writer takes over an entry whose process no longer exists, or that
+ * is older than 30 seconds (its process ID was reused, or its holder hung or
+ * was suspended). It renames the entry out to a tombstone, deletes that, then
+ * removes the empty directory. Owner tokens are never reused, so the rename can
+ * only move the entry it inspected, and `rmdir` refuses a directory that
+ * another writer has meanwhile filled. A holder suspended mid-write for over
+ * 30 seconds can lose its write. That is the trade-off for never leaving every
+ * later write failing until someone deletes the lock by hand.
  *
  * Waits up to `timeout` for a live holder, then throws {@link TimeoutError}.
  */
@@ -34,12 +50,12 @@ export async function lock<value>(
 ): Promise<value> {
   const { timeout = 10_000 } = options
   const path_lock = `${path}.lock`
-  const owner = `${process.pid}-${randomBytes(8).toString('hex')}`
+  const owner = `${process.pid}-${threadId}-${randomBytes(8).toString('hex')}`
   const deadline = Date.now() + timeout
 
   owners.add(owner)
-  await prune(path_lock)
   try {
+    await prune(path_lock)
     while (!(await acquire(path_lock, owner))) {
       const holders = await reclaim(path_lock)
       if (holders.length === 0) await rmdir(path_lock).catch(() => undefined)
@@ -54,7 +70,7 @@ export async function lock<value>(
   try {
     return await fn()
   } finally {
-    await unlink(join(path_lock, owner)).catch(() => undefined)
+    await rm(join(path_lock, owner), { force: true }).catch(() => undefined)
     await rmdir(path_lock).catch(() => undefined)
     owners.delete(owner)
   }
@@ -85,8 +101,8 @@ export class TimeoutError extends Error {
 
 /**
  * Tries to install a lock directory holding `owner`'s entry at `path`. The
- * staged directory only exists for the attempt, so a process killed while it
- * waits leaves nothing behind.
+ * staged directory (`<path>.<owner>`) only exists during the attempt; one left
+ * by a process killed mid-attempt is removed by {@link prune}.
  */
 async function acquire(path: string, owner: string): Promise<boolean> {
   const staging = `${path}.${owner}`
@@ -103,8 +119,8 @@ async function acquire(path: string, owner: string): Promise<boolean> {
 }
 
 /**
- * Deletes the entries of owners that no longer exist from the lock directory,
- * and returns a description of each remaining holder.
+ * Takes over the stale entries of the lock directory at `path`, and returns a
+ * description of each remaining holder.
  */
 async function reclaim(path: string): Promise<readonly string[]> {
   const names = await readdir(path).catch((error: NodeJS.ErrnoException) => {
@@ -114,31 +130,52 @@ async function reclaim(path: string): Promise<readonly string[]> {
   if (!names) return ['an unknown owner']
   const holders: string[] = []
   for (const name of names) {
-    if (!alive(name)) await unlink(join(path, name)).catch(() => undefined)
-    else if (/^\d+-/.test(name)) holders.push(`process ${name.split('-')[0]}`)
-    else holders.push(name)
+    if (!(await isStale(join(path, name)))) {
+      holders.push(/^\d+-/.test(name) ? `process ${name.split('-')[0]}` : name)
+      continue
+    }
+    const tombstone = `${path}.${name}.${randomBytes(4).toString('hex')}.stale`
+    await rename(join(path, name), tombstone)
+      .then(() => rm(tombstone, { force: true }))
+      .catch(() => undefined)
   }
   return holders
 }
 
 /**
- * Deletes staged lock directories (`<path>.<owner>`) left by processes killed
- * while trying to take the lock. Like lock entries, their names are never
- * reused, so only a dead owner's directory is ever deleted.
+ * Removes what stale owners left next to the lock directory at `path`: staged
+ * directories (`<path>.<owner>`) and tombstones (`<path>.<owner>.<random>.stale`).
  */
 async function prune(path: string) {
   const prefix = `${basename(path)}.`
   const names = await readdir(dirname(path)).catch(() => [])
-  for (const name of names)
-    if (name.startsWith(prefix) && !alive(name.slice(prefix.length)))
-      await rm(join(dirname(path), name), { force: true, recursive: true }).catch(() => undefined)
+  for (const name of names) {
+    if (!name.startsWith(prefix)) continue
+    const leftover = join(dirname(path), name)
+    if (await isStale(leftover, name.slice(prefix.length)))
+      await rm(leftover, { force: true, recursive: true }).catch(() => undefined)
+  }
 }
 
-/** Returns whether a lock entry's owner (`<pid>-<random>`) may still exist. Unknown ones count as live. */
-function alive(name: string): boolean {
-  const pid = Number(name.split('-')[0])
-  if (!/^\d+-/.test(name) || !Number.isSafeInteger(pid) || pid <= 0) return true
-  if (pid === process.pid) return owners.has(name)
+/**
+ * Returns whether the entry at `path`, named after an owner token, can be
+ * taken over: its process no longer exists, or the entry is older than
+ * {@link stale}. Entries of other threads of this process, and names that are
+ * not owner tokens, only go stale by age.
+ */
+async function isStale(path: string, name = basename(path)): Promise<boolean> {
+  const match = /^(\d+)-(\d+)-[0-9a-f]+$/.exec(name)
+  if (match) {
+    const pid = Number(match[1])
+    if (pid === process.pid && Number(match[2]) === threadId) return !owners.has(name)
+    if (pid !== process.pid && !running(pid)) return true
+  }
+  const info = await stat(path).catch(() => undefined)
+  return !!info && Date.now() - info.mtimeMs > stale
+}
+
+/** Returns whether a process with this ID exists. */
+function running(pid: number): boolean {
   try {
     process.kill(pid, 0)
     return true

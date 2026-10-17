@@ -19,6 +19,7 @@ async function createPath() {
 const root = '0x00000000000000000000000000000000000000a1'
 const root_2 = '0x00000000000000000000000000000000000000a2'
 const root_3 = '0x00000000000000000000000000000000000000a3'
+const root_4 = '0x00000000000000000000000000000000000000a4'
 
 function accessKey(
   access: Address.Address,
@@ -31,14 +32,42 @@ function accessKey(
 const key_1 = accessKey(root, '0x00000000000000000000000000000000000000b1')
 const key_2 = accessKey(root, '0x00000000000000000000000000000000000000b2')
 const key_3 = accessKey(root_3, '0x00000000000000000000000000000000000000b3', 42431)
+const key_4 = accessKey(root_4, '0x00000000000000000000000000000000000000b4')
 
-type State = Pick<Store.State, 'accessKeys' | 'accounts' | 'activeAccount' | 'chainId'>
+const labels: Record<string, string> = {
+  [root]: 'root',
+  [root_2]: 'root_2',
+  [root_3]: 'root_3',
+  [root_4]: 'root_4',
+  [key_1.address]: 'key_1',
+  [key_2.address]: 'key_2',
+  [key_3.address]: 'key_3',
+  [key_4.address]: 'key_4',
+}
+
+type State = Pick<Store.State, 'accessKeys' | 'accounts' | 'activeAccount' | 'auth' | 'chainId'>
 
 const initial: State = {
   accessKeys: [key_1, key_2],
   accounts: [{ address: root }, { address: root_2 }],
   activeAccount: 1,
   chainId: 4217,
+}
+
+const auth = { logout: 'https://example.com/logout' }
+
+/** A stored state with records named after their fixtures. */
+function summarize(state: Partial<State> | undefined) {
+  if (!state) return state
+  const { accessKeys = [], accounts = [], activeAccount = 0, ...rest } = state
+  return {
+    ...rest,
+    accessKeys: accessKeys.map(
+      (key) => `${labels[key.address]}${key.expiry ? ` (expiry ${key.expiry})` : ''}`,
+    ),
+    accounts: accounts.map((account) => labels[account.address]),
+    active: accounts[activeAccount] ? labels[accounts[activeAccount].address] : null,
+  }
 }
 
 function without(state: State, key: { address: string }): State {
@@ -52,13 +81,19 @@ function withExpiry(state: State, key: { address: string }, expiry: number): Sta
   }
 }
 
-/** Another process's login: a new active account, its key, and its chain. */
-function login(state: State): State {
+/** A login: a new active account, its key, and its chain. */
+function login(
+  state: State,
+  account: Address.Address = root_3,
+  key = key_3,
+  chainId = 42431,
+): State {
   return {
-    accessKeys: [key_3, ...state.accessKeys],
-    accounts: [{ address: root_3 }, ...state.accounts],
+    ...state,
+    accessKeys: [key, ...state.accessKeys],
+    accounts: [{ address: account }, ...state.accounts],
     activeAccount: 0,
-    chainId: 42431,
+    chainId,
   }
 }
 
@@ -191,81 +226,311 @@ describe('filesystem', () => {
     `)
   })
 
-  test.each<{
-    name: string
-    a: (state: State) => State
-    b: (state: State) => State
-    expected: State
-  }>([
-    {
-      name: 'keeps a login from another process while removing a different key',
-      b: login,
-      a: (state) => without(state, key_1),
-      expected: {
-        accessKeys: [key_3, key_2],
-        accounts: [{ address: root_3 }, { address: root }, { address: root_2 }],
-        activeAccount: 0,
-        chainId: 42431,
-      },
-    },
-    {
-      name: 'gives a field both processes changed to the later write',
-      b: (state) => ({ ...state, chainId: 42431 }),
-      a: (state) => ({ ...state, chainId: 1 }),
-      expected: { ...initial, chainId: 1 },
-    },
-    {
-      name: 'gives a record both processes changed to the later write',
-      b: (state) => withExpiry(login(state), key_1, 100),
-      a: (state) => withExpiry(state, key_1, 200),
-      expected: { ...login(initial), accessKeys: [key_3, { ...key_1, expiry: 200 }, key_2] },
-    },
-    {
-      name: 'leaves out a record another process removed',
-      b: (state) => without(state, key_2),
-      a: (state) => ({ ...state, accessKeys: [key_3, ...state.accessKeys] }),
-      expected: { ...initial, accessKeys: [key_3, key_1] },
-    },
-    {
-      name: 'restores a record this process changed after another process removed it',
-      b: (state) => without(state, key_1),
-      a: (state) => withExpiry(state, key_1, 200),
-      expected: { ...initial, accessKeys: [{ ...key_1, expiry: 200 }, key_2] },
-    },
-    {
-      name: 'stores a record both processes added once',
-      b: (state) => ({ ...state, accessKeys: [key_3, ...state.accessKeys] }),
-      a: (state) => ({ ...state, accessKeys: [key_3, ...state.accessKeys] }),
-      expected: { ...initial, accessKeys: [key_3, key_1, key_2] },
-    },
-    {
-      name: 'keeps the active account this process chose when another process adds one',
-      b: login,
-      a: (state) => ({ ...state, activeAccount: 0 }),
-      expected: { ...login(initial), activeAccount: 1 },
-    },
-    {
-      name: 'keeps a logout from another process',
-      b: (state) => ({ ...state, accessKeys: [], accounts: [], activeAccount: 0 }),
-      a: (state) => without(state, key_1),
-      expected: { ...initial, accessKeys: [], accounts: [], activeAccount: 0 },
-    },
-  ])('behavior: $name', async ({ a, b, expected }) => {
-    const path = await createPath()
-    await Storage.filesystem({ key: 'test', path }).setItem('store', { state: initial, version: 0 })
-
+  test('behavior: merges concurrent writes per field and record', async () => {
     // Two adapters on one file stand in for two processes that load the store at the same time.
-    const storage_a = Storage.filesystem({ key: 'test', path })
-    const storage_b = Storage.filesystem({ key: 'test', path })
-    const item_a = (await storage_a.getItem<{ state: State; version: number }>('store'))!
-    const item_b = (await storage_b.getItem<{ state: State; version: number }>('store'))!
-    await storage_b.setItem('store', { ...item_b, state: b(item_b.state) })
-    await storage_a.setItem('store', { ...item_a, state: a(item_a.state) })
+    // B writes first, then A. A `fresh` A writes without reading the file first.
+    const rows: {
+      name: string
+      a: (state: State) => State
+      b: (state: State) => State
+      fresh?: boolean | undefined
+      initial?: State | undefined
+    }[] = [
+      {
+        name: 'keeps a login from another process while removing a different key',
+        b: (state) => login(state),
+        a: (state) => without(state, key_1),
+      },
+      {
+        name: 'gives a field both processes changed to the later write',
+        b: (state) => ({ ...state, chainId: 42431 }),
+        a: (state) => ({ ...state, chainId: 1 }),
+      },
+      {
+        name: 'gives a record both processes changed to the later write',
+        b: (state) => withExpiry(login(state), key_1, 100),
+        a: (state) => withExpiry(state, key_1, 200),
+      },
+      {
+        name: 'adds a new key while another process removes a different one',
+        b: (state) => without(state, key_2),
+        a: (state) => ({ ...state, accessKeys: [key_3, ...state.accessKeys] }),
+      },
+      {
+        name: 'leaves out a record another process removed, even if this process changed it',
+        b: (state) => without(state, key_1),
+        a: (state) => withExpiry(state, key_1, 200),
+      },
+      {
+        name: 'stores a record both processes added once',
+        b: (state) => ({ ...state, accessKeys: [key_3, ...state.accessKeys] }),
+        a: (state) => ({ ...state, accessKeys: [key_3, ...state.accessKeys] }),
+      },
+      {
+        name: 'keeps the account this process selected when another process adds one',
+        b: (state) => login(state),
+        a: (state) => ({ ...state, activeAccount: 0 }),
+      },
+      {
+        name: 'keeps the account this process selected after another process removed it',
+        b: (state) => ({ ...state, accounts: [{ address: root_2 }], activeAccount: 0 }),
+        a: (state) => ({ ...state, activeAccount: 0 }),
+      },
+      {
+        name: 'keeps the selection when neither process changed it',
+        b: (state) => ({
+          ...state,
+          accounts: [{ address: root_3 }, ...state.accounts],
+          activeAccount: 2,
+        }),
+        a: (state) => without(state, key_1),
+      },
+      {
+        name: "selects this process's account when it removed the other's selection",
+        b: (state) => ({ ...state, activeAccount: 0 }),
+        a: (state) => ({ ...state, accounts: [{ address: root_2 }], activeAccount: 0 }),
+      },
+      {
+        name: 'removes a field another process cleared',
+        initial: { ...initial, auth },
+        b: ({ auth: _, ...state }) => state,
+        a: (state) => without(state, key_1),
+      },
+      {
+        name: 'keeps the auth of the login that is selected',
+        b: (state) => ({ ...login(state), auth }),
+        a: (state) => login(state, root_4, key_4, 4217),
+      },
+      {
+        name: 'keeps a logout from another process',
+        b: (state) => ({ ...state, accessKeys: [], accounts: [], activeAccount: 0 }),
+        a: (state) => without(state, key_1),
+      },
+      {
+        name: 'keeps a logout from another process over a stale key change',
+        b: (state) => ({ ...state, accessKeys: [], accounts: [], activeAccount: 0 }),
+        a: (state) => withExpiry(state, key_1, 200),
+      },
+      {
+        name: 'keeps a logout from another process over a stale selection',
+        b: (state) => ({ ...state, accessKeys: [], accounts: [], activeAccount: 0 }),
+        a: (state) => ({ ...state, activeAccount: 0 }),
+      },
+      {
+        name: 'replaces the item on a write without a read',
+        fresh: true,
+        b: (state) => login(state),
+        a: () => ({
+          accessKeys: [key_4],
+          accounts: [{ address: root_4 }],
+          activeAccount: 0,
+          chainId: 1,
+        }),
+      },
+    ]
 
-    expect(await Storage.filesystem({ key: 'test', path }).getItem('store')).toEqual({
-      state: expected,
-      version: 0,
-    })
+    const results: Record<string, unknown> = {}
+    for (const { a, b, fresh, name, initial: state = initial } of rows) {
+      const path = await createPath()
+      await Storage.filesystem({ key: 'test', path }).setItem('store', { state, version: 0 })
+      const storage_a = Storage.filesystem({ key: 'test', path })
+      const storage_b = Storage.filesystem({ key: 'test', path })
+      const item_a = fresh
+        ? { state, version: 0 }
+        : (await storage_a.getItem<{ state: State; version: number }>('store'))!
+      const item_b = (await storage_b.getItem<{ state: State; version: number }>('store'))!
+      await storage_b.setItem('store', { ...item_b, state: b(item_b.state) })
+      await storage_a.setItem('store', { ...item_a, state: a(item_a.state) })
+
+      const item = await Storage.filesystem({ key: 'test', path }).getItem<{ state: State }>(
+        'store',
+      )
+      results[name] = summarize(item?.state)
+    }
+
+    expect(results).toMatchInlineSnapshot(`
+      {
+        "adds a new key while another process removes a different one": {
+          "accessKeys": [
+            "key_3",
+            "key_1",
+          ],
+          "accounts": [
+            "root",
+            "root_2",
+          ],
+          "active": "root_2",
+          "chainId": 4217,
+        },
+        "gives a field both processes changed to the later write": {
+          "accessKeys": [
+            "key_1",
+            "key_2",
+          ],
+          "accounts": [
+            "root",
+            "root_2",
+          ],
+          "active": "root_2",
+          "chainId": 1,
+        },
+        "gives a record both processes changed to the later write": {
+          "accessKeys": [
+            "key_3",
+            "key_1 (expiry 200)",
+            "key_2",
+          ],
+          "accounts": [
+            "root_3",
+            "root",
+            "root_2",
+          ],
+          "active": "root_3",
+          "chainId": 42431,
+        },
+        "keeps a login from another process while removing a different key": {
+          "accessKeys": [
+            "key_3",
+            "key_2",
+          ],
+          "accounts": [
+            "root_3",
+            "root",
+            "root_2",
+          ],
+          "active": "root_3",
+          "chainId": 42431,
+        },
+        "keeps a logout from another process": {
+          "accessKeys": [],
+          "accounts": [],
+          "active": null,
+          "chainId": 4217,
+        },
+        "keeps a logout from another process over a stale key change": {
+          "accessKeys": [],
+          "accounts": [],
+          "active": null,
+          "chainId": 4217,
+        },
+        "keeps a logout from another process over a stale selection": {
+          "accessKeys": [],
+          "accounts": [],
+          "active": null,
+          "chainId": 4217,
+        },
+        "keeps the account this process selected after another process removed it": {
+          "accessKeys": [
+            "key_1",
+            "key_2",
+          ],
+          "accounts": [
+            "root",
+            "root_2",
+          ],
+          "active": "root",
+          "chainId": 4217,
+        },
+        "keeps the account this process selected when another process adds one": {
+          "accessKeys": [
+            "key_3",
+            "key_1",
+            "key_2",
+          ],
+          "accounts": [
+            "root_3",
+            "root",
+            "root_2",
+          ],
+          "active": "root",
+          "chainId": 42431,
+        },
+        "keeps the auth of the login that is selected": {
+          "accessKeys": [
+            "key_4",
+            "key_3",
+            "key_1",
+            "key_2",
+          ],
+          "accounts": [
+            "root_4",
+            "root_3",
+            "root",
+            "root_2",
+          ],
+          "active": "root_4",
+          "chainId": 42431,
+        },
+        "keeps the selection when neither process changed it": {
+          "accessKeys": [
+            "key_2",
+          ],
+          "accounts": [
+            "root_3",
+            "root",
+            "root_2",
+          ],
+          "active": "root_2",
+          "chainId": 4217,
+        },
+        "leaves out a record another process removed, even if this process changed it": {
+          "accessKeys": [
+            "key_2",
+          ],
+          "accounts": [
+            "root",
+            "root_2",
+          ],
+          "active": "root_2",
+          "chainId": 4217,
+        },
+        "removes a field another process cleared": {
+          "accessKeys": [
+            "key_2",
+          ],
+          "accounts": [
+            "root",
+            "root_2",
+          ],
+          "active": "root_2",
+          "chainId": 4217,
+        },
+        "replaces the item on a write without a read": {
+          "accessKeys": [
+            "key_4",
+          ],
+          "accounts": [
+            "root_4",
+          ],
+          "active": "root_4",
+          "chainId": 1,
+        },
+        "selects this process's account when it removed the other's selection": {
+          "accessKeys": [
+            "key_1",
+            "key_2",
+          ],
+          "accounts": [
+            "root_2",
+          ],
+          "active": "root_2",
+          "chainId": 4217,
+        },
+        "stores a record both processes added once": {
+          "accessKeys": [
+            "key_3",
+            "key_1",
+            "key_2",
+          ],
+          "accounts": [
+            "root",
+            "root_2",
+          ],
+          "active": "root_2",
+          "chainId": 4217,
+        },
+      }
+    `)
   })
 
   test('behavior: merges each write against the value it last wrote', async () => {
@@ -280,33 +545,19 @@ describe('filesystem', () => {
     await storage_a.setItem('store', { state: without(initial, key_1), version: 0 })
     await storage_a.setItem('store', { state: without(without(initial, key_1), key_2), version: 0 })
 
-    expect(await storage_b.getItem('store')).toMatchInlineSnapshot(`
+    const item = await storage_b.getItem<{ state: State }>('store')
+    expect(summarize(item?.state)).toMatchInlineSnapshot(`
       {
-        "state": {
-          "accessKeys": [
-            {
-              "access": "0x00000000000000000000000000000000000000a3",
-              "address": "0x00000000000000000000000000000000000000b3",
-              "chainId": 42431,
-              "keyType": "secp256k1",
-              "privateKey": "0x01",
-            },
-          ],
-          "accounts": [
-            {
-              "address": "0x00000000000000000000000000000000000000a3",
-            },
-            {
-              "address": "0x00000000000000000000000000000000000000a1",
-            },
-            {
-              "address": "0x00000000000000000000000000000000000000a2",
-            },
-          ],
-          "activeAccount": 0,
-          "chainId": 42431,
-        },
-        "version": 0,
+        "accessKeys": [
+          "key_3",
+        ],
+        "accounts": [
+          "root_3",
+          "root",
+          "root_2",
+        ],
+        "active": "root_3",
+        "chainId": 42431,
       }
     `)
   })
@@ -314,63 +565,125 @@ describe('filesystem', () => {
   test('behavior: stores exactly the given value when no other process wrote', async () => {
     const path = await createPath()
     const storage = Storage.filesystem({ key: 'test', path })
-    const value = { state: { ...initial, limit: 10n, label: undefined }, version: 0 }
+    const value = {
+      state: { ...without(initial, key_2), limit: 10n, label: undefined },
+      version: 0,
+    }
 
     await storage.getItem('store')
+    await storage.setItem('store', { state: login(initial), version: 0 })
     await storage.setItem('store', value)
-    await storage.setItem('store', { ...value, state: without(initial, key_1) })
 
-    expect(await readFile(path, 'utf8')).toBe(
-      Json.stringify({ 'test.store': { ...value, state: without(initial, key_1) } }),
+    expect(await readFile(path, 'utf8')).toMatchInlineSnapshot(
+      `"{"test.store":{"state":{"accessKeys":[{"access":"0x00000000000000000000000000000000000000a1","address":"0x00000000000000000000000000000000000000b1","chainId":4217,"keyType":"secp256k1","privateKey":"0x01"}],"accounts":[{"address":"0x00000000000000000000000000000000000000a1"},{"address":"0x00000000000000000000000000000000000000a2"}],"activeAccount":1,"chainId":4217,"limit":"10#__bigint"},"version":0}}"`,
     )
   })
 
   test('behavior: merges the writes of two provider stores', async () => {
-    const path = await createPath()
-    await Storage.filesystem({ path }).setItem('store', { state: initial, version: 0 })
-
-    const store_a = Store.create({ chainId: 4217, storage: Storage.filesystem({ path }) })
-    const store_b = Store.create({ chainId: 4217, storage: Storage.filesystem({ path }) })
-    await Promise.all([Store.waitForHydration(store_a), Store.waitForHydration(store_b)])
-
-    store_b.setState(login(store_b.getState()))
-    store_a.accessKeys.remove({ account: root, accessKey: key_1.address, chainId: 4217 })
-
-    // Reads queue behind every write to the file.
-    expect(await Storage.filesystem({ path }).getItem('store')).toMatchInlineSnapshot(`
+    // Two stores on one file stand in for two CLI processes. B acts first, then A.
+    const rows: {
+      name: string
+      a: (store: Store.Store) => void
+      b: (store: Store.Store) => void
+      maxAccounts?: number | undefined
+    }[] = [
       {
-        "state": {
-          "accessKeys": [
-            {
-              "access": "0x00000000000000000000000000000000000000a3",
-              "address": "0x00000000000000000000000000000000000000b3",
-              "chainId": 42431,
-              "keyType": "secp256k1",
-              "privateKey": "0x01",
-            },
-            {
-              "access": "0x00000000000000000000000000000000000000a1",
-              "address": "0x00000000000000000000000000000000000000b2",
-              "chainId": 4217,
-              "keyType": "secp256k1",
-              "privateKey": "0x01",
-            },
-          ],
-          "accounts": [
-            {
-              "address": "0x00000000000000000000000000000000000000a3",
-            },
-            {
-              "address": "0x00000000000000000000000000000000000000a1",
-            },
-            {
-              "address": "0x00000000000000000000000000000000000000a2",
-            },
-          ],
-          "activeAccount": 0,
+        name: 'keeps a login from another store while removing a different key',
+        b: (store) => store.setState(login(store.getState())),
+        a: (store) =>
+          store.accessKeys.remove({ account: root, accessKey: key_1.address, chainId: 4217 }),
+      },
+      {
+        name: 'clears accounts and keys another store added on disconnect',
+        b: (store) => store.setState(login(store.getState())),
+        a: (store) => store.disconnect(),
+      },
+      {
+        name: 'keeps a disconnect over a stale key change',
+        b: (store) => store.disconnect(),
+        a: (store) => store.setState(withExpiry(store.getState(), key_1, 200)),
+      },
+      {
+        name: 'clears keys another store added when clearing keys',
+        b: (store) => store.setState(login(store.getState())),
+        a: (store) => store.accessKeys.clear(),
+      },
+      {
+        name: 'stores at most maxAccounts after concurrent logins',
+        maxAccounts: 2,
+        b: (store) => store.setState(login(store.getState())),
+        a: (store) => store.setState(login(store.getState(), root_4, key_4, 4217)),
+      },
+    ]
+
+    const results: Record<string, unknown> = {}
+    for (const { a, b, maxAccounts, name } of rows) {
+      const path = await createPath()
+      await Storage.filesystem({ path }).setItem('store', { state: initial, version: 0 })
+      const [store_a, store_b] = [0, 1].map(() =>
+        Store.create({ chainId: 4217, maxAccounts, storage: Storage.filesystem({ path }) }),
+      ) as [Store.Store, Store.Store]
+      await Promise.all([Store.waitForHydration(store_a), Store.waitForHydration(store_b)])
+
+      b(store_b)
+      a(store_a)
+
+      // Reads queue behind every write to the file.
+      const item = await Storage.filesystem({ path }).getItem<{ state: State }>('store')
+      results[name] = summarize(item?.state)
+    }
+
+    expect(results).toMatchInlineSnapshot(`
+      {
+        "clears accounts and keys another store added on disconnect": {
+          "accessKeys": [],
+          "accounts": [],
+          "active": null,
           "chainId": 42431,
         },
-        "version": 0,
+        "clears keys another store added when clearing keys": {
+          "accessKeys": [],
+          "accounts": [
+            "root_3",
+            "root",
+            "root_2",
+          ],
+          "active": "root_3",
+          "chainId": 42431,
+        },
+        "keeps a disconnect over a stale key change": {
+          "accessKeys": [],
+          "accounts": [],
+          "active": null,
+          "chainId": 4217,
+        },
+        "keeps a login from another store while removing a different key": {
+          "accessKeys": [
+            "key_3",
+            "key_2",
+          ],
+          "accounts": [
+            "root_3",
+            "root",
+            "root_2",
+          ],
+          "active": "root_3",
+          "chainId": 42431,
+        },
+        "stores at most maxAccounts after concurrent logins": {
+          "accessKeys": [
+            "key_4",
+            "key_3",
+            "key_1",
+            "key_2",
+          ],
+          "accounts": [
+            "root_4",
+            "root_3",
+          ],
+          "active": "root_4",
+          "chainId": 42431,
+        },
       }
     `)
   })
@@ -382,12 +695,13 @@ describe('filesystem', () => {
     // Each process loads the store, waits until all have loaded, then adds its own key.
     const writers = Array.from({ length: 6 }, (_, i) =>
       run(`
+        import { Hex } from 'ox'
         import * as Storage from ${JSON.stringify(moduleUrl('src/cli/storage.ts'))}
         const storage = Storage.filesystem({ key: 'test', path: ${JSON.stringify(path)} })
         const item = await storage.getItem('store')
         process.stdout.write('loaded\\n')
         await new Promise((resolve) => process.stdin.once('data', resolve))
-        const key = { ...item.state.accessKeys[0], address: '0x${'0'.repeat(39)}${i}' }
+        const key = { ...item.state.accessKeys[0], address: Hex.fromNumber(${i}, { size: 20 }) }
         await storage.setItem('store', {
           ...item,
           state: { ...item.state, accessKeys: [key, ...item.state.accessKeys] },
@@ -437,11 +751,12 @@ describe('filesystem', () => {
 
     for (const delay of [0, 5, 10, 20, 40]) {
       const writer = run(`
+        import { Hex } from 'ox'
         import * as Storage from ${JSON.stringify(moduleUrl('src/cli/storage.ts'))}
         const storage = Storage.filesystem({ key: 'test', path: ${JSON.stringify(path)} })
         const accessKeys = Array.from({ length: 2_000 }, (_, i) => ({
           ...${JSON.stringify(key_1)},
-          address: '0x' + i.toString(16).padStart(40, '0'),
+          address: Hex.fromNumber(i, { size: 20 }),
         }))
         for (let i = 0; ; i++) {
           await storage.setItem('store', { state: { accessKeys, chainId: i }, version: 0 })

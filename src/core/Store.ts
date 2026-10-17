@@ -11,6 +11,13 @@ import * as Storage from './Storage.js'
 
 const supportsStructuredClone = Symbol.for('accounts.storage.supportsStructuredClone')
 const hydration_key = Symbol.for('accounts.store.hydration')
+/**
+ * Key of the merge hints attached to each persisted state as a non-enumerable
+ * property. Storage shared between processes (`Storage.filesystem` in
+ * `accounts/cli`) reads them to merge a write with what other processes
+ * stored. Storages never serialize them.
+ */
+const hints_key = Symbol.for('accounts.store.merge')
 
 export type { Account }
 
@@ -125,6 +132,8 @@ export function create(options: Options): Store {
       : Storage.memory({ key: 'tempo' }),
   } = options
 
+  // Fields the write in progress resets. Shared storage stores them as given instead of merging.
+  let replace: readonly string[] | undefined
   // The load in progress. Only it can settle `hydration`.
   let load: ReturnType<typeof deferred> | undefined = deferred()
   const hydration: Hydration = { promise: load.promise, status: 'pending' }
@@ -167,12 +176,16 @@ export function create(options: Options): Store {
             }
           },
           partialize: (state) =>
-            serialize(state, {
-              keystores,
-              maxAccounts,
-              persistCredentials,
-              structuredClone: canStructuredClone(storage),
-            }),
+            Object.defineProperty(
+              serialize(state, {
+                keystores,
+                maxAccounts,
+                persistCredentials,
+                structuredClone: canStructuredClone(storage),
+              }),
+              hints_key,
+              { value: { maxAccounts, replace } },
+            ),
           storage,
           version: 0,
         },
@@ -180,9 +193,21 @@ export function create(options: Options): Store {
     ),
   ) as ZustandStore
   const store = state as Store
-  store.accessKeys = core_AccessKey.createManager({ keystores, state })
+  /** Sets `reset` and persists its fields as replacements, so they win over any merge. */
+  function setReset(reset: Partial<State>) {
+    replace = Object.keys(reset)
+    try {
+      state.setState(reset)
+    } finally {
+      replace = undefined
+    }
+  }
+  store.accessKeys = {
+    ...core_AccessKey.createManager({ keystores, state }),
+    clear: () => setReset({ accessKeys: [] }),
+  }
   store.disconnect = () =>
-    state.setState({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
+    setReset({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
   Object.assign(store, { [hydration_key]: hydration })
   return store
 }
