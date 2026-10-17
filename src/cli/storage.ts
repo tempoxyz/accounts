@@ -44,7 +44,9 @@ export function defaultPath(): string {
  *
  * The lock is a `<path>.lock` directory, held only for the read, merge, and
  * write. A writer takes it over from a process that has exited, or once it is
- * 30 seconds old, and gives up after 35 seconds.
+ * 30 seconds old, and gives up after 35 seconds. The file's directory must not
+ * be writable by every user or owned by another user (the default
+ * `~/.tempo/wallet` is private), or writes fail with `Lock.UnusableError`.
  */
 export function filesystem(options: filesystem.Options = {}): Storage.Storage {
   const path = expandPath(options.path ?? defaultPath())

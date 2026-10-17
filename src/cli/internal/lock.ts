@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { mkdir, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { threadId } from 'node:worker_threads'
@@ -12,6 +12,9 @@ import { threadId } from 'node:worker_threads'
 const owners = ((globalThis as Record<symbol, Set<string> | undefined>)[
   Symbol.for('accounts.storage.lock')
 ] ??= new Set<string>())
+
+/** Owner token: `<pid>-<threadId>-<random>`. */
+const token = /^(\d+)-(\d+)-[0-9a-f]{16}$/
 
 /** `rename` errors that mean the lock directory already exists. */
 const contended = new Set(['EACCES', 'EEXIST', 'ENOTDIR', 'ENOTEMPTY', 'EPERM'])
@@ -38,6 +41,12 @@ const contended = new Set(['EACCES', 'EEXIST', 'ENOTDIR', 'ENOTEMPTY', 'EPERM'])
  *
  * Waits up to `timeout`, by default 5 seconds past `stale` so that any
  * abandoned entry is taken over first, then throws {@link TimeoutError}.
+ *
+ * Only this user (or root) may be able to create entries next to `path`, or
+ * another user could plant `<path>.lock`. The lock throws
+ * {@link UnusableError} instead of waiting when the directory is writable by
+ * every user or owned by another user, or when `<path>.lock` is not a
+ * directory of this user's that holds only owner entries.
  */
 export async function lock<value>(
   path: string,
@@ -53,6 +62,7 @@ export async function lock<value>(
 
   owners.add(owner)
   try {
+    await assertPrivate(dirname(path), path_lock)
     await prune(path_lock, stale)
     while (!(await acquire(path_lock, owner))) {
       const holders = await reclaim(path_lock, stale)
@@ -103,6 +113,27 @@ export class TimeoutError extends Error {
   }
 }
 
+/** Thrown when a lock can't be used safely, so waiting for it would not help. */
+export class UnusableError extends Error {
+  /** Lock directory. */
+  path: string
+
+  constructor(path: string, reason: string) {
+    super(`Cannot use the lock at ${path}: ${reason}.`)
+    this.name = 'Lock.UnusableError'
+    this.path = path
+  }
+}
+
+/** Throws unless only this user (or root) can create entries in `directory`. */
+async function assertPrivate(directory: string, path: string) {
+  if (typeof process.getuid !== 'function') return
+  const info = await stat(directory)
+  if (info.mode & 0o002) throw new UnusableError(path, `${directory} is writable by every user`)
+  if (info.uid !== process.getuid() && info.uid !== 0)
+    throw new UnusableError(path, `${directory} is owned by another user`)
+}
+
 /**
  * Tries to install a lock directory holding `owner`'s entry at `path`. The
  * staged directory (`<path>.<owner>`) only exists during the attempt; one left
@@ -124,18 +155,28 @@ async function acquire(path: string, owner: string): Promise<boolean> {
 
 /**
  * Takes over the stale entries of the lock directory at `path`, and returns a
- * description of each remaining holder.
+ * description of each remaining holder. Throws {@link UnusableError} unless
+ * `path` is a real directory of this user's holding only owner entries, so a
+ * planted directory or symbolic link is never read or emptied.
  */
 async function reclaim(path: string, stale: number): Promise<readonly string[]> {
+  const info = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return undefined
+    throw new UnusableError(path, 'it cannot be inspected')
+  })
+  if (!info) return []
+  if (!info.isDirectory()) throw new UnusableError(path, 'it is not a directory')
+  if (typeof process.getuid === 'function' && info.uid !== process.getuid())
+    throw new UnusableError(path, 'it is owned by another user')
   const names = await readdir(path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return []
-    return undefined
+    throw new UnusableError(path, 'it cannot be read')
   })
-  if (!names) return ['an unknown owner']
   const holders: string[] = []
   for (const name of names) {
+    if (!token.test(name)) throw new UnusableError(path, `it holds an unexpected entry, ${name}`)
     if (!(await isStale(join(path, name), stale))) {
-      holders.push(/^\d+-/.test(name) ? `process ${name.split('-')[0]}` : name)
+      holders.push(`process ${name.split('-')[0]}`)
       continue
     }
     const tombstone = `${path}.${name}.${randomBytes(4).toString('hex')}.stale`
@@ -164,17 +205,17 @@ async function prune(path: string, stale: number) {
 /**
  * Returns whether the entry at `path`, named after an owner token, can be
  * taken over: its process no longer exists, or the entry is older than
- * `stale` milliseconds. Entries of other threads of this process, and names that are
- * not owner tokens, only go stale by age.
+ * `stale` milliseconds. Entries of other threads of this process, and names
+ * that are not owner tokens, only go stale by age.
  */
 async function isStale(path: string, stale: number, name = basename(path)): Promise<boolean> {
-  const match = /^(\d+)-(\d+)-[0-9a-f]+$/.exec(name)
+  const match = token.exec(name)
   if (match) {
     const pid = Number(match[1])
     if (pid === process.pid && Number(match[2]) === threadId) return !owners.has(name)
     if (pid !== process.pid && !running(pid)) return true
   }
-  const info = await stat(path).catch(() => undefined)
+  const info = await lstat(path).catch(() => undefined)
   return !!info && Date.now() - info.mtimeMs > stale
 }
 

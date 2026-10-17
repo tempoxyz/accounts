@@ -1,5 +1,14 @@
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readdir, unlink, utimes, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  symlink,
+  unlink,
+  utimes,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -98,14 +107,20 @@ describe('lock', () => {
   test('behavior: takes over stale entries and waits for live ones', async () => {
     const dead = await deadPid()
     const rows = [
-      { name: 'this thread, not held', entry: `${process.pid}-${threadId}-0bad`, age: 0 },
-      { name: 'exited process', entry: `${dead}-0-0bad`, age: 0 },
-      { name: 'running process', entry: `${process.ppid}-0-0bad`, age: 0 },
-      { name: 'running process, reused ID', entry: `${process.ppid}-0-0bad`, age: 31 },
-      { name: 'other thread', entry: `${process.pid}-${threadId + 1}-0bad`, age: 0 },
-      { name: 'other thread, hung', entry: `${process.pid}-${threadId + 1}-0bad`, age: 31 },
-      { name: 'unknown entry', entry: 'unknown', age: 0 },
-      { name: 'unknown entry, old', entry: 'unknown', age: 31 },
+      {
+        name: 'this thread, not held',
+        entry: `${process.pid}-${threadId}-0badc0de0badc0de`,
+        age: 0,
+      },
+      { name: 'exited process', entry: `${dead}-0-0badc0de0badc0de`, age: 0 },
+      { name: 'running process', entry: `${process.ppid}-0-0badc0de0badc0de`, age: 0 },
+      { name: 'running process, reused ID', entry: `${process.ppid}-0-0badc0de0badc0de`, age: 31 },
+      { name: 'other thread', entry: `${process.pid}-${threadId + 1}-0badc0de0badc0de`, age: 0 },
+      {
+        name: 'other thread, hung',
+        entry: `${process.pid}-${threadId + 1}-0badc0de0badc0de`,
+        age: 31,
+      },
     ]
 
     const results: Record<string, string> = {}
@@ -133,8 +148,6 @@ describe('lock', () => {
         "running process": "Timed out after 50ms waiting for the lock at <path>.lock, held by process <ppid>. If no other process is using it, remove <path>.lock.",
         "running process, reused ID": "locked",
         "this thread, not held": "locked",
-        "unknown entry": "Timed out after 50ms waiting for the lock at <path>.lock, held by unknown. If no other process is using it, remove <path>.lock.",
-        "unknown entry, old": "locked",
       }
     `)
   })
@@ -254,16 +267,19 @@ describe('lock', () => {
   test('behavior: removes directories left by owners that exited', async () => {
     const path = await createPath()
     const dead = await deadPid()
-    await mkdir(`${path}.lock.${dead}-0-0bad`)
-    await writeFile(join(`${path}.lock.${dead}-0-0bad`, `${dead}-0-0bad`), '')
-    await mkdir(`${path}.lock.${process.ppid}-0-0bad`)
+    await mkdir(`${path}.lock.${dead}-0-0badc0de0badc0de`)
+    await writeFile(
+      join(`${path}.lock.${dead}-0-0badc0de0badc0de`, `${dead}-0-0badc0de0badc0de`),
+      '',
+    )
+    await mkdir(`${path}.lock.${process.ppid}-0-0badc0de0badc0de`)
 
     await lock(path, async () => {})
 
     expect((await readdir(dirname(path))).map((x) => x.replace(`${process.ppid}`, '<ppid>')))
       .toMatchInlineSnapshot(`
       [
-        "store.json.lock.<ppid>-0-0bad",
+        "store.json.lock.<ppid>-0-0badc0de0badc0de",
       ]
     `)
   })
@@ -286,6 +302,135 @@ describe('lock', () => {
 
     await lock(path, async () => {})
     expect(await readdir(dirname(path))).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('error: refuses a lock that another user could plant', async () => {
+    const rows: { name: string; setup: (path: string) => Promise<void> }[] = [
+      {
+        name: 'directory writable by every user',
+        setup: (path) => chmod(dirname(path), 0o777),
+      },
+      {
+        name: 'sticky directory writable by every user',
+        setup: (path) => chmod(dirname(path), 0o1777),
+      },
+      {
+        name: 'lock that is a symbolic link',
+        setup: async (path) => {
+          const target = await mkdtemp(join(tmpdir(), 'accounts-lock-target-'))
+          await symlink(target, `${path}.lock`)
+        },
+      },
+      {
+        name: 'lock that is a file',
+        setup: (path) => writeFile(`${path}.lock`, ''),
+      },
+      {
+        name: 'lock holding an unexpected entry',
+        setup: async (path) => {
+          await mkdir(`${path}.lock`)
+          await writeFile(join(`${path}.lock`, 'unknown'), '')
+          const time = new Date(Date.now() - 31_000)
+          await utimes(join(`${path}.lock`, 'unknown'), time, time)
+        },
+      },
+    ]
+
+    const results: Record<string, unknown> = {}
+    for (const { name, setup } of rows) {
+      const path = await createPath()
+      await setup(path)
+      const start = Date.now()
+      results[name] = await lock(path, async () => 'locked', { timeout: 2_000 }).catch(
+        (error: Error) => ({
+          fast: Date.now() - start < 1_000,
+          message: error.message.replaceAll(dirname(path), '<dir>'),
+          name: error.name,
+        }),
+      )
+      await chmod(dirname(path), 0o700)
+      await chmod(`${path}.lock`, 0o700).catch(() => undefined)
+    }
+
+    expect(results).toMatchInlineSnapshot(`
+      {
+        "directory writable by every user": {
+          "fast": true,
+          "message": "Cannot use the lock at <dir>/store.json.lock: <dir> is writable by every user.",
+          "name": "Lock.UnusableError",
+        },
+        "lock holding an unexpected entry": {
+          "fast": true,
+          "message": "Cannot use the lock at <dir>/store.json.lock: it holds an unexpected entry, unknown.",
+          "name": "Lock.UnusableError",
+        },
+        "lock that is a file": {
+          "fast": true,
+          "message": "Cannot use the lock at <dir>/store.json.lock: it is not a directory.",
+          "name": "Lock.UnusableError",
+        },
+        "lock that is a symbolic link": {
+          "fast": true,
+          "message": "Cannot use the lock at <dir>/store.json.lock: it is not a directory.",
+          "name": "Lock.UnusableError",
+        },
+        "sticky directory writable by every user": {
+          "fast": true,
+          "message": "Cannot use the lock at <dir>/store.json.lock: <dir> is writable by every user.",
+          "name": "Lock.UnusableError",
+        },
+      }
+    `)
+  })
+
+  // Root reads any directory, so the lock below would be readable.
+  test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'error: refuses a lock directory it cannot read instead of waiting',
+    async () => {
+      const path = await createPath()
+      await mkdir(`${path}.lock`)
+      await writeFile(join(`${path}.lock`, `${process.ppid}-0-0badc0de0badc0de`), '')
+      await chmod(`${path}.lock`, 0o000)
+
+      const start = Date.now()
+      const result = await lock(path, async () => 'locked', { timeout: 2_000 }).catch(
+        (error: Error) => ({
+          fast: Date.now() - start < 1_000,
+          message: error.message.replaceAll(dirname(path), '<dir>'),
+          name: error.name,
+        }),
+      )
+      await chmod(`${path}.lock`, 0o700)
+
+      expect(result).toMatchInlineSnapshot(`
+        {
+          "fast": true,
+          "message": "Cannot use the lock at <dir>/store.json.lock: it cannot be read.",
+          "name": "Lock.UnusableError",
+        }
+      `)
+    },
+  )
+
+  test('behavior: never touches the target of a planted symbolic link', async () => {
+    const path = await createPath()
+    const target = await mkdtemp(join(tmpdir(), 'accounts-lock-target-'))
+    const dead = await deadPid()
+    const files = [`${dead}-0-0badc0de0badc0de`, 'old']
+    for (const file of files) await writeFile(join(target, file), 'secret')
+    const time = new Date(Date.now() - 31_000)
+    await utimes(join(target, 'old'), time, time)
+    await symlink(target, `${path}.lock`)
+
+    await lock(path, async () => undefined, { timeout: 200 }).catch(() => undefined)
+
+    expect((await readdir(target)).map((x) => x.replace(`${dead}`, '<dead>')))
+      .toMatchInlineSnapshot(`
+      [
+        "<dead>-0-0badc0de0badc0de",
+        "old",
+      ]
+    `)
   })
 
   test('error: times out while a live process holds the lock', async () => {

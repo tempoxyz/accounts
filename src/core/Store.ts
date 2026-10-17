@@ -80,8 +80,11 @@ export type Store = ZustandStore & {
    * logout another process saved meanwhile.
    */
   connect: (state: Partial<State>, accounts: readonly { address: string }[]) => void
-  /** Disconnects all accounts and clears locally signable access-key material. */
-  disconnect: () => void
+  /**
+   * Disconnects all accounts and clears locally signable access-key material.
+   * Resolves once storage has saved the cleared state, and rejects if it can't.
+   */
+  disconnect: () => Promise<void>
 }
 
 /** Progress of a store loading its persisted state from storage. */
@@ -199,14 +202,19 @@ export function create(options: Options): Store {
     ),
   ) as ZustandStore
   const store = state as Store
-  /** Sets `next`, persisting it with `intent_next` as its merge hint. */
-  function setStateWith(next: Partial<State>, intent_next: NonNullable<typeof intent>) {
+  /**
+   * Sets `next`, persisting it with `intent_next` as its merge hint. Resolves
+   * once storage has saved it (the `persist` middleware returns that write).
+   */
+  async function setStateWith(next: Partial<State>, intent_next: NonNullable<typeof intent>) {
     intent = intent_next
+    let written: unknown
     try {
-      state.setState(next)
+      written = state.setState(next)
     } finally {
       intent = undefined
     }
+    await written
   }
   /** Sets `reset` and persists its fields as replacements, so they win over any merge. */
   const reset = (next: Partial<State>) => setStateWith(next, { replace: Object.keys(next) })

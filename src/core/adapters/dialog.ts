@@ -173,7 +173,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async disconnect() {
-          store.disconnect()
+          await store.disconnect()
         },
       },
       getAccount(options = {}) {

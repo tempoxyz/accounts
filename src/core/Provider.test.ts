@@ -959,6 +959,26 @@ function setupTransportWallet() {
   return { provider, requests }
 }
 
+describe('wallet_disconnect', () => {
+  test('error: fails when storage cannot save the cleared state', async () => {
+    let failing = false
+    const storage = Storage.from({
+      getItem: () => null,
+      removeItem() {},
+      async setItem() {
+        if (failing) throw new Error('Storage is full.')
+      },
+    })
+    const provider = Provider.create({ storage })
+    await provider.ready()
+    failing = true
+
+    await expect(
+      provider.request({ method: 'wallet_disconnect' }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[RpcResponse.InternalError: Storage is full.]`)
+  })
+})
+
 describe('wallet_revokeAccessKey', () => {
   test.each([
     { case: 'omitted', chainId: undefined },

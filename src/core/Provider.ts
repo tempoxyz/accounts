@@ -1671,7 +1671,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                         credentials: 'include',
                       }).catch(() => {})
                     await actions.disconnect?.()
-                    store.disconnect()
+                    // Fails the request if the cleared state was not saved, so a caller never
+                    // believes credentials are gone while they remain in storage.
+                    await store.disconnect()
                     return
                   }
 

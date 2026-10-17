@@ -277,7 +277,7 @@ const provider = Provider.create({
 
 Storage adapter for provider persistence. The CLI default stores connected accounts, active chain state, and managed access keys in one filesystem-backed provider store.
 
-CLI processes can share one store file. Each write applies only what that process changed since it loaded the store, so a command that waits for approval does not undo a login or key change another command saved in the meantime. A disconnect still clears every account and key in the file.
+CLI processes can share one store file. Each write applies only what that process changed since it loaded the store, so a command that waits for approval does not undo a login or key change another command saved in the meantime. A disconnect still clears every account and key in the file. Keep the file in a directory only you can write to: writes fail if every user can write to it or another user owns it.
 
 ```ts twoslash [cli.ts]
 import { Provider, Storage } from 'accounts/cli'
