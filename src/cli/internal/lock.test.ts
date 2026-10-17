@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { describe, expect, test } from 'vp/test'
 
@@ -118,6 +118,31 @@ describe('lock', () => {
         ],
       }
     `)
+  })
+
+  test('behavior: leaves nothing behind when killed while waiting', async () => {
+    const path = await createPath()
+    const live = run(holder(path))
+    await live.waitFor('locked')
+
+    try {
+      const waiter = run(`
+        import { lock } from ${JSON.stringify(moduleUrl('src/cli/internal/lock.ts'))}
+        process.stdout.write('waiting\\n')
+        await lock(${JSON.stringify(path)}, async () => {})
+      `)
+      await waiter.waitFor('waiting')
+      await sleep(100)
+      await waiter.kill()
+
+      expect(await readdir(dirname(path))).toMatchInlineSnapshot(`
+        [
+          "store.json.lock",
+        ]
+      `)
+    } finally {
+      await live.kill()
+    }
   })
 
   test('error: times out while a live process holds the lock', async () => {

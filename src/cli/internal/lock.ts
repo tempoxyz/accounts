@@ -35,20 +35,11 @@ export async function lock<value>(
   const { timeout = 10_000 } = options
   const path_lock = `${path}.lock`
   const owner = `${process.pid}-${randomBytes(8).toString('hex')}`
-  const staging = `${path_lock}.${owner}`
   const deadline = Date.now() + timeout
 
   owners.add(owner)
   try {
-    await mkdir(staging, { mode: 0o700 })
-    await writeFile(join(staging, owner), '', { flag: 'wx', mode: 0o600 })
-    for (;;) {
-      try {
-        await rename(staging, path_lock)
-        break
-      } catch (error) {
-        if (!contended.has((error as NodeJS.ErrnoException).code ?? '')) throw error
-      }
+    while (!(await acquire(path_lock, owner))) {
       const holders = await reclaim(path_lock)
       if (holders.length === 0) await rmdir(path_lock).catch(() => undefined)
       if (Date.now() >= deadline) throw new TimeoutError(path_lock, holders, timeout)
@@ -56,7 +47,6 @@ export async function lock<value>(
     }
   } catch (error) {
     owners.delete(owner)
-    await rm(staging, { force: true, recursive: true }).catch(() => undefined)
     throw error
   }
 
@@ -89,6 +79,25 @@ export class TimeoutError extends Error {
     )
     this.name = 'Lock.TimeoutError'
     this.path = path
+  }
+}
+
+/**
+ * Tries to install a lock directory holding `owner`'s entry at `path`. The
+ * staged directory only exists for the attempt, so a process killed while it
+ * waits leaves nothing behind.
+ */
+async function acquire(path: string, owner: string): Promise<boolean> {
+  const staging = `${path}.${owner}`
+  await mkdir(staging, { mode: 0o700 })
+  try {
+    await writeFile(join(staging, owner), '', { flag: 'wx', mode: 0o600 })
+    await rename(staging, path)
+    return true
+  } catch (error) {
+    await rm(staging, { force: true, recursive: true }).catch(() => undefined)
+    if (contended.has((error as NodeJS.ErrnoException).code ?? '')) return false
+    throw error
   }
 }
 
