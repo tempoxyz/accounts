@@ -52,7 +52,7 @@ pnpm --filter bench badges
 
 ## Options
 
-The bench waits 1 s before each action, as a person does between clicks.
+The bench sends each action as soon as the previous one returns, with no pause between clicks.
 
 | Option or variable        | Effect                                                           |
 | ------------------------- | ---------------------------------------------------------------- |

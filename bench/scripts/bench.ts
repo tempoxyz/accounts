@@ -46,13 +46,6 @@ const approvals = {
 
 const timeout = 60_000
 
-/**
- * Pause before each user action, as a person takes between clicks. Without it, a
- * popup request sent right after the previous popup closes can reach the closed
- * window, since the transport polls for a closed window every 250 ms.
- */
-const pause = 1_000
-
 const { values } = parseArgs({
   options: {
     host: { type: 'string' },
@@ -159,7 +152,6 @@ async function click(page: Page, action: string) {
 
 /** Runs one untimed setup action and fails when it rejects. */
 async function setup(page: Page, action: 'disconnect' | 'fund') {
-  await page.waitForTimeout(pause)
   const { done } = await click(page, action)
   const { entry } = await done()
   if (entry.error) throw new Error(`${action} failed: ${entry.error}`)
@@ -175,7 +167,6 @@ async function step(
   const popup = renderer === 'tempoWallet/popup' ? context.waitForEvent('page', { timeout }) : null
   popup?.catch(() => {})
 
-  await page.waitForTimeout(pause)
   const { done, start } = await click(page, options.case)
 
   if (renderer === 'webAuthn') {
