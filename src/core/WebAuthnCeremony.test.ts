@@ -212,11 +212,11 @@ describe('server', () => {
     const credential = { id: 'credential', publicKey: '0x04ab' } as never
 
     /** Answers each `/register` with the next of `responses`, recording the paths. */
-    function stub(responses: (() => Response | Promise<Response>)[]) {
+    function stub(responses: ((init?: RequestInit) => Response | Promise<Response>)[]) {
       const paths: string[] = []
       vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
         paths.push(`${new URL(input).pathname}${init?.keepalive ? ' (keepalive)' : ''}`)
-        return await responses.shift()!()
+        return await responses.shift()!(init)
       })
       return paths
     }
@@ -276,6 +276,38 @@ describe('server', () => {
       expect(paths).toMatchInlineSnapshot(`
         [
           "/webauthn/register (keepalive)",
+          "/webauthn/register (keepalive)",
+          "/webauthn/register (keepalive)",
+        ]
+      `)
+    })
+
+    test('behavior: retries a request that never answers', async () => {
+      vi.useFakeTimers()
+      const paths = stub([
+        // Hangs until the ceremony aborts it, as `fetch` rejects with the abort reason.
+        (init) =>
+          new Promise<Response>((_, reject) =>
+            init?.signal?.addEventListener('abort', () => reject(init.signal!.reason)),
+          ),
+        () => Response.json({ credentialId: 'credential' }),
+      ])
+      const ceremony = WebAuthnCeremony.server({
+        deferRegistration: true,
+        url: 'https://wallet.example.com/webauthn',
+      })
+
+      const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+      await vi.advanceTimersByTimeAsync(10_250)
+      vi.useRealTimers()
+
+      await expect(verified).resolves.toMatchInlineSnapshot(`
+        {
+          "session": true,
+        }
+      `)
+      expect(paths).toMatchInlineSnapshot(`
+        [
           "/webauthn/register (keepalive)",
           "/webauthn/register (keepalive)",
         ]

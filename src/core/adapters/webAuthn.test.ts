@@ -277,68 +277,31 @@ describe('background registration', () => {
     expect(logins).toHaveBeenCalledTimes(1)
   })
 
-  /** Registers, then leaves the marker behind as a page closed mid-verification would. */
-  async function abandon(storage: Storage.Storage, time: number) {
-    const first = setup({ storage })
-    authenticator = first.authenticator
-    await register(first.provider)
-    const credential = credentialOf(first.provider)!
-    const marker = await storage.getItem<{ time: number }>(`registration:pending:${credential.id}`)
-    expect(marker).toBeTruthy()
-    await storage.setItem(`registration:pending:${credential.id}`, { ...marker, time })
-    return credential
-  }
-  let authenticator: ReturnType<typeof Authenticator.create> | undefined
-
-  test('behavior: drops an account whose registration outlived its page', async () => {
+  test('behavior: keeps an account whose page closed before the server answered', async () => {
+    // A popup closes as soon as it answers, so its verification never settles here.
     const storage = Storage.memory()
-    const credential = await abandon(storage, 0)
+    const first = setup({ storage })
+    const account = await register(first.provider)
 
-    const { provider } = setup({ storage })
+    const { provider } = setup({ authenticator: first.authenticator, storage })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(await provider.request({ method: 'eth_accounts' })).toEqual([account.address])
+  })
+
+  test('behavior: does not restore a rejected credential as the last used', async () => {
+    const { provider, storage, verifications } = setup()
+    await register(provider, 'alice')
+    await register(provider, 'bob')
+
+    // Bob's registration recorded alice's credential as the one used before.
+    verifications[0]!.reject(new Error('Missing or expired challenge'))
+    verifications[1]!.reject(new Error('Missing or expired challenge'))
 
     await vi.waitFor(async () =>
       expect(await provider.request({ method: 'eth_accounts' })).toEqual([]),
     )
-    expect(await storage.getItem(`registration:pending:${credential.id}`)).toMatchInlineSnapshot(
-      `null`,
-    )
-    expect(Object.keys((await storage.getItem<object>(`registration:${credential.id}`)) ?? {}))
-      .toMatchInlineSnapshot(`
-        [
-          "name",
-          "publicKey",
-        ]
-      `)
-  })
-
-  test('behavior: a login before the marker expires keeps the account', async () => {
-    const storage = Storage.memory()
-    // Expires 200 ms from now.
-    const credential = await abandon(storage, Date.now() - 60_000 + 200)
-    const { provider } = setup({ authenticator, storage })
-
-    const { accounts } = await provider.request({
-      method: 'wallet_connect',
-      params: [{ capabilities: { method: 'login', credentialId: credential.id } as never }],
-    })
-    await new Promise((resolve) => setTimeout(resolve, 400))
-
-    expect(await provider.request({ method: 'eth_accounts' })).toEqual([accounts[0]!.address])
-    expect(await storage.getItem(`registration:pending:${credential.id}`)).toMatchInlineSnapshot(
-      `null`,
-    )
-  })
-
-  test('behavior: clears the marker once the server stores the credential', async () => {
-    const { provider, storage, verifications } = setup()
-    await register(provider)
-    const credential = credentialOf(provider)!
-
-    verifications[0]!.resolve()
-
-    await vi.waitFor(async () =>
-      expect(await storage.getItem(`registration:pending:${credential.id}`)).toBeNull(),
-    )
+    expect(await storage.getItem('lastCredentialId')).toMatchInlineSnapshot(`null`)
   })
 
   test('behavior: disconnect ends the ceremony session', async () => {

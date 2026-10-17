@@ -95,6 +95,9 @@ export declare namespace verifyAuthentication {
   }
 }
 
+/** How long a background `/register` request may take before it is retried. */
+const timeout_register = 10_000
+
 /** Creates a {@link WebAuthnCeremony} from a custom implementation. */
 export function from(ceremony: WebAuthnCeremony): WebAuthnCeremony {
   return ceremony
@@ -217,8 +220,17 @@ export function server(options: server.Options): WebAuthnCeremony {
         for (let attempt = 0; ; attempt++)
           try {
             // `keepalive` lets the request finish when the page closes right
-            // after answering (e.g. a wallet popup).
-            await request('/register', credential, { keepalive: true })
+            // after answering (e.g. a wallet popup). A request that never
+            // answers is retried, so logins waiting on it are not held forever.
+            const controller = new AbortController()
+            const timer = setTimeout(
+              () => controller.abort(new TypeError('Request timed out')),
+              timeout_register,
+            )
+            await request('/register', credential, {
+              keepalive: true,
+              signal: controller.signal,
+            }).finally(() => clearTimeout(timer))
             return { session: true }
           } catch (error) {
             // A retry that finds the credential means a lost earlier attempt
@@ -281,10 +293,13 @@ export declare namespace server {
      * `webAuthn` adapter makes logins and disconnects wait for it. The request
      * is sent with `keepalive`, so it completes when the page closes right
      * after answering (a popup), but retries only run while the page is open.
-     * If the server rejects the registration, or the page closed before it
-     * answered, the adapter removes the account (an `accountsChanged` event)
-     * and keeps its public key in storage under `registration:<credentialId>`.
-     * A later login with the passkey restores the account.
+     * If the server rejects the registration while the page is open, the
+     * adapter removes the account (an `accountsChanged` event) and keeps its
+     * public key in storage under `registration:<credentialId>`. A later login
+     * with the passkey restores the account if the server did store it. A
+     * rejection that arrives after the page closed goes unnoticed: the account
+     * stays stored on the device, and server logins with it fail. Prefer this
+     * option where the page outlives the request (e.g. an embedded wallet).
      *
      * @default false
      */

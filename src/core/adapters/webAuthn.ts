@@ -8,7 +8,6 @@ import * as z from 'zod/mini'
 
 import type { OneOf } from '../../internal/types.js'
 import * as Adapter from '../Adapter.js'
-import * as Store from '../Store.js'
 import * as WebAuthnCeremony from '../WebAuthnCeremony.js'
 import * as Rpc from '../zod/rpc.js'
 import * as u from '../zod/utils.js'
@@ -16,24 +15,6 @@ import { local } from './local.js'
 
 /** How long a registration's server session backs the local signing shortcut. */
 const ttl_registration = 5 * 60 * 1_000
-
-/** Storage key prefix of registrations still verifying with the server, by credential ID. */
-const key_pending = 'registration:pending:'
-
-/** How long a registration can still be verifying after it answers. */
-const ttl_pending = 60 * 1_000
-
-/** A registration still verifying with the server, as kept in storage. */
-type Marker = {
-  /** Credential display name. */
-  name: string
-  /** Credential used before the registration, restored if it is rejected. */
-  previous?: string | undefined
-  /** The credential's public key. */
-  publicKey: Hex.Hex
-  /** When the registration answered, in milliseconds. */
-  time: number
-}
 
 const schema = z.object({
   address: u.address(),
@@ -94,32 +75,12 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     // ones stored after the rejection (e.g. while a sign-up's signature prompt
     // was still open). A later login with the credential clears it.
     const rejected = new Set<string>()
+    // Credential IDs of those rejections, so none is restored as the last used.
+    const rejected_ids = new Set<string>()
     // Dropped after the update that added them, so the provider emits both.
     store.subscribe(() => {
       if (rejected.size > 0) queueMicrotask(drop)
     })
-
-    // A registration whose page closed before the server answered leaves its
-    // marker in storage. Once its requests can no longer be running, count it
-    // as rejected: the account then needs a login, which succeeds if the
-    // server did store the credential. A login before then clears the marker.
-    void (async () => {
-      await Store.waitForHydration(store)
-      for (const account of store.getState().accounts) {
-        const id = 'credential' in account ? account.credential?.id : undefined
-        if (!id) continue
-        const marker = await storage.getItem<Marker>(`${key_pending}${id}`)
-        if (!marker) continue
-        setTimeout(
-          async () => {
-            if (pending.has(id)) return
-            if (!(await storage.getItem(`${key_pending}${id}`))) return
-            await reject({ id, publicKey: marker.publicKey }, marker)
-          },
-          Math.max(0, marker.time + ttl_pending - Date.now()),
-        )
-      }
-    })().catch(() => {})
 
     /**
      * Removes accounts of rejected credentials, with their access keys. Keeps
@@ -137,12 +98,6 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       })
     }
 
-    /** Records or clears a registration still verifying in storage. */
-    async function mark(id: string, marker: Marker | undefined) {
-      if (marker) await storage.setItem(`${key_pending}${id}`, marker)
-      else await storage.removeItem(`${key_pending}${id}`)
-    }
-
     /** Drops the account of a credential the server never stored. */
     async function reject(
       credential: { id: string; publicKey: Hex.Hex },
@@ -151,6 +106,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       const { name, previous } = options
       const { address } = Account.fromWebAuthnP256(credential)
       rejected.add(address.toLowerCase())
+      rejected_ids.add(credential.id)
       if (registered?.credentialId === credential.id) registered = undefined
       drop()
       // Keep the public key on this device, so the account can be recovered.
@@ -158,11 +114,12 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         name,
         publicKey: credential.publicKey,
       })
-      // Point the next sign-in back at the credential used before.
+      // Point the next sign-in back at the credential used before, unless it
+      // was rejected too.
       if ((await storage.getItem<string>('lastCredentialId')) === credential.id)
-        if (previous) await storage.setItem('lastCredentialId', previous)
+        if (previous && !rejected_ids.has(previous))
+          await storage.setItem('lastCredentialId', previous)
         else await storage.removeItem('lastCredentialId')
-      await mark(credential.id, undefined)
     }
 
     /** Tracks a registration the ceremony verifies in the background. */
@@ -176,12 +133,11 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     ) {
       const { name, previous, verified } = options
       const promise = verified.then(
-        async ({ session }) => {
+        ({ session }) => {
           // The session belongs to the registration answered last. Keep the
           // shortcut only if that is the latest registration and its response
           // carried the session (not a retry after a lost response).
           if (!session || registered?.credentialId !== credential.id) registered = undefined
-          await mark(credential.id, undefined)
         },
         async (error) => {
           // The server never stored the credential: drop the account the app
@@ -238,14 +194,6 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         }
         if (verified) {
           const previous = (await storage.getItem<string>('lastCredentialId')) ?? undefined
-          // Lets a provider opened after this page closes reconcile the outcome.
-          // Written before tracking, so a settled verification clears it.
-          await mark(credential.id, {
-            name: parameters.name,
-            ...(previous ? { previous } : {}),
-            publicKey,
-            time: Date.now(),
-          })
           track({ id: credential.id, publicKey }, { name: parameters.name, previous, verified })
         }
         await storage.setItem('lastCredentialId', credential.id)
@@ -336,7 +284,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         rejected.delete(
           Account.fromWebAuthnP256({ id: response.id, publicKey }).address.toLowerCase(),
         )
-        if (!pending.has(response.id)) await mark(response.id, undefined)
+        rejected_ids.delete(response.id)
 
         await storage.setItem('lastCredentialId', response.id)
 
