@@ -1,0 +1,25 @@
+{
+  "name": "bench-playground",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "bench": "tsx scripts/bench.ts",
+    "build": "tsc --noEmit && vp build",
+    "check:types": "tsc --noEmit",
+    "dev": "vp dev",
+    "preview": "vp preview"
+  },
+  "dependencies": {
+    "accounts": "workspace:*",
+    "viem": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "playwright-core": "^1.59.1",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vp": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

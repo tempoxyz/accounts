@@ -34,6 +34,8 @@ jobs:
               VITE_PRIVY_CLIENT_ID=client-WY6TQmgzdwgp2ZkrEXJBDscCamyaXNyXrTYoVRkMYm2rk
           - name: Wagmi
             directory: playgrounds/wagmi
+          - name: Bench
+            directory: playgrounds/bench
 
     steps:
       - name: Secure runner
