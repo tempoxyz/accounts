@@ -12,6 +12,10 @@ on:
         default: '5'
         description: Runs per renderer
         required: false
+      host:
+        default: ''
+        description: Wallet page for the Tempo Wallet renderers (e.g. a wallet PR preview's /post-message). Default is wallet.tempo.xyz.
+        required: false
 
 concurrency:
   group: accounts-bench-${{ github.event.pull_request.number || github.run_id }}
@@ -64,6 +68,7 @@ jobs:
         env:
           BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           BENCH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HOST: ${{ inputs.host }}
           RUNS: ${{ inputs.runs || '5' }}
         run: |
           pnpm preview > preview.log 2>&1 &
@@ -73,7 +78,7 @@ jobs:
             cat preview.log
             exit 1
           fi
-          BENCH_BASE_COMMIT="$(git -C ../base rev-parse HEAD)" pnpm bench --runs "$RUNS" --baseline http://localhost:5180/base/ --json samples.json --markdown report.md
+          BENCH_BASE_COMMIT="$(git -C ../base rev-parse HEAD)" pnpm bench --runs "$RUNS" --baseline http://localhost:5180/base/ --json samples.json --markdown report.md ${HOST:+--host "$HOST"}
 
       - name: Write job summary
         if: ${{ !cancelled() && hashFiles('bench/report.md') != '' }}
