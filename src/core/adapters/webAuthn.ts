@@ -16,6 +16,9 @@ import { local } from './local.js'
 /** How long a registration's server session backs the local signing shortcut. */
 const ttl_registration = 5 * 60 * 1_000
 
+/** How long logins and disconnects wait for registrations still verifying. */
+const timeout_pending = 10_000
+
 const schema = z.object({
   address: u.address(),
   credential: z.object({
@@ -70,6 +73,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     // Server registrations still in flight, by credential ID. Each settles once
     // the server acknowledges or rejects the credential.
     const pending = new Map<string, Promise<void>>()
+    // Disconnects so far, so a registration landing after one can tell.
+    let disconnects = 0
     // Account addresses of credentials the server rejected. Their accounts and
     // access keys are dropped whenever they show up in the store, including
     // ones stored after the rejection (e.g. while a sign-up's signature prompt
@@ -134,8 +139,12 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       },
     ) {
       const { name, previous, verified } = options
+      const started = disconnects
       const promise = verified.then(
-        ({ session }) => {
+        async ({ session }) => {
+          // A disconnect that stopped waiting for this registration logged out
+          // before its session existed: end that session too.
+          if (disconnects !== started) return void (await ceremony.logout?.().catch(() => {}))
           // The session belongs to the registration answered last. Keep the
           // shortcut only if that is the latest registration and its response
           // carried the session (not a retry after a lost response).
@@ -153,6 +162,22 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         () => pending.delete(credential.id),
         () => pending.delete(credential.id),
       )
+    }
+
+    /**
+     * Waits for registrations still verifying, for up to `timeout_pending`. A
+     * slow one keeps running, and its session isn't relied on.
+     */
+    async function settle() {
+      if (pending.size === 0) return
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const settled = await Promise.race([
+        Promise.allSettled(pending.values()).then(() => true),
+        new Promise<false>((resolve) => {
+          timer = setTimeout(() => resolve(false), timeout_pending)
+        }),
+      ]).finally(() => clearTimeout(timer))
+      if (!settled) registered = undefined
     }
 
     /** Returns the latest registration if it still owns a fresh server session. */
@@ -224,7 +249,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         // know the credential, and a registration landing after a login would
         // replace its session, so wait for registrations still verifying in
         // the background. Their failures are handled by `track`.
-        await Promise.allSettled(pending.values())
+        await settle()
 
         const credentialId = selectAccount
           ? undefined
@@ -335,8 +360,10 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       // Forget the latest registration so the next connect authenticates with
       // the server again.
       registered = undefined
-      // A registration landing after logout would restore its session.
-      await Promise.allSettled(pending.values())
+      // A registration landing after logout would restore its session, so
+      // wait for it, or have it log out when it lands (see `track`).
+      await settle()
+      disconnects++
       await ceremony.logout?.().catch(() => {})
     }
 

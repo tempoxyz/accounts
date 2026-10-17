@@ -55,9 +55,8 @@ export declare namespace verifyRegistration {
      * Settles once the server has stored the credential, when the ceremony
      * verifies the registration in the background (see
      * `server({ deferRegistration })`). Rejects when the server refuses it.
-     * `session` is `false` when this client may not hold the session it
-     * issued: a retry found the registration already processed after a lost
-     * response, or the request was slow to answer.
+     * `session` is `false` when a retry found the registration already
+     * processed after a lost response, so its session was never received.
      */
     verified?: Promise<{ session: boolean }> | undefined
   }
@@ -87,9 +86,6 @@ export declare namespace verifyAuthentication {
     username?: string | null | undefined
   }
 }
-
-/** How long logins wait for a background `/register` request to answer. */
-const timeout_register = 10_000
 
 /** Creates a {@link WebAuthnCeremony} from a custom implementation. */
 export function from(ceremony: WebAuthnCeremony): WebAuthnCeremony {
@@ -214,19 +210,8 @@ export function server(options: server.Options): WebAuthnCeremony {
           try {
             // `keepalive` lets the request finish when the page closes right
             // after answering (e.g. a wallet popup).
-            const sent = request('/register', credential, { keepalive: true })
-            // A request that is slow to answer may still store the credential,
-            // so it is neither aborted nor retried. Logins stop waiting for it
-            // and authenticate with the server instead of using its session.
-            let timer: ReturnType<typeof setTimeout> | undefined
-            const answered = await Promise.race([
-              sent.then(() => true),
-              new Promise<false>((resolve) => {
-                timer = setTimeout(() => resolve(false), timeout_register)
-              }),
-            ]).finally(() => clearTimeout(timer))
-            if (!answered) sent.catch(() => {})
-            return { session: answered }
+            await request('/register', credential, { keepalive: true })
+            return { session: true }
           } catch (error) {
             // A retry that finds the credential means a lost earlier attempt
             // stored it: the authenticator just minted this random credential

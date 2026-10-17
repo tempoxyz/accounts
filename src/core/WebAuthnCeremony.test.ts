@@ -281,31 +281,6 @@ describe('server', () => {
       `)
     })
 
-    test('behavior: stops waiting for a slow request without retrying it', async () => {
-      vi.useFakeTimers()
-      // A slow server may still store the credential, so the request is left running.
-      const paths = stub([() => new Promise<Response>(() => {})])
-      const ceremony = WebAuthnCeremony.server({
-        deferRegistration: true,
-        url: 'https://wallet.example.com/webauthn',
-      })
-
-      const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
-      await vi.advanceTimersByTimeAsync(10_000)
-      vi.useRealTimers()
-
-      await expect(verified).resolves.toMatchInlineSnapshot(`
-        {
-          "session": false,
-        }
-      `)
-      expect(paths).toMatchInlineSnapshot(`
-        [
-          "/webauthn/register (keepalive)",
-        ]
-      `)
-    })
-
     test('error: a retry that finds the challenge consumed rejects', async () => {
       // The challenge may have expired, so it does not prove the server stored the credential.
       stub([
