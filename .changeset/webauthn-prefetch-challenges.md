@@ -1,0 +1,5 @@
+---
+"accounts": patch
+---
+
+Added `prefetch` to `WebAuthnCeremony.server` and `WebAuthnCeremony.deferred`. It fetches a login and a registration challenge ahead of the ceremonies that use them, so their options are built locally instead of waiting for the server to store a challenge. Each challenge taken is replaced in the background. The `webAuthn` adapter's login with a known passkey uses a prefetched challenge (`takeChallenge`) instead of registering a random one. `Handler.webAuthn`'s `/register/options` issues a challenge without a `name`, and `/register` then takes the name sent with the credential.

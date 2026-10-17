@@ -1,4 +1,4 @@
-import { Bytes } from 'ox'
+import { Base64, Bytes, Hex as ox_Hex } from 'ox'
 import type { Hex } from 'viem'
 import { Authentication, Registration } from 'webauthx/server'
 
@@ -25,6 +25,17 @@ export type WebAuthnCeremony = {
   ) => Promise<verifyAuthentication.ReturnType>
   /** Ends the server session, if the ceremony has one. Called on `wallet_disconnect`. */
   logout?: (() => Promise<void>) | undefined
+  /**
+   * Fetches a login and a registration challenge ahead of the ceremonies that
+   * use them, and a new one each time one is used (see {@link server}).
+   */
+  prefetch?: (() => void) | undefined
+  /**
+   * Takes a login challenge the server already issued, if one is ready, so
+   * the caller can build request options before {@link getAuthenticationOptions}
+   * answers (it answers at once for this challenge).
+   */
+  takeChallenge?: (() => Hex | undefined) | undefined
 }
 
 export declare namespace getRegistrationOptions {
@@ -184,6 +195,11 @@ export declare namespace local {
  * ```
  */
 export function server(options: server.Options): WebAuthnCeremony {
+  return create(options).ceremony
+}
+
+/** Builds a {@link server} ceremony, with its challenge prefetcher for {@link deferred}. */
+function create(options: server.Options) {
   const { credentials, url } = options
 
   async function request<returnType>(path: string, body: unknown): Promise<returnType> {
@@ -198,19 +214,45 @@ export function server(options: server.Options): WebAuthnCeremony {
     return json as returnType
   }
 
-  return from({
+  const challenges = prefetcher(request)
+
+  const ceremony = from({
     async getRegistrationOptions(parameters) {
       const { excludeCredentialIds, name, userId } = parameters
-      return request('/register/options', { excludeCredentialIds, name, userId })
+      // A `userId` is bound to the challenge when it's issued, so it can't use
+      // a prefetched one.
+      const ready = userId ? undefined : challenges.take('register')
+      if (!ready) return request('/register/options', { excludeCredentialIds, name, userId })
+      return {
+        options: Registration.getOptions({
+          challenge: ready.challenge,
+          excludeCredentialIds: excludeCredentialIds as string[] | undefined,
+          name,
+          rp: { id: ready.rpId, name: ready.rpId },
+        }).options,
+      }
     },
 
-    async verifyRegistration(credential) {
-      return request('/register', credential)
+    async verifyRegistration(credential, options = {}) {
+      return request('/register', challenges.body(credential, options.name))
     },
 
     async getAuthenticationOptions(parameters = {}) {
       const { challenge, credentialId, mediation } = parameters
-      return request('/login/options', { challenge, credentialId, mediation })
+      const ready = challenge ? challenges.issued(challenge) : challenges.take('login')
+      if (!ready) return request('/login/options', { challenge, credentialId, mediation })
+      const { options } = Authentication.getOptions({
+        challenge: ready.challenge,
+        credentialId: credentialId as string | string[] | undefined,
+        rpId: ready.rpId,
+      })
+      return { options: mediation ? { ...options, mediation } : options }
+    },
+
+    prefetch: challenges.warm,
+
+    takeChallenge() {
+      return challenges.take('login', { issue: true })?.challenge
     },
 
     async verifyAuthentication(response) {
@@ -227,6 +269,105 @@ export function server(options: server.Options): WebAuthnCeremony {
         throw new Error(`Logout failed with status ${response.status}`)
     },
   })
+  return { ceremony, challenges }
+}
+
+/**
+ * How long a prefetched challenge is used for, under `Handler.webAuthn`'s
+ * default 5-minute challenge TTL.
+ */
+const prefetchMaxAge = 4 * 60_000
+
+/** A challenge the server issued ahead of the ceremony that uses it. */
+type Prefetched = { challenge: Hex; created: number; rpId: string }
+
+/**
+ * Holds one login and one registration challenge fetched ahead of time, once
+ * `warm` is called, and fetches the next one each time one is taken.
+ */
+function prefetcher(request: <returnType>(path: string, body: unknown) => Promise<returnType>) {
+  let enabled = false
+  const ready: { login?: Prefetched | undefined; register?: Prefetched | undefined } = {}
+  const pending: { login?: Promise<void> | undefined; register?: Promise<void> | undefined } = {}
+  /** Login challenges handed out by `take(…, { issue: true })`, by challenge. */
+  const issued_login = new Map<Hex, Prefetched>()
+  /** Registration challenges whose options were built locally, so `/register` carries the name. */
+  const named = new Set<Hex>()
+
+  function fresh(value: Prefetched | undefined) {
+    return value && Date.now() - value.created < prefetchMaxAge ? value : undefined
+  }
+
+  function fill(kind: 'login' | 'register') {
+    if (!enabled || pending[kind] || fresh(ready[kind])) return
+    pending[kind] = (async () => {
+      try {
+        if (kind === 'login') {
+          const { options } = await request<{ options: Authentication.Options }>(
+            '/login/options',
+            {},
+          )
+          const { challenge, rpId } = options.publicKey ?? {}
+          if (challenge && rpId) ready.login = { challenge, created: Date.now(), rpId }
+        } else {
+          const { options } = await request<{ options: Registration.Options }>(
+            '/register/options',
+            {},
+          )
+          const { challenge, rp } = options.publicKey ?? {}
+          if (challenge && rp?.id) ready.register = { challenge, created: Date.now(), rpId: rp.id }
+        }
+      } catch {
+        // The ceremony fetches its own challenge instead.
+      } finally {
+        pending[kind] = undefined
+      }
+    })()
+  }
+
+  return {
+    /** Starts prefetching. */
+    warm() {
+      enabled = true
+      fill('login')
+      fill('register')
+    },
+    /** Takes a fresh prefetched challenge, if one is ready, and fetches the next. */
+    take(kind: 'login' | 'register', options: { issue?: boolean } = {}) {
+      const value = fresh(ready[kind])
+      ready[kind] = undefined
+      fill(kind)
+      if (!value) return undefined
+      if (kind === 'login' && options.issue) issued_login.set(value.challenge, value)
+      if (kind === 'register') named.add(value.challenge)
+      return value
+    },
+    /** The prefetched login challenge `take` issued, if `challenge` is one. */
+    issued(challenge: Hex) {
+      const value = issued_login.get(challenge)
+      issued_login.delete(challenge)
+      return fresh(value)
+    },
+    /**
+     * The `/register` body: the credential, plus its name when its challenge
+     * was issued without one.
+     */
+    body(credential: Registration.Credential, name: string | undefined) {
+      if (named.size === 0 || name === undefined) return credential
+      const challenge = (() => {
+        try {
+          const { challenge } = JSON.parse(
+            Bytes.toString(Base64.toBytes(credential.clientDataJSON)),
+          ) as { challenge: string }
+          return ox_Hex.fromBytes(Base64.toBytes(challenge))
+        } catch {
+          return undefined
+        }
+      })()
+      if (!challenge || !named.delete(challenge)) return credential
+      return { ...credential, name }
+    },
+  }
 }
 
 export declare namespace server {
@@ -273,13 +414,15 @@ export declare namespace server {
 export function deferred(options: deferred.Options): WebAuthnCeremony {
   const { credentials, url } = options
 
+  const { ceremony: base, challenges } = create(options)
+
   /** Posts the registration with `keepalive`, so it survives the page closing. */
   async function register(
-    credential: Registration.Credential,
+    body: unknown,
     signal: AbortSignal | undefined,
   ): Promise<{ publicKey?: Hex | undefined }> {
     const response = await fetch(`${url}/register`, {
-      body: JSON.stringify(credential),
+      body: JSON.stringify(body),
       ...(credentials ? { credentials } : {}),
       headers: { 'Content-Type': 'application/json' },
       keepalive: true,
@@ -295,19 +438,18 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
     return json as { publicKey?: Hex | undefined }
   }
 
-  const base = server(options)
-
   return from({
     ...base,
 
     async verifyRegistration(credential, options = {}) {
       const { signal } = options
+      const body = challenges.body(credential, options.name)
       const verified = (async () => {
         const { publicKey, session } = await (async () => {
           for (let attempt = 0; ; attempt++)
             try {
               signal?.throwIfAborted()
-              const { publicKey } = await register(credential, signal)
+              const { publicKey } = await register(body, signal)
               return { publicKey, session: true }
             } catch (error) {
               if (signal?.aborted) throw signal.reason

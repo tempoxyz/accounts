@@ -120,20 +120,23 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       const body = await c.req.raw.json()
       const { excludeCredentialIds, name, userId } = body as {
         excludeCredentialIds?: string[]
-        name: string
+        name?: string
         userId?: string
       }
 
+      // Without a name, the challenge is issued ahead of the sign-up (see
+      // `WebAuthnCeremony.server`'s `prefetch`): the client builds the options
+      // itself and sends the name with `/register`.
       const { challenge, options } = Registration.getOptions({
         excludeCredentialIds,
-        name,
+        name: name ?? '',
         rp: { id: rpId, name: rpId },
-        ...(userId ? { user: { id: new TextEncoder().encode(userId), name } } : undefined),
+        ...(userId && name ? { user: { id: new TextEncoder().encode(userId), name } } : undefined),
       })
 
       await kv.set(
         `challenge:${challenge}`,
-        { created: Date.now(), name, ...(userId ? { userId } : {}) },
+        { created: Date.now(), ...(name ? { name } : {}), ...(userId && name ? { userId } : {}) },
         { ttl: challengeTtl },
       )
 
@@ -145,7 +148,10 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
   router.post(`${path}/register`, async (c) => {
     try {
-      const credential = (await c.req.raw.json()) as Registration_Types.Credential
+      const { name: name_body, ...credential } =
+        (await c.req.raw.json()) as Registration_Types.Credential & {
+          name?: string | undefined
+        }
       const deserialized = Credential.deserialize(credential)
 
       const clientData = JSON.parse(
@@ -160,7 +166,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       // single-use and needs no delete. Otherwise it is read here and deleted
       // after the response.
       const [stored, existing] = await Promise.all([
-        consume<{ created: number; name: string; userId?: string }>(`challenge:${challenge}`),
+        consume<{ created: number; name?: string; userId?: string }>(`challenge:${challenge}`),
         kv.create ? undefined : kv.get(key),
       ])
       if (!stored || Date.now() - stored.created > challengeTtl * 1_000) {
@@ -170,6 +176,9 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         if (existing ?? (await kv.get(key))) throw new Error('Credential already exists')
         throw new Error('Missing or expired challenge')
       }
+      // A challenge issued without a name takes the one sent with the credential.
+      const name = stored.name ?? name_body
+      if (typeof name !== 'string') throw new Error('Missing name')
 
       const result = Registration.verify(credential, {
         challenge,
@@ -199,7 +208,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
           return await onRegister?.({
             ...(aaguid ? { aaguid } : {}),
             credentialId,
-            name: stored.name,
+            name,
             publicKey,
             request: c.req.raw,
             ...(userId ? { userId } : {}),
@@ -477,7 +486,7 @@ export declare namespace webAuthn {
       /** Authenticator model identifier, when the authenticator reports one. */
       aaguid?: string | undefined
       credentialId: string
-      /** The name provided during `/register/options` (e.g. user email). */
+      /** The name provided during `/register/options`, or with `/register` for a prefetched challenge (e.g. user email). */
       name: string
       publicKey: string
       request: Request

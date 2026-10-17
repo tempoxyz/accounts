@@ -30,3 +30,19 @@ const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' }
 - **Required**
 
 Base URL of the WebAuthn handler (e.g. `"https://example.com/webauthn"{:js}`).
+
+## Prefetching challenges
+
+Each ceremony normally starts with a request for its options, and the server stores the challenge before it answers. Call `prefetch` ahead of time (e.g. when the sign-in screen loads) to fetch one login and one registration challenge in advance:
+
+```ts
+import { WebAuthnCeremony } from 'accounts'
+
+const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+
+ceremony.prefetch?.()
+```
+
+The next `getAuthenticationOptions` or `getRegistrationOptions` then builds its options from a prefetched challenge, without a request, and the ceremony fetches the next challenge in the background. A registration challenge is issued without a name, so `verifyRegistration` sends the name with the credential. A challenge is used for up to 4 minutes, within [`Handler.webAuthn`](/docs/server/handler.webAuthn)'s default 5-minute challenge TTL. A registration with a `userId` still requests its own options.
+
+Each prefetched challenge is one write to the server's challenge store, so call `prefetch` only where a sign-in is likely.

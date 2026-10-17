@@ -36,6 +36,25 @@ describe('POST /register/options', () => {
     expect(typeof options.publicKey!.challenge).toMatchInlineSnapshot(`"string"`)
   })
 
+  test('behavior: issues a challenge without a name', async () => {
+    const kv = Kv.memory()
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost' })
+    const response = await handler.fetch(
+      new Request('http://localhost/register/options', { body: '{}', method: 'POST' }),
+    )
+    const { options } = (await response.json()) as { options: Registration.Options }
+    const { created, ...stored } = (await kv.get<{ created: number }>(
+      `challenge:${options.publicKey!.challenge}`,
+    ))!
+    expect({ created: typeof created, status: response.status, stored }).toMatchInlineSnapshot(`
+      {
+        "created": "number",
+        "status": 200,
+        "stored": {},
+      }
+    `)
+  })
+
   test('behavior: each call generates a unique challenge', async () => {
     const { options: a } = await ceremony.getRegistrationOptions({ name: 'Test' })
     const { options: b } = await ceremony.getRegistrationOptions({ name: 'Test' })
@@ -78,6 +97,56 @@ describe('POST /login/options', () => {
 })
 
 describe('POST /register', () => {
+  /** Registers `credential` against challenge `0x01`, stored as `challenge`. Returns the hook's name. */
+  async function register(challenge: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), ...challenge })
+    let name: string | undefined
+    const handler = webAuthn({
+      kv,
+      onRegister: (parameters) => {
+        name = parameters.name
+      },
+      origin: 'http://localhost',
+      rpId: 'localhost',
+      session: false,
+    })
+    const response = await handler.fetch(registerRequest(extra))
+    return { body: response.ok ? undefined : await response.json(), name, status: response.status }
+  }
+
+  test('behavior: a challenge issued without a name takes the one sent with the credential', async () => {
+    expect(await register({}, { name: 'alice' })).toMatchInlineSnapshot(`
+      {
+        "body": undefined,
+        "name": "alice",
+        "status": 200,
+      }
+    `)
+  })
+
+  test('behavior: the name the challenge was issued with wins', async () => {
+    expect(await register({ name: 'Test' }, { name: 'alice' })).toMatchInlineSnapshot(`
+      {
+        "body": undefined,
+        "name": "Test",
+        "status": 200,
+      }
+    `)
+  })
+
+  test('error: a challenge issued without a name needs one with the credential', async () => {
+    expect(await register({})).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Missing name",
+        },
+        "name": undefined,
+        "status": 400,
+      }
+    `)
+  })
+
   test('error: invalid credential → 400', async () => {
     const response = await fetch(`${server.url}/register`, {
       method: 'POST',
@@ -648,7 +717,7 @@ describe('session — getSession & /logout', () => {
  * `/register` request for credential `credential` against challenge `0x01`,
  * with `Registration.verify` mocked to accept it.
  */
-function registerRequest() {
+function registerRequest(extra: Record<string, unknown> = {}) {
   vi.mocked(Registration.verify).mockReturnValueOnce({
     credential: { publicKey: registerPublicKey },
   } as never)
@@ -668,6 +737,7 @@ function registerRequest() {
         response: { clientDataJSON },
         type: 'public-key',
       },
+      ...extra,
     }),
   })
 }
