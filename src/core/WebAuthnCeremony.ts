@@ -227,7 +227,14 @@ function create(options: server.Options) {
       // The server binds a `userId` when it issues the challenge, so a
       // prefetched one only serves sign-ups that leave it to the server.
       const ready = userId === undefined ? await challenges.register() : undefined
-      if (!ready) return request('/register/options', { excludeCredentialIds, name, userId })
+      if (!ready)
+        return request('/register/options', {
+          excludeCredentialIds,
+          name,
+          // Random by default, so passkeys with the same name don't share a user handle on servers
+          // that leave `user.id` to the name.
+          userId: userId ?? core_Hex.random(16),
+        })
       challenges.bind(ready, name)
       return {
         options: Registration.getOptions({
@@ -303,6 +310,9 @@ function expiry(requested: number, ttl: unknown) {
  */
 function prefetcher(request: <returnType>(path: string, body: unknown) => Promise<returnType>) {
   let enabled = false
+  /** Cleared when the server answers without a TTL: it predates prefetching. */
+  let login_supported = true
+  let register_supported = true
   let login: { challenge: Hex; expires: number; rpId: string } | undefined
   let login_pending: Promise<void> | undefined
   let register: { challenge: Hex; expires: number; rpId: string; userId: Uint8Array } | undefined
@@ -317,7 +327,8 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
   const bound = new Map<Hex, { expires: number; name: string }>()
 
   function fill_login() {
-    if (!enabled || login_pending || (login && Date.now() < login.expires)) return
+    if (!enabled || !login_supported || login_pending || (login && Date.now() < login.expires))
+      return
     login_pending = (async () => {
       // The server starts the TTL before it answers, so count from the request.
       const requested = Date.now()
@@ -326,6 +337,7 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
           '/login/options',
           {},
         )
+        if (ttl === undefined) login_supported = false
         const { challenge, rpId } = options.publicKey ?? {}
         const expires = expiry(requested, ttl)
         if (challenge && rpId && expires) login = { challenge, expires, rpId }
@@ -338,7 +350,13 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
   }
 
   function fill_register() {
-    if (!enabled || register_pending || (register && Date.now() < register.expires)) return
+    if (
+      !enabled ||
+      !register_supported ||
+      register_pending ||
+      (register && Date.now() < register.expires)
+    )
+      return
     register_pending = (async () => {
       const requested = Date.now()
       try {
@@ -346,6 +364,7 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
           '/register/options',
           {},
         )
+        if (ttl === undefined) register_supported = false
         const { challenge, rp, user } = options.publicKey ?? {}
         const expires = expiry(requested, ttl)
         if (challenge && rp?.id && user?.id && expires)

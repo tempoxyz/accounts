@@ -444,32 +444,34 @@ describe('server: prefetch', () => {
     `)
   })
 
-  test('behavior: ignores challenges from a server that sends no TTL', async () => {
+  test('behavior: stops prefetching from a server that sends no TTL', async () => {
     const requests = stub(null)
     const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
     ceremony.prefetch!()
     await prefetched(requests)
 
     const { options } = await ceremony.getRegistrationOptions({ name: 'alice' })
+    await ceremony.getAuthenticationOptions()
 
+    // Each ceremony requests its own options, and fetches nothing ahead. The sign-up's carries a
+    // random `userId`, so an older server doesn't derive the user handle from the name.
+    const { userId, ...body } = requests[2]!.body as { userId?: unknown }
     expect({
+      body,
       challenge: options.publicKey!.challenge,
-      requests: requests.slice(2),
+      paths: requests.slice(2).map(({ path }) => path),
+      userId: typeof userId,
     }).toMatchInlineSnapshot(`
       {
-        "challenge": "0x03",
-        "requests": [
-          {
-            "body": {},
-            "path": "/register/options",
-          },
-          {
-            "body": {
-              "name": "alice",
-            },
-            "path": "/register/options",
-          },
+        "body": {
+          "name": "alice",
+        },
+        "challenge": "0x02",
+        "paths": [
+          "/register/options",
+          "/login/options",
         ],
+        "userId": "string",
       }
     `)
   })
