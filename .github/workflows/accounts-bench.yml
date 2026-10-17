@@ -18,15 +18,17 @@ on:
         description: Wallet page to bench against, e.g. a wallet PR preview's /post-message. Default is the live Tempo Wallet.
         required: false
 
-concurrency:
-  group: accounts-bench-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
-
 permissions: {}
 
 jobs:
   bench:
     name: Bench
+    # An edit that leaves the body alone (e.g. a title change) has nothing to rerun.
+    if: github.event.action != 'edited' || github.event.changes.body
+    # On the job, so a skipped edit doesn't cancel a bench in progress.
+    concurrency:
+      group: accounts-bench-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -78,7 +80,8 @@ jobs:
           wallet="${WALLET:-$(printf '%s\n' "$PR_BODY" | tr -d '\r' | sed -n 's/^Bench wallet: *//p' | head -n 1)}"
           host=()
           if [ -n "$wallet" ]; then
-            if ! printf '%s' "$wallet" | grep -Eq '^https://[a-z0-9-]+-wallet-preview\.porto\.workers\.dev/post-message$'; then
+            # Matches the whole value, so a multi-line input can't smuggle in another URL.
+            if ! [[ "$wallet" =~ ^https://[a-z0-9-]+-wallet-preview\.porto\.workers\.dev/post-message$ ]]; then
               echo "::error::Bench wallet must be a wallet PR preview, like https://<hash>-wallet-preview.porto.workers.dev/post-message."
               exit 1
             fi
