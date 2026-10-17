@@ -362,7 +362,10 @@ export function create(options: create.Options = {}): create.ReturnType {
             ...(feePayer ? { feePayer: true as never } : {}),
           })
           return await prepared.send()
-        } catch {}
+        } catch (error) {
+          // Signing again with the root account could send the calls twice.
+          if (AccessKeyTransaction.maybeSubmitted(error)) throw error
+        }
     }
 
     const { feePayer, ...rest } = parameters
@@ -409,7 +412,10 @@ export function create(options: create.Options = {}): create.ReturnType {
             ...(feePayer ? { feePayer: true as never } : {}),
           })
           return await prepared.sendSync()
-        } catch {}
+        } catch (error) {
+          // Signing again with the root account could send the calls twice.
+          if (AccessKeyTransaction.maybeSubmitted(error)) throw error
+        }
     }
 
     const { feePayer, ...rest } = parameters
