@@ -86,6 +86,8 @@ type Entry = {
   events: [string, number][]
   renderer: string
   result?: unknown
+  /** Wall-clock time of the click (ms since the epoch), so the bench can line events up with its own clock. */
+  start: number
 }
 
 const results: Entry[] = []
@@ -114,7 +116,13 @@ async function account() {
 
 async function run(action: string, fn: () => Promise<unknown>) {
   marks = { events: [], t0: performance.now() }
-  const entry: Entry = { action, events: marks.events, renderer }
+  const entry: Entry = {
+    action,
+    events: marks.events,
+    renderer,
+    // Taken per action, so only the short monotonic span to each event is added to it.
+    start: Date.now(),
+  }
   results.push(entry)
   try {
     entry.result = await fn()
@@ -144,9 +152,12 @@ for (const method of ['register', 'login'] as const)
             ...(siwe ? { auth: '/auth' } : {}),
             ...(key
               ? {
+                  // Scoped like a third-party app's key: wallets other than wallet.tempo.xyz
+                  // (e.g. PR previews) trust no other origin, and reject a key without scopes.
                   authorizeAccessKey: {
                     expiry: Math.floor(Date.now() / 1000) + 60 * 60,
                     limits: [{ limit: numberToHex(1_000_000), token: pathUsd }],
+                    scopes: [{ address: pathUsd, selector: 'transfer(address,uint256)' }],
                   },
                 }
               : {}),

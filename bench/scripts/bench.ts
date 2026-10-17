@@ -92,7 +92,7 @@ if (Report.kind(ordered[0]!) !== 'register')
   throw new Error(`--cases must include a register case to run ${ordered[0]}.`)
 
 /** Page timeline entry written by `src/main.ts`. */
-type Entry = { action: string; error?: string; events: [string, number][] }
+type Entry = { action: string; error?: string; events: [string, number][]; start: number }
 
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH
@@ -174,9 +174,70 @@ async function click(page: Page, action: string) {
       count,
     )
     const callback = entry.events.find(([name]) => name.startsWith('callback'))!
-    return { callback: callback[1], entry, time: Date.now() }
+    if (typeof entry.start !== 'number')
+      throw new Error(
+        'The bench app predates `start` in its timeline. Rebuild it from this checkout.',
+      )
+    // The callback's own wall-clock time, not when polling noticed it.
+    return { callback: callback[1], entry, time: Math.round(entry.start + callback[1]) }
   }
   return { done, start }
+}
+
+/**
+ * Resolves `true` once `locator` matches a visible element, or `false` once `cancelled` returns
+ * `true`. Polls every 10 ms: in a cross-origin iframe, `waitFor` noticed an enabled button up to
+ * ~200 ms late, which Wallet ready would count. Rejects when the page closes.
+ */
+async function appear(locator: Locator, cancelled: () => boolean = () => false) {
+  const deadline = Date.now() + timeout
+  while (!(await locator.isVisible())) {
+    if (cancelled()) return false
+    if (Date.now() > deadline)
+      throw new Error(`Timed out after ${timeout} ms waiting for ${locator}`)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  return true
+}
+
+/** Receives the in-frame click time reported through `__benchClicked` (see {@link measure}). */
+let clicked: ((time: number) => void) | undefined
+
+/**
+ * Clicks `locator` and returns when the wallet received the click. Playwright first waits for the
+ * button to settle (the wallet animates it in), which a user waits for too, so Confirm starts at
+ * the click itself. The frame reports the click through a context binding as it lands, so a popup
+ * that closes right after the click still reports it.
+ */
+async function clickAt(locator: Locator) {
+  const frame = await (await locator.elementHandle())?.ownerFrame()
+  if (!frame) throw new Error('The approval button has no frame.')
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const time = new Promise<number>((resolve, reject) => {
+    clicked = resolve
+    timer = setTimeout(
+      () => reject(new Error('The wallet did not report the approval click.')),
+      timeout,
+    )
+  })
+  time.catch(() => {})
+  try {
+    await frame.evaluate(() =>
+      document.addEventListener(
+        'click',
+        () =>
+          (window as never as { __benchClicked: (time: number) => void }).__benchClicked(
+            Date.now(),
+          ),
+        { capture: true, once: true },
+      ),
+    )
+    await locator.click()
+    return await time
+  } finally {
+    clearTimeout(timer)
+    clicked = undefined
+  }
 }
 
 /** Runs one untimed setup action and fails when it rejects. */
@@ -196,7 +257,7 @@ async function step(
   const popup = renderer === 'tempoWallet/popup' ? context.waitForEvent('page', { timeout }) : null
   popup?.catch(() => {})
 
-  const { done, start } = await click(page, options.case)
+  const { done } = await click(page, options.case)
 
   if (renderer === 'webAuthn') {
     const { callback, entry } = await done()
@@ -213,31 +274,29 @@ async function step(
     name: approvals[Report.kind(options.case)],
   })
   try {
-    await button.waitFor({ state: 'visible', timeout })
+    await appear(button)
   } catch (error) {
     await screenshot(popup ? (wallet as Page) : page, `${renderer}-${options.case}-${run}`)
     throw error
   }
-  const ready = Date.now() - start
+  const ready_at = Date.now()
   // The passkey prompt follows the approval click, so the popup's authenticator
   // must be attached by then. Awaited after `ready` to keep setup out of the timing.
   if (popup) await attached(wallet as Page)
 
   if (Report.kind(options.case) === 'register')
     await wallet.getByPlaceholder(/Email address or label/).fill(`bench-${Date.now()}`)
-  const approved = Date.now()
-  await button.click()
+  const approved = await clickAt(button)
 
   // Approves a follow-up screen if one appears. Its render counts toward Confirm, as a user
   // would wait for it too.
   let finished = false
   if (options.case.endsWith('-key')) {
     const approve = wallet.getByRole('button', { disabled: false, name: followup })
-    approve
-      .waitFor({ state: 'visible', timeout })
-      // The iframe wallet is reused, so a wait that outlives its case must not click a later
-      // case's screen.
-      .then(() => (finished ? undefined : approve.click()))
+    // Stops once the case finishes: the iframe wallet is reused, so a wait that outlives its case
+    // must not click a later case's screen.
+    appear(approve, () => finished)
+      .then((shown) => (shown && !finished ? approve.click() : undefined))
       // Settles harmlessly when the case finishes without the screen and the wallet closes.
       .catch(() => {})
   }
@@ -253,8 +312,9 @@ async function step(
   return {
     case: options.case,
     confirm: time - approved,
+    // From the page's own click time, like Total.
+    ready: ready_at - Math.round(entry.start),
     error: entry.error,
-    ready,
     renderer,
     run,
     total: callback,
@@ -280,6 +340,8 @@ async function measure(options: { renderer: Renderer; run: number; url: string }
     // which Chrome's Local Network Access blocks unless granted.
     permissions: ['local-network-access'],
   })
+  // Lets every wallet frame, popup or iframe, report its approval click time (see `clickAt`).
+  await context.exposeBinding('__benchClicked', (_source, time: number) => clicked?.(time))
   const credentials = new Map<string, { credentialId: string }>()
   // Each page's authenticator setup, awaited before the page is used.
   const authenticators = new WeakMap<Page, Promise<void>>()
