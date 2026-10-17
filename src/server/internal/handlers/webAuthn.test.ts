@@ -228,14 +228,15 @@ describe('hooks', () => {
     }
   })
 
-  test('behavior: register defers the challenge deletion to waitUntil', async () => {
+  test('behavior: register defers the challenge deletion to waitUntil without take', async () => {
     const kv = Kv.memory()
     await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
     const events: string[] = []
     let release = () => {}
+    const { take: _, ...rest } = kv
     const handler = webAuthn({
       kv: {
-        ...kv,
+        ...rest,
         async delete(key) {
           events.push(`delete:${key}`)
           await new Promise<void>((resolve) => {
@@ -263,14 +264,89 @@ describe('hooks', () => {
       ]
     `)
     expect(waitUntil).toHaveLength(1)
-    expect(await kv.get('challenge:0x01')).toBeDefined()
+    const { created: _created, ...challenge } = (await kv.get<{ created: number }>(
+      'challenge:0x01',
+    ))!
+    expect(challenge).toMatchInlineSnapshot(`
+      {
+        "name": "Test",
+      }
+    `)
 
     release()
     await Promise.all(waitUntil)
-    expect(await kv.get('challenge:0x01')).toBeUndefined()
+    expect(await kv.get('challenge:0x01')).toMatchInlineSnapshot(`undefined`)
     expect(await kv.get('credential:credential')).toMatchInlineSnapshot(`
       {
         "publicKey": "0x04ab891400140fc4f8e941ce0ff90e419de9470acaca613bbd717a4775435031a7d884318e919fd3b3e5a631d866d8a380b44063e70f0c381ee16e0652f7f97554",
+      }
+    `)
+  })
+
+  test('behavior: register consumes the challenge with take', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost', session: false })
+
+    const first = await handler.fetch(registerRequest())
+    // A second credential against the same challenge.
+    await kv.delete('credential:credential')
+    const second = await handler.fetch(registerRequest())
+
+    expect({
+      first: first.status,
+      second: { body: await second.json(), status: second.status },
+    }).toMatchInlineSnapshot(`
+      {
+        "first": 200,
+        "second": {
+          "body": {
+            "error": "Missing or expired challenge",
+          },
+          "status": 400,
+        },
+      }
+    `)
+  })
+
+  test('behavior: login consumes the challenge with take', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', Date.now())
+    await kv.set('credential:credential', { publicKey: registerPublicKey })
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost' })
+    const login = () =>
+      handler.fetch(
+        new Request('http://localhost/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: 'credential',
+            metadata: { authenticatorData: '0x00', clientDataJSON: '{"challenge":"AQ"}' },
+            raw: {
+              authenticatorAttachment: null,
+              id: 'credential',
+              rawId: 'Y3JlZGVudGlhbA',
+              response: { clientDataJSON: 'e30' },
+              type: 'public-key',
+            },
+            signature: '0x00',
+          }),
+        }),
+      )
+
+    const first = await login()
+    const second = await login()
+
+    expect({
+      first: (await first.json()).error,
+      second: (await second.json()).error,
+    }).toMatchInlineSnapshot(`
+      {
+        "first": "Value \`0x00\` is an invalid signature size.
+
+      Expected: 64 bytes or 65 bytes.
+      Received 1 bytes.",
+        "second": "Missing or expired challenge",
       }
     `)
   })
