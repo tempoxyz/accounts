@@ -174,6 +174,10 @@ async function click(page: Page, action: string) {
       count,
     )
     const callback = entry.events.find(([name]) => name.startsWith('callback'))!
+    if (typeof entry.start !== 'number')
+      throw new Error(
+        'The bench app predates `start` in its timeline. Rebuild it from this checkout.',
+      )
     // The callback's own wall-clock time, not when polling noticed it.
     return { callback: callback[1], entry, time: Math.round(entry.start + callback[1]) }
   }
@@ -181,16 +185,45 @@ async function click(page: Page, action: string) {
 }
 
 /**
- * Resolves once `locator` matches a visible element. Polls every 10 ms: in a cross-origin iframe,
- * `waitFor` noticed an enabled button up to ~200 ms late, which Wallet ready would count.
+ * Resolves `true` once `locator` matches a visible element, or `false` once `cancelled` returns
+ * `true`. Polls every 10 ms: in a cross-origin iframe, `waitFor` noticed an enabled button up to
+ * ~200 ms late, which Wallet ready would count. Rejects when the page closes.
  */
-async function appear(locator: Locator) {
+async function appear(locator: Locator, cancelled: () => boolean = () => false) {
   const deadline = Date.now() + timeout
-  while (!(await locator.isVisible().catch(() => false))) {
+  while (!(await locator.isVisible())) {
+    if (cancelled()) return false
     if (Date.now() > deadline)
       throw new Error(`Timed out after ${timeout} ms waiting for ${locator}`)
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
+  return true
+}
+
+/**
+ * Clicks `locator` and returns when the wallet received the click. Playwright first waits for the
+ * button to settle (the wallet animates it in), which a user waits for too, so Confirm starts at
+ * the click itself.
+ */
+async function clickAt(locator: Locator) {
+  const handle = await locator.elementHandle()
+  const frame = await handle?.ownerFrame()
+  await frame
+    ?.evaluate(() => {
+      const target = window as never as { __benchClick?: number | undefined }
+      target.__benchClick = undefined
+      document.addEventListener('click', () => void (target.__benchClick = Date.now()), {
+        capture: true,
+        once: true,
+      })
+    })
+    .catch(() => {})
+  const fallback = Date.now()
+  await locator.click()
+  const time = await frame
+    ?.evaluate(() => (window as never as { __benchClick?: number | undefined }).__benchClick)
+    .catch(() => undefined)
+  return time ?? fallback
 }
 
 /** Runs one untimed setup action and fails when it rejects. */
@@ -239,20 +272,17 @@ async function step(
 
   if (Report.kind(options.case) === 'register')
     await wallet.getByPlaceholder(/Email address or label/).fill(`bench-${Date.now()}`)
-  const approved = Date.now()
-  // Already visible and enabled, so skip Playwright's actionability checks: in a cross-origin
-  // iframe they delay the click by ~130 ms, which Confirm would count.
-  await button.click({ force: true })
+  const approved = await clickAt(button)
 
   // Approves a follow-up screen if one appears. Its render counts toward Confirm, as a user
   // would wait for it too.
   let finished = false
   if (options.case.endsWith('-key')) {
     const approve = wallet.getByRole('button', { disabled: false, name: followup })
-    appear(approve)
-      // The iframe wallet is reused, so a wait that outlives its case must not click a later
-      // case's screen.
-      .then(() => (finished ? undefined : approve.click({ force: true })))
+    // Stops once the case finishes: the iframe wallet is reused, so a wait that outlives its case
+    // must not click a later case's screen.
+    appear(approve, () => finished)
+      .then((shown) => (shown && !finished ? approve.click() : undefined))
       // Settles harmlessly when the case finishes without the screen and the wallet closes.
       .catch(() => {})
   }

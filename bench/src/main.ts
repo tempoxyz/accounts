@@ -120,7 +120,8 @@ async function run(action: string, fn: () => Promise<unknown>) {
     action,
     events: marks.events,
     renderer,
-    start: performance.timeOrigin + marks.t0,
+    // Taken per action, so only the short monotonic span to each event is added to it.
+    start: Date.now(),
   }
   results.push(entry)
   try {
