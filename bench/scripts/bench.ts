@@ -200,30 +200,40 @@ async function appear(locator: Locator, cancelled: () => boolean = () => false) 
   return true
 }
 
+/** Receives the in-frame click time reported through `__benchClicked` (see {@link measure}). */
+let clicked: ((time: number) => void) | undefined
+
 /**
  * Clicks `locator` and returns when the wallet received the click. Playwright first waits for the
  * button to settle (the wallet animates it in), which a user waits for too, so Confirm starts at
- * the click itself.
+ * the click itself. The frame reports the click through a context binding as it lands, so a popup
+ * that closes right after the click still reports it.
  */
 async function clickAt(locator: Locator) {
-  const handle = await locator.elementHandle()
-  const frame = await handle?.ownerFrame()
-  await frame
-    ?.evaluate(() => {
-      const target = window as never as { __benchClick?: number | undefined }
-      target.__benchClick = undefined
-      document.addEventListener('click', () => void (target.__benchClick = Date.now()), {
-        capture: true,
-        once: true,
-      })
-    })
-    .catch(() => {})
-  const fallback = Date.now()
+  const frame = await (await locator.elementHandle())?.ownerFrame()
+  if (!frame) throw new Error('The approval button has no frame.')
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const time = new Promise<number>((resolve, reject) => {
+    clicked = resolve
+    timer = setTimeout(
+      () => reject(new Error('The wallet did not report the approval click.')),
+      timeout,
+    )
+  })
+  time.catch(() => {})
+  await frame.evaluate(() =>
+    document.addEventListener(
+      'click',
+      () =>
+        (window as never as { __benchClicked: (time: number) => void }).__benchClicked(Date.now()),
+      { capture: true, once: true },
+    ),
+  )
   await locator.click()
-  const time = await frame
-    ?.evaluate(() => (window as never as { __benchClick?: number | undefined }).__benchClick)
-    .catch(() => undefined)
-  return time ?? fallback
+  return await time.finally(() => {
+    clearTimeout(timer)
+    clicked = undefined
+  })
 }
 
 /** Runs one untimed setup action and fails when it rejects. */
@@ -326,6 +336,8 @@ async function measure(options: { renderer: Renderer; run: number; url: string }
     // which Chrome's Local Network Access blocks unless granted.
     permissions: ['local-network-access'],
   })
+  // Lets every wallet frame, popup or iframe, report its approval click time (see `clickAt`).
+  await context.exposeBinding('__benchClicked', (_source, time: number) => clicked?.(time))
   const credentials = new Map<string, { credentialId: string }>()
   // Each page's authenticator setup, awaited before the page is used.
   const authenticators = new WeakMap<Page, Promise<void>>()
