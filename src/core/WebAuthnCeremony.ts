@@ -331,7 +331,8 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
         // server parsed another one from the attestation, that address isn't
         // the stored account's: end its session and refuse the registration.
         if (publicKey && publicKey.toLowerCase() !== credential.publicKey.toLowerCase()) {
-          await base.logout?.().catch(() => {})
+          // If ending it fails, that failure rejects verification instead.
+          await base.logout?.()
           throw new Error('Server stored a different public key')
         }
         // Any session still in place belongs to an earlier sign-in, not this

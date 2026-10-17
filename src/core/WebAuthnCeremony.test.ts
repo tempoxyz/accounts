@@ -403,6 +403,20 @@ describe('deferred', () => {
     `)
   })
 
+  test('error: a key mismatch rejects with the logout failure when it cannot end the session', async () => {
+    stub([
+      () => Response.json({ credentialId: 'credential', publicKey: '0x04cd' }),
+      () => new Response(null, { status: 500 }),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({ url: 'https://wallet.example.com/webauthn' })
+
+    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+    await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Logout failed with status 500]`,
+    )
+  })
+
   test('error: a cancelled verification rejects without retrying', async () => {
     const paths = stub([
       (init) =>
