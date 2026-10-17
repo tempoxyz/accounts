@@ -86,6 +86,8 @@ type Entry = {
   events: [string, number][]
   renderer: string
   result?: unknown
+  /** Wall-clock time of the click (ms since the epoch), so the bench can line events up with its own clock. */
+  start: number
 }
 
 const results: Entry[] = []
@@ -114,7 +116,12 @@ async function account() {
 
 async function run(action: string, fn: () => Promise<unknown>) {
   marks = { events: [], t0: performance.now() }
-  const entry: Entry = { action, events: marks.events, renderer }
+  const entry: Entry = {
+    action,
+    events: marks.events,
+    renderer,
+    start: performance.timeOrigin + marks.t0,
+  }
   results.push(entry)
   try {
     entry.result = await fn()

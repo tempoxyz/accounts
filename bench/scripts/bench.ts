@@ -92,7 +92,7 @@ if (Report.kind(ordered[0]!) !== 'register')
   throw new Error(`--cases must include a register case to run ${ordered[0]}.`)
 
 /** Page timeline entry written by `src/main.ts`. */
-type Entry = { action: string; error?: string; events: [string, number][] }
+type Entry = { action: string; error?: string; events: [string, number][]; start: number }
 
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH
@@ -174,7 +174,8 @@ async function click(page: Page, action: string) {
       count,
     )
     const callback = entry.events.find(([name]) => name.startsWith('callback'))!
-    return { callback: callback[1], entry, time: Date.now() }
+    // The callback's own wall-clock time, not when polling noticed it.
+    return { callback: callback[1], entry, time: Math.round(entry.start + callback[1]) }
   }
   return { done, start }
 }
@@ -226,7 +227,9 @@ async function step(
   if (Report.kind(options.case) === 'register')
     await wallet.getByPlaceholder(/Email address or label/).fill(`bench-${Date.now()}`)
   const approved = Date.now()
-  await button.click()
+  // Already visible and enabled, so skip Playwright's actionability checks: in a cross-origin
+  // iframe they delay the click by ~130 ms, which Confirm would count.
+  await button.click({ force: true })
 
   // Approves a follow-up screen if one appears. Its render counts toward Confirm, as a user
   // would wait for it too.
@@ -237,7 +240,7 @@ async function step(
       .waitFor({ state: 'visible', timeout })
       // The iframe wallet is reused, so a wait that outlives its case must not click a later
       // case's screen.
-      .then(() => (finished ? undefined : approve.click()))
+      .then(() => (finished ? undefined : approve.click({ force: true })))
       // Settles harmlessly when the case finishes without the screen and the wallet closes.
       .catch(() => {})
   }
