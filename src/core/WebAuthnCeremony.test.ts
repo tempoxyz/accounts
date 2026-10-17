@@ -282,7 +282,8 @@ describe('server', () => {
       `)
     })
 
-    test('behavior: a retry that finds the challenge consumed counts as acknowledged', async () => {
+    test('error: a retry that finds the challenge consumed rejects', async () => {
+      // The challenge may have expired, so it does not prove the server stored the credential.
       stub([
         () => Promise.reject(new TypeError('Failed to fetch')),
         () => Response.json({ error: 'Missing or expired challenge' }, { status: 400 }),
@@ -294,11 +295,9 @@ describe('server', () => {
 
       const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
 
-      await expect(verified).resolves.toMatchInlineSnapshot(`
-        {
-          "session": false,
-        }
-      `)
+      await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Error: Missing or expired challenge]`,
+      )
     })
 
     test('error: rejects when the server refuses the registration', async () => {

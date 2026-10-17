@@ -23,6 +23,8 @@ export type WebAuthnCeremony = {
   verifyAuthentication: (
     response: Authentication.Response,
   ) => Promise<verifyAuthentication.ReturnType>
+  /** Ends the server session, if the ceremony has one. Called on `wallet_disconnect`. */
+  logout?: (() => Promise<void>) | undefined
 }
 
 export declare namespace getRegistrationOptions {
@@ -219,16 +221,13 @@ export function server(options: server.Options): WebAuthnCeremony {
             await request('/register', credential, { keepalive: true })
             return { session: true }
           } catch (error) {
-            // A retry that finds the credential, or its challenge already
-            // consumed, means a lost earlier attempt reached the server: the
-            // authenticator just minted this random credential ID. Count it as
-            // acknowledged, without the session that attempt issued.
-            if (
-              attempt > 0 &&
-              ['Credential already exists', 'Missing or expired challenge'].includes(
-                (error as Error).message,
-              )
-            )
+            // A retry that finds the credential means a lost earlier attempt
+            // stored it: the authenticator just minted this random credential
+            // ID. Count it as acknowledged, without the session that attempt
+            // issued. A consumed challenge does not prove that (it may have
+            // expired), so it rejects; a later login recovers the account if
+            // the server did store it.
+            if (attempt > 0 && (error as Error).message === 'Credential already exists')
               return { session: false }
             // `fetch` failures and non-JSON (e.g. gateway) responses can be
             // retried; a JSON error is the server's answer.
@@ -255,6 +254,13 @@ export function server(options: server.Options): WebAuthnCeremony {
     async verifyAuthentication(response) {
       return request('/login', response)
     },
+
+    async logout() {
+      await fetch(`${url}/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+    },
   })
 }
 
@@ -275,10 +281,10 @@ export declare namespace server {
      * `webAuthn` adapter makes logins and disconnects wait for it. The request
      * is sent with `keepalive`, so it completes when the page closes right
      * after answering (a popup), but retries only run while the page is open.
-     * If the
-     * server rejects the registration, the adapter removes the account (an
-     * `accountsChanged` event) and keeps its public key in storage under
-     * `registration:<credentialId>`.
+     * If the server rejects the registration, or the page closed before it
+     * answered, the adapter removes the account (an `accountsChanged` event)
+     * and keeps its public key in storage under `registration:<credentialId>`.
+     * A later login with the passkey restores the account.
      *
      * @default false
      */
