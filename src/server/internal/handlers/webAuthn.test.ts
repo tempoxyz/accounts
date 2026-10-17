@@ -228,6 +228,120 @@ describe('hooks', () => {
     }
   })
 
+  test('behavior: register defers the challenge deletion to waitUntil', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    const events: string[] = []
+    let release = () => {}
+    const handler = webAuthn({
+      kv: {
+        ...kv,
+        async delete(key) {
+          events.push(`delete:${key}`)
+          await new Promise<void>((resolve) => {
+            release = resolve
+          })
+          await kv.delete(key)
+        },
+      },
+      origin: 'http://localhost',
+      rpId: 'localhost',
+      session: false,
+    })
+    const waitUntil: Promise<unknown>[] = []
+
+    const response = await handler.fetch(registerRequest(), {}, {
+      passThroughOnException() {},
+      props: {},
+      waitUntil: (promise: Promise<unknown>) => void waitUntil.push(promise),
+    } as never)
+
+    expect(response.status).toMatchInlineSnapshot(`200`)
+    expect(events).toMatchInlineSnapshot(`
+      [
+        "delete:challenge:0x01",
+      ]
+    `)
+    expect(waitUntil).toHaveLength(1)
+    expect(await kv.get('challenge:0x01')).toBeDefined()
+
+    release()
+    await Promise.all(waitUntil)
+    expect(await kv.get('challenge:0x01')).toBeUndefined()
+    expect(await kv.get('credential:credential')).toMatchInlineSnapshot(`
+      {
+        "publicKey": "0x04ab891400140fc4f8e941ce0ff90e419de9470acaca613bbd717a4775435031a7d884318e919fd3b3e5a631d866d8a380b44063e70f0c381ee16e0652f7f97554",
+      }
+    `)
+  })
+
+  test('behavior: register reads the challenge and the credential in parallel without create', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    const events: string[] = []
+    const handler = webAuthn({
+      kv: {
+        async delete(key) {
+          events.push(`delete:${key}`)
+          await kv.delete(key)
+        },
+        async get(key) {
+          events.push(`get:${key}`)
+          await new Promise((resolve) => setTimeout(resolve, 10))
+          events.push(`got:${key}`)
+          return await kv.get(key)
+        },
+        async set(key, value) {
+          events.push(`set:${key}`)
+          await kv.set(key, value)
+        },
+      },
+      origin: 'http://localhost',
+      rpId: 'localhost',
+      session: false,
+    })
+
+    const response = await handler.fetch(registerRequest())
+
+    expect(response.status).toMatchInlineSnapshot(`200`)
+    expect(events).toMatchInlineSnapshot(`
+      [
+        "get:challenge:0x01",
+        "get:credential:credential",
+        "got:challenge:0x01",
+        "got:credential:credential",
+        "set:credential:credential",
+        "delete:challenge:0x01",
+      ]
+    `)
+  })
+
+  test('error: register rejects a credential that already exists without create', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    await kv.set('credential:credential', { publicKey: '0x01' })
+    const handler = webAuthn({
+      kv: { delete: kv.delete, get: kv.get, set: kv.set },
+      origin: 'http://localhost',
+      rpId: 'localhost',
+      session: false,
+    })
+
+    const response = await handler.fetch(registerRequest())
+
+    expect(response.status).toMatchInlineSnapshot(`400`)
+    expect(await response.json()).toMatchInlineSnapshot(`
+      {
+        "error": "Credential already exists",
+      }
+    `)
+    expect(await kv.get('credential:credential')).toMatchInlineSnapshot(`
+      {
+        "publicKey": "0x01",
+      }
+    `)
+  })
+
   test('behavior: onAuthenticate error does not call hook', async () => {
     let called = false
     const hookServer = await createServer(
@@ -409,3 +523,34 @@ describe('session — getSession & /logout', () => {
     expect(await kv.get('session:tok-D')).toBeDefined()
   })
 })
+
+/**
+ * `/register` request for credential `credential` against challenge `0x01`,
+ * with `Registration.verify` mocked to accept it.
+ */
+function registerRequest() {
+  vi.mocked(Registration.verify).mockReturnValueOnce({
+    credential: { publicKey: registerPublicKey },
+  } as never)
+  const clientDataJSON = 'eyJjaGFsbGVuZ2UiOiJBUSJ9'
+  return new Request('http://localhost/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      attestationObject: 'AA',
+      clientDataJSON,
+      id: 'credential',
+      publicKey: registerPublicKey,
+      raw: {
+        authenticatorAttachment: null,
+        id: 'credential',
+        rawId: 'Y3JlZGVudGlhbA',
+        response: { clientDataJSON },
+        type: 'public-key',
+      },
+    }),
+  })
+}
+
+const registerPublicKey =
+  '0x04ab891400140fc4f8e941ce0ff90e419de9470acaca613bbd717a4775435031a7d884318e919fd3b3e5a631d866d8a380b44063e70f0c381ee16e0652f7f97554'

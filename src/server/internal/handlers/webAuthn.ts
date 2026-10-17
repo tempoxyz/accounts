@@ -1,3 +1,4 @@
+import type { Context } from 'hono'
 import { Base64, Bytes, Hex } from 'ox'
 import { Credential } from 'ox/webauthn'
 import {
@@ -20,15 +21,21 @@ const defaults = {
 
 const sessionKey = (token: string) => `session:${token}`
 
-async function createCredential(
-  kv: Kv.Kv,
-  key: string,
-  value: { publicKey: string; userId?: string | undefined },
-) {
-  if (kv.create) return await kv.create(key, value)
-  if (await kv.get(key)) return false
-  await kv.set(key, value)
-  return true
+/**
+ * Runs `promise` after the response when the runtime exposes `waitUntil`
+ * (e.g. Cloudflare Workers via Hono's `executionCtx`). Otherwise awaits it,
+ * so runtimes that may stop work after the response still finish it.
+ */
+async function defer(c: Context, promise: Promise<unknown>) {
+  const ctx = (() => {
+    try {
+      return c.executionCtx
+    } catch {
+      return undefined
+    }
+  })()
+  if (!ctx) return void (await promise)
+  ctx.waitUntil(promise.catch(() => {}))
 }
 
 /**
@@ -140,9 +147,14 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         Bytes.toString(new Uint8Array(deserialized.clientDataJSON)),
       ) as { challenge: string }
       const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
-      const stored = await kv.get<{ created: number; name: string; userId?: string }>(
-        `challenge:${challenge}`,
-      )
+      const credentialId = credential.id
+      const key = `credential:${credentialId}`
+      // Without an atomic `create`, duplicates are rejected by a read before
+      // the write. Run that read alongside the challenge read.
+      const [stored, existing] = await Promise.all([
+        kv.get<{ created: number; name: string; userId?: string }>(`challenge:${challenge}`),
+        kv.create ? undefined : kv.get(key),
+      ])
       if (!stored || Date.now() - stored.created > challengeTtl * 1_000)
         throw new Error('Missing or expired challenge')
 
@@ -154,18 +166,19 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
       const { aaguid } = result
       const { publicKey } = result.credential
-      const credentialId = credential.id
       // Base64url-encode the userId we registered with so it matches
       // the `userHandle` shape the authenticator emits on `/login`.
       // Callers see a consistent identifier across both flows.
       const userId = stored.userId
         ? Base64.fromBytes(Bytes.fromString(stored.userId), { pad: false, url: true })
         : undefined
-      const key = `credential:${credentialId}`
-      const created = await createCredential(kv, key, {
-        publicKey,
-        ...(userId ? { userId } : {}),
-      })
+      const value = { publicKey, ...(userId ? { userId } : {}) }
+      const created = await (async () => {
+        if (kv.create) return await kv.create(key, value)
+        if (existing) return false
+        await kv.set(key, value)
+        return true
+      })()
       if (!created) throw new Error('Credential already exists')
 
       const hook = await (async () => {
@@ -183,7 +196,9 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
           throw error
         }
       })()
-      await kv.delete(`challenge:${challenge}`)
+      // The challenge expires on its own, and replaying it cannot register the
+      // same credential twice, so its deletion does not hold the response.
+      await defer(c, kv.delete(`challenge:${challenge}`))
 
       // Successful registration is also a successful authentication for
       // the freshly-minted credential. Issue a session here so the
@@ -420,6 +435,13 @@ export declare namespace webAuthn {
      * `create` is available, credential registration uses it to reject
      * duplicates atomically. Otherwise, registration falls back to
      * best-effort `get` then `set` storage.
+     *
+     * On runtimes with `waitUntil` (e.g. Cloudflare Workers), pass the
+     * execution context (`handler.fetch(request, env, ctx)`) so
+     * `/register` deletes its challenge after responding. Registration
+     * challenges may outlive their use because a replay cannot register the
+     * same credential twice. Login challenges are single-use, so `/login`
+     * deletes them before responding.
      */
     kv: Kv.Kv
     /**
