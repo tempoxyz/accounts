@@ -218,10 +218,13 @@ export function server(options: server.Options): WebAuthnCeremony {
     },
 
     async logout() {
-      await fetch(`${url}/logout`, {
+      const response = await fetch(`${url}/logout`, {
         method: 'POST',
         credentials: credentials ?? 'include',
       })
+      // A server without a logout route has no session to end.
+      if (!response.ok && response.status !== 404)
+        throw new Error(`Logout failed with status ${response.status}`)
     },
   })
 }
@@ -283,6 +286,10 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
       method: 'POST',
       ...(signal ? { signal } : {}),
     })
+    // A gateway or overloaded server may answer with JSON too; its status
+    // tells a failure in transit from the server's answer.
+    if (response.status >= 500 || response.status === 408 || response.status === 429)
+      throw new TypeError(`Request failed with status ${response.status}`)
     const json = await response.json()
     if (!response.ok) throw new Error((json as { error?: string }).error ?? 'Request failed')
     return json as { publicKey?: Hex | undefined }
@@ -312,8 +319,9 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
               // the server did store it.
               if (attempt > 0 && (error as Error).message === 'Credential already exists')
                 return { publicKey: undefined, session: false }
-              // `fetch` failures and non-JSON (e.g. gateway) responses can be
-              // retried; a JSON error is the server's answer.
+              // `fetch` failures, 5xx, 408 and 429 responses, and non-JSON
+              // responses can be retried; any other JSON error is the server's
+              // answer.
               const retryable = error instanceof TypeError || error instanceof SyntaxError
               if (!retryable || attempt >= 2) throw error
               await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))

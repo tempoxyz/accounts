@@ -351,6 +351,38 @@ describe('deferred', () => {
     )
   })
 
+  test('behavior: retries a JSON 5xx response', async () => {
+    const paths = stub([
+      () => Response.json({ error: 'Service unavailable' }, { status: 503 }),
+      () => Response.json({ credentialId: 'credential' }),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({ url: 'https://wallet.example.com/webauthn' })
+
+    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+    await expect(verified).resolves.toMatchInlineSnapshot(`
+      {
+        "session": true,
+      }
+    `)
+    expect(paths).toHaveLength(2)
+  })
+
+  test('error: a retry without the session rejects when logout answers with an error', async () => {
+    stub([
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      () => Response.json({ error: 'Credential already exists' }, { status: 400 }),
+      () => new Response(null, { status: 500 }),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({ url: 'https://wallet.example.com/webauthn' })
+
+    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+    await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Logout failed with status 500]`,
+    )
+  })
+
   test('error: rejects when the server stored a different public key', async () => {
     const paths = stub([
       () => Response.json({ credentialId: 'credential', publicKey: '0x04cd' }),

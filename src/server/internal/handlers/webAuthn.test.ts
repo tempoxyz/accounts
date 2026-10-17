@@ -309,6 +309,50 @@ describe('hooks', () => {
     `)
   })
 
+  test('behavior: a retry after a stored registration answers that the credential exists', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost', session: false })
+    const request = registerRequest()
+    // The same request sent again, as after a lost response.
+    const retry = request.clone()
+
+    const first = await handler.fetch(request)
+    const second = await handler.fetch(retry)
+
+    expect({
+      first: first.status,
+      second: { body: await second.json(), status: second.status },
+    }).toMatchInlineSnapshot(`
+      {
+        "first": 200,
+        "second": {
+          "body": {
+            "error": "Credential already exists",
+          },
+          "status": 400,
+        },
+      }
+    `)
+  })
+
+  test('behavior: register revokes the session presented with it', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    await kv.set('session:tok-A', { credentialId: 'cred-1' }, { ttl: 60 })
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost' })
+    const request = registerRequest()
+
+    const response = await handler.fetch(
+      new Request(request, {
+        headers: { 'Content-Type': 'application/json', cookie: 'accounts_webauthn=tok-A' },
+      }),
+    )
+
+    expect(response.status).toMatchInlineSnapshot(`200`)
+    expect(await kv.get('session:tok-A')).toMatchInlineSnapshot(`undefined`)
+  })
+
   test('behavior: login consumes the challenge with take', async () => {
     const kv = Kv.memory()
     await kv.set('challenge:0x01', Date.now())

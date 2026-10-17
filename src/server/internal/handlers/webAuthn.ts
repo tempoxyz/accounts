@@ -163,8 +163,13 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         consume<{ created: number; name: string; userId?: string }>(`challenge:${challenge}`),
         kv.create ? undefined : kv.get(key),
       ])
-      if (!stored || Date.now() - stored.created > challengeTtl * 1_000)
+      if (!stored || Date.now() - stored.created > challengeTtl * 1_000) {
+        // A retry whose first attempt stored the credential (and consumed the
+        // challenge) but lost its response: answer as a duplicate, so the
+        // client can tell it was stored.
+        if (existing ?? (await kv.get(key))) throw new Error('Credential already exists')
         throw new Error('Missing or expired challenge')
+      }
 
       const result = Registration.verify(credential, {
         challenge,
@@ -228,7 +233,14 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         expiresAt: issuedAt + sessionTtl,
       }
       const token = Session.generateToken()
-      await kv.set(sessionKey(token), payload, { ttl: sessionTtl })
+      // The session presented with this request belongs to an earlier
+      // sign-in. The new one replaces it, so revoke it rather than leave it
+      // usable for the rest of its lifetime.
+      const previous = Session.tokenFromRequest(c.req.raw, { cookie, cookieName })
+      await Promise.all([
+        kv.set(sessionKey(token), payload, { ttl: sessionTtl }),
+        previous ? kv.delete(sessionKey(previous)) : undefined,
+      ])
 
       const json = {
         credentialId,
