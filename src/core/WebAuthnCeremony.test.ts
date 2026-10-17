@@ -247,7 +247,11 @@ describe('server', () => {
       `)
       await vi.waitFor(() => expect(paths).toHaveLength(1))
       release()
-      await expect(verified).resolves.toBeUndefined()
+      await expect(verified).resolves.toMatchInlineSnapshot(`
+        {
+          "session": true,
+        }
+      `)
     })
 
     test('behavior: retries a request that failed in transit', async () => {
@@ -264,13 +268,36 @@ describe('server', () => {
 
       const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
 
-      await expect(verified).resolves.toBeUndefined()
+      await expect(verified).resolves.toMatchInlineSnapshot(`
+        {
+          "session": false,
+        }
+      `)
       expect(paths).toMatchInlineSnapshot(`
         [
           "/webauthn/register (keepalive)",
           "/webauthn/register (keepalive)",
           "/webauthn/register (keepalive)",
         ]
+      `)
+    })
+
+    test('behavior: a retry that finds the challenge consumed counts as acknowledged', async () => {
+      stub([
+        () => Promise.reject(new TypeError('Failed to fetch')),
+        () => Response.json({ error: 'Missing or expired challenge' }, { status: 400 }),
+      ])
+      const ceremony = WebAuthnCeremony.server({
+        deferRegistration: true,
+        url: 'https://wallet.example.com/webauthn',
+      })
+
+      const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+      await expect(verified).resolves.toMatchInlineSnapshot(`
+        {
+          "session": false,
+        }
       `)
     })
 

@@ -53,8 +53,10 @@ export declare namespace verifyRegistration {
      * Settles once the server has stored the credential, when the ceremony
      * verifies the registration in the background (see
      * `server({ deferRegistration })`). Rejects when the server refuses it.
+     * `session` is `false` when a retry found the registration already
+     * processed after a lost response, so its session was never received.
      */
-    verified?: Promise<void> | undefined
+    verified?: Promise<{ session: boolean }> | undefined
   }
 }
 
@@ -84,8 +86,10 @@ export declare namespace verifyAuthentication {
      * Settles once the server has stored the credential, when the ceremony
      * verifies the registration in the background (see
      * `server({ deferRegistration })`). Rejects when the server refuses it.
+     * `session` is `false` when a retry found the registration already
+     * processed after a lost response, so its session was never received.
      */
-    verified?: Promise<void> | undefined
+    verified?: Promise<{ session: boolean }> | undefined
   }
 }
 
@@ -213,11 +217,19 @@ export function server(options: server.Options): WebAuthnCeremony {
             // `keepalive` lets the request finish when the page closes right
             // after answering (e.g. a wallet popup).
             await request('/register', credential, { keepalive: true })
-            return
+            return { session: true }
           } catch (error) {
-            // The authenticator just minted this random credential ID, so a
-            // retry that finds it means an earlier attempt registered it.
-            if (attempt > 0 && (error as Error).message === 'Credential already exists') return
+            // A retry that finds the credential, or its challenge already
+            // consumed, means a lost earlier attempt reached the server: the
+            // authenticator just minted this random credential ID. Count it as
+            // acknowledged, without the session that attempt issued.
+            if (
+              attempt > 0 &&
+              ['Credential already exists', 'Missing or expired challenge'].includes(
+                (error as Error).message,
+              )
+            )
+              return { session: false }
             // `fetch` failures and non-JSON (e.g. gateway) responses can be
             // retried; a JSON error is the server's answer.
             const retryable = error instanceof TypeError || error instanceof SyntaxError

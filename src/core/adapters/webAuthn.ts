@@ -70,38 +70,72 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     // Server registrations still in flight, by credential ID. Each settles once
     // the server acknowledges or rejects the credential.
     const pending = new Map<string, Promise<void>>()
+    // Credentials the server rejected. Their accounts are dropped whenever they
+    // show up in the store, including ones merged after the rejection (e.g.
+    // while a sign-up's signature prompt was still open).
+    const rejected = new Set<string>()
+    store.subscribe(() => {
+      if (rejected.size > 0) drop()
+    })
 
-    /**
-     * Tracks a registration the ceremony verifies in the background. Its
-     * public key stays in storage until the server acknowledges it, so a
-     * credential the server never stored can still be recovered on this device.
-     */
+    /** Removes accounts of rejected credentials, with their access keys. */
+    function drop() {
+      const { accessKeys, accounts } = store.getState()
+      const removed = new Set(
+        accounts
+          .filter(
+            (account) => 'credential' in account && rejected.has(account.credential?.id ?? ''),
+          )
+          .map((account) => account.address.toLowerCase()),
+      )
+      if (removed.size === 0) return
+      const remaining = accounts.filter((account) => !removed.has(account.address.toLowerCase()))
+      if (remaining.length === 0) return store.disconnect()
+      store.setState({
+        accessKeys: accessKeys.filter((accessKey) => !removed.has(accessKey.access.toLowerCase())),
+        accounts: remaining,
+        activeAccount: 0,
+      })
+    }
+
+    /** Tracks a registration the ceremony verifies in the background. */
     function track(
       credential: { id: string; publicKey: Hex.Hex },
-      options: { name: string; verified: Promise<void> },
+      options: {
+        name: string
+        previous: string | undefined
+        verified: Promise<{ session: boolean }>
+      },
     ) {
-      const key = `registration:${credential.id}`
-      const promise = (async () => {
-        await storage.setItem(key, { name: options.name, publicKey: credential.publicKey })
-        await options.verified
-        await storage.removeItem(key)
-      })()
+      const { name, previous, verified } = options
+      const promise = verified.then(
+        ({ session }) => {
+          // Acknowledged by a retry after a lost response: the server holds the
+          // credential, but this client has no session from it.
+          if (!session && registered?.credentialId === credential.id) registered = undefined
+        },
+        async (error) => {
+          // The server never stored the credential: drop the account the app
+          // was handed, so it signs in or registers again.
+          rejected.add(credential.id)
+          if (registered?.credentialId === credential.id) registered = undefined
+          // Keep the public key on this device, so the account can be recovered.
+          await storage.setItem(`registration:${credential.id}`, {
+            name,
+            publicKey: credential.publicKey,
+          })
+          // Point the next sign-in back at the credential used before.
+          if ((await storage.getItem<string>('lastCredentialId')) === credential.id)
+            if (previous) await storage.setItem('lastCredentialId', previous)
+            else await storage.removeItem('lastCredentialId')
+          drop()
+          throw error
+        },
+      )
       pending.set(credential.id, promise)
       promise.then(
         () => pending.delete(credential.id),
-        () => {
-          pending.delete(credential.id)
-          // The server never stored the credential: drop the account the app
-          // was handed, so it signs in or registers again.
-          if (registered?.credentialId === credential.id) registered = undefined
-          store.setState((state) => {
-            const accounts = state.accounts.filter(
-              (account) => !('credential' in account) || account.credential?.id !== credential.id,
-            )
-            if (accounts.length === state.accounts.length) return state
-            return { accounts, activeAccount: 0 }
-          })
-        },
+        () => pending.delete(credential.id),
       )
     }
 
@@ -133,7 +167,11 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         const { publicKey, username, verified } = await ceremony.verifyRegistration(credential, {
           name: parameters.name,
         })
-        if (verified) track({ id: credential.id, publicKey }, { name: parameters.name, verified })
+        const previous = verified
+          ? ((await storage.getItem<string>('lastCredentialId')) ?? undefined)
+          : undefined
+        if (verified)
+          track({ id: credential.id, publicKey }, { name: parameters.name, previous, verified })
         await storage.setItem('lastCredentialId', credential.id)
         registered = {
           credentialId: credential.id,
@@ -159,16 +197,17 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       async loadAccounts(parameters = {}) {
         const { digest, selectAccount } = parameters
 
+        // A login or the registration's session shortcut needs the server to
+        // know the credential, and a registration landing after a login would
+        // replace its session, so wait for registrations still verifying in
+        // the background. Their failures are handled by `track`.
+        await Promise.allSettled(pending.values())
+
         const credentialId = selectAccount
           ? undefined
           : (parameters?.credentialId ??
             (await storage.getItem<string>('lastCredentialId')) ??
             undefined)
-
-        // A login or the registration's session shortcut needs the server to
-        // know the credential, so wait for a registration verified in the
-        // background.
-        if (typeof credentialId === 'string') await pending.get(credentialId)
         const fresh = digest && typeof credentialId === 'string' ? current(credentialId) : undefined
         if (fresh && typeof credentialId === 'string') {
           const { publicKey, rpId, username } = fresh
