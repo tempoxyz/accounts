@@ -228,8 +228,10 @@ function rawTransactionTransport(base: Transport): Transport {
             .catch(() => null)
           if (!known) throw error
           if (method === 'eth_sendRawTransaction') return hash
-          // Waits up to 30 s for the receipt, as the sync method does.
-          const deadline = Date.now() + 30_000
+          // Waits for the receipt as long as the sync method would: the
+          // caller's timeout, or 30 s.
+          const timeout = (args.params as readonly unknown[])[1]
+          const deadline = Date.now() + (typeof timeout === 'number' ? timeout : 30_000)
           for (;;) {
             const receipt = await transport
               .request({ method: 'eth_getTransactionReceipt', params: [hash] } as never)

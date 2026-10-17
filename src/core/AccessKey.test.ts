@@ -386,6 +386,35 @@ describe('maybeSubmitted', () => {
     expect(AccessKeyTransaction.maybeSubmitted(result)).toMatchInlineSnapshot(`false`)
   })
 
+  test('behavior: an HTTP refusal did not land, a gateway error may have', async () => {
+    const refused = await send(
+      new HttpRequestError({ body: {}, status: 429, url: 'https://rpc.example' }),
+    )
+    const gateway = await send(
+      new HttpRequestError({ body: {}, status: 502, url: 'https://rpc.example' }),
+    )
+
+    expect([refused.result, gateway.result].map(AccessKeyTransaction.maybeSubmitted))
+      .toMatchInlineSnapshot(`
+      [
+        false,
+        true,
+      ]
+    `)
+  })
+
+  test('behavior: an unconfirmed duplicate may have landed', async () => {
+    const { result } = await send(
+      new RpcRequestError({
+        body: {},
+        error: { code: -32000, message: 'nonce too low' },
+        url: 'https://rpc.example',
+      }),
+    )
+
+    expect(AccessKeyTransaction.maybeSubmitted(result)).toMatchInlineSnapshot(`true`)
+  })
+
   test('behavior: an error before submission did not land', () => {
     expect(
       AccessKeyTransaction.maybeSubmitted(new HttpRequestError({ url: 'https://rpc.example' })),
