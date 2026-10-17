@@ -326,18 +326,12 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
                   challenge: options.publicKey!.challenge,
                   publicKey: known.publicKey,
                   rpId: known.rpId,
+                  ...(known.label !== undefined ? { username: known.label } : {}),
                 },
                 signal: controller.signal,
               }
             : { signal: controller.signal },
         )
-        // Logins and disconnects wait for it, as for a registration. A refusal
-        // keeps the account: its passkey just signed for this public key.
-        if (verified) {
-          const promise = verified.catch(() => {})
-          pending.set(response.id, { controller, promise })
-          promise.then(() => pending.delete(response.id))
-        }
         // The server session now belongs to this login.
         registered = undefined
         // The server knows the credential, even if its registration looked
@@ -347,7 +341,21 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         )
         rejected_ids.delete(response.id)
 
+        const previous = (await storage.getItem<string>('lastCredentialId')) ?? undefined
         await storage.setItem('lastCredentialId', response.id)
+        // Tracked like a registration verified in the background: logins and
+        // disconnects wait for it, and if the server refuses it, the account
+        // is dropped (an `accountsChanged` event) as the server's answer.
+        if (verified)
+          track(
+            { id: response.id, publicKey },
+            {
+              controller,
+              name: known?.label ?? '',
+              previous,
+              verified: verified.then(() => ({ session: true })),
+            },
+          )
 
         const account = Account.fromWebAuthnP256({ id: response.id, publicKey }, { rpId })
 
@@ -377,13 +385,26 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       },
     })(parameters)
 
-    /** Looks up a credential's public key and RP ID from the latest registration or stored accounts. */
-    function find(credentialId: string): { publicKey: Hex.Hex; rpId: string } | undefined {
+    /**
+     * Looks up a credential's public key, RP ID and label from the latest
+     * registration or stored accounts.
+     */
+    function find(
+      credentialId: string,
+    ): { label?: string | undefined; publicKey: Hex.Hex; rpId: string } | undefined {
       if (registered?.credentialId === credentialId)
-        return { publicKey: registered.publicKey, rpId: registered.rpId }
+        return {
+          ...(registered.username ? { label: registered.username } : {}),
+          publicKey: registered.publicKey,
+          rpId: registered.rpId,
+        }
       for (const account of store.getState().accounts)
         if ('credential' in account && account.credential?.id === credentialId)
-          return { publicKey: account.credential.publicKey, rpId: account.credential.rpId }
+          return {
+            ...('label' in account && account.label ? { label: account.label } : {}),
+            publicKey: account.credential.publicKey,
+            rpId: account.credential.rpId,
+          }
       return undefined
     }
 

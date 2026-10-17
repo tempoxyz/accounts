@@ -209,6 +209,29 @@ describe('server', () => {
   })
 })
 
+describe('server: verifyAuthentication', () => {
+  test('behavior: returns only the declared fields of the login response', async () => {
+    vi.stubGlobal('fetch', async () =>
+      Response.json({
+        credentialId: 'credential',
+        publicKey: '0x04ab',
+        username: 'alice',
+        verified: true,
+      }),
+    )
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+
+    expect(await ceremony.verifyAuthentication({ id: 'credential' } as never))
+      .toMatchInlineSnapshot(`
+      {
+        "credentialId": "credential",
+        "publicKey": "0x04ab",
+        "username": "alice",
+      }
+    `)
+  })
+})
+
 describe('server: prefetch', () => {
   /** Serialized credential whose client data carries challenge `0x01`. */
   const credential = {

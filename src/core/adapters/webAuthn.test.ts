@@ -194,6 +194,7 @@ describe('deferred login', () => {
     vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
       const request = new Request(input, init)
       const path = new URL(request.url).pathname
+      if (path === '/webauthn/logout') events.push('logout')
       if (path === '/webauthn/login') {
         events.push('login sent')
         await new Promise<void>((resolve) => (gate.release = resolve))
@@ -243,16 +244,20 @@ describe('deferred login', () => {
           "login sent",
           "connected",
           "login answered",
+          "logout",
           "disconnected",
         ],
       }
     `)
   })
 
-  test('behavior: keeps the account when the server refuses the login', async () => {
+  test('behavior: drops the account and ends the session when the server refuses the login', async () => {
     const { events, gate, provider } = setup()
     const address = await signUp(provider)
 
+    const changed = new Promise<readonly string[]>((resolve) =>
+      provider.on('accountsChanged', resolve),
+    )
     await provider.request({
       method: 'wallet_connect',
       params: [{ capabilities: { method: 'login' } }],
@@ -260,11 +265,20 @@ describe('deferred login', () => {
     gate.refuse = 'Unknown credential'
     await vi.waitFor(() => expect(events).toContain('login sent'))
     gate.release()
-    await vi.waitFor(() => expect(events).toContain('login answered'))
-    await new Promise((resolve) => setTimeout(resolve))
 
-    const accounts = await provider.request({ method: 'eth_accounts' })
-    expect(accounts[0] === address).toMatchInlineSnapshot(`true`)
+    expect({
+      accounts: (await changed).includes(address),
+      events,
+    }).toMatchInlineSnapshot(`
+      {
+        "accounts": false,
+        "events": [
+          "login sent",
+          "login answered",
+          "logout",
+        ],
+      }
+    `)
   })
 })
 

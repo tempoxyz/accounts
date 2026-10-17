@@ -103,10 +103,18 @@ export declare namespace verifyAuthentication {
   type Options = {
     /**
      * The credential the caller already knows: the challenge it signed, its
-     * public key and RP ID. A {@link deferred} ceremony checks the signature
-     * against them and verifies the login with the server in the background.
+     * public key, RP ID and username. A {@link deferred} ceremony checks the
+     * signature against them, answers with the username, and verifies the
+     * login with the server in the background.
      */
-    credential?: { challenge: Hex; publicKey: Hex; rpId: string } | undefined
+    credential?:
+      | {
+          challenge: Hex
+          publicKey: Hex
+          rpId: string
+          username?: string | null | undefined
+        }
+      | undefined
     /**
      * Cancels background verification (see `verified`), which then rejects
      * with the signal's reason, and can no longer issue a session.
@@ -293,7 +301,15 @@ function create(options: server.Options) {
     },
 
     async verifyAuthentication(response) {
-      return request('/login', response)
+      // Only the declared fields: a hook can merge others into the response.
+      const { credentialId, publicKey, userId, username } =
+        await request<verifyAuthentication.ReturnType>('/login', response)
+      return {
+        credentialId,
+        publicKey,
+        ...(userId !== undefined ? { userId } : {}),
+        ...(username !== undefined ? { username } : {}),
+      }
     },
 
     async logout() {
@@ -541,8 +557,8 @@ export declare namespace server {
  * answers once the signature checks out against the stored public key, and
  * `POST /login` runs in the background the same way. The session it issues
  * likewise exists only once it lands, and the adapter makes logins and
- * disconnects wait for it. A refusal leaves the account in place: its
- * passkey signed for that key.
+ * disconnects wait for it. A refusal ends the session in place and the
+ * adapter drops the account, as for a refused registration.
  *
  * The request is sent with `keepalive`, so it completes when the page closes
  * right after answering, but retries only run while the page is open. If the
@@ -664,31 +680,41 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
           : false
       if (!credential || !valid) return base.verifyAuthentication(response)
       const verified = (async () => {
-        const { publicKey } = await (async () => {
-          for (let attempt = 0; ; attempt++)
-            try {
-              signal?.throwIfAborted()
-              return await post('/login', response, signal)
-            } catch (error) {
-              if (signal?.aborted) throw signal.reason
-              // As for registration. A retry of a login that reached the
-              // server finds its challenge consumed, and rejects.
-              const retryable = error instanceof TypeError || error instanceof SyntaxError
-              if (!retryable || attempt >= 2) throw error
-              await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
-            }
-        })()
-        // The app was handed the account of the key checked here. If the
-        // server knows the credential by another key, end the session it
-        // just issued and refuse the login.
-        if (publicKey?.toLowerCase() !== credential.publicKey.toLowerCase()) {
-          await base.logout?.()
-          throw new Error('Server stored a different public key')
+        try {
+          const { publicKey } = await (async () => {
+            for (let attempt = 0; ; attempt++)
+              try {
+                signal?.throwIfAborted()
+                return await post('/login', response, signal)
+              } catch (error) {
+                if (signal?.aborted) throw signal.reason
+                // As for registration. A retry of a login that reached the
+                // server finds its challenge consumed, and rejects.
+                const retryable = error instanceof TypeError || error instanceof SyntaxError
+                if (!retryable || attempt >= 2) throw error
+                await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
+              }
+          })()
+          // The app was handed the account of the key checked here. If the
+          // server knows the credential by another key, refuse the login.
+          if (publicKey?.toLowerCase() !== credential.publicKey.toLowerCase())
+            throw new Error('Server stored a different public key')
+        } catch (error) {
+          // The app now runs as this account, so a session the server left
+          // in place (an earlier account's, or the one it just issued) must
+          // not stay. If ending it fails, so does verification.
+          if (!signal?.aborted) await base.logout?.()
+          throw error
         }
       })()
       // Observed by the adapter; keep an unobserved failure from going unhandled.
       verified.catch(() => {})
-      return { credentialId: response.id, publicKey: credential.publicKey, verified }
+      return {
+        credentialId: response.id,
+        publicKey: credential.publicKey,
+        ...(credential.username !== undefined ? { username: credential.username } : {}),
+        verified,
+      }
     },
   })
 }
