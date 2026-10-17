@@ -207,110 +207,127 @@ describe('server', () => {
       }
     `)
   })
+})
 
-  describe('deferRegistration', () => {
-    const credential = { id: 'credential', publicKey: '0x04ab' } as never
+describe('deferred', () => {
+  const credential = { id: 'credential', publicKey: '0x04ab' } as never
 
-    /** Answers each `/register` with the next of `responses`, recording the paths. */
-    function stub(responses: ((init?: RequestInit) => Response | Promise<Response>)[]) {
-      const paths: string[] = []
-      vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
-        paths.push(`${new URL(input).pathname}${init?.keepalive ? ' (keepalive)' : ''}`)
-        return await responses.shift()!(init)
-      })
-      return paths
-    }
+  /** Answers each `/register` with the next of `responses`, recording the paths. */
+  function stub(responses: ((init?: RequestInit) => Response | Promise<Response>)[]) {
+    const paths: string[] = []
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      paths.push(`${new URL(input).pathname}${init?.keepalive ? ' (keepalive)' : ''}`)
+      return await responses.shift()!(init)
+    })
+    return paths
+  }
 
-    test('behavior: returns the public key before the server stores the credential', async () => {
-      let release = () => {}
-      const paths = stub([
-        () =>
-          new Promise<Response>((resolve) => {
-            release = () => resolve(Response.json({ credentialId: 'credential' }))
-          }),
-      ])
-      const ceremony = WebAuthnCeremony.server({
-        deferRegistration: true,
-        url: 'https://wallet.example.com/webauthn',
-      })
-
-      const { verified, ...result } = await ceremony.verifyRegistration(credential, {
-        name: 'alice',
-      })
-
-      expect(result).toMatchInlineSnapshot(`
-        {
-          "credentialId": "credential",
-          "publicKey": "0x04ab",
-        }
-      `)
-      await vi.waitFor(() => expect(paths).toHaveLength(1))
-      release()
-      await expect(verified).resolves.toMatchInlineSnapshot(`
-        {
-          "session": true,
-        }
-      `)
+  test('behavior: returns the public key before the server stores the credential', async () => {
+    let release = () => {}
+    const paths = stub([
+      () =>
+        new Promise<Response>((resolve) => {
+          release = () => resolve(Response.json({ credentialId: 'credential' }))
+        }),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({
+      url: 'https://wallet.example.com/webauthn',
     })
 
-    test('behavior: retries a request that failed in transit', async () => {
-      const paths = stub([
-        () => Promise.reject(new TypeError('Failed to fetch')),
-        () => new Response('Bad Gateway', { status: 502 }),
-        // The first attempt registered the credential before its response was lost.
-        () => Response.json({ error: 'Credential already exists' }, { status: 400 }),
-      ])
-      const ceremony = WebAuthnCeremony.server({
-        deferRegistration: true,
-        url: 'https://wallet.example.com/webauthn',
-      })
-
-      const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
-
-      await expect(verified).resolves.toMatchInlineSnapshot(`
-        {
-          "session": false,
-        }
-      `)
-      expect(paths).toMatchInlineSnapshot(`
-        [
-          "/webauthn/register (keepalive)",
-          "/webauthn/register (keepalive)",
-          "/webauthn/register (keepalive)",
-        ]
-      `)
+    const { verified, ...result } = await ceremony.verifyRegistration(credential, {
+      name: 'alice',
     })
 
-    test('error: a retry that finds the challenge consumed rejects', async () => {
-      // The challenge may have expired, so it does not prove the server stored the credential.
-      stub([
-        () => Promise.reject(new TypeError('Failed to fetch')),
-        () => Response.json({ error: 'Missing or expired challenge' }, { status: 400 }),
-      ])
-      const ceremony = WebAuthnCeremony.server({
-        deferRegistration: true,
-        url: 'https://wallet.example.com/webauthn',
-      })
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "credentialId": "credential",
+        "publicKey": "0x04ab",
+      }
+    `)
+    await vi.waitFor(() => expect(paths).toHaveLength(1))
+    release()
+    await expect(verified).resolves.toMatchInlineSnapshot(`
+      {
+        "session": true,
+      }
+    `)
+  })
 
-      const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
-
-      await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
-        `[Error: Missing or expired challenge]`,
-      )
+  test('behavior: retries a request that failed in transit', async () => {
+    const paths = stub([
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      () => new Response('Bad Gateway', { status: 502 }),
+      // The first attempt registered the credential before its response was lost.
+      () => Response.json({ error: 'Credential already exists' }, { status: 400 }),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({
+      url: 'https://wallet.example.com/webauthn',
     })
 
-    test('error: rejects when the server refuses the registration', async () => {
-      stub([() => Response.json({ error: 'Missing or expired challenge' }, { status: 400 })])
-      const ceremony = WebAuthnCeremony.server({
-        deferRegistration: true,
-        url: 'https://wallet.example.com/webauthn',
-      })
+    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
 
-      const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+    await expect(verified).resolves.toMatchInlineSnapshot(`
+      {
+        "session": false,
+      }
+    `)
+    expect(paths).toMatchInlineSnapshot(`
+      [
+        "/webauthn/register (keepalive)",
+        "/webauthn/register (keepalive)",
+        "/webauthn/register (keepalive)",
+      ]
+    `)
+  })
 
-      await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
-        `[Error: Missing or expired challenge]`,
-      )
+  test('error: a retry that finds the challenge consumed rejects', async () => {
+    // The challenge may have expired, so it does not prove the server stored the credential.
+    stub([
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      () => Response.json({ error: 'Missing or expired challenge' }, { status: 400 }),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({
+      url: 'https://wallet.example.com/webauthn',
     })
+
+    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+    await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Missing or expired challenge]`,
+    )
+  })
+
+  test('error: rejects when the server refuses the registration', async () => {
+    stub([() => Response.json({ error: 'Missing or expired challenge' }, { status: 400 })])
+    const ceremony = WebAuthnCeremony.deferred({
+      url: 'https://wallet.example.com/webauthn',
+    })
+
+    const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+    await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Missing or expired challenge]`,
+    )
+  })
+
+  test('error: a cancelled verification rejects without retrying', async () => {
+    const paths = stub([
+      (init) =>
+        new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason)),
+        ),
+    ])
+    const ceremony = WebAuthnCeremony.deferred({ url: 'https://wallet.example.com/webauthn' })
+    const controller = new AbortController()
+
+    const { verified } = await ceremony.verifyRegistration(credential, {
+      name: 'alice',
+      signal: controller.signal,
+    })
+    await vi.waitFor(() => expect(paths).toHaveLength(1))
+    controller.abort(new Error('Cancelled'))
+
+    await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: Cancelled]`)
+    expect(paths).toHaveLength(1)
   })
 })

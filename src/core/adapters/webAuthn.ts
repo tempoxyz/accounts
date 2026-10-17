@@ -71,10 +71,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       | undefined
 
     // Server registrations still in flight, by credential ID. Each settles once
-    // the server acknowledges or rejects the credential.
-    const pending = new Map<string, Promise<void>>()
-    // Disconnects so far, so a registration landing after one can tell.
-    let disconnects = 0
+    // the server acknowledges or rejects the credential, or once it's cancelled.
+    const pending = new Map<string, { controller: AbortController; promise: Promise<void> }>()
     // Account addresses of credentials the server rejected. Their accounts and
     // access keys are dropped whenever they show up in the store, including
     // ones stored after the rejection (e.g. while a sign-up's signature prompt
@@ -133,31 +131,30 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     function track(
       credential: { id: string; publicKey: Hex.Hex },
       options: {
+        controller: AbortController
         name: string
         previous: string | undefined
         verified: Promise<{ session: boolean }>
       },
     ) {
-      const { name, previous, verified } = options
-      const started = disconnects
+      const { controller, name, previous, verified } = options
       const promise = verified.then(
         async ({ session }) => {
-          // A disconnect that stopped waiting for this registration logged out
-          // before its session existed: end that session too.
-          if (disconnects !== started) return void (await ceremony.logout?.().catch(() => {}))
           // The session belongs to the registration answered last. Keep the
           // shortcut only if that is the latest registration and its response
           // carried the session (not a retry after a lost response).
           if (!session || registered?.credentialId !== credential.id) registered = undefined
         },
         async (error) => {
+          // Cancelled by `settle`: the outcome is unknown, so keep the account.
+          if (controller.signal.aborted) return
           // The server never stored the credential: drop the account the app
           // was handed, so it signs in or registers again.
           await reject(credential, { name, previous })
           throw error
         },
       )
-      pending.set(credential.id, promise)
+      pending.set(credential.id, { controller, promise })
       promise.then(
         () => pending.delete(credential.id),
         () => pending.delete(credential.id),
@@ -165,19 +162,22 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     }
 
     /**
-     * Waits for registrations still verifying, for up to `timeout_pending`. A
-     * slow one keeps running, and its session isn't relied on.
+     * Waits for registrations still verifying, for up to `timeout_pending`,
+     * then cancels the rest, so none can land later and replace the session of
+     * the login or disconnect that follows.
      */
     async function settle() {
       if (pending.size === 0) return
       let timer: ReturnType<typeof setTimeout> | undefined
       const settled = await Promise.race([
-        Promise.allSettled(pending.values()).then(() => true),
+        Promise.allSettled([...pending.values()].map(({ promise }) => promise)).then(() => true),
         new Promise<false>((resolve) => {
           timer = setTimeout(() => resolve(false), timeout_pending)
         }),
       ]).finally(() => clearTimeout(timer))
-      if (!settled) registered = undefined
+      if (settled) return
+      registered = undefined
+      for (const { controller } of pending.values()) controller.abort()
     }
 
     /** Returns the latest registration if it still owns a fresh server session. */
@@ -205,12 +205,14 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         // Keep a failed prompt from surfacing as an unhandled rejection while
         // verification is still pending; it rethrows from the `await` below.
         signature?.catch(() => {})
+        const controller = new AbortController()
         const { publicKey, username, verified } = await ceremony.verifyRegistration(credential, {
           name: parameters.name,
+          signal: controller.signal,
         })
         let failure: { error: unknown } | undefined
         verified?.catch((error) => {
-          failure = { error }
+          if (!controller.signal.aborted) failure = { error }
         })
         registered = {
           credentialId: credential.id,
@@ -221,13 +223,16 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         }
         if (verified) {
           const previous = (await storage.getItem<string>('lastCredentialId')) ?? undefined
-          track({ id: credential.id, publicKey }, { name: parameters.name, previous, verified })
+          track(
+            { id: credential.id, publicKey },
+            { controller, name: parameters.name, previous, verified },
+          )
         }
         await storage.setItem('lastCredentialId', credential.id)
         const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
         const signed = signature ? await signature : undefined
         // Rejected while the signature prompt was open: fail the sign-up, as
-        // without `deferRegistration`.
+        // with `WebAuthnCeremony.server`.
         if (failure) throw failure.error
         return {
           accounts: [
@@ -361,9 +366,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       // the server again.
       registered = undefined
       // A registration landing after logout would restore its session, so
-      // wait for it, or have it log out when it lands (see `track`).
+      // wait for it, or cancel it (see `settle`).
       await settle()
-      disconnects++
       await ceremony.logout?.().catch(() => {})
     }
 

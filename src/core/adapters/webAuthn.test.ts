@@ -64,15 +64,20 @@ describe('background registration', () => {
     const local = WebAuthnCeremony.local({ rpId: 'localhost', storage })
     const logins = vi.fn()
     const verifications: { reject: (error: Error) => void; resolve: () => void }[] = []
+    const cancelled: string[] = []
     const ceremony = WebAuthnCeremony.from({
       ...local,
       async verifyRegistration(credential, parameters) {
         const result = await local.verifyRegistration(credential, parameters)
         const verified = options.reject
           ? Promise.reject(options.reject)
-          : new Promise<{ session: boolean }>((resolve, reject) =>
-              verifications.push({ reject, resolve: () => resolve({ session: true }) }),
-            )
+          : new Promise<{ session: boolean }>((resolve, reject) => {
+              parameters?.signal?.addEventListener('abort', () => {
+                cancelled.push(credential.id)
+                reject(parameters.signal!.reason)
+              })
+              verifications.push({ reject, resolve: () => resolve({ session: true }) })
+            })
         return { ...result, verified }
       },
       async verifyAuthentication(response) {
@@ -86,7 +91,7 @@ describe('background registration', () => {
       chains: [chain],
       storage,
     })
-    return { authenticator, logins, provider, storage, verifications }
+    return { authenticator, cancelled, logins, provider, storage, verifications }
   }
 
   async function register(provider: ReturnType<typeof setup>['provider'], name = 'alice') {
@@ -327,8 +332,8 @@ describe('background registration', () => {
     expect(await storage.getItem('lastCredentialId')).toMatchInlineSnapshot(`null`)
   })
 
-  test('behavior: a login waits at most 10 s for a slow registration', async () => {
-    const { logins, provider } = setup()
+  test('behavior: a login waits at most 10 s for a slow registration, then cancels it', async () => {
+    const { cancelled, logins, provider } = setup()
     const account = await register(provider)
     const id = credentialOf(provider)?.id
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
@@ -344,23 +349,28 @@ describe('background registration', () => {
 
     expect(accounts[0]!.address).toBe(account.address)
     expect(logins).toHaveBeenCalledTimes(1)
+    // Cancelled, so it can't replace the login's session later.
+    expect(cancelled).toEqual([id])
   })
 
-  test('behavior: a registration landing after a disconnect ends its session', async () => {
+  test('behavior: a disconnect cancels a slow registration and keeps later sessions', async () => {
     const logout = vi.fn(async () => {})
-    const { provider, verifications } = setup({ logout })
+    const { cancelled, provider } = setup({ logout })
     await register(provider)
+    const id = credentialOf(provider)?.id
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     const disconnect = provider.request({ method: 'wallet_disconnect' })
     await vi.advanceTimersByTimeAsync(10_000)
     vi.useRealTimers()
     await disconnect
+    expect(cancelled).toEqual([id])
+
+    // A sign-up after the disconnect keeps its session: nothing logs out late.
+    await register(provider, 'bob')
+    await new Promise((resolve) => setTimeout(resolve, 10))
     expect(logout).toHaveBeenCalledTimes(1)
-
-    verifications[0]!.resolve()
-
-    await vi.waitFor(() => expect(logout).toHaveBeenCalledTimes(2))
+    expect(await provider.request({ method: 'eth_accounts' })).toHaveLength(1)
   })
 
   test('behavior: disconnect ends the ceremony session', async () => {

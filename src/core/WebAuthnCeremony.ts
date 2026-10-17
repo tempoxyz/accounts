@@ -43,6 +43,12 @@ export declare namespace verifyRegistration {
   type Options = {
     /** Display name for the credential (e.g. user's email). */
     name?: string | undefined
+    /**
+     * Cancels background verification (see `verified`), which then rejects
+     * with the signal's reason, and can no longer issue a session. The
+     * `webAuthn` adapter cancels a verification that outlasts its wait.
+     */
+    signal?: AbortSignal | undefined
   }
   type ReturnType = {
     /** The registered credential's ID. */
@@ -53,8 +59,8 @@ export declare namespace verifyRegistration {
     username?: string | null | undefined
     /**
      * Settles once the server has stored the credential, when the ceremony
-     * verifies the registration in the background (see
-     * `server({ deferRegistration })`). Rejects when the server refuses it.
+     * verifies the registration in the background (see {@link deferred}).
+     * Rejects when the server refuses it.
      * `session` is `false` when a retry found the registration already
      * processed after a lost response, so its session was never received.
      */
@@ -178,15 +184,10 @@ export declare namespace local {
  * ```
  */
 export function server(options: server.Options): WebAuthnCeremony {
-  const { credentials, deferRegistration = false, url } = options
+  const { credentials, url } = options
 
-  async function request<returnType>(
-    path: string,
-    body: unknown,
-    init: RequestInit = {},
-  ): Promise<returnType> {
+  async function request<returnType>(path: string, body: unknown): Promise<returnType> {
     const response = await fetch(`${url}${path}`, {
-      ...init,
       body: JSON.stringify(body),
       ...(credentials ? { credentials } : {}),
       headers: { 'Content-Type': 'application/json' },
@@ -204,37 +205,7 @@ export function server(options: server.Options): WebAuthnCeremony {
     },
 
     async verifyRegistration(credential) {
-      if (!deferRegistration) return request('/register', credential)
-      const verified = (async () => {
-        for (let attempt = 0; ; attempt++)
-          try {
-            // `keepalive` lets the request finish when the page closes right
-            // after answering (e.g. a wallet popup).
-            await request('/register', credential, { keepalive: true })
-            return { session: true }
-          } catch (error) {
-            // A retry that finds the credential means a lost earlier attempt
-            // stored it: the authenticator just minted this random credential
-            // ID. Count it as acknowledged, without the session that attempt
-            // issued. A consumed challenge does not prove that (it may have
-            // expired), so it rejects; a later login recovers the account if
-            // the server did store it.
-            if (attempt > 0 && (error as Error).message === 'Credential already exists')
-              return { session: false }
-            // `fetch` failures and non-JSON (e.g. gateway) responses can be
-            // retried; a JSON error is the server's answer.
-            const retryable = error instanceof TypeError || error instanceof SyntaxError
-            if (!retryable || attempt >= 2) throw error
-            await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
-          }
-      })()
-      // Observed by the adapter; keep an unobserved failure from going unhandled.
-      verified.catch(() => {})
-      return {
-        credentialId: credential.id,
-        publicKey: credential.publicKey,
-        verified,
-      }
+      return request('/register', credential)
     },
 
     async getAuthenticationOptions(parameters = {}) {
@@ -259,31 +230,100 @@ export declare namespace server {
   type Options = {
     /** Credential mode for ceremony requests. @default "same-origin" */
     credentials?: RequestCredentials | undefined
-    /**
-     * Answers registration as soon as the passkey is created, and verifies it
-     * with the server (`POST /register`) in the background, retrying requests
-     * that fail in transit. The account address derives from the passkey's
-     * public key alone, so the app gets the same address it would after
-     * verification.
-     *
-     * Trade-offs: the server session (e.g. `Handler.webAuthn`'s cookie)
-     * exists only once verification completes, so server requests the app
-     * makes right after registering may not be authenticated yet. The
-     * `webAuthn` adapter makes logins and disconnects wait for it. The request
-     * is sent with `keepalive`, so it completes when the page closes right
-     * after answering (a popup), but retries only run while the page is open.
-     * If the server rejects the registration while the page is open, the
-     * adapter removes the account (an `accountsChanged` event) and keeps its
-     * public key in storage under `registration:<credentialId>`. A later login
-     * with the passkey restores the account if the server did store it. A
-     * rejection that arrives after the page closed goes unnoticed: the account
-     * stays stored on the device, and server logins with it fail. Prefer this
-     * option where the page outlives the request (e.g. an embedded wallet).
-     *
-     * @default false
-     */
-    deferRegistration?: boolean | undefined
     /** Base URL of the WebAuthn handler (e.g. `"https://example.com/webauthn"`). */
     url: string
   }
+}
+
+/**
+ * Creates a {@link server} ceremony that answers registration as soon as the
+ * passkey is created, and verifies it with the server (`POST /register`) in
+ * the background, retrying requests that fail in transit. The account address
+ * derives from the passkey's public key alone, so the app gets the same
+ * address it would after verification.
+ *
+ * Trade-offs: the server session (e.g. `Handler.webAuthn`'s cookie) exists
+ * only once verification completes, so server requests the app makes right
+ * after registering may not be authenticated yet. The `webAuthn` adapter makes
+ * logins and disconnects wait for it, for up to 10 s. A verification still
+ * running then is cancelled, so it can't replace the session of the login or
+ * disconnect that follows; the account stays, and a later login with the
+ * passkey works if the server stored it.
+ *
+ * The request is sent with `keepalive`, so it completes when the page closes
+ * right after answering, but retries only run while the page is open. If the
+ * server rejects the registration while the page is open, the adapter removes
+ * the account (an `accountsChanged` event) and keeps its public key in storage
+ * under `registration:<credentialId>`. A later login with the passkey restores
+ * the account if the server did store it. A rejection that arrives after the
+ * page closed goes unnoticed: the account stays stored on the device, and
+ * server logins with it fail. Use it where the page outlives the request and
+ * every server request waits for it (e.g. an embedded wallet's iframe).
+ *
+ * @example
+ * ```ts
+ * import { WebAuthnCeremony } from 'accounts'
+ *
+ * const ceremony = WebAuthnCeremony.deferred({ url: 'https://example.com/webauthn' })
+ * ```
+ */
+export function deferred(options: deferred.Options): WebAuthnCeremony {
+  const { credentials, url } = options
+
+  /** Posts the registration with `keepalive`, so it survives the page closing. */
+  async function register(credential: Registration.Credential, signal: AbortSignal | undefined) {
+    const response = await fetch(`${url}/register`, {
+      body: JSON.stringify(credential),
+      ...(credentials ? { credentials } : {}),
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      method: 'POST',
+      ...(signal ? { signal } : {}),
+    })
+    const json = await response.json()
+    if (!response.ok) throw new Error((json as { error?: string }).error ?? 'Request failed')
+  }
+
+  return from({
+    ...server(options),
+
+    async verifyRegistration(credential, options = {}) {
+      const { signal } = options
+      const verified = (async () => {
+        for (let attempt = 0; ; attempt++)
+          try {
+            signal?.throwIfAborted()
+            await register(credential, signal)
+            return { session: true }
+          } catch (error) {
+            if (signal?.aborted) throw signal.reason
+            // A retry that finds the credential means a lost earlier attempt
+            // stored it: the authenticator just minted this random credential
+            // ID. Count it as acknowledged, without the session that attempt
+            // issued. A consumed challenge does not prove that (it may have
+            // expired), so it rejects; a later login recovers the account if
+            // the server did store it.
+            if (attempt > 0 && (error as Error).message === 'Credential already exists')
+              return { session: false }
+            // `fetch` failures and non-JSON (e.g. gateway) responses can be
+            // retried; a JSON error is the server's answer.
+            const retryable = error instanceof TypeError || error instanceof SyntaxError
+            if (!retryable || attempt >= 2) throw error
+            await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
+          }
+      })()
+      // Observed by the adapter; keep an unobserved failure from going unhandled.
+      verified.catch(() => {})
+      return {
+        credentialId: credential.id,
+        publicKey: credential.publicKey,
+        verified,
+      }
+    },
+  })
+}
+
+export declare namespace deferred {
+  /** Same options as {@link server}. */
+  type Options = server.Options
 }

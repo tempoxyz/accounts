@@ -113,6 +113,7 @@ const config: Config = defineConfig({
                 collapsed: true,
                 items: [
                   { text: 'Overview', link: '/docs/api/webauthnceremony' },
+                  { text: '.deferred', link: '/docs/api/webauthnceremony.deferred' },
                   { text: '.from', link: '/docs/api/webauthnceremony.from' },
                   { text: '.server', link: '/docs/api/webauthnceremony.server' },
                 ],
