@@ -219,17 +219,17 @@ function create(options: server.Options) {
   const ceremony = from({
     async getRegistrationOptions(parameters) {
       const { excludeCredentialIds, name, userId } = parameters
-      // A `userId` is bound to the challenge when it's issued, so it can't use
-      // a prefetched one.
-      const ready = userId ? undefined : challenges.take('register')
+      const ready = challenges.take('register')
       if (!ready) return request('/register/options', { excludeCredentialIds, name, userId })
-      challenges.name(ready.challenge, name)
+      challenges.bind(ready.challenge, { name, ...(userId !== undefined ? { userId } : {}) })
       return {
         options: Registration.getOptions({
           challenge: ready.challenge,
           excludeCredentialIds: excludeCredentialIds as string[] | undefined,
           name,
           rp: { id: ready.rpId, name: ready.rpId },
+          // Encoded like `Handler.webAuthn`'s `/register/options`.
+          ...(userId !== undefined ? { user: { id: Bytes.fromString(userId), name } } : undefined),
         }).options,
       }
     },
@@ -293,10 +293,10 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
   /** Login challenges handed out by `take(…, { issue: true })`, by challenge. */
   const issued_login = new Map<Hex, Prefetched>()
   /**
-   * Names of registration challenges whose options were built locally, by
-   * challenge, so `/register` carries the name the server didn't store.
+   * The name and `userId` each locally built registration's options were
+   * built with, by challenge, so `/register` carries what the server didn't store.
    */
-  const named = new Map<Hex, string>()
+  const bound = new Map<Hex, { name: string; userId?: string | undefined }>()
 
   function fresh(value: Prefetched | undefined) {
     return value && Date.now() < value.expires ? value : undefined
@@ -368,16 +368,16 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
       issued_login.delete(challenge)
       return fresh(value)
     },
-    /** Records the name a prefetched registration challenge's options were built with. */
-    name(challenge: Hex, name: string) {
-      named.set(challenge, name)
+    /** Records what a prefetched registration challenge's options were built with. */
+    bind(challenge: Hex, value: { name: string; userId?: string | undefined }) {
+      bound.set(challenge, value)
     },
     /**
-     * The `/register` body: the credential, plus the name its options were
-     * built with when its challenge was issued without one.
+     * The `/register` body: the credential, plus the name and `userId` its
+     * options were built with when its challenge was prefetched.
      */
     body(credential: Registration.Credential) {
-      if (named.size === 0) return credential
+      if (bound.size === 0) return credential
       const challenge = (() => {
         try {
           const { challenge } = JSON.parse(
@@ -388,10 +388,10 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
           return undefined
         }
       })()
-      const bound = challenge ? named.get(challenge) : undefined
-      if (!challenge || bound === undefined) return credential
-      named.delete(challenge)
-      return { ...credential, name: bound }
+      const value = challenge ? bound.get(challenge) : undefined
+      if (!challenge || !value) return credential
+      bound.delete(challenge)
+      return { ...credential, ...value }
     },
   }
 }

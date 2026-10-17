@@ -327,33 +327,36 @@ describe('server: prefetch', () => {
     `)
   })
 
-  test('behavior: sends the name with a registration whose challenge was prefetched', async () => {
+  test('behavior: sends the name and userId with a registration whose challenge was prefetched', async () => {
     const requests = stub()
     const ceremony = WebAuthnCeremony.deferred({ url: 'https://example.com/webauthn' })
     ceremony.prefetch!()
     await prefetched(requests)
 
-    // Takes challenge `0x01`, the credential's. Verification sends the name
-    // the options were built with, even when the caller omits it.
-    await ceremony.getRegistrationOptions({ name: 'alice' })
+    // Takes challenge `0x01`, the credential's. Verification sends what the
+    // options were built with, even when the caller omits the name.
+    const { options } = await ceremony.getRegistrationOptions({ name: 'alice', userId: 'user-1' })
     const { verified } = await ceremony.verifyRegistration(credential)
     await verified
 
-    expect(requests.find(({ path }) => path === '/register')!.body).toMatchInlineSnapshot(`
+    const {
+      attestationObject: _,
+      raw: __,
+      ...body
+    } = requests.find(({ path }) => path === '/register')!.body as Record<string, unknown>
+    expect({ body, user: options.publicKey!.user }).toMatchInlineSnapshot(`
       {
-        "attestationObject": "AA",
-        "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJBUSJ9",
-        "id": "credential",
-        "name": "alice",
-        "publicKey": "0x04ab",
-        "raw": {
-          "authenticatorAttachment": null,
+        "body": {
+          "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJBUSJ9",
           "id": "credential",
-          "rawId": "Y3JlZGVudGlhbA",
-          "response": {
-            "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJBUSJ9",
-          },
-          "type": "public-key",
+          "name": "alice",
+          "publicKey": "0x04ab",
+          "userId": "user-1",
+        },
+        "user": {
+          "displayName": "alice",
+          "id": "dXNlci0x",
+          "name": "alice",
         },
       }
     `)
