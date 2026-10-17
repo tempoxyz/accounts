@@ -1,7 +1,14 @@
 import { Address, Hex, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { BaseError, encodeErrorResult, encodeFunctionResult } from 'viem'
+import {
+  BaseError,
+  encodeErrorResult,
+  encodeFunctionResult,
+  HttpRequestError,
+  RpcRequestError,
+} from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
+import { tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
 import { accounts, privateKeys } from '../../test/config.js'
@@ -288,6 +295,101 @@ describe('create invalidation', () => {
 
     await expect(transaction?.fill({ chainId: 1, from: rootAddress })).rejects.toThrowError()
     expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
+  })
+})
+
+describe('maybeSubmitted', () => {
+  async function send(error: Error) {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const account = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    await addAuthorization({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(account.accessKeyAddress),
+      keyPair,
+      store,
+    })
+    const methods: string[] = []
+    const transaction = await AccessKeyTransaction.create({
+      address: rootAddress,
+      chainId: 1,
+      client: {
+        chain: { ...tempoModerato, id: 1 },
+        request: async ({ method }: { method: string }) => {
+          methods.push(method)
+          if (method === 'eth_sendRawTransactionSync') throw error
+          // The key is already authorized on-chain.
+          if (method === 'eth_call')
+            return encodeFunctionResult({
+              abi: Abis.accountKeychain,
+              functionName: 'getKey',
+              result: {
+                enforceLimits: false,
+                expiry: 0n,
+                isRevoked: false,
+                keyId: account.accessKeyAddress,
+                signatureType: 1,
+              },
+            } as never)
+          throw new Error(`unexpected ${method}`)
+        },
+      } as never,
+      store,
+    })
+    const prepared = await transaction!.prepare({
+      calls: [{ to: rootAddress }],
+      chainId: 1,
+      gas: 100_000n,
+      maxFeePerGas: 2n,
+      maxPriorityFeePerGas: 1n,
+      nonce: 0,
+      nonceKey: 0n,
+    } as never)
+    return { methods, result: await prepared.sendSync().catch((error) => error) }
+  }
+
+  test('behavior: a lost response may have landed the transaction', async () => {
+    const { methods, result } = await send(
+      new HttpRequestError({ body: {}, details: 'fetch failed', url: 'https://rpc.example' }),
+    )
+
+    expect(methods).toMatchInlineSnapshot(`
+      [
+        "eth_call",
+        "eth_sendRawTransactionSync",
+      ]
+    `)
+    expect(AccessKeyTransaction.maybeSubmitted(result)).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: a sync send that timed out may still land', async () => {
+    const { result } = await send(
+      new RpcRequestError({
+        body: {},
+        error: { code: 4, message: 'transaction not included within the timeout' },
+        url: 'https://rpc.example',
+      }),
+    )
+
+    expect(AccessKeyTransaction.maybeSubmitted(result)).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: a transaction the node refused did not land', async () => {
+    const { result } = await send(
+      new RpcRequestError({
+        body: {},
+        error: { code: -32003, message: 'insufficient funds' },
+        url: 'https://rpc.example',
+      }),
+    )
+
+    expect(AccessKeyTransaction.maybeSubmitted(result)).toMatchInlineSnapshot(`false`)
+  })
+
+  test('behavior: an error before submission did not land', () => {
+    expect(
+      AccessKeyTransaction.maybeSubmitted(new HttpRequestError({ url: 'https://rpc.example' })),
+    ).toMatchInlineSnapshot(`false`)
   })
 })
 

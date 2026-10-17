@@ -1,5 +1,13 @@
 import { Address, Hex } from 'ox'
-import type { Client, Transport } from 'viem'
+import {
+  BaseError,
+  type Client,
+  HttpRequestError,
+  SocketClosedError,
+  TimeoutError,
+  type Transport,
+  WebSocketRequestError,
+} from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
 import type { PrepareTransactionRequestReturnType } from 'viem/actions'
 import type { Account as TempoAccount, Transaction as TempoTransaction } from 'viem/tempo'
@@ -22,6 +30,28 @@ const removalErrorNames = new Set([
   'KeyNotFound',
   'SignatureTypeMismatch',
 ])
+
+// Errors thrown while submitting a signed transaction.
+const submitted = new WeakSet<object>()
+
+/**
+ * Whether an error came from submitting a signed transaction in a way that may
+ * still land it: a timeout or a lost response, as opposed to the node refusing
+ * it. Signing the same calls again with another key could then send them twice.
+ */
+export function maybeSubmitted(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !submitted.has(error)) return false
+  if (!(error instanceof BaseError)) return true
+  return !!error.walk(
+    (e) =>
+      e instanceof HttpRequestError ||
+      e instanceof SocketClosedError ||
+      e instanceof TimeoutError ||
+      e instanceof WebSocketRequestError ||
+      // EIP-7966: added to the mempool, but not included within the timeout.
+      (e as { code?: unknown }).code === 4,
+  )
+}
 
 /** Creates a transaction helper for a matching locally-signable access key. */
 export async function create(options: create.Options): Promise<create.ReturnType> {
@@ -163,26 +193,28 @@ function createPreparedTransaction(options: {
     request,
     sign,
     async send() {
+      const signed = await sign()
       try {
-        const signed = await sign()
         return (await client.request({
           method: 'eth_sendRawTransaction' as never,
           params: [signed],
         })) as Hex.Hex
       } catch (error) {
         removeForError(error, { account, address, chainId, store })
+        if (typeof error === 'object' && error !== null) submitted.add(error)
         throw error
       }
     },
     async sendSync() {
+      const signed = await sign()
       try {
-        const signed = await sign()
         return (await client.request({
           method: 'eth_sendRawTransactionSync' as never,
           params: [signed],
         })) as create.SendSyncReturnType
       } catch (error) {
         removeForError(error, { account, address, chainId, store })
+        if (typeof error === 'object' && error !== null) submitted.add(error)
         throw error
       }
     },
