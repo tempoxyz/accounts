@@ -180,6 +180,19 @@ async function click(page: Page, action: string) {
   return { done, start }
 }
 
+/**
+ * Resolves once `locator` matches a visible element. Polls every 10 ms: in a cross-origin iframe,
+ * `waitFor` noticed an enabled button up to ~200 ms late, which Wallet ready would count.
+ */
+async function appear(locator: Locator) {
+  const deadline = Date.now() + timeout
+  while (!(await locator.isVisible().catch(() => false))) {
+    if (Date.now() > deadline)
+      throw new Error(`Timed out after ${timeout} ms waiting for ${locator}`)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
 /** Runs one untimed setup action and fails when it rejects. */
 async function setup(page: Page, action: 'disconnect' | 'fund') {
   const { done } = await click(page, action)
@@ -214,12 +227,12 @@ async function step(
     name: approvals[Report.kind(options.case)],
   })
   try {
-    await button.waitFor({ state: 'visible', timeout })
+    await appear(button)
   } catch (error) {
     await screenshot(popup ? (wallet as Page) : page, `${renderer}-${options.case}-${run}`)
     throw error
   }
-  const ready = Date.now() - start
+  const ready_at = Date.now()
   // The passkey prompt follows the approval click, so the popup's authenticator
   // must be attached by then. Awaited after `ready` to keep setup out of the timing.
   if (popup) await attached(wallet as Page)
@@ -236,8 +249,7 @@ async function step(
   let finished = false
   if (options.case.endsWith('-key')) {
     const approve = wallet.getByRole('button', { disabled: false, name: followup })
-    approve
-      .waitFor({ state: 'visible', timeout })
+    appear(approve)
       // The iframe wallet is reused, so a wait that outlives its case must not click a later
       // case's screen.
       .then(() => (finished ? undefined : approve.click({ force: true })))
@@ -256,8 +268,9 @@ async function step(
   return {
     case: options.case,
     confirm: time - approved,
+    // From the page's own click time, like Total.
+    ready: ready_at - Math.round(entry.start),
     error: entry.error,
-    ready,
     renderer,
     run,
     total: callback,
