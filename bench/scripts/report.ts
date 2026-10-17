@@ -127,6 +127,8 @@ export function summarize(
                 weight,
             )
           : 0,
+        /** Total of each passing run, for comparing against a baseline. */
+        totals: ok.map((sample) => sample.total),
         values,
       }
     }),
@@ -205,6 +207,10 @@ export function table(summary: Summary) {
 export function markdown(
   summary: Summary,
   options: {
+    /** Commit of the baseline SDK, usually the base branch. */
+    baseCommit?: string | undefined
+    /** Summary of the same bench against the baseline SDK. Adds the "vs main" columns. */
+    baseline?: Summary | undefined
     browser: string
     commit?: string | undefined
     /** GitHub repository that hosts the score rings, as `owner/name`. */
@@ -213,35 +219,82 @@ export function markdown(
     walletHost: string
   },
 ) {
-  const { browser, commit, repository, runUrl, walletHost } = options
+  const { baseCommit, baseline, browser, commit, repository, runUrl, walletHost } = options
 
   // Rings load from the benchmarked commit, so a report always matches its rings.
   const base = `https://raw.githubusercontent.com/${repository}/${commit ?? 'main'}/bench/badges`
   const img = (score: number, title: string) =>
     `<img src="${base}/score-${score}.svg" width="40" height="40" alt="${score}" title="${title}">`
 
+  /**
+   * Returns -1 when the head is faster, 1 when it is slower, and 0 when the runs
+   * overlap or the medians differ by less than 50 ms. Run-to-run noise (block
+   * inclusion, network) is large, so only a change that every run agrees on counts.
+   */
+  const direction = (row: Summary['rows'][number]) => {
+    const head = row.values.total?.value
+    const base_row = baseline?.rows.find(
+      (entry) => entry.renderer === row.renderer && entry.case === row.case,
+    )
+    const base = base_row?.values.total?.value
+    if (head === undefined || base === undefined || !base_row) return 0
+    if (Math.abs(head - base) < 50) return 0
+    if (Math.max(...row.totals) < Math.min(...base_row.totals)) return -1
+    if (Math.min(...row.totals) > Math.max(...base_row.totals)) return 1
+    return 0
+  }
+
+  /** Score change against the baseline. Marked only when its cases agree on a change. */
+  const delta_score = (renderer: Renderer) => {
+    const head = summary.overall.find((entry) => entry.renderer === renderer)
+    const base = baseline?.overall.find((entry) => entry.renderer === renderer)
+    if (!head || !base) return '–'
+    const delta = head.score - base.score
+    const text = delta === 0 ? '±0' : `${delta > 0 ? '+' : '−'}${Math.abs(delta)}`
+    const directions = summary.rows.filter((row) => row.renderer === renderer).map(direction)
+    if (delta > 0 && directions.includes(-1) && !directions.includes(1)) return `🟢 ${text}`
+    if (delta < 0 && directions.includes(1) && !directions.includes(-1)) return `🔴 ${text}`
+    return text
+  }
+
+  /** Total change against the baseline, marked when every run agrees on it. */
+  const delta_total = (row: Summary['rows'][number]) => {
+    const head = row.values.total?.value
+    const base = baseline?.rows.find(
+      (entry) => entry.renderer === row.renderer && entry.case === row.case,
+    )?.values.total?.value
+    if (head === undefined || base === undefined) return '–'
+    const delta = head - base
+    const percent = Math.round((delta / base) * 100)
+    const sign = delta > 0 ? '+' : delta < 0 ? '−' : '±'
+    const text = `${sign}${Math.abs(delta)} ms (${sign}${Math.abs(percent)}%)`
+    const mark = { [-1]: '🟢 ', 0: '', 1: '🔴 ' }[direction(row)]
+    return `${mark}${text}`
+  }
+
   const lines = [
     '## ⚡ Accounts Bench',
     '',
     '<table>',
-    '<thead><tr><th>Renderer</th><th align="center">Score</th></tr></thead>',
+    `<thead><tr><th>Renderer</th><th align="center">Score</th>${baseline ? '<th align="center">vs main</th>' : ''}</tr></thead>`,
     '<tbody>',
     ...summary.overall.map(
       (entry) =>
-        `<tr><td>${names[entry.renderer]}</td><td align="center">${img(entry.score, `${names[entry.renderer]}: ${entry.score}`)}</td></tr>`,
+        `<tr><td>${names[entry.renderer]}</td><td align="center">${img(entry.score, `${names[entry.renderer]}: ${entry.score}`)}</td>${baseline ? `<td align="center">${delta_score(entry.renderer)}</td>` : ''}</tr>`,
     ),
     '</tbody>',
     '</table>',
     '',
     '<details><summary>Timings</summary>',
     '',
-    `| Renderer | Case | ${metrics.map((metric) => labels[metric].name).join(' | ')} | Score | Runs |`,
-    `| --- | --- | ${metrics.map(() => '---:').join(' | ')} | ---: | ---: |`,
+    `| Renderer | Case | ${metrics.map((metric) => labels[metric].name).join(' | ')} |${baseline ? ' Total vs main |' : ''} Score | Runs |`,
+    `| --- | --- | ${metrics.map(() => '---:').join(' | ')} |${baseline ? ' ---: |' : ''} ---: | ---: |`,
     ...summary.rows.map((row) => {
       const cells = metrics.map((metric) => {
         const value = row.values[metric]
         return value ? `${value.value} ms` : '–'
       })
+      if (baseline) cells.push(delta_total(row))
       const score = row.ok ? `${row.score}` : '–'
       const runs = row.ok === row.runs ? `${row.ok}/${row.runs}` : `⚠️ ${row.ok}/${row.runs}`
       return `| ${names[row.renderer]} | ${row.case} | ${cells.join(' | ')} | ${score} | ${runs} |`
@@ -272,10 +325,13 @@ export function markdown(
     '',
     '`send` runs `eth_sendTransactionSync`, so it includes block inclusion on Tempo Testnet (Moderato).',
     '',
+    "**vs main** runs the same bench against main's SDK in the same job, alternating which app goes first in each run, so both see the same network. 🟢 and 🔴 mark a Total change only when every run of one app beats every run of the other and the medians differ by 50 ms or more. A score change is marked when its cases agree.",
+    '',
     '</details>',
     '',
     [
       commit ? `Commit ${commit.slice(0, 7)}` : undefined,
+      baseline && baseCommit ? `vs main ${baseCommit.slice(0, 7)}` : undefined,
       `${summary.rows[0]?.runs ?? 0} runs`,
       browser,
       `wallet ${walletHost}`,
