@@ -1,4 +1,4 @@
-import { Secp256k1 } from 'ox'
+import { Hash, Secp256k1 } from 'ox'
 import { TxEnvelopeTempo } from 'ox/tempo'
 import { custom, http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
@@ -488,5 +488,101 @@ describe('feePayerTransport', () => {
       `[Error: Fee payer changed the requested transaction intent.]`,
     )
     expect(baseRequests).toMatchInlineSnapshot(`[]`)
+  })
+})
+
+describe('rawTransactionTransport', () => {
+  const serialized = '0x76deadbeef'
+  const hash = Hash.keccak256(serialized)
+  const receipt = { status: '0x1', transactionHash: hash }
+
+  /**
+   * Base transport whose first raw submission is accepted by the node but
+   * fails in transit (e.g. a 502 after the node took it), so viem retries it
+   * and the node rejects the copy with `rejection`.
+   */
+  function flaky(rejection: string, options: { known?: boolean | undefined } = {}) {
+    const { known = true } = options
+    const requests: string[] = []
+    let accepted = false
+    const transport = custom({
+      async request({ method, params }) {
+        requests.push(method)
+        if (method === 'eth_sendRawTransaction' || method === 'eth_sendRawTransactionSync') {
+          if (!accepted) {
+            accepted = true
+            throw new Error('fetch failed')
+          }
+          throw { code: -32000, message: rejection }
+        }
+        const found = known && (params as readonly unknown[])[0] === hash
+        if (method === 'eth_getTransactionByHash') return found ? { hash } : null
+        if (method === 'eth_getTransactionReceipt') return found ? receipt : null
+        return null
+      },
+    })
+    return { requests, transport }
+  }
+
+  function client(transport: ReturnType<typeof custom>) {
+    return Client.fromChainId(tempo.id, {
+      chains: [tempo],
+      store: setup(),
+      transports: { [tempo.id]: transport },
+    })
+  }
+
+  test('behavior: resolves a retried sync submission the node already knows', async () => {
+    const { requests, transport } = flaky('already known')
+
+    const result = await client(transport).request({
+      method: 'eth_sendRawTransactionSync' as never,
+      params: [serialized] as never,
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "status": "0x1",
+        "transactionHash": "0x8addb664b3fd09d9911a80e8930de7cba6e70ed84ec0514fee6a298d421b11d7",
+      }
+    `)
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        "eth_sendRawTransactionSync",
+        "eth_sendRawTransactionSync",
+        "eth_getTransactionByHash",
+        "eth_getTransactionReceipt",
+      ]
+    `)
+  })
+
+  test('behavior: resolves a retried submission that was already mined', async () => {
+    const { transport } = flaky('nonce too low: next nonce 1, tx nonce 0')
+
+    const result = await client(transport).request({
+      method: 'eth_sendRawTransaction' as never,
+      params: [serialized] as never,
+    })
+
+    expect(result).toMatchInlineSnapshot(
+      `"0x8addb664b3fd09d9911a80e8930de7cba6e70ed84ec0514fee6a298d421b11d7"`,
+    )
+  })
+
+  test('error: rethrows a nonce rejection for a transaction the node does not know', async () => {
+    const { transport } = flaky('nonce too low: next nonce 1, tx nonce 0', { known: false })
+
+    await expect(
+      client(transport).request({
+        method: 'eth_sendRawTransaction' as never,
+        params: [serialized] as never,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`
+      [InvalidInputRpcError: Missing or invalid parameters.
+      Double check you have provided the correct parameters.
+
+      Details: nonce too low: next nonce 1, tx nonce 0
+      Version: viem@2.57.1]
+    `)
   })
 })

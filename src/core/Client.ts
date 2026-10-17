@@ -1,4 +1,4 @@
-import { type Provider as ox_Provider } from 'ox'
+import { Hash, type Hex, type Provider as ox_Provider } from 'ox'
 import { TxEnvelopeTempo } from 'ox/tempo'
 import {
   type Chain,
@@ -48,7 +48,7 @@ export function fromChainId(
   let client = cache.get(key)
   if (!client) {
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
-    const base = transports?.[id] ?? http()
+    const base = rawTransactionTransport(transports?.[id] ?? http())
     const transport_base = provider
       ? providerTransport(provider, base, chainId === undefined ? undefined : chain.id)
       : base
@@ -196,6 +196,57 @@ function feePayerTransport(
       },
     } as ReturnType<Transport>
   }
+}
+
+/**
+ * Makes raw transaction submission idempotent. viem's transports retry a
+ * request after a timeout, a network error or a 5xx response, including
+ * `eth_sendRawTransaction(Sync)`. When the node accepted the first attempt,
+ * the retry is rejected (`already known` while pending, `nonce too low` once
+ * mined), although the transaction landed. On such a rejection, look the
+ * transaction up by its hash: when the node knows it, the submission
+ * succeeded, so return its hash (or, for the sync method, its receipt).
+ * Otherwise rethrow, since another transaction took the nonce.
+ */
+function rawTransactionTransport(base: Transport): Transport {
+  return (params) => {
+    const transport = base(params)
+    return {
+      ...transport,
+      async request(args: { method: string; params?: unknown }, options?: unknown) {
+        const { method } = args
+        if (method !== 'eth_sendRawTransaction' && method !== 'eth_sendRawTransactionSync')
+          return await transport.request(args as never, options as never)
+        try {
+          return await transport.request(args as never, options as never)
+        } catch (error) {
+          const serialized = (args.params as readonly unknown[] | undefined)?.[0]
+          if (typeof serialized !== 'string' || !isDuplicateError(error)) throw error
+          const hash = Hash.keccak256(serialized as Hex.Hex)
+          const known = await transport
+            .request({ method: 'eth_getTransactionByHash', params: [hash] } as never)
+            .catch(() => null)
+          if (!known) throw error
+          if (method === 'eth_sendRawTransaction') return hash
+          // Waits up to 30 s for the receipt, as the sync method does.
+          const deadline = Date.now() + 30_000
+          for (;;) {
+            const receipt = await transport
+              .request({ method: 'eth_getTransactionReceipt', params: [hash] } as never)
+              .catch(() => null)
+            if (receipt) return receipt
+            if (Date.now() > deadline) throw error
+            await new Promise((resolve) => setTimeout(resolve, 250))
+          }
+        }
+      },
+    } as ReturnType<Transport>
+  }
+}
+
+function isDuplicateError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /already known|known transaction|nonce too low|already imported/i.test(message)
 }
 
 function assertFilledTransactionIntent(request: Record<string, unknown>, response: unknown) {
