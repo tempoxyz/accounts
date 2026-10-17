@@ -417,6 +417,33 @@ describe('server: prefetch', () => {
       `)
   })
 
+  test('behavior: waits for a prefetch in flight instead of requesting options', async () => {
+    const requests = stub()
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    ceremony.prefetch!()
+
+    // Both prefetches are still in flight.
+    const { options: registration } = await ceremony.getRegistrationOptions({ name: 'alice' })
+    const { options: authentication } = await ceremony.getAuthenticationOptions()
+
+    expect({
+      authentication: authentication.publicKey!.challenge,
+      paths: requests.map(({ path }) => path),
+      registration: registration.publicKey!.challenge,
+    }).toMatchInlineSnapshot(`
+      {
+        "authentication": "0x11",
+        "paths": [
+          "/login/options",
+          "/register/options",
+          "/register/options",
+          "/login/options",
+        ],
+        "registration": "0x01",
+      }
+    `)
+  })
+
   test('behavior: ignores challenges from a server that sends no TTL', async () => {
     const requests = stub(null)
     const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })

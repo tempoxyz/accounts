@@ -226,7 +226,7 @@ function create(options: server.Options) {
       const { excludeCredentialIds, name, userId } = parameters
       // The server binds a `userId` when it issues the challenge, so a
       // prefetched one only serves sign-ups that leave it to the server.
-      const ready = userId === undefined ? challenges.register() : undefined
+      const ready = userId === undefined ? await challenges.register() : undefined
       if (!ready) return request('/register/options', { excludeCredentialIds, name, userId })
       challenges.bind(ready, name)
       return {
@@ -246,7 +246,7 @@ function create(options: server.Options) {
 
     async getAuthenticationOptions(parameters = {}) {
       const { challenge, credentialId, mediation } = parameters
-      const ready = challenge ? challenges.issued(challenge) : challenges.login()
+      const ready = challenge ? challenges.issued(challenge) : await challenges.login()
       if (!ready) return request('/login/options', { challenge, credentialId, mediation })
       const { options } = Authentication.getOptions({
         challenge: ready.challenge,
@@ -373,8 +373,15 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
       fill_login()
       fill_register()
     },
-    login: take_login,
-    /** Takes a login challenge, like `login`, for options the caller builds itself. */
+    /**
+     * Takes the prefetched login challenge, waiting for one in flight (the
+     * ceremony would wait as long for its own), and fetches the next.
+     */
+    async login() {
+      if (login_pending && !(login && Date.now() < login.expires)) await login_pending
+      return take_login()
+    },
+    /** Takes a ready login challenge for options the caller builds itself, and fetches the next. */
     issue() {
       const value = take_login()
       if (value) issued.set(value.challenge, value)
@@ -386,8 +393,12 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
       issued.delete(challenge)
       return value && Date.now() < value.expires ? value : undefined
     },
-    /** Takes the prefetched registration challenge, if it's fresh, and fetches the next. */
-    register() {
+    /**
+     * Takes the prefetched registration challenge, waiting for one in flight
+     * (the ceremony would wait as long for its own), and fetches the next.
+     */
+    async register() {
+      if (register_pending && !(register && Date.now() < register.expires)) await register_pending
       const value = register && Date.now() < register.expires ? register : undefined
       register = undefined
       fill_register()
