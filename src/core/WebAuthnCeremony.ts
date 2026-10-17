@@ -27,7 +27,10 @@ export type WebAuthnCeremony = {
   logout?: (() => Promise<void>) | undefined
   /**
    * Fetches a login and a registration challenge ahead of the ceremonies that
-   * use them, and a new one each time one is used (see {@link server}).
+   * use them, and a new one each time one is used (see {@link server}). A
+   * ceremony with `prefetch` picks a random `userId` itself when
+   * {@link getRegistrationOptions} gets none, so the `webAuthn` adapter
+   * leaves it unset.
    */
   prefetch?: (() => void) | undefined
   /**
@@ -418,6 +421,8 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
         login = undefined
         fill_login()
         if (login_pending) await login_pending
+        // A prefetch that failed isn't retried here: the ceremony requests its own instead.
+        if (!(login && Date.now() < login.expires)) return undefined
       }
       return take_login()
     },
@@ -442,6 +447,7 @@ function prefetcher(request: <returnType>(path: string, body: unknown) => Promis
         register = undefined
         fill_register()
         if (register_pending) await register_pending
+        if (!(register && Date.now() < register.expires)) return undefined
       }
       const value = register && Date.now() < register.expires ? register : undefined
       register = undefined

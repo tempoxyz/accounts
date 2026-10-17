@@ -444,6 +444,37 @@ describe('server: prefetch', () => {
     `)
   })
 
+  test('behavior: requests its own options once when a prefetch fails', async () => {
+    stub()
+    const attempts: string[] = []
+    let failures = 2
+    const fetch_ = globalThis.fetch
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      const path = new URL(input).pathname.replace('/webauthn', '')
+      if (path === '/login/options' && failures-- > 0) {
+        attempts.push(`${path} (failed)`)
+        throw new TypeError('Failed to fetch')
+      }
+      attempts.push(path)
+      return fetch_(input, init)
+    })
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    ceremony.prefetch!()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    await ceremony.getAuthenticationOptions()
+
+    // The failed prefetch, the failed refill the ceremony waited on, then its own request.
+    expect(attempts).toMatchInlineSnapshot(`
+      [
+        "/login/options (failed)",
+        "/register/options",
+        "/login/options (failed)",
+        "/login/options",
+      ]
+    `)
+  })
+
   test('behavior: stops prefetching from a server that sends no TTL', async () => {
     const requests = stub(null)
     const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
