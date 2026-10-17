@@ -207,7 +207,7 @@ export function server(options: server.Options): WebAuthnCeremony {
       return request('/register/options', { excludeCredentialIds, name, userId })
     },
 
-    async verifyRegistration(credential, options = {}) {
+    async verifyRegistration(credential) {
       if (!deferRegistration) return request('/register', credential)
       const verified = (async () => {
         for (let attempt = 0; ; attempt++)
