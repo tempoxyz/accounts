@@ -1,22 +1,45 @@
 import { chmod, mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { Json } from 'ox'
 
 import * as Storage from '../core/Storage.js'
+import { lock } from './internal/lock.js'
 
 const mode_directory = 0o700
 const mode_file = 0o600
 const operations = new Map<string, Promise<void>>()
+
+/** Identity of each record in the provider store's collections. */
+const identities = {
+  accessKeys: (key: unknown) =>
+    [field(key, 'access'), field(key, 'address'), field(key, 'chainId')].join(':'),
+  accounts: (account: unknown) => field(account, 'address'),
+}
 
 /** Returns the default CLI provider storage path. */
 export function defaultPath(): string {
   return join(homedir(), '.tempo', 'wallet', 'store.json')
 }
 
-/** Creates a filesystem-backed storage adapter for CLI provider state. */
+/**
+ * Creates a filesystem-backed storage adapter for CLI provider state.
+ *
+ * Several processes can share the file. Each write takes an exclusive lock on
+ * the file, re-reads it, and merges in only what this adapter changed since it
+ * last read or wrote the item, so a write never undoes another process's
+ * change made in the meantime. A provider store item merges per state field,
+ * and its `accounts` and `accessKeys` merge per record. When no other process
+ * has written the file, a write stores exactly the given value.
+ *
+ * The lock is a `<path>.lock` directory. A writer takes it over from a process
+ * that has exited, and waits up to 10 seconds for one that is still running.
+ */
 export function filesystem(options: filesystem.Options = {}): Storage.Storage {
   const path = expandPath(options.path ?? defaultPath())
+  // Each item as this adapter last read or wrote it: the base a write merges against.
+  const bases = new Map<string, unknown>()
 
   function enqueue<value>(fn: () => Promise<value>): Promise<value> {
     const operation = operations.get(path) ?? Promise.resolve()
@@ -36,22 +59,27 @@ export function filesystem(options: filesystem.Options = {}): Storage.Storage {
     {
       async getItem<value>(name: string): Promise<value | null> {
         return await enqueue(async () => {
-          const value = await read(path)
-          return (value[name] as value | undefined) ?? null
+          const value = (await read(path))[name] ?? null
+          bases.set(name, structuredClone(value))
+          return value as value | null
         })
       },
       async removeItem(name) {
         await enqueue(async () => {
-          const value = await read(path)
-          delete value[name]
-          await write(path, value)
+          await update(path, (value) => {
+            delete value[name]
+          })
+          bases.set(name, null)
         })
       },
       async setItem(name, item) {
+        // The value as it reads back from the file, so it compares equal to what other writes leave.
+        const next = typeof item === 'undefined' ? item : Json.parse(Json.stringify(item))
         await enqueue(async () => {
-          const value = await read(path)
-          value[name] = item
-          await write(path, value)
+          await update(path, (value) => {
+            value[name] = merge(bases.get(name) ?? null, value[name] ?? null, next)
+          })
+          bases.set(name, next)
         })
       },
     },
@@ -121,6 +149,111 @@ async function read(path: string): Promise<Record<string, unknown>> {
   }
 
   return value as Record<string, unknown>
+}
+
+/** Re-reads the file, applies `fn`, and writes the result, all under the file's lock. */
+async function update(path: string, fn: (value: Record<string, unknown>) => void) {
+  await ensureDirectory(path)
+  await lock(path, async () => {
+    const value = await read(path)
+    fn(value)
+    await write(path, value)
+  })
+}
+
+/**
+ * Applies the changes `next` makes to `base` onto `current`, the item as the
+ * file holds it now.
+ *
+ * A provider store item (`{ state, version }`) merges per state field: a field
+ * `next` left as `base` had it keeps `current`'s value, and one it changed
+ * takes `next`'s, so when both changed a field the later write wins it.
+ * Collections merge per record by identity, and `activeAccount` follows the
+ * address it points to. Any other item is replaced by `next`.
+ */
+function merge(base: unknown, current: unknown, next: unknown): unknown {
+  if (isDeepStrictEqual(current, base) || !isItem(next)) return next
+  if (current !== null && (!isItem(current) || current.version !== next.version)) return next
+  const state_base = isItem(base) ? base.state : {}
+  const state_current = isItem(current) ? current.state : {}
+  const state: Record<string, unknown> = {}
+  const keys = new Set([
+    ...Object.keys(next.state),
+    ...Object.keys(state_current),
+    ...Object.keys(state_base),
+  ])
+  for (const key of keys) {
+    const value = mergeField(key, state_base[key], state_current[key], next.state[key])
+    if (typeof value !== 'undefined') state[key] = value
+  }
+  if (typeof next.state.activeAccount === 'number') {
+    const active =
+      activeAddress(next.state) === activeAddress(state_base)
+        ? activeAddress(state_current)
+        : activeAddress(next.state)
+    const index = list(state.accounts).findIndex(
+      (account) => identities.accounts(account) === active,
+    )
+    state.activeAccount = Math.max(index, 0)
+  }
+  return { ...next, state }
+}
+
+function mergeField(key: string, base: unknown, current: unknown, next: unknown): unknown {
+  if (isDeepStrictEqual(next, base)) return current
+  if (isDeepStrictEqual(current, base)) return next
+  if (!Array.isArray(next) || !Object.hasOwn(identities, key)) return next
+  const identity = identities[key as keyof typeof identities]
+  return mergeRecords(list(base), list(current), next, identity)
+}
+
+/**
+ * Applies the records `next` adds, changes, and removes relative to `base` to
+ * `current`. Changed records keep their place in `current`; records `current`
+ * lacks come first, as the store adds new records.
+ */
+function mergeRecords(
+  base: readonly unknown[],
+  current: readonly unknown[],
+  next: readonly unknown[],
+  identity: (record: unknown) => string,
+): unknown[] {
+  const records_base = new Map(base.map((record) => [identity(record), record]))
+  const records_next = new Map(next.map((record) => [identity(record), record]))
+  const ids_current = new Set(current.map(identity))
+  const changed = (id: string) =>
+    records_next.has(id) && !isDeepStrictEqual(records_next.get(id), records_base.get(id))
+  const added = next.filter(
+    (record) => changed(identity(record)) && !ids_current.has(identity(record)),
+  )
+  const kept = current.flatMap((record) => {
+    const id = identity(record)
+    if (changed(id)) return [records_next.get(id)]
+    if (records_base.has(id) && !records_next.has(id)) return []
+    return [record]
+  })
+  return [...added, ...kept]
+}
+
+function activeAddress(state: Record<string, unknown>): string | undefined {
+  const account = list(state.accounts)[state.activeAccount as number]
+  if (typeof account === 'undefined') return undefined
+  return identities.accounts(account)
+}
+
+function isItem(value: unknown): value is { state: Record<string, unknown>; version?: unknown } {
+  if (!value || typeof value !== 'object') return false
+  const { state } = value as { state?: unknown }
+  return !!state && typeof state === 'object' && !Array.isArray(state)
+}
+
+function list(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? value : []
+}
+
+function field(record: unknown, key: string): string {
+  if (!record || typeof record !== 'object') return ''
+  return String((record as Record<string, unknown>)[key]).toLowerCase()
 }
 
 async function write(path: string, value: Record<string, unknown>) {
