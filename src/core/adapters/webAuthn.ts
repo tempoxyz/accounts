@@ -67,6 +67,44 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       | { credentialId: string; publicKey: Hex.Hex; rpId: string; time: number; username?: string }
       | undefined
 
+    // Server registrations still in flight, by credential ID. Each settles once
+    // the server acknowledges or rejects the credential.
+    const pending = new Map<string, Promise<void>>()
+
+    /**
+     * Tracks a registration the ceremony verifies in the background. Its
+     * public key stays in storage until the server acknowledges it, so a
+     * credential the server never stored can still be recovered on this device.
+     */
+    function track(
+      credential: { id: string; publicKey: Hex.Hex },
+      options: { name: string; verified: Promise<void> },
+    ) {
+      const key = `registration:${credential.id}`
+      const promise = (async () => {
+        await storage.setItem(key, { name: options.name, publicKey: credential.publicKey })
+        await options.verified
+        await storage.removeItem(key)
+      })()
+      pending.set(credential.id, promise)
+      promise.then(
+        () => pending.delete(credential.id),
+        () => {
+          pending.delete(credential.id)
+          // The server never stored the credential: drop the account the app
+          // was handed, so it signs in or registers again.
+          if (registered?.credentialId === credential.id) registered = undefined
+          store.setState((state) => {
+            const accounts = state.accounts.filter(
+              (account) => !('credential' in account) || account.credential?.id !== credential.id,
+            )
+            if (accounts.length === state.accounts.length) return state
+            return { accounts, activeAccount: 0 }
+          })
+        },
+      )
+    }
+
     /** Returns the latest registration if it still owns a fresh server session. */
     function current(credentialId: string) {
       if (registered?.credentialId !== credentialId) return undefined
@@ -92,9 +130,10 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         // Keep a failed prompt from surfacing as an unhandled rejection while
         // verification is still pending; it rethrows from the `await` below.
         signature?.catch(() => {})
-        const { publicKey, username } = await ceremony.verifyRegistration(credential, {
+        const { publicKey, username, verified } = await ceremony.verifyRegistration(credential, {
           name: parameters.name,
         })
+        if (verified) track({ id: credential.id, publicKey }, { name: parameters.name, verified })
         await storage.setItem('lastCredentialId', credential.id)
         registered = {
           credentialId: credential.id,
@@ -126,6 +165,10 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
             (await storage.getItem<string>('lastCredentialId')) ??
             undefined)
 
+        // A login or the registration's session shortcut needs the server to
+        // know the credential, so wait for a registration verified in the
+        // background.
+        if (typeof credentialId === 'string') await pending.get(credentialId)
         const fresh = digest && typeof credentialId === 'string' ? current(credentialId) : undefined
         if (fresh && typeof credentialId === 'string') {
           const { publicKey, rpId, username } = fresh
@@ -224,6 +267,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       // Forget the latest registration so the next connect authenticates with
       // the server again.
       registered = undefined
+      // A registration landing after logout would restore its session.
+      await Promise.allSettled(pending.values())
       if (!url) return
       await fetch(`${url}/logout`, {
         method: 'POST',

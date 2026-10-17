@@ -49,6 +49,12 @@ export declare namespace verifyRegistration {
     publicKey: Hex
     /** Username associated with the account. */
     username?: string | null | undefined
+    /**
+     * Settles once the server has stored the credential, when the ceremony
+     * verifies the registration in the background (see
+     * `server({ deferRegistration })`). Rejects when the server refuses it.
+     */
+    verified?: Promise<void> | undefined
   }
 }
 
@@ -74,6 +80,12 @@ export declare namespace verifyAuthentication {
     userId?: string | undefined
     /** Username associated with the account. */
     username?: string | null | undefined
+    /**
+     * Settles once the server has stored the credential, when the ceremony
+     * verifies the registration in the background (see
+     * `server({ deferRegistration })`). Rejects when the server refuses it.
+     */
+    verified?: Promise<void> | undefined
   }
 }
 
@@ -168,7 +180,7 @@ export declare namespace local {
  * ```
  */
 export function server(options: server.Options): WebAuthnCeremony {
-  const { credentials, url } = options
+  const { credentials, deferRegistration = false, url } = options
 
   async function request<returnType>(path: string, body: unknown): Promise<returnType> {
     const response = await fetch(`${url}${path}`, {
@@ -188,8 +200,32 @@ export function server(options: server.Options): WebAuthnCeremony {
       return request('/register/options', { excludeCredentialIds, name, userId })
     },
 
-    async verifyRegistration(credential) {
-      return request('/register', credential)
+    async verifyRegistration(credential, options = {}) {
+      if (!deferRegistration) return request('/register', credential)
+      const verified = (async () => {
+        for (let attempt = 0; ; attempt++)
+          try {
+            await request('/register', credential)
+            return
+          } catch (error) {
+            // The authenticator just minted this random credential ID, so a
+            // retry that finds it means an earlier attempt registered it.
+            if (attempt > 0 && (error as Error).message === 'Credential already exists') return
+            // `fetch` failures and non-JSON (e.g. gateway) responses can be
+            // retried; a JSON error is the server's answer.
+            const retryable = error instanceof TypeError || error instanceof SyntaxError
+            if (!retryable || attempt >= 2) throw error
+            await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
+          }
+      })()
+      // Observed by the adapter; keep an unobserved failure from going unhandled.
+      verified.catch(() => {})
+      return {
+        credentialId: credential.id,
+        publicKey: credential.publicKey,
+        username: options.name,
+        verified,
+      }
     },
 
     async getAuthenticationOptions(parameters = {}) {
@@ -207,6 +243,24 @@ export declare namespace server {
   type Options = {
     /** Credential mode for ceremony requests. @default "same-origin" */
     credentials?: RequestCredentials | undefined
+    /**
+     * Answers registration as soon as the passkey is created, and verifies it
+     * with the server (`POST /register`) in the background, retrying requests
+     * that fail in transit. The account address derives from the passkey's
+     * public key alone, so the app gets the same address it would after
+     * verification.
+     *
+     * Trade-offs: the server session (e.g. `Handler.webAuthn`'s cookie)
+     * exists only once verification completes, so server requests the app
+     * makes right after registering may not be authenticated yet. The
+     * `webAuthn` adapter makes logins and disconnects wait for it. If the
+     * server rejects the registration, the adapter removes the account (an
+     * `accountsChanged` event) and keeps its public key in storage under
+     * `registration:<credentialId>`.
+     *
+     * @default false
+     */
+    deferRegistration?: boolean | undefined
     /** Base URL of the WebAuthn handler (e.g. `"https://example.com/webauthn"`). */
     url: string
   }

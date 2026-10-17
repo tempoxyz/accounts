@@ -207,4 +207,85 @@ describe('server', () => {
       }
     `)
   })
+
+  describe('deferRegistration', () => {
+    const credential = { id: 'credential', publicKey: '0x04ab' } as never
+
+    /** Answers each `/register` with the next of `responses`, recording the paths. */
+    function stub(responses: (() => Response | Promise<Response>)[]) {
+      const paths: string[] = []
+      vi.stubGlobal('fetch', async (input: string | URL) => {
+        paths.push(new URL(input).pathname)
+        return await responses.shift()!()
+      })
+      return paths
+    }
+
+    test('behavior: returns the public key before the server stores the credential', async () => {
+      let release = () => {}
+      const paths = stub([
+        () =>
+          new Promise<Response>((resolve) => {
+            release = () => resolve(Response.json({ credentialId: 'credential' }))
+          }),
+      ])
+      const ceremony = WebAuthnCeremony.server({
+        deferRegistration: true,
+        url: 'https://wallet.example.com/webauthn',
+      })
+
+      const { verified, ...result } = await ceremony.verifyRegistration(credential, {
+        name: 'alice',
+      })
+
+      expect(result).toMatchInlineSnapshot(`
+        {
+          "credentialId": "credential",
+          "publicKey": "0x04ab",
+          "username": "alice",
+        }
+      `)
+      await vi.waitFor(() => expect(paths).toHaveLength(1))
+      release()
+      await expect(verified).resolves.toBeUndefined()
+    })
+
+    test('behavior: retries a request that failed in transit', async () => {
+      const paths = stub([
+        () => Promise.reject(new TypeError('Failed to fetch')),
+        () => new Response('Bad Gateway', { status: 502 }),
+        // The first attempt registered the credential before its response was lost.
+        () => Response.json({ error: 'Credential already exists' }, { status: 400 }),
+      ])
+      const ceremony = WebAuthnCeremony.server({
+        deferRegistration: true,
+        url: 'https://wallet.example.com/webauthn',
+      })
+
+      const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+      await expect(verified).resolves.toBeUndefined()
+      expect(paths).toMatchInlineSnapshot(`
+        [
+          "/webauthn/register",
+          "/webauthn/register",
+          "/webauthn/register",
+        ]
+      `)
+    })
+
+    test('error: rejects when the server refuses the registration', async () => {
+      stub([() => Response.json({ error: 'Missing or expired challenge' }, { status: 400 })])
+      const ceremony = WebAuthnCeremony.server({
+        deferRegistration: true,
+        url: 'https://wallet.example.com/webauthn',
+      })
+
+      const { verified } = await ceremony.verifyRegistration(credential, { name: 'alice' })
+
+      await expect(verified).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Error: Missing or expired challenge]`,
+      )
+    })
+  })
 })
