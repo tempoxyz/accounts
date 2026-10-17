@@ -1,8 +1,8 @@
 import { defineConfig } from 'vp'
 
+const port = Number(process.env.PORT ?? 5180)
+
 export default defineConfig({
-  server: {
-    port: Number(process.env.PORT ?? 5180),
-    strictPort: true,
-  },
+  preview: { port, strictPort: true },
+  server: { port, strictPort: true },
 })

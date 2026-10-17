@@ -32,10 +32,36 @@ pnpm --filter bench-playground bench --runs 5
 pnpm --filter bench-playground bench --url https://<preview-url> --renderers tempoWallet/iframe
 ```
 
-| Metric                | Meaning                                                    |
-| --------------------- | ---------------------------------------------------------- |
-| `click → interactive` | App click to wallet approval button visible (Tempo Wallet) |
-| `approve → callback`  | Approval click to app callback (Tempo Wallet)              |
-| `click → callback`    | App click to app callback, from the page's own timeline    |
+Each case reports three metrics. Tempo Wallet renderers report all three, and WebAuthn reports only Total:
 
-The bench waits 1 s before each action, as a person does between clicks. `--json <path>` writes every sample. Set `CHROME_PATH` to use a specific browser binary, `BENCH_SCREENSHOTS=<dir>` to capture the wallet when a step fails, and `BENCH_NO_SANDBOX=1` only in containers that cannot run Chrome's sandbox.
+| Metric         | Measures                                                |
+| -------------- | ------------------------------------------------------- |
+| `Wallet ready` | App click to wallet approval button visible             |
+| `Confirm`      | Wallet approval click to app callback                   |
+| `Total`        | App click to app callback, from the page's own timeline |
+
+## Scores
+
+Each metric's median is scored from 0 to 100 on Lighthouse's log-normal curve, against the budgets in `scripts/report.ts`. A value at the **good** budget scores 90, and a value at the **poor** budget scores 50. A case score weights Total twice as much as Wallet ready and Confirm. A renderer score is the mean of its case scores.
+
+| Score  | Rating        |
+| ------ | ------------- |
+| 90–100 | 🟢 Good       |
+| 50–89  | 🟠 Needs work |
+| 0–49   | 🔴 Poor       |
+
+## Options
+
+The bench waits 1 s before each action, as a person does between clicks.
+
+| Option or variable        | Effect                                                           |
+| ------------------------- | ---------------------------------------------------------------- |
+| `--json <path>`           | Writes every sample as JSON                                      |
+| `--markdown <path>`       | Writes the scored Markdown report                                |
+| `CHROME_PATH`             | Uses a specific browser binary                                   |
+| `BENCH_SCREENSHOTS=<dir>` | Captures the wallet when a step fails                            |
+| `BENCH_NO_SANDBOX=1`      | Disables Chrome's sandbox, only in containers that cannot run it |
+
+## CI
+
+The `UX Bench` workflow (`.github/workflows/ux-bench.yml`) runs on pull requests that change `src/`, this playground, or the lockfile. It builds the playground with the PR's SDK and runs 5 runs per renderer against the live Tempo Wallet. Then it writes the report to the job summary and keeps one comment on the pull request up to date. Run it on any branch with **Run workflow**, and set the number of runs there.

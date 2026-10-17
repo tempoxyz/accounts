@@ -11,11 +11,14 @@
  *                            (tempoWallet/popup, tempoWallet/iframe, webAuthn)
  *   --host <url>             Wallet page override for the Tempo Wallet renderers.
  *   --json <path>            Also writes every sample as JSON.
+ *   --markdown <path>        Also writes a scored Markdown report.
  *
  * Environment:
  *   CHROME_PATH=<path>       Browser binary. Defaults to the installed Chrome channel.
  *   BENCH_NO_SANDBOX=1       Disables Chrome's sandbox (only for containers that need it).
  *   BENCH_SCREENSHOTS=<dir>  Writes a screenshot of the wallet when a step fails.
+ *   BENCH_COMMIT=<sha>       Commit named in the Markdown report.
+ *   BENCH_RUN_URL=<url>      Workflow run linked from the Markdown report.
  */
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
@@ -28,12 +31,11 @@ import {
   type Page,
 } from 'playwright-core'
 
-const renderers = ['tempoWallet/popup', 'tempoWallet/iframe', 'webAuthn'] as const
-type Renderer = (typeof renderers)[number]
+import * as Report from './report.js'
 
-/** Benchmarked cases, in run order. Each case depends on the state the previous one leaves. */
-const cases = ['register', 'login', 'send'] as const
-type Case = (typeof cases)[number]
+type Case = Report.Case
+type Renderer = Report.Renderer
+type Sample = Report.Sample
 
 /** Wallet button that approves each case. */
 const approvals = {
@@ -55,30 +57,18 @@ const { values } = parseArgs({
   options: {
     host: { type: 'string' },
     json: { type: 'string' },
-    renderers: { default: renderers.join(','), type: 'string' },
+    markdown: { type: 'string' },
+    renderers: { default: Report.renderers.join(','), type: 'string' },
     runs: { default: '3', type: 'string' },
     url: { default: 'http://localhost:5180', type: 'string' },
   },
 })
 
 const selected = values.renderers.split(',').map((renderer) => {
-  if (!renderers.includes(renderer as Renderer)) throw new Error(`Unknown renderer: ${renderer}`)
+  if (!Report.renderers.includes(renderer as Renderer))
+    throw new Error(`Unknown renderer: ${renderer}`)
   return renderer as Renderer
 })
-
-/** One timed case. Durations are in milliseconds. */
-type Sample = {
-  /** Wallet approval click to app callback. Absent for WebAuthn. */
-  approve_to_callback?: number | undefined
-  case: Case
-  /** Click to app callback, from the page's own timeline. */
-  click_to_callback: number
-  /** Click to wallet approval button visible. Absent for WebAuthn. */
-  click_to_interactive?: number | undefined
-  error?: string | undefined
-  renderer: Renderer
-  run: number
-}
 
 /** Page timeline entry written by `src/main.ts`. */
 type Entry = { action: string; error?: string; events: [string, number][] }
@@ -171,7 +161,7 @@ async function step(
 
   if (renderer === 'webAuthn') {
     const { callback, entry } = await done()
-    return { case: options.case, click_to_callback: callback, error: entry.error, renderer, run }
+    return { case: options.case, error: entry.error, renderer, run, total: callback }
   }
 
   const wallet: Page | FrameLocator = popup
@@ -184,7 +174,7 @@ async function step(
     await screenshot(popup ? (wallet as Page) : page, `${renderer}-${options.case}-${run}`)
     throw error
   }
-  const interactive = Date.now() - start
+  const ready = Date.now() - start
 
   if (options.case === 'register')
     await wallet.getByPlaceholder(/Email address or label/).fill(`bench-${Date.now()}`)
@@ -193,13 +183,13 @@ async function step(
 
   const { callback, entry, time } = await done()
   return {
-    approve_to_callback: time - approved,
     case: options.case,
-    click_to_callback: callback,
-    click_to_interactive: interactive,
+    confirm: time - approved,
     error: entry.error,
+    ready,
     renderer,
     run,
+    total: callback,
   }
 }
 
@@ -231,7 +221,7 @@ for (const renderer of selected)
     await page.waitForFunction(() => '__bench' in window)
 
     try {
-      for (const name of cases) {
+      for (const name of Report.cases) {
         if (name === 'login') await setup(page, 'disconnect')
         if (name === 'send') await setup(page, 'fund')
         const sample = await step(context, page, { case: name, renderer, run })
@@ -244,34 +234,21 @@ for (const renderer of selected)
     }
     await context.close()
   }
+const version = browser.version()
 await browser.close()
 
 if (values.json) await fs.writeFile(values.json, JSON.stringify(samples, null, 2))
 
-/** Returns the median, or `undefined` when no sample has the metric. */
-function median(values: readonly (number | undefined)[]) {
-  const sorted = values.filter((value) => value !== undefined).sort((a, b) => a - b)
-  if (sorted.length === 0) return undefined
-  const middle = Math.floor(sorted.length / 2)
-  if (sorted.length % 2) return sorted[middle]
-  return Math.round((sorted[middle - 1]! + sorted[middle]!) / 2)
-}
+const summary = Report.summarize(samples, { renderers: selected, runs: Number(values.runs) })
+console.table(Report.table(summary))
 
-const summary = selected.flatMap((renderer) =>
-  cases.map((name) => {
-    const group = samples.filter((sample) => sample.renderer === renderer && sample.case === name)
-    const ok = group.filter((sample) => !sample.error)
-    return {
-      renderer,
-      case: name,
-      ok: `${ok.length}/${values.runs}`,
-      'click → interactive (p50)': median(ok.map((sample) => sample.click_to_interactive)),
-      'approve → callback (p50)': median(ok.map((sample) => sample.approve_to_callback)),
-      'click → callback (p50)': median(ok.map((sample) => sample.click_to_callback)),
-      'click → callback (max)': ok.length
-        ? Math.max(...ok.map((sample) => sample.click_to_callback))
-        : undefined,
-    }
-  }),
-)
-console.table(summary)
+if (values.markdown)
+  await fs.writeFile(
+    values.markdown,
+    Report.markdown(summary, {
+      browser: `Chrome ${version}`,
+      commit: process.env.BENCH_COMMIT,
+      runUrl: process.env.BENCH_RUN_URL,
+      walletHost: values.host ?? 'https://wallet.tempo.xyz',
+    }),
+  )
