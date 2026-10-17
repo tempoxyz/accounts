@@ -13,7 +13,7 @@
  *   --runs <n>               Runs per renderer. @default 3
  *   --renderers <list>       Comma-separated renderers. @default all
  *                            (tempoWallet/popup, tempoWallet/iframe, webAuthn)
- *   --cases <list>           Comma-separated cases, run in report order. @default all
+ *   --cases <list>           Comma-separated cases, run in report order. Needs a register case. @default all
  *                            (login cases need a register case before them)
  *   --host <url>             Wallet page override for the Tempo Wallet renderers.
  *   --json <path>            Also writes every sample as JSON.
@@ -87,6 +87,9 @@ const cases = values.cases.split(',').map((name) => {
   return name as Case
 })
 const ordered = Report.cases.filter((name) => cases.includes(name))
+// Login and send need the account that a register case creates earlier in the same run.
+if (Report.kind(ordered[0]!) !== 'register')
+  throw new Error(`--cases must include a register case to run ${ordered[0]}.`)
 
 /** Page timeline entry written by `src/main.ts`. */
 type Entry = { action: string; error?: string; events: [string, number][] }
@@ -227,19 +230,26 @@ async function step(
 
   // Approves a follow-up screen if one appears. Its render counts toward Confirm, as a user
   // would wait for it too.
+  let finished = false
   if (options.case.endsWith('-key')) {
     const approve = wallet.getByRole('button', { disabled: false, name: followup })
     approve
       .waitFor({ state: 'visible', timeout })
-      .then(() => approve.click())
+      // The iframe wallet is reused, so a wait that outlives its case must not click a later
+      // case's screen.
+      .then(() => (finished ? undefined : approve.click()))
       // Settles harmlessly when the case finishes without the screen and the wallet closes.
       .catch(() => {})
   }
 
-  const { callback, entry, time } = await done().catch(async (error) => {
-    await screenshot(popup ? (wallet as Page) : page, `${renderer}-${options.case}-${run}`)
-    throw error
-  })
+  const { callback, entry, time } = await done()
+    .catch(async (error) => {
+      await screenshot(popup ? (wallet as Page) : page, `${renderer}-${options.case}-${run}`)
+      throw error
+    })
+    .finally(() => {
+      finished = true
+    })
   return {
     case: options.case,
     confirm: time - approved,

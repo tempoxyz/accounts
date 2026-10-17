@@ -64,7 +64,7 @@ The bench sends each action as soon as the previous one returns, with no pause b
 
 | Option or variable        | Effect                                                           |
 | ------------------------- | ---------------------------------------------------------------- |
-| `--cases <list>`          | Runs only these cases, in report order (login needs a register)  |
+| `--cases <list>`          | Runs only these cases, in report order (needs a register case)   |
 | `--baseline <url>`        | Also measures a baseline app and compares against it             |
 | `--json <path>`           | Writes every sample as JSON                                      |
 | `--markdown <path>`       | Writes the scored Markdown report                                |
