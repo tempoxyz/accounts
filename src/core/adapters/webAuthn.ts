@@ -126,22 +126,29 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     }
 
     /**
-     * Clears the rejection of a credential the server knows after all, and
-     * restores the account and access keys `drop` removed for it.
+     * Clears the rejection of a credential the server knows after all. With
+     * `options.restore` (a login that landed after the drop), also restores
+     * the account and access keys `drop` removed for it, as the active account
+     * and the last used credential, as its connect left them.
      */
-    function accept(credential: { id: string; publicKey: Hex.Hex }) {
+    async function accept(
+      credential: { id: string; publicKey: Hex.Hex },
+      options: { restore?: boolean | undefined } = {},
+    ) {
       const address = Account.fromWebAuthnP256(credential).address.toLowerCase()
       rejected.delete(address)
       rejected_ids.delete(credential.id)
       const restored = dropped.get(address)
       dropped.delete(address)
-      if (!restored) return
+      if (!options.restore || !restored) return
       const { accessKeys, accounts } = store.getState()
       if (accounts.some((account) => account.address.toLowerCase() === address)) return
       store.setState({
-        accessKeys: [...accessKeys, ...restored.accessKeys],
-        accounts: [...accounts, restored.account],
+        accessKeys: [...restored.accessKeys, ...accessKeys],
+        accounts: [restored.account, ...accounts],
+        activeAccount: 0,
       })
+      await storage.setItem('lastCredentialId', credential.id)
     }
 
     /** Drops the account of a credential the server never stored. */
@@ -189,7 +196,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         },
         async (error) => {
           // Cancelled by `settle`: the outcome is unknown, so keep the account.
-          if (controller.signal.aborted) return
+          // A refusal stays the server's answer, even if its cleanup was cancelled.
+          if (controller.signal.aborted && error === controller.signal.reason) return
           // The server never stored the credential: drop the account the app
           // was handed, so it signs in or registers again.
           await reject(credential, { name, previous })
@@ -408,7 +416,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         // The server knows the credential, even if its registration looked
         // rejected (e.g. every response to it was lost), so the account is kept.
         const was_rejected = rejected_ids.has(response.id)
-        accept({ id: response.id, publicKey })
+        // This connect stores the account again.
+        await accept({ id: response.id, publicKey })
 
         const previous = (await storage.getItem<string>('lastCredentialId')) ?? undefined
         await storage.setItem('lastCredentialId', response.id)
@@ -422,9 +431,10 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         if (verified)
           verified.then(
             ({ session }) => {
-              if (session) return accept({ id: response.id, publicKey })
-              if (!was_rejected || controller.signal.aborted) return
+              // Only the latest login with the credential decides its rejection.
               if (logins.get(response.id) !== login) return
+              if (session) return accept({ id: response.id, publicKey }, { restore: true })
+              if (!was_rejected || controller.signal.aborted) return
               return reject({ id: response.id, publicKey }, { name: known?.label ?? '', previous })
             },
             () => {},
@@ -505,6 +515,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       // A registration landing after logout would restore its session, so
       // wait for it, or cancel it (see `settle`).
       await settle()
+      // A later login mustn't restore accounts or access keys this disconnect removes.
+      dropped.clear()
       await ceremony.logout?.().catch(() => {})
     }
 

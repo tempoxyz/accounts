@@ -671,7 +671,7 @@ describe('deferred login', () => {
   })
 
   test('behavior: restores an account a late registration refusal dropped once its login lands', async () => {
-    const { events, gate, provider } = setup()
+    const { events, gate, provider, storage } = setup()
     let land = () => {}
     gate.register = new Promise<void>((resolve) => (land = resolve))
     // The server stores the passkey, but its answer is lost.
@@ -693,15 +693,94 @@ describe('deferred login', () => {
     await vi.waitFor(() => expect(events).toContain('login answered'))
     await new Promise((resolve) => setTimeout(resolve, 20))
 
+    // It's restored as the active account and the last used credential, as its connect left them.
+    const [account] = provider.store.getState().accounts
     expect({
+      active: (await provider.request({ method: 'eth_accounts' }))[0] === address,
       during,
-      landed: (await provider.request({ method: 'eth_accounts' })).includes(address),
+      last:
+        account && 'credential' in account
+          ? (await storage.getItem('lastCredentialId')) === account.credential?.id
+          : false,
     }).toMatchInlineSnapshot(`
       {
+        "active": true,
         "during": false,
-        "landed": true,
+        "last": true,
       }
     `)
+  })
+
+  test("behavior: a login after a disconnect doesn't restore what a refusal dropped", async () => {
+    const { events, gate, provider } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    gate.lose_register = 'Missing or expired challenge'
+    const address = await signUp(provider)
+    // e.g. the sign-up's access key.
+    provider.store.setState({
+      accessKeys: [
+        {
+          access: address,
+          address: '0x0000000000000000000000000000000000000002',
+          chainId: chain.id,
+          keyType: 'p256',
+        },
+      ],
+    })
+    const dropped = new Promise<void>((resolve) => provider.on('accountsChanged', () => resolve()))
+    land()
+    await dropped
+    await provider.request({ method: 'wallet_disconnect' })
+
+    // The server knows the passkey, so the login succeeds.
+    events.length = 0
+    const connected = provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    await connected
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: drops a refused login whose logout is cancelled', async () => {
+    const { events, gate, provider } = setup()
+    const address = await signUp(provider)
+
+    gate.hold_logout = true
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    gate.refuse = 'Unknown credential'
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    await vi.waitFor(() => expect(events).toContain('logout'))
+    const [stored] = provider.store.getState().accounts
+
+    // A sign-up waits up to 10 s for the refused login, then cancels its logout.
+    gate.hold_logout = false
+    gate.refuse = undefined
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'bob' } }],
+    })
+    await vi.advanceTimersByTimeAsync(10_000)
+    vi.useRealTimers()
+    await vi.waitFor(() => expect(events).toContain('logout aborted'))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    // The refusal still stands: the refused account is dropped whenever it shows up again.
+    provider.store.setState({ accounts: [stored!, ...provider.store.getState().accounts] })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(
+      (await provider.request({ method: 'eth_accounts' })).includes(address),
+    ).toMatchInlineSnapshot(`false`)
   })
 
   test('behavior: keeps a refused sign-up dropped when its login has an unknown outcome', async () => {

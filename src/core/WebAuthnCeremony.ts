@@ -805,8 +805,11 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
           // The app now runs as this account, so a session the server left
           // in place (an earlier account's, or the one it just issued) must
           // not stay. If ending it fails, so does verification. Abortable, as
-          // in `end`.
-          if (!signal?.aborted) await logout(signal)
+          // in `end`, but a refusal stays the answer once that's cancelled.
+          if (!signal?.aborted)
+            await logout(signal).catch((error_logout) => {
+              if (!signal?.aborted) throw error_logout
+            })
           throw error
         }
       })()
