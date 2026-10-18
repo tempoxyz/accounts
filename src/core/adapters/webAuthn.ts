@@ -277,12 +277,12 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         // A login needs the server to know the credential, and a registration
         // landing after a login would replace its session, so wait for
         // registrations still verifying in the background. Their failures are
-        // handled by `track`. The latest registration signing a digest with
-        // its own credential (the shortcut below) needs no login, and the
-        // session it issues when it lands is this account's, so it isn't
-        // waited for.
+        // handled by `track`. The latest registration, still fresh, signing a
+        // digest with its own credential (the shortcut below) needs no login,
+        // and the session it issues when it lands is this account's, so it
+        // isn't waited for. A stale one is, since a login follows.
         const latest =
-          digest && typeof credentialId === 'string' && registered?.credentialId === credentialId
+          digest && typeof credentialId === 'string' && current(credentialId)
             ? credentialId
             : undefined
         await settle({ except: latest })

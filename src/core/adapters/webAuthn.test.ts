@@ -695,6 +695,36 @@ describe('background registration', () => {
     `)
   })
 
+  test('behavior: waits for a stale registration before its login', async () => {
+    const { logins, provider, verifications } = setup()
+    await register(provider)
+    const id = credentialOf(provider)?.id
+    // Past the registration shortcut's 5 min, so the digest takes a server login.
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 6 * 60_000)
+
+    const login = provider.request({
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: { method: 'login', credentialId: id, digest: `0x${'1'.repeat(64)}` },
+        } as never,
+      ],
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const waited = logins.mock.calls.length === 0
+    verifications[0]!.resolve()
+    await login
+    clock.mockRestore()
+
+    expect({ logins: logins.mock.calls.length, waited }).toMatchInlineSnapshot(`
+      {
+        "logins": 1,
+        "waited": true,
+      }
+    `)
+  })
+
   test('behavior: keeps an account whose page closed before the server answered', async () => {
     // A popup closes as soon as it answers, so its verification never settles here.
     const storage = Storage.memory()
