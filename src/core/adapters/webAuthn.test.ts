@@ -850,6 +850,51 @@ describe('deferred login', () => {
     `)
   })
 
+  test("behavior: a cancelled connect doesn't stop a late login from selecting its account", async () => {
+    const { authenticator, events, gate, provider, storage } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    gate.lose_register = 'Missing or expired challenge'
+    const address = await signUp(provider)
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    const dropped = new Promise<void>((resolve) => provider.on('accountsChanged', () => resolve()))
+    land()
+    await dropped
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+
+    // Another connect whose passkey prompt is cancelled selects nothing.
+    const get = authenticator.credentials.get.bind(authenticator.credentials)
+    authenticator.credentials.get = async () => {
+      authenticator.credentials.get = get
+      throw new DOMException('Cancelled', 'NotAllowedError')
+    }
+    await provider
+      .request({ method: 'wallet_connect', params: [{ capabilities: { method: 'login' } }] })
+      .catch(() => {})
+    gate.release()
+    await vi.waitFor(() => expect(events).toContain('login answered'))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    // Restored as selected: active, and the last used credential again.
+    const [account] = provider.store.getState().accounts
+    expect({
+      active: (await provider.request({ method: 'eth_accounts' }))[0] === address,
+      last:
+        account && 'credential' in account
+          ? (await storage.getItem('lastCredentialId')) === account.credential?.id
+          : false,
+    }).toMatchInlineSnapshot(`
+      {
+        "active": true,
+        "last": true,
+      }
+    `)
+  })
+
   test("behavior: a login after a disconnect doesn't restore what a refusal dropped", async () => {
     const { events, gate, provider } = setup()
     let land = () => {}

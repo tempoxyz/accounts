@@ -94,8 +94,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     >()
     // The latest login per credential ID, so only it decides the credential's rejection.
     const logins = new Map<string, object>()
-    // Connects and disconnects so far, so a late login restores its account as
-    // the selected one only if none has happened since.
+    // Successful connects and disconnects so far, so a late login restores its
+    // account as the selected one only if none has happened since.
     let connects = 0
     // Dropped after the update that added them, so the provider emits both.
     store.subscribe(() => {
@@ -268,7 +268,6 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
 
     const base = local({
       async createAccount(parameters) {
-        connects++
         const { options } = await ceremony.getRegistrationOptions({
           ...parameters,
           // A random `userId` by default, so passkeys with the same name don't share a user
@@ -325,6 +324,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         // Rejected while the signature prompt was open: fail the sign-up, as
         // with `WebAuthnCeremony.server`.
         if (failure) throw failure.error
+        connects++
         return {
           accounts: [
             {
@@ -339,7 +339,6 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         }
       },
       async loadAccounts(parameters = {}) {
-        const connect = ++connects
         const { digest, selectAccount } = parameters
 
         const credentialId = selectAccount
@@ -373,6 +372,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           // dropping the account: fail, as `createAccount` does.
           if (rejected.has(account.address.toLowerCase()))
             throw new Error('The server refused to store the passkey.')
+          connects++
           return {
             accounts: [
               {
@@ -438,8 +438,10 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
               }
             : { ready, signal: controller.signal },
         )
-        // The server session now belongs to this login.
+        // The server session now belongs to this login. Counted once it
+        // succeeded, so a failed connect selects nothing.
         registered = undefined
+        const connect = ++connects
         // The server knows the credential, even if its registration looked
         // rejected (e.g. every response to it was lost), so the account is kept.
         const was_rejected = rejected_ids.has(response.id)
