@@ -751,6 +751,32 @@ describe('background registration', () => {
     `)
   })
 
+  test('behavior: fails a digest signed while its registration was refused', async () => {
+    const { authenticator, provider, verifications } = setup()
+    await register(provider)
+    const id = credentialOf(provider)?.id
+    // The registration is refused while the signature prompt is open.
+    const get = authenticator.credentials.get.bind(authenticator.credentials)
+    authenticator.credentials.get = async (options) => {
+      verifications[0]!.reject(new Error('Missing or expired challenge'))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      return get(options)
+    }
+
+    await expect(
+      provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            capabilities: { method: 'login', credentialId: id, digest: `0x${'1'.repeat(64)}` },
+          } as never,
+        ],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InternalError: The server refused to store the passkey.]`,
+    )
+  })
+
   test('behavior: waits for a stale registration before its login', async () => {
     const { logins, provider, verifications } = setup()
     await register(provider)

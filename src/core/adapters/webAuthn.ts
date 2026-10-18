@@ -295,6 +295,11 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         if (fresh && typeof credentialId === 'string') {
           const { publicKey, rpId, username } = fresh
           const account = Account.fromWebAuthnP256({ id: credentialId, publicKey }, { rpId })
+          const signature = await account.sign({ hash: digest! })
+          // Its registration may have been refused while the prompt was open,
+          // dropping the account: fail, as `createAccount` does.
+          if (rejected.has(account.address.toLowerCase()))
+            throw new Error('The server refused to store the passkey.')
           return {
             accounts: [
               {
@@ -303,7 +308,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
                 credential: { id: credentialId, publicKey, rpId },
               },
             ],
-            signature: await account.sign({ hash: digest! }),
+            signature,
             username,
           }
         }
