@@ -622,6 +622,29 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
   }
 
   /**
+   * Ends the session in place, retrying with backoff (up to 30 s apart) until
+   * it succeeds. Rejects with `signal`'s reason once it aborts.
+   */
+  async function end(signal: AbortSignal | undefined) {
+    for (let attempt = 0; ; attempt++) {
+      signal?.throwIfAborted()
+      try {
+        return await base.logout?.()
+      } catch {}
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(done, Math.min(250 * 2 ** attempt, 30_000))
+        signal?.addEventListener('abort', done, { once: true })
+        function done() {
+          clearTimeout(timer)
+          signal?.removeEventListener('abort', done)
+          if (signal?.aborted) reject(signal.reason)
+          else resolve()
+        }
+      })
+    }
+  }
+
+  /**
    * Whether a `/login` error is the server refusing the credential itself (it
    * doesn't know it, the signature doesn't check out, or a hook denied it),
    * rather than an error unrelated to the account (e.g. an expired challenge
@@ -737,9 +760,10 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
             throw new Error('Server stored a different public key')
           // Unknown outcome: the login wasn't refused, so keep the account,
           // and end any session in place, which may be an earlier account's.
-          // A logout that fails too (e.g. still offline) leaves it to the
-          // caller's next request or login, rather than drop the account.
-          if (!answer) await base.logout?.().catch(() => {})
+          // A logout that fails too (e.g. still offline) is retried until it
+          // succeeds or `signal` aborts, rather than drop the account or leave
+          // that session in place.
+          if (!answer) await end(signal)
           return { session: !!answer }
         } catch (error) {
           // The app now runs as this account, so a session the server left

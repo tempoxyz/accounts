@@ -329,7 +329,7 @@ describe('deferred login', () => {
     `)
   })
 
-  test('behavior: keeps the account when the logout after a failed login fails too', async () => {
+  test('behavior: retries the logout after a failed login until it ends the session', async () => {
     const { events, gate, provider } = setup()
     const address = await signUp(provider)
 
@@ -340,13 +340,33 @@ describe('deferred login', () => {
       method: 'wallet_connect',
       params: [{ capabilities: { method: 'login' } }],
     })
-    await vi.waitFor(() => expect(events).toContain('logout'), { timeout: 5_000 })
+    // The logout fails twice, then goes through.
+    await vi.waitFor(() => expect(events.filter((event) => event === 'logout').length).toBe(2), {
+      timeout: 5_000,
+    })
+    gate.unavailable_logout = false
+    await vi.waitFor(() => expect(events.filter((event) => event === 'logout').length).toBe(3), {
+      timeout: 5_000,
+    })
     // Lets `track` settle.
     await new Promise((resolve) => setTimeout(resolve, 10))
 
-    expect(
-      (await provider.request({ method: 'eth_accounts' })).includes(address),
-    ).toMatchInlineSnapshot(`true`)
+    expect({
+      accounts: (await provider.request({ method: 'eth_accounts' })).includes(address),
+      events,
+    }).toMatchInlineSnapshot(`
+      {
+        "accounts": true,
+        "events": [
+          "login sent",
+          "login sent",
+          "login sent",
+          "logout",
+          "logout",
+          "logout",
+        ],
+      }
+    `)
   })
 
   test('behavior: keeps the account when the login fails for a reason other than the credential', async () => {
