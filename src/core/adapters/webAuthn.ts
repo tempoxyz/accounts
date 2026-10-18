@@ -94,6 +94,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     >()
     // The latest login per credential ID, so only it decides the credential's rejection.
     const logins = new Map<string, object>()
+    // Connects and disconnects so far, so a late login restores its account as
+    // the selected one only if none has happened since.
+    let connects = 0
     // Dropped after the update that added them, so the provider emits both.
     store.subscribe(() => {
       if (rejected.size > 0) queueMicrotask(drop)
@@ -128,12 +131,14 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     /**
      * Clears the rejection of a credential the server knows after all. With
      * `options.restore` (a login that landed after the drop), also restores
-     * the account and access keys `drop` removed for it, as the active account
-     * and the last used credential, as its connect left them.
+     * the account and access keys `drop` removed for it. With
+     * `options.selected` (no connect or disconnect since that login), it's
+     * restored as the active account and the last used credential, as its
+     * connect left them; otherwise the newer selection stays.
      */
     async function accept(
       credential: { id: string; publicKey: Hex.Hex },
-      options: { restore?: boolean | undefined } = {},
+      options: { restore?: boolean | undefined; selected?: boolean | undefined } = {},
     ) {
       const address = Account.fromWebAuthnP256(credential).address.toLowerCase()
       rejected.delete(address)
@@ -143,6 +148,13 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       if (!options.restore || !restored) return
       const { accessKeys, accounts } = store.getState()
       if (accounts.some((account) => account.address.toLowerCase() === address)) return
+      if (!options.selected) {
+        store.setState({
+          accessKeys: [...accessKeys, ...restored.accessKeys],
+          accounts: [...accounts, restored.account],
+        })
+        return
+      }
       store.setState({
         accessKeys: [...restored.accessKeys, ...accessKeys],
         accounts: [restored.account, ...accounts],
@@ -245,6 +257,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
 
     const base = local({
       async createAccount(parameters) {
+        connects++
         const { options } = await ceremony.getRegistrationOptions({
           ...parameters,
           // A random `userId` by default, so passkeys with the same name don't share a user
@@ -315,6 +328,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         }
       },
       async loadAccounts(parameters = {}) {
+        const connect = ++connects
         const { digest, selectAccount } = parameters
 
         const credentialId = selectAccount
@@ -433,7 +447,11 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
             ({ session }) => {
               // Only the latest login with the credential decides its rejection.
               if (logins.get(response.id) !== login) return
-              if (session) return accept({ id: response.id, publicKey }, { restore: true })
+              if (session)
+                return accept(
+                  { id: response.id, publicKey },
+                  { restore: true, selected: connects === connect },
+                )
               if (!was_rejected || controller.signal.aborted) return
               return reject({ id: response.id, publicKey }, { name: known?.label ?? '', previous })
             },
@@ -517,6 +535,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       await settle()
       // A later login mustn't restore accounts or access keys this disconnect removes.
       dropped.clear()
+      connects++
       await ceremony.logout?.().catch(() => {})
     }
 

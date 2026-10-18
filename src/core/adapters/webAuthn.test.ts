@@ -711,6 +711,45 @@ describe('deferred login', () => {
     `)
   })
 
+  test("behavior: a late login's restore keeps a newer connect's selection", async () => {
+    const { events, gate, provider } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    gate.lose_register = 'Missing or expired challenge'
+    const address = await signUp(provider)
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    const dropped = new Promise<void>((resolve) => provider.on('accountsChanged', () => resolve()))
+    land()
+    await dropped
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+
+    // Before that login lands, the user signs up another account.
+    gate.register = undefined
+    gate.lose_register = undefined
+    const { accounts } = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'bob' } }],
+    })
+    gate.release()
+    await vi.waitFor(() => expect(events).toContain('login answered'))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    const connected = await provider.request({ method: 'eth_accounts' })
+    expect({
+      active: connected[0] === accounts[0]!.address,
+      restored: connected.includes(address),
+    }).toMatchInlineSnapshot(`
+      {
+        "active": true,
+        "restored": true,
+      }
+    `)
+  })
+
   test("behavior: a login after a disconnect doesn't restore what a refusal dropped", async () => {
     const { events, gate, provider } = setup()
     let land = () => {}
