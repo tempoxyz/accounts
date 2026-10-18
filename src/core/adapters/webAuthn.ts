@@ -370,23 +370,29 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         // The server session now belongs to this login.
         registered = undefined
         // The server knows the credential, even if its registration looked
-        // rejected (e.g. every response to it was lost). A login verified in
-        // the background proves that only once it lands with a session.
-        const accept = () => {
-          rejected.delete(
-            Account.fromWebAuthnP256({ id: response.id, publicKey }).address.toLowerCase(),
-          )
-          rejected_ids.delete(response.id)
-        }
-        if (verified)
-          verified.then(
-            ({ session }) => session && accept(),
-            () => {},
-          )
-        else accept()
+        // rejected (e.g. every response to it was lost), so the account is kept.
+        const address = Account.fromWebAuthnP256({ id: response.id, publicKey }).address
+        const was_rejected = rejected.has(address.toLowerCase())
+        rejected.delete(address.toLowerCase())
+        rejected_ids.delete(response.id)
 
         const previous = (await storage.getItem<string>('lastCredentialId')) ?? undefined
         await storage.setItem('lastCredentialId', response.id)
+        // A login verified in the background proves that only once it lands
+        // with a session. Until then the account is kept, so connecting
+        // doesn't drop it; an unknown outcome restores the rejection (a
+        // refusal drops it in `track`).
+        if (verified && was_rejected)
+          verified.then(
+            ({ session }) => {
+              if (!session && !controller.signal.aborted)
+                return reject(
+                  { id: response.id, publicKey },
+                  { name: known?.label ?? '', previous },
+                )
+            },
+            () => {},
+          )
         // Tracked like a registration verified in the background: logins and
         // disconnects wait for it, and if the server refuses it, the account
         // is dropped (an `accountsChanged` event) as the server's answer.

@@ -632,6 +632,21 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
   }
 
   /**
+   * Ends the session in place, once. Abortable, so a logout cancelled for a
+   * later session can't land after it and clear its cookie.
+   */
+  async function logout(signal: AbortSignal | undefined) {
+    const response = await fetch(`${url}/logout`, {
+      credentials: credentials ?? 'include',
+      method: 'POST',
+      ...(signal ? { signal } : {}),
+    })
+    // A server without a logout route has no session to end.
+    if (!response.ok && response.status !== 404)
+      throw new Error(`Logout failed with status ${response.status}`)
+  }
+
+  /**
    * Ends the session in place, retrying with backoff (up to 30 s apart) until
    * it succeeds. Rejects with `signal`'s reason once it aborts.
    */
@@ -639,15 +654,7 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
     for (let attempt = 0; ; attempt++) {
       signal?.throwIfAborted()
       try {
-        // Abortable, so a logout cancelled for a later session can't land after it and clear its
-        // cookie.
-        const response = await fetch(`${url}/logout`, {
-          credentials: credentials ?? 'include',
-          method: 'POST',
-          ...(signal ? { signal } : {}),
-        })
-        // A server without a logout route has no session to end.
-        if (response.ok || response.status === 404) return
+        return await logout(signal)
       } catch {}
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(done, Math.min(250 * 2 ** attempt, 30_000))
@@ -787,8 +794,9 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
         } catch (error) {
           // The app now runs as this account, so a session the server left
           // in place (an earlier account's, or the one it just issued) must
-          // not stay. If ending it fails, so does verification.
-          if (!signal?.aborted) await base.logout?.()
+          // not stay. If ending it fails, so does verification. Abortable, as
+          // in `end`.
+          if (!signal?.aborted) await logout(signal)
           throw error
         }
       })()

@@ -200,6 +200,10 @@ describe('deferred login', () => {
       register: undefined as Promise<void> | undefined,
       /** When set, `/register` requests are refused with it. */
       refuse_register: undefined as string | undefined,
+      /** When set, `/logout` requests wait until they're aborted. */
+      hold_logout: false,
+      /** When set, `/register` requests are stored, but answered with it. */
+      lose_register: undefined as string | undefined,
     }
     vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
       const request = new Request(input, init)
@@ -207,6 +211,14 @@ describe('deferred login', () => {
       if (path === '/webauthn/logout') {
         events.push('logout')
         if (gate.unavailable_logout) return Response.json({}, { status: 503 })
+        if (gate.hold_logout)
+          return await new Promise<Response>((_, reject) => {
+            const signal = init?.signal
+            signal?.addEventListener('abort', () => {
+              events.push('logout aborted')
+              reject(signal.reason)
+            })
+          })
       }
       if (path === '/webauthn/register') {
         events.push('register sent')
@@ -216,6 +228,10 @@ describe('deferred login', () => {
         }
         if (gate.refuse_register)
           return Response.json({ error: gate.refuse_register }, { status: 400 })
+        if (gate.lose_register) {
+          await handler.fetch(request)
+          return Response.json({ error: gate.lose_register }, { status: 400 })
+        }
       }
       if (path === '/webauthn/login') {
         events.push('login sent')
@@ -226,12 +242,13 @@ describe('deferred login', () => {
       }
       return handler.fetch(request)
     })
+    const storage = Storage.memory()
     const provider = Provider.create({
       adapter: webAuthn({ ceremony: WebAuthnCeremony.deferred({ url: `${origin}/webauthn` }) }),
       chains: [chain],
-      storage: Storage.memory(),
+      storage,
     })
-    return { authenticator, events, gate, provider }
+    return { authenticator, events, gate, provider, storage }
   }
 
   /** Signs up, so the next connect logs in with a known passkey. */
@@ -305,6 +322,42 @@ describe('deferred login', () => {
       }
     `)
   })
+  test('behavior: cancels the logout of a refused login for a later login', async () => {
+    const { events, gate, provider } = setup()
+    await signUp(provider)
+
+    events.length = 0
+    gate.hold_logout = true
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    gate.refuse = 'Unknown credential'
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    await vi.waitFor(() => expect(events).toContain('logout'))
+
+    // The next login waits for the refused one, then cancels its logout, so that logout can't
+    // land after the next login and end its session.
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const next = provider
+      .request({ method: 'wallet_connect', params: [{ capabilities: { method: 'login' } }] })
+      .catch(() => {})
+    await vi.advanceTimersByTimeAsync(10_000)
+    vi.useRealTimers()
+    await vi.waitFor(() => expect(events).toContain('logout aborted'))
+    await next
+
+    expect(events.slice(0, 4)).toMatchInlineSnapshot(`
+      [
+        "login sent",
+        "login answered",
+        "logout",
+        "logout aborted",
+      ]
+    `)
+  })
+
   test('behavior: keeps the account and ends the session when the login fails in transit', async () => {
     const { events, gate, provider } = setup()
     const address = await signUp(provider)
@@ -468,8 +521,47 @@ describe('deferred login', () => {
     `)
   })
 
-  test('behavior: keeps a refused sign-up dropped when its login has an unknown outcome', async () => {
+  test('behavior: keeps an account whose sign-up looked refused once its login lands', async () => {
     const { authenticator, events, gate, provider } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    gate.lose_register = 'Missing or expired challenge'
+    const address = await signUp(provider)
+
+    // The sign-up looks refused while the login's passkey prompt is open, though the server
+    // stored it.
+    const get = authenticator.credentials.get.bind(authenticator.credentials)
+    authenticator.credentials.get = async (options) => {
+      land()
+      await vi.waitFor(() => expect(events).toContain('register answered'))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      return get(options)
+    }
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    const connected = (await provider.request({ method: 'eth_accounts' })).includes(address)
+    // The server stored the passkey after all, so the login lands with a session.
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    await vi.waitFor(() => expect(events).toContain('login answered'))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect({
+      connected,
+      landed: (await provider.request({ method: 'eth_accounts' })).includes(address),
+    }).toMatchInlineSnapshot(`
+      {
+        "connected": true,
+        "landed": true,
+      }
+    `)
+  })
+
+  test('behavior: keeps a refused sign-up dropped when its login has an unknown outcome', async () => {
+    const { authenticator, events, gate, provider, storage } = setup()
     let land = () => {}
     gate.register = new Promise<void>((resolve) => (land = resolve))
     gate.refuse_register = 'Missing or expired challenge'
@@ -492,9 +584,16 @@ describe('deferred login', () => {
     await vi.waitFor(() => expect(events).toContain('logout'), { timeout: 5_000 })
     await new Promise((resolve) => setTimeout(resolve, 10))
 
-    expect(
-      (await provider.request({ method: 'eth_accounts' })).includes(address),
-    ).toMatchInlineSnapshot(`false`)
+    // Nor does a later login target the dropped passkey by default.
+    expect({
+      accounts: (await provider.request({ method: 'eth_accounts' })).includes(address),
+      last: await storage.getItem('lastCredentialId'),
+    }).toMatchInlineSnapshot(`
+      {
+        "accounts": false,
+        "last": null,
+      }
+    `)
   })
 
   test('behavior: a sign-up waits for a login still verifying', async () => {
