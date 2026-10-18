@@ -780,6 +780,18 @@ describe('deferred login', () => {
     })
     await new Promise((resolve) => setTimeout(resolve, 20))
     const removed = provider.store.getState().accessKeys.length
+    // Another account holds an authorization for the same key on the same chain.
+    const other = '0x0000000000000000000000000000000000000003' as const
+    provider.store.setState({
+      accessKeys: [
+        {
+          access: other,
+          address: '0x0000000000000000000000000000000000000002',
+          chainId: chain.id,
+          keyType: 'p256',
+        },
+      ],
+    })
 
     // A login the server verifies proves the passkey.
     gate.register = undefined
@@ -798,7 +810,8 @@ describe('deferred login', () => {
       removed,
       restored: provider.store
         .getState()
-        .accessKeys.map(({ chainId }) => chainId - chain.id)
+        .accessKeys.filter(({ access }) => access === address)
+        .map(({ chainId }) => chainId - chain.id)
         .sort(),
     }).toMatchInlineSnapshot(`
       {

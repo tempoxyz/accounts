@@ -601,9 +601,13 @@ export declare namespace webAuthn {
   }
 }
 
-/** Whether two access keys are the same authorization: the same key on the same chain. */
+/** Whether two access keys are the same authorization: the same key, for the same account, on the same chain. */
 function same(a: Store.State['accessKeys'][number], b: Store.State['accessKeys'][number]): boolean {
-  return a.address.toLowerCase() === b.address.toLowerCase() && a.chainId === b.chainId
+  return (
+    a.access.toLowerCase() === b.access.toLowerCase() &&
+    a.address.toLowerCase() === b.address.toLowerCase() &&
+    a.chainId === b.chainId
+  )
 }
 
 /** Whether two credential request options ask the authenticator for the same assertion. */
