@@ -811,6 +811,133 @@ describe('deferred login', () => {
     `)
   })
 
+  test('behavior: drops a refused login promptly while its logout keeps failing', async () => {
+    const { events, gate, provider } = setup()
+    const address = await signUp(provider)
+
+    events.length = 0
+    gate.unavailable_logout = true
+    const changed = new Promise<readonly string[]>((resolve) =>
+      provider.on('accountsChanged', resolve),
+    )
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    gate.refuse = 'Unknown credential'
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    const accounts = await Promise.race([
+      changed,
+      new Promise<undefined>((resolve) => setTimeout(resolve, 3_000)),
+    ])
+
+    expect({
+      dropped: accounts ? !accounts.includes(address) : false,
+      logouts: events.filter((event) => event === 'logout').length,
+    }).toMatchInlineSnapshot(`
+      {
+        "dropped": true,
+        "logouts": 3,
+      }
+    `)
+  })
+
+  test("behavior: a late login doesn't change a sign-up's last used credential", async () => {
+    const { authenticator, events, gate, provider, storage } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    gate.lose_register = 'Missing or expired challenge'
+    await signUp(provider)
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    const dropped = new Promise<void>((resolve) => provider.on('accountsChanged', () => resolve()))
+    land()
+    await dropped
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+
+    // A sign-up with a digest; the late login lands while its signature prompt is open.
+    gate.register = undefined
+    gate.lose_register = undefined
+    const get = authenticator.credentials.get.bind(authenticator.credentials)
+    authenticator.credentials.get = async (options) => {
+      authenticator.credentials.get = get
+      gate.release()
+      await vi.waitFor(() => expect(events).toContain('login answered'))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      return get(options)
+    }
+    const { accounts } = await provider.request({
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: {
+            digest: '0x0000000000000000000000000000000000000000000000000000000000000001',
+            method: 'register',
+            name: 'bob',
+          },
+        },
+      ],
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    const bob = provider.store
+      .getState()
+      .accounts.find((account) => account.address === accounts[0]!.address)
+    expect(
+      bob && 'credential' in bob
+        ? (await storage.getItem('lastCredentialId')) === bob.credential?.id
+        : false,
+    ).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: keeps dropped access keys across a second drop', async () => {
+    const { events, gate, provider } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    gate.lose_register = 'Missing or expired challenge'
+    const address = await signUp(provider)
+    provider.store.setState({
+      accessKeys: [
+        {
+          access: address,
+          address: '0x0000000000000000000000000000000000000002',
+          chainId: chain.id,
+          keyType: 'p256',
+        },
+      ],
+    })
+    // The login is answered, its sign-up's refusal drops the account with its key, and the
+    // login's outcome stays unknown, so the account is dropped again, without the key.
+    gate.unavailable = true
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    land()
+    await vi.waitFor(() => expect(events).toContain('logout'), { timeout: 5_000 })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    // A login the server verifies proves it.
+    gate.unavailable = false
+    gate.register = undefined
+    gate.lose_register = undefined
+    events.length = 0
+    const connected = provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    await connected
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(provider.store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
+  })
+
   test("behavior: a late login's restore keeps a newer connect's selection", async () => {
     const { events, gate, provider } = setup()
     let land = () => {}

@@ -114,8 +114,19 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       for (const account of accounts) {
         const address = account.address.toLowerCase()
         if (!rejected.has(address)) continue
+        // Merged with an earlier drop's, so dropping it again keeps its keys.
+        const earlier = dropped.get(address)?.accessKeys ?? []
+        const own = accessKeys.filter((accessKey) => accessKey.access.toLowerCase() === address)
         dropped.set(address, {
-          accessKeys: accessKeys.filter((accessKey) => accessKey.access.toLowerCase() === address),
+          accessKeys: [
+            ...earlier.filter(
+              (key) =>
+                !own.some(
+                  (accessKey) => accessKey.address.toLowerCase() === key.address.toLowerCase(),
+                ),
+            ),
+            ...own,
+          ],
           account,
         })
       }
@@ -318,13 +329,15 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
             { controller, name: parameters.name, previous, verified },
           )
         }
+        // Counted with its selection write, so a late login landing during the
+        // signature prompt can't overwrite it.
+        connects++
         await storage.setItem('lastCredentialId', credential.id)
         const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
         const signed = signature ? await signature : undefined
         // Rejected while the signature prompt was open: fail the sign-up, as
         // with `WebAuthnCeremony.server`.
         if (failure) throw failure.error
-        connects++
         return {
           accounts: [
             {

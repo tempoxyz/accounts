@@ -652,10 +652,12 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
    * Ends the session in place, retrying failures in transit, 5xx, 408 and
    * 429 responses with backoff (up to 30 s apart) until it succeeds. Gives up
    * on any other error status (e.g. a 401 from a route that requires a
-   * session), which retrying can't change. Rejects with `signal`'s reason
-   * once it aborts.
+   * session), which retrying can't change. With `options.attempts`, rejects
+   * with the last failure once that many attempts failed. Rejects with
+   * `signal`'s reason once it aborts.
    */
-  async function end(signal: AbortSignal | undefined) {
+  async function end(signal: AbortSignal | undefined, options: { attempts?: number } = {}) {
+    const { attempts = Number.POSITIVE_INFINITY } = options
     for (let attempt = 0; ; attempt++) {
       signal?.throwIfAborted()
       try {
@@ -664,6 +666,7 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
         signal?.throwIfAborted()
         const { status } = error as { status?: number }
         if (status !== undefined && status < 500 && status !== 408 && status !== 429) return
+        if (attempt + 1 >= attempts) throw error
       }
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(done, Math.min(250 * 2 ** attempt, 30_000))
@@ -804,12 +807,10 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
         } catch (error) {
           // The app now runs as this account, so a session the server left
           // in place (an earlier account's, or the one it just issued) must
-          // not stay, so end it, retrying as `end` does. A refusal stays the
-          // answer once that's cancelled.
-          if (!signal?.aborted)
-            await end(signal).catch((error_logout) => {
-              if (!signal?.aborted) throw error_logout
-            })
+          // not stay, so end it, retrying as `end` does, but only a few times
+          // (under a second apart), so the refusal reaches the adapter and
+          // drops the account promptly. The refusal stays the answer either way.
+          if (!signal?.aborted) await end(signal, { attempts: 3 }).catch(() => {})
           throw error
         }
       })()
