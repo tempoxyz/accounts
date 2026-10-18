@@ -103,16 +103,14 @@ export declare namespace verifyAuthentication {
   type Options = {
     /**
      * The credential the caller already knows: the challenge it signed, its
-     * public key, RP ID and username. A {@link deferred} ceremony checks the
-     * signature against them, answers with the username, and verifies the
-     * login with the server in the background.
+     * public key and RP ID. A {@link deferred} ceremony checks the signature
+     * against them and verifies the login with the server in the background.
      */
     credential?:
       | {
           challenge: Hex
           publicKey: Hex
           rpId: string
-          username?: string | null | undefined
         }
       | undefined
     /**
@@ -131,11 +129,13 @@ export declare namespace verifyAuthentication {
     /** Username associated with the account. */
     username?: string | null | undefined
     /**
-     * Settles once the server has verified the login and issued its session,
-     * when the ceremony verifies it in the background (see {@link deferred}).
-     * Rejects when the server refuses it.
+     * Settles once the server has verified the login, when the ceremony
+     * verifies it in the background (see {@link deferred}). `session` is
+     * `false` when the outcome is unknown (every attempt failed in transit, or
+     * a retry found the challenge consumed): no session is in place then, but
+     * the login wasn't refused. Rejects when the server refuses it.
      */
-    verified?: Promise<void> | undefined
+    verified?: Promise<{ session: boolean }> | undefined
   }
 }
 
@@ -558,7 +558,9 @@ export declare namespace server {
  * `POST /login` runs in the background the same way. The session it issues
  * likewise exists only once it lands, and the adapter makes logins and
  * disconnects wait for it. A refusal ends the session in place and the
- * adapter drops the account, as for a refused registration.
+ * adapter drops the account, as for a refused registration. A login whose
+ * outcome stays unknown (it failed in transit, or a retry found its challenge
+ * consumed) ends the session in place but keeps the account.
  *
  * The request is sent with `keepalive`, so it completes when the page closes
  * right after answering, but retries only run while the page is open. If the
@@ -681,24 +683,31 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
       if (!credential || !valid) return base.verifyAuthentication(response)
       const verified = (async () => {
         try {
-          const { publicKey } = await (async () => {
+          const answer = await (async () => {
             for (let attempt = 0; ; attempt++)
               try {
                 signal?.throwIfAborted()
                 return await post('/login', response, signal)
               } catch (error) {
                 if (signal?.aborted) throw signal.reason
-                // As for registration. A retry of a login that reached the
-                // server finds its challenge consumed, and rejects.
+                // As for registration. A refusal of the first attempt is the
+                // server's answer. A retry's may not be: an earlier attempt
+                // may have landed and consumed the challenge.
                 const retryable = error instanceof TypeError || error instanceof SyntaxError
-                if (!retryable || attempt >= 2) throw error
+                if (!retryable && attempt === 0) throw error
+                if (!retryable || attempt >= 2) return undefined
                 await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
               }
           })()
           // The app was handed the account of the key checked here. If the
           // server knows the credential by another key, refuse the login.
-          if (publicKey?.toLowerCase() !== credential.publicKey.toLowerCase())
+          if (answer && answer.publicKey?.toLowerCase() !== credential.publicKey.toLowerCase())
             throw new Error('Server stored a different public key')
+          // Unknown outcome: the login wasn't refused, so keep the account,
+          // but end any session in place, which may be an earlier account's.
+          // If that fails, so does verification.
+          if (!answer) await base.logout?.()
+          return { session: !!answer }
         } catch (error) {
           // The app now runs as this account, so a session the server left
           // in place (an earlier account's, or the one it just issued) must
@@ -712,7 +721,6 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
       return {
         credentialId: response.id,
         publicKey: credential.publicKey,
-        ...(credential.username !== undefined ? { username: credential.username } : {}),
         verified,
       }
     },

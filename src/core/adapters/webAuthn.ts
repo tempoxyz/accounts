@@ -166,7 +166,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     /**
      * Waits for registrations still verifying, for up to `timeout_pending`,
      * then cancels the rest, so none can land later and replace the session of
-     * the login or disconnect that follows.
+     * the login, sign-up or disconnect that follows.
      */
     async function settle() {
       if (pending.size === 0) return
@@ -191,6 +191,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
 
     const base = local({
       async createAccount(parameters) {
+        // A login or registration still verifying would replace this sign-up's session if it
+        // landed after it, so wait for it (see `settle`).
+        await settle()
         const { options } = await ceremony.getRegistrationOptions({
           ...parameters,
           // A random `userId` by default, so passkeys with the same name don't share a user
@@ -328,7 +331,6 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
                   challenge: options.publicKey!.challenge,
                   publicKey: known.publicKey,
                   rpId: known.rpId,
-                  ...(known.label !== undefined ? { username: known.label } : {}),
                 },
                 signal: controller.signal,
               }
@@ -355,7 +357,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
               controller,
               name: known?.label ?? '',
               previous,
-              verified: verified.then(() => ({ session: true })),
+              verified,
             },
           )
 

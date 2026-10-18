@@ -171,7 +171,8 @@ describe('deferred login', () => {
   /**
    * Provider whose deferred ceremony runs against an in-process
    * `Handler.webAuthn`. `/login` requests wait for `release`, and answer
-   * `refuse`'s error instead when it's set.
+   * `refuse`'s error instead when it's set. With `unavailable` set, they fail
+   * at once with a 503.
    */
   function setup() {
     const authenticator = Authenticator.create({ origin, rpId: 'localhost' })
@@ -190,13 +191,19 @@ describe('deferred login', () => {
       session: false,
     })
     const events: string[] = []
-    const gate = { refuse: undefined as string | undefined, release: () => {} }
+    const gate = {
+      refuse: undefined as string | undefined,
+      release: () => {},
+      unavailable: false,
+    }
     vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
       const request = new Request(input, init)
       const path = new URL(request.url).pathname
       if (path === '/webauthn/logout') events.push('logout')
+      if (path === '/webauthn/register') events.push('register sent')
       if (path === '/webauthn/login') {
         events.push('login sent')
+        if (gate.unavailable) return Response.json({}, { status: 503 })
         await new Promise<void>((resolve) => (gate.release = resolve))
         events.push('login answered')
         if (gate.refuse) return Response.json({ error: gate.refuse }, { status: 400 })
@@ -241,6 +248,7 @@ describe('deferred login', () => {
       {
         "address": true,
         "events": [
+          "register sent",
           "login sent",
           "connected",
           "login answered",
@@ -273,12 +281,84 @@ describe('deferred login', () => {
       {
         "accounts": false,
         "events": [
+          "register sent",
           "login sent",
           "login answered",
           "logout",
         ],
       }
     `)
+  })
+  test('behavior: keeps the account and ends the session when the login fails in transit', async () => {
+    const { events, gate, provider } = setup()
+    const address = await signUp(provider)
+
+    gate.unavailable = true
+    events.length = 0
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await vi.waitFor(() => expect(events).toContain('logout'), { timeout: 5_000 })
+
+    expect({
+      accounts: (await provider.request({ method: 'eth_accounts' })).includes(address),
+      events,
+    }).toMatchInlineSnapshot(`
+      {
+        "accounts": true,
+        "events": [
+          "login sent",
+          "login sent",
+          "login sent",
+          "logout",
+        ],
+      }
+    `)
+  })
+
+  test('behavior: a sign-up waits for a login still verifying', async () => {
+    const { events, gate, provider } = setup()
+    await signUp(provider)
+
+    events.length = 0
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    const registered = provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'bob' } }],
+    })
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    // Gives the sign-up time to send `/register`, if it didn't wait.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    events.push('released')
+    gate.release()
+    await registered
+    await vi.waitFor(() => expect(events).toContain('register sent'))
+
+    expect(events).toMatchInlineSnapshot(`
+      [
+        "login sent",
+        "released",
+        "login answered",
+        "register sent",
+      ]
+    `)
+  })
+
+  test("behavior: doesn't report the passkey's name as the login's username", async () => {
+    const { gate, provider } = setup()
+    await signUp(provider)
+
+    const login = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    gate.release()
+
+    expect(login.accounts[0]!.capabilities).toMatchInlineSnapshot(`{}`)
   })
 })
 
@@ -506,15 +586,18 @@ describe('background registration', () => {
     `)
   })
 
-  test('behavior: the registration answered last owns the session', async () => {
+  test('behavior: a sign-up waits for a registration still verifying, so it owns the session', async () => {
     const { logins, provider, verifications } = setup()
     await register(provider, 'alice')
-    await register(provider, 'bob')
+    const bob = register(provider, 'bob')
+    // Bob's registration isn't sent while alice's may still set the session.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(verifications.length).toMatchInlineSnapshot(`1`)
+    verifications[0]!.resolve()
+    await bob
+    verifications[1]!.resolve()
     const id = credentialOf(provider)?.id
 
-    // Bob registered last, but alice's response set the session cookie last.
-    verifications[1]!.resolve()
-    verifications[0]!.resolve()
     await provider.request({
       method: 'wallet_connect',
       params: [
@@ -524,8 +607,8 @@ describe('background registration', () => {
       ],
     })
 
-    // Bob signs in with the server instead of the registration's shortcut.
-    expect(logins).toHaveBeenCalledTimes(1)
+    // Bob's registration set the session last, so the login takes its shortcut.
+    expect(logins).toHaveBeenCalledTimes(0)
   })
 
   test('behavior: keeps an account whose page closed before the server answered', async () => {
@@ -566,10 +649,11 @@ describe('background registration', () => {
   test('behavior: does not restore a rejected credential as the last used', async () => {
     const { provider, storage, verifications } = setup()
     await register(provider, 'alice')
-    await register(provider, 'bob')
+    const bob = register(provider, 'bob')
 
     // Bob's registration recorded alice's credential as the one used before.
     verifications[0]!.reject(new Error('Missing or expired challenge'))
+    await bob
     verifications[1]!.reject(new Error('Missing or expired challenge'))
 
     await vi.waitFor(async () =>
