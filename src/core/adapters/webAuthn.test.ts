@@ -196,6 +196,8 @@ describe('deferred login', () => {
       release: () => {},
       unavailable: false,
       unavailable_logout: false,
+      /** When set, only the next `/logout` fails with a 503. */
+      unavailable_logout_once: false,
       /** When set, `/register` requests wait for it. */
       register: undefined as Promise<void> | undefined,
       /** When set, `/register` requests are refused with it. */
@@ -205,6 +207,8 @@ describe('deferred login', () => {
       release_logout: () => {},
       /** When set, `/logout` requests are answered with this status. */
       logout_status: undefined as number | undefined,
+      /** The latest `/register` request's signal. */
+      register_signal: undefined as AbortSignal | undefined,
       /** When set, `/register` requests are stored, but answered with it. */
       lose_register: undefined as string | undefined,
     }
@@ -213,7 +217,10 @@ describe('deferred login', () => {
       const path = new URL(request.url).pathname
       if (path === '/webauthn/logout') {
         events.push('logout')
-        if (gate.unavailable_logout) return Response.json({}, { status: 503 })
+        if (gate.unavailable_logout) {
+          if (gate.unavailable_logout_once) gate.unavailable_logout = false
+          return Response.json({}, { status: 503 })
+        }
         if (gate.logout_status) return Response.json({}, { status: gate.logout_status })
         if (gate.hold_logout)
           await new Promise<void>((resolve, reject) => {
@@ -227,6 +234,7 @@ describe('deferred login', () => {
       }
       if (path === '/webauthn/register') {
         events.push('register sent')
+        gate.register_signal = init?.signal ?? undefined
         if (gate.register) {
           await gate.register
           events.push('register answered')
@@ -707,6 +715,98 @@ describe('deferred login', () => {
         "active": true,
         "during": false,
         "last": true,
+      }
+    `)
+  })
+
+  test('behavior: a login the server verifies restores access keys a refusal dropped earlier', async () => {
+    const { events, gate, provider } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    gate.lose_register = 'Missing or expired challenge'
+    const address = await signUp(provider)
+    const key = {
+      access: address,
+      address: '0x0000000000000000000000000000000000000002',
+      chainId: chain.id,
+      keyType: 'p256',
+    } as const
+    provider.store.setState({ accessKeys: [key] })
+    const dropped = new Promise<void>((resolve) => provider.on('accountsChanged', () => resolve()))
+    land()
+    await dropped
+
+    // The server stored the passkey after all: a login proves it.
+    gate.register = undefined
+    gate.lose_register = undefined
+    events.length = 0
+    const connected = provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    await connected
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect({
+      accounts: (await provider.request({ method: 'eth_accounts' })).includes(address),
+      keys: provider.store.getState().accessKeys.length,
+    }).toMatchInlineSnapshot(`
+      {
+        "accounts": true,
+        "keys": 1,
+      }
+    `)
+  })
+
+  test("behavior: a login whose passkey prompt fails doesn't cancel an earlier registration", async () => {
+    const { authenticator, gate, provider } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    await signUp(provider)
+    await vi.waitFor(() => expect(gate.register_signal).toBeDefined())
+
+    authenticator.credentials.get = async () => {
+      throw new DOMException('Cancelled', 'NotAllowedError')
+    }
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    await provider
+      .request({ method: 'wallet_connect', params: [{ capabilities: { method: 'login' } }] })
+      .catch(() => {})
+    await vi.advanceTimersByTimeAsync(10_000)
+    vi.useRealTimers()
+    const aborted = gate.register_signal!.aborted
+    land()
+
+    expect(aborted).toMatchInlineSnapshot(`false`)
+  })
+
+  test('behavior: retries the logout after a refused login until it ends the session', async () => {
+    const { events, gate, provider } = setup()
+    const address = await signUp(provider)
+
+    events.length = 0
+    gate.unavailable_logout = true
+    gate.unavailable_logout_once = true
+    const changed = new Promise<readonly string[]>((resolve) =>
+      provider.on('accountsChanged', resolve),
+    )
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    gate.refuse = 'Unknown credential'
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+
+    expect({
+      accounts: (await changed).includes(address),
+      logouts: events.filter((event) => event === 'logout').length,
+    }).toMatchInlineSnapshot(`
+      {
+        "accounts": false,
+        "logouts": 2,
       }
     `)
   })

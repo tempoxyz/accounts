@@ -143,20 +143,31 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       const address = Account.fromWebAuthnP256(credential).address.toLowerCase()
       rejected.delete(address)
       rejected_ids.delete(credential.id)
+      if (!options.restore) return
       const restored = dropped.get(address)
       dropped.delete(address)
-      if (!options.restore || !restored) return
+      if (!restored) return
       const { accessKeys, accounts } = store.getState()
-      if (accounts.some((account) => account.address.toLowerCase() === address)) return
+      const keys = restored.accessKeys.filter(
+        (key) =>
+          !accessKeys.some(
+            (accessKey) => accessKey.address.toLowerCase() === key.address.toLowerCase(),
+          ),
+      )
+      // Its connect stored the account again: restore only its access keys.
+      if (accounts.some((account) => account.address.toLowerCase() === address)) {
+        if (keys.length > 0) store.setState({ accessKeys: [...accessKeys, ...keys] })
+        return
+      }
       if (!options.selected) {
         store.setState({
-          accessKeys: [...accessKeys, ...restored.accessKeys],
+          accessKeys: [...accessKeys, ...keys],
           accounts: [...accounts, restored.account],
         })
         return
       }
       store.setState({
-        accessKeys: [...restored.accessKeys, ...accessKeys],
+        accessKeys: [...keys, ...accessKeys],
         accounts: [restored.account, ...accounts],
         activeAccount: 0,
       })
@@ -349,10 +360,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           digest && typeof credentialId === 'string' && current(credentialId)
             ? credentialId
             : undefined
-        const ready = settle({ except: latest })
         // The shortcut uses the latest registration's session, which an
         // earlier one landing after it would replace.
-        if (latest) await ready
+        if (latest) await settle({ except: latest })
 
         const fresh = digest && typeof credentialId === 'string' ? current(credentialId) : undefined
         if (fresh && typeof credentialId === 'string') {
@@ -410,6 +420,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         })()
         // The known credential's public key lets a deferred ceremony check the
         // passkey's signature itself and verify the login in the background.
+        // Started once the passkey answered, so a prompt that fails or is
+        // cancelled leaves earlier registrations alone.
+        const ready = settle()
         const controller = new AbortController()
         const { publicKey, username, verified } = await ceremony.verifyAuthentication(
           response,
@@ -430,8 +443,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         // The server knows the credential, even if its registration looked
         // rejected (e.g. every response to it was lost), so the account is kept.
         const was_rejected = rejected_ids.has(response.id)
-        // This connect stores the account again.
-        await accept({ id: response.id, publicKey })
+        // This connect stores the account again. A login the server verified
+        // already also restores the access keys a refusal dropped.
+        await accept({ id: response.id, publicKey }, { restore: !verified, selected: true })
 
         const previous = (await storage.getItem<string>('lastCredentialId')) ?? undefined
         await storage.setItem('lastCredentialId', response.id)
