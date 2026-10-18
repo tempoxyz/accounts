@@ -196,6 +196,8 @@ describe('deferred login', () => {
       release: () => {},
       unavailable: false,
       unavailable_logout: false,
+      /** When set, `/register` requests wait for it. */
+      register: undefined as Promise<void> | undefined,
     }
     vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
       const request = new Request(input, init)
@@ -204,7 +206,13 @@ describe('deferred login', () => {
         events.push('logout')
         if (gate.unavailable_logout) return Response.json({}, { status: 503 })
       }
-      if (path === '/webauthn/register') events.push('register sent')
+      if (path === '/webauthn/register') {
+        events.push('register sent')
+        if (gate.register) {
+          await gate.register
+          events.push('register answered')
+        }
+      }
       if (path === '/webauthn/login') {
         events.push('login sent')
         if (gate.unavailable) return Response.json({}, { status: 503 })
@@ -371,6 +379,32 @@ describe('deferred login', () => {
     `)
   })
 
+  test('behavior: answers a login before an earlier sign-up lands, and sends it after', async () => {
+    const { events, gate, provider } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    await signUp(provider)
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    events.push('connected')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    land()
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+
+    expect(events).toMatchInlineSnapshot(`
+      [
+        "register sent",
+        "connected",
+        "register answered",
+        "login sent",
+      ]
+    `)
+  })
+
   test('behavior: a sign-up waits for a login still verifying', async () => {
     const { events, gate, provider } = setup()
     await signUp(provider)
@@ -460,7 +494,9 @@ describe('background registration', () => {
             })
         return { ...result, verified }
       },
-      async verifyAuthentication(response) {
+      // Like a server ceremony: the login is sent once `ready` resolves.
+      async verifyAuthentication(response, parameters) {
+        await parameters?.ready
         logins()
         return local.verifyAuthentication(response)
       },

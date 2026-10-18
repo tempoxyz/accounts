@@ -275,17 +275,21 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
             undefined)
 
         // A login needs the server to know the credential, and a registration
-        // landing after a login would replace its session, so wait for
-        // registrations still verifying in the background. Their failures are
-        // handled by `track`. The latest registration, still fresh, signing a
-        // digest with its own credential (the shortcut below) needs no login,
-        // and the session it issues when it lands is this account's, so it
-        // isn't waited for. A stale one is, since a login follows.
+        // landing after a login would replace its session, so the server login
+        // waits for registrations still verifying in the background (the
+        // ceremony sends it once `ready` resolves). Their failures are handled
+        // by `track`. The latest registration, still fresh, signing a digest
+        // with its own credential (the shortcut below) needs no login, and the
+        // session it issues when it lands is this account's, so it isn't waited
+        // for. A stale one is, since a login follows.
         const latest =
           digest && typeof credentialId === 'string' && current(credentialId)
             ? credentialId
             : undefined
-        await settle({ except: latest })
+        const ready = settle({ except: latest })
+        // The shortcut uses the latest registration's session, which an
+        // earlier one landing after it would replace.
+        if (latest) await ready
 
         const fresh = digest && typeof credentialId === 'string' ? current(credentialId) : undefined
         if (fresh && typeof credentialId === 'string') {
@@ -348,9 +352,10 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
                   publicKey: known.publicKey,
                   rpId: known.rpId,
                 },
+                ready,
                 signal: controller.signal,
               }
-            : { signal: controller.signal },
+            : { ready, signal: controller.signal },
         )
         // The server session now belongs to this login.
         registered = undefined

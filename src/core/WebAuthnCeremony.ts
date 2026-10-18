@@ -114,6 +114,14 @@ export declare namespace verifyAuthentication {
         }
       | undefined
     /**
+     * Resolves once the server may be sent the login, e.g. after earlier
+     * registrations have landed, so none replaces its session. A ceremony
+     * that verifies logins with a server waits for it before sending
+     * `/login`; one that answers before verifying (see {@link deferred}) only
+     * delays its background verification.
+     */
+    ready?: Promise<unknown> | undefined
+    /**
      * Cancels background verification (see `verified`), which then rejects
      * with the signal's reason, and can no longer issue a session.
      */
@@ -301,7 +309,8 @@ function create(options: server.Options) {
       return challenges.issue()?.challenge
     },
 
-    async verifyAuthentication(response) {
+    async verifyAuthentication(response, options = {}) {
+      await options.ready
       // Only the declared fields: a hook can merge others into the response.
       const { credentialId, publicKey, userId, username } =
         await request<verifyAuthentication.ReturnType>('/login', response)
@@ -683,7 +692,7 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
     },
 
     async verifyAuthentication(response, options = {}) {
-      const { credential, signal } = options
+      const { credential, ready, signal } = options
       // Without the credential's public key, only the server can verify the
       // login, so the caller waits for it.
       const valid =
@@ -701,8 +710,9 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
               }
             })()
           : false
-      if (!credential || !valid) return base.verifyAuthentication(response)
+      if (!credential || !valid) return base.verifyAuthentication(response, { ready })
       const verified = (async () => {
+        await ready
         try {
           const answer = await (async () => {
             for (let attempt = 0; ; attempt++)
