@@ -425,6 +425,45 @@ describe('deferred login', () => {
     `)
   })
 
+  test('behavior: answers a sign-up before an earlier one lands, and sends it after', async () => {
+    const { events, provider } = setup()
+    let land = () => {}
+    const gate_first = new Promise<void>((resolve) => (land = resolve))
+    // Only the first `/register` is held.
+    let held = false
+    const fetch_ = globalThis.fetch
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      const path = new URL(new Request(input, init).url).pathname
+      if (path === '/webauthn/register' && !held) {
+        held = true
+        events.push('first sent')
+        await gate_first
+        events.push('first answered')
+      }
+      return fetch_(input, init)
+    })
+
+    await signUp(provider)
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'bob' } }],
+    })
+    events.push('second connected')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    land()
+    await vi.waitFor(() => expect(events.filter((e) => e === 'register sent').length).toBe(2))
+
+    expect(events).toMatchInlineSnapshot(`
+      [
+        "first sent",
+        "second connected",
+        "first answered",
+        "register sent",
+        "register sent",
+      ]
+    `)
+  })
+
   test('behavior: a sign-up waits for a login still verifying', async () => {
     const { events, gate, provider } = setup()
     await signUp(provider)
@@ -503,15 +542,19 @@ describe('background registration', () => {
       ...local,
       async verifyRegistration(credential, parameters) {
         const result = await local.verifyRegistration(credential, parameters)
+        // Like a server ceremony: the registration is sent once `ready` resolves.
         const verified = options.reject
           ? Promise.reject(options.reject)
-          : new Promise<{ session: boolean }>((resolve, reject) => {
-              parameters?.signal?.addEventListener('abort', () => {
-                cancelled.push(credential.id)
-                reject(parameters.signal!.reason)
+          : (async () => {
+              await parameters?.ready
+              return new Promise<{ session: boolean }>((resolve, reject) => {
+                parameters?.signal?.addEventListener('abort', () => {
+                  cancelled.push(credential.id)
+                  reject(parameters.signal!.reason)
+                })
+                verifications.push({ reject, resolve: () => resolve({ session: true }) })
               })
-              verifications.push({ reject, resolve: () => resolve({ session: true }) })
-            })
+            })()
         return { ...result, verified }
       },
       // Like a server ceremony: the login is sent once `ready` resolves.
@@ -696,15 +739,15 @@ describe('background registration', () => {
     `)
   })
 
-  test('behavior: a sign-up waits for a registration still verifying, so it owns the session', async () => {
+  test('behavior: a sign-up answers at once, but its registration waits for one still verifying', async () => {
     const { logins, provider, verifications } = setup()
     await register(provider, 'alice')
-    const bob = register(provider, 'bob')
+    await register(provider, 'bob')
     // Bob's registration isn't sent while alice's may still set the session.
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(verifications.length).toMatchInlineSnapshot(`1`)
     verifications[0]!.resolve()
-    await bob
+    await vi.waitFor(() => expect(verifications.length).toBe(2))
     verifications[1]!.resolve()
     const id = credentialOf(provider)?.id
 

@@ -63,6 +63,14 @@ export declare namespace verifyRegistration {
     /** Display name for the credential (e.g. user's email). */
     name?: string | undefined
     /**
+     * Resolves once the server may be sent the registration, e.g. after
+     * earlier logins and registrations have landed, so none replaces its
+     * session. A ceremony that registers with a server waits for it before
+     * sending `/register`; one that answers before verifying (see
+     * {@link deferred}) only delays its background verification.
+     */
+    ready?: Promise<unknown> | undefined
+    /**
      * Cancels background verification (see `verified`), which then rejects
      * with the signal's reason, and can no longer issue a session. The
      * `webAuthn` adapter cancels a verification that outlasts its wait.
@@ -287,8 +295,10 @@ function create(options: server.Options) {
       }
     },
 
-    async verifyRegistration(credential) {
-      return request('/register', challenges.body(credential))
+    async verifyRegistration(credential, options = {}) {
+      const body = challenges.body(credential)
+      await options.ready
+      return request('/register', body)
     },
 
     async getAuthenticationOptions(parameters = {}) {
@@ -664,9 +674,10 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
     ...base,
 
     async verifyRegistration(credential, options = {}) {
-      const { signal } = options
+      const { ready, signal } = options
       const body = challenges.body(credential)
       const verified = (async () => {
+        await ready
         const { publicKey, session } = await (async () => {
           for (let attempt = 0; ; attempt++)
             try {

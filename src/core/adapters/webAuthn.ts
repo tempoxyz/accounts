@@ -145,10 +145,11 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       const { controller, name, previous, verified } = options
       const promise = verified.then(
         async ({ session }) => {
-          // The session belongs to the registration answered last. Keep the
-          // shortcut only if that is the latest registration and its response
-          // carried the session (not a retry after a lost response).
-          if (!session || registered?.credentialId !== credential.id) registered = undefined
+          // A later registration is sent only once this one lands (see
+          // `ready`), so it can't replace a later one's session. Drop the
+          // shortcut only if it is this registration's and its response
+          // didn't carry the session (a retry after a lost response).
+          if (!session && registered?.credentialId === credential.id) registered = undefined
         },
         async (error) => {
           // Cancelled by `settle`: the outcome is unknown, so keep the account.
@@ -186,7 +187,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         }),
       ]).finally(() => clearTimeout(timer))
       if (settled) return
-      registered = undefined
+      // Only the shortcut of a registration cancelled here: a newer one may hold it meanwhile.
+      if (waited.some(({ id }) => id === registered?.credentialId)) registered = undefined
       for (const { controller } of waited) controller.abort()
     }
 
@@ -200,8 +202,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     const base = local({
       async createAccount(parameters) {
         // A login or registration still verifying would replace this sign-up's session if it
-        // landed after it, so wait for it (see `settle`).
-        await settle()
+        // landed after it, so the server registration waits for it (the ceremony sends it once
+        // `ready` resolves; see `settle`).
+        const ready = settle()
         const { options } = await ceremony.getRegistrationOptions({
           ...parameters,
           // A random `userId` by default, so passkeys with the same name don't share a user
@@ -226,6 +229,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         const controller = new AbortController()
         const { publicKey, username, verified } = await ceremony.verifyRegistration(credential, {
           name: parameters.name,
+          ready,
           signal: controller.signal,
         })
         let failure: { error: unknown } | undefined
