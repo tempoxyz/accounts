@@ -321,15 +321,14 @@ function create(options: server.Options) {
 
     async verifyAuthentication(response, options = {}) {
       await options.ready
-      // Only the declared fields: a hook can merge others into the response.
-      const { credentialId, publicKey, userId, username } =
-        await request<verifyAuthentication.ReturnType>('/login', response)
-      return {
-        credentialId,
-        publicKey,
-        ...(userId !== undefined ? { userId } : {}),
-        ...(username !== undefined ? { username } : {}),
-      }
+      // Every field the server answers with (e.g. a session `token`, or ones a
+      // hook merged in), except `verified`: the adapter reads it as the
+      // background verification, which a server-backed login doesn't have.
+      const { verified: _, ...result } = await request<verifyAuthentication.ReturnType>(
+        '/login',
+        response,
+      )
+      return result
     },
 
     async logout() {
@@ -584,7 +583,9 @@ export declare namespace server {
  * credential) ends the session in place but keeps the account.
  *
  * The request is sent with `keepalive`, so it completes when the page closes
- * right after answering, but retries only run while the page is open. If the
+ * right after answering, but retries only run while the page is open. A
+ * request that waits on `options.ready` (an earlier verification still in
+ * flight) isn't sent yet, so a page closed during that wait never sends it. If the
  * server rejects the registration while the page is open, the adapter removes
  * the account (an `accountsChanged` event) and keeps its public key in storage
  * under `registration:<credentialId>`. A later login with the passkey restores

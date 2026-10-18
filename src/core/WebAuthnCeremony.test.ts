@@ -210,11 +210,13 @@ describe('server', () => {
 })
 
 describe('server: verifyAuthentication', () => {
-  test('behavior: returns only the declared fields of the login response', async () => {
+  test('behavior: returns the login response, except a `verified` field', async () => {
+    // e.g. a session `token` (`cookie: false`), and a `verified` field a hook merged in.
     vi.stubGlobal('fetch', async () =>
       Response.json({
         credentialId: 'credential',
         publicKey: '0x04ab',
+        token: 'session-token',
         username: 'alice',
         verified: true,
       }),
@@ -223,12 +225,13 @@ describe('server: verifyAuthentication', () => {
 
     expect(await ceremony.verifyAuthentication({ id: 'credential' } as never))
       .toMatchInlineSnapshot(`
-      {
-        "credentialId": "credential",
-        "publicKey": "0x04ab",
-        "username": "alice",
-      }
-    `)
+        {
+          "credentialId": "credential",
+          "publicKey": "0x04ab",
+          "token": "session-token",
+          "username": "alice",
+        }
+      `)
   })
 })
 
