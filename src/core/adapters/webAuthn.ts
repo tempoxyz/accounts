@@ -8,6 +8,7 @@ import * as z from 'zod/mini'
 
 import type { OneOf } from '../../internal/types.js'
 import * as Adapter from '../Adapter.js'
+import type * as Store from '../Store.js'
 import * as WebAuthnCeremony from '../WebAuthnCeremony.js'
 import * as Rpc from '../zod/rpc.js'
 import * as u from '../zod/utils.js'
@@ -85,6 +86,14 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     const rejected = new Set<string>()
     // Credential IDs of those rejections, so none is restored as the last used.
     const rejected_ids = new Set<string>()
+    // What `drop` removed, per account address, so a login that proves the
+    // server knows the credential after all puts it back.
+    const dropped = new Map<
+      string,
+      { accessKeys: Store.State['accessKeys']; account: Store.State['accounts'][number] }
+    >()
+    // The latest login per credential ID, so only it decides the credential's rejection.
+    const logins = new Map<string, object>()
     // Dropped after the update that added them, so the provider emits both.
     store.subscribe(() => {
       if (rejected.size > 0) queueMicrotask(drop)
@@ -99,12 +108,39 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       const kept = accounts.filter((account) => !rejected.has(account.address.toLowerCase()))
       const keys = accessKeys.filter((accessKey) => !rejected.has(accessKey.access.toLowerCase()))
       if (kept.length === accounts.length && keys.length === accessKeys.length) return
+      for (const account of accounts) {
+        const address = account.address.toLowerCase()
+        if (!rejected.has(address)) continue
+        dropped.set(address, {
+          accessKeys: accessKeys.filter((accessKey) => accessKey.access.toLowerCase() === address),
+          account,
+        })
+      }
       // Keep the active account selected, unless it is the one dropped.
       const active = kept.indexOf(accounts[activeAccount]!)
       store.setState({
         accessKeys: keys,
         accounts: kept,
         activeAccount: Math.max(active, 0),
+      })
+    }
+
+    /**
+     * Clears the rejection of a credential the server knows after all, and
+     * restores the account and access keys `drop` removed for it.
+     */
+    function accept(credential: { id: string; publicKey: Hex.Hex }) {
+      const address = Account.fromWebAuthnP256(credential).address.toLowerCase()
+      rejected.delete(address)
+      rejected_ids.delete(credential.id)
+      const restored = dropped.get(address)
+      dropped.delete(address)
+      if (!restored) return
+      const { accessKeys, accounts } = store.getState()
+      if (accounts.some((account) => account.address.toLowerCase() === address)) return
+      store.setState({
+        accessKeys: [...accessKeys, ...restored.accessKeys],
+        accounts: [...accounts, restored.account],
       })
     }
 
@@ -371,25 +407,25 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         registered = undefined
         // The server knows the credential, even if its registration looked
         // rejected (e.g. every response to it was lost), so the account is kept.
-        const address = Account.fromWebAuthnP256({ id: response.id, publicKey }).address
-        const was_rejected = rejected.has(address.toLowerCase())
-        rejected.delete(address.toLowerCase())
-        rejected_ids.delete(response.id)
+        const was_rejected = rejected_ids.has(response.id)
+        accept({ id: response.id, publicKey })
 
         const previous = (await storage.getItem<string>('lastCredentialId')) ?? undefined
         await storage.setItem('lastCredentialId', response.id)
         // A login verified in the background proves that only once it lands
-        // with a session. Until then the account is kept, so connecting
-        // doesn't drop it; an unknown outcome restores the rejection (a
-        // refusal drops it in `track`).
-        if (verified && was_rejected)
+        // with a session, which also clears a rejection that arrived while it
+        // waited. Until then the account is kept, so connecting doesn't drop
+        // it. An unknown outcome restores the rejection, unless a later login
+        // with the credential has started since (a refusal drops it in `track`).
+        const login = {}
+        logins.set(response.id, login)
+        if (verified)
           verified.then(
             ({ session }) => {
-              if (!session && !controller.signal.aborted)
-                return reject(
-                  { id: response.id, publicKey },
-                  { name: known?.label ?? '', previous },
-                )
+              if (session) return accept({ id: response.id, publicKey })
+              if (!was_rejected || controller.signal.aborted) return
+              if (logins.get(response.id) !== login) return
+              return reject({ id: response.id, publicKey }, { name: known?.label ?? '', previous })
             },
             () => {},
           )

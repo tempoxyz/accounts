@@ -643,22 +643,32 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
     })
     // A server without a logout route has no session to end.
     if (!response.ok && response.status !== 404)
-      throw new Error(`Logout failed with status ${response.status}`)
+      throw Object.assign(new Error(`Logout failed with status ${response.status}`), {
+        status: response.status,
+      })
   }
 
   /**
-   * Ends the session in place, retrying with backoff (up to 30 s apart) until
-   * it succeeds. Rejects with `signal`'s reason once it aborts.
+   * Ends the session in place, retrying failures in transit, 5xx, 408 and
+   * 429 responses with backoff (up to 30 s apart) until it succeeds. Gives up
+   * on any other error status (e.g. a 401 from a route that requires a
+   * session), which retrying can't change. Rejects with `signal`'s reason
+   * once it aborts.
    */
   async function end(signal: AbortSignal | undefined) {
     for (let attempt = 0; ; attempt++) {
       signal?.throwIfAborted()
       try {
         return await logout(signal)
-      } catch {}
+      } catch (error) {
+        signal?.throwIfAborted()
+        const { status } = error as { status?: number }
+        if (status !== undefined && status < 500 && status !== 408 && status !== 429) return
+      }
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(done, Math.min(250 * 2 ** attempt, 30_000))
         signal?.addEventListener('abort', done, { once: true })
+        if (signal?.aborted) done()
         function done() {
           clearTimeout(timer)
           signal?.removeEventListener('abort', done)
