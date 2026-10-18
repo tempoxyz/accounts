@@ -760,6 +760,57 @@ describe('deferred login', () => {
     `)
   })
 
+  test('behavior: restores access keys stored after a refusal dropped the account', async () => {
+    const { events, gate, provider } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    gate.lose_register = 'Missing or expired challenge'
+    const address = await signUp(provider)
+    const dropped = new Promise<void>((resolve) => provider.on('accountsChanged', () => resolve()))
+    land()
+    await dropped
+    // e.g. a sign-up's access key saved after its account was dropped, on two chains.
+    provider.store.setState({
+      accessKeys: [chain.id, chain.id + 1].map((chainId) => ({
+        access: address,
+        address: '0x0000000000000000000000000000000000000002' as const,
+        chainId,
+        keyType: 'p256' as const,
+      })),
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const removed = provider.store.getState().accessKeys.length
+
+    // A login the server verifies proves the passkey.
+    gate.register = undefined
+    gate.lose_register = undefined
+    events.length = 0
+    const connected = provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    await connected
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect({
+      removed,
+      restored: provider.store
+        .getState()
+        .accessKeys.map(({ chainId }) => chainId - chain.id)
+        .sort(),
+    }).toMatchInlineSnapshot(`
+      {
+        "removed": 0,
+        "restored": [
+          0,
+          1,
+        ],
+      }
+    `)
+  })
+
   test("behavior: a login whose passkey prompt fails doesn't cancel an earlier registration", async () => {
     const { authenticator, gate, provider } = setup()
     let land = () => {}

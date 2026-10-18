@@ -111,20 +111,20 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       const kept = accounts.filter((account) => !rejected.has(account.address.toLowerCase()))
       const keys = accessKeys.filter((accessKey) => !rejected.has(accessKey.access.toLowerCase()))
       if (kept.length === accounts.length && keys.length === accessKeys.length) return
-      for (const account of accounts) {
-        const address = account.address.toLowerCase()
-        if (!rejected.has(address)) continue
-        // Merged with an earlier drop's, so dropping it again keeps its keys.
-        const earlier = dropped.get(address)?.accessKeys ?? []
+      // Saved per address, including keys stored after the account was
+      // dropped, and merged with an earlier drop's, so dropping it again keeps
+      // its keys.
+      for (const address of rejected) {
+        const current = accounts.find((account) => account.address.toLowerCase() === address)
         const own = accessKeys.filter((accessKey) => accessKey.access.toLowerCase() === address)
+        // Nothing of it is removed this time.
+        if (!current && own.length === 0) continue
+        const account = current ?? dropped.get(address)?.account
+        if (!account) continue
+        const earlier = dropped.get(address)?.accessKeys ?? []
         dropped.set(address, {
           accessKeys: [
-            ...earlier.filter(
-              (key) =>
-                !own.some(
-                  (accessKey) => accessKey.address.toLowerCase() === key.address.toLowerCase(),
-                ),
-            ),
+            ...earlier.filter((key) => !own.some((accessKey) => same(accessKey, key))),
             ...own,
           ],
           account,
@@ -160,10 +160,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       if (!restored) return
       const { accessKeys, accounts } = store.getState()
       const keys = restored.accessKeys.filter(
-        (key) =>
-          !accessKeys.some(
-            (accessKey) => accessKey.address.toLowerCase() === key.address.toLowerCase(),
-          ),
+        (key) => !accessKeys.some((accessKey) => same(accessKey, key)),
       )
       // Its connect stored the account again: restore only its access keys.
       if (accounts.some((account) => account.address.toLowerCase() === address)) {
@@ -602,6 +599,11 @@ export declare namespace webAuthn {
     /** Reverse DNS identifier. @default `com.{lowercase name}` */
     rdns?: string | undefined
   }
+}
+
+/** Whether two access keys are the same authorization: the same key on the same chain. */
+function same(a: Store.State['accessKeys'][number], b: Store.State['accessKeys'][number]): boolean {
+  return a.address.toLowerCase() === b.address.toLowerCase() && a.chainId === b.chainId
 }
 
 /** Whether two credential request options ask the authenticator for the same assertion. */
