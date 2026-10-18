@@ -370,11 +370,20 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         // The server session now belongs to this login.
         registered = undefined
         // The server knows the credential, even if its registration looked
-        // rejected (e.g. every response to it was lost).
-        rejected.delete(
-          Account.fromWebAuthnP256({ id: response.id, publicKey }).address.toLowerCase(),
-        )
-        rejected_ids.delete(response.id)
+        // rejected (e.g. every response to it was lost). A login verified in
+        // the background proves that only once it lands with a session.
+        const accept = () => {
+          rejected.delete(
+            Account.fromWebAuthnP256({ id: response.id, publicKey }).address.toLowerCase(),
+          )
+          rejected_ids.delete(response.id)
+        }
+        if (verified)
+          verified.then(
+            ({ session }) => session && accept(),
+            () => {},
+          )
+        else accept()
 
         const previous = (await storage.getItem<string>('lastCredentialId')) ?? undefined
         await storage.setItem('lastCredentialId', response.id)

@@ -198,6 +198,8 @@ describe('deferred login', () => {
       unavailable_logout: false,
       /** When set, `/register` requests wait for it. */
       register: undefined as Promise<void> | undefined,
+      /** When set, `/register` requests are refused with it. */
+      refuse_register: undefined as string | undefined,
     }
     vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
       const request = new Request(input, init)
@@ -212,6 +214,8 @@ describe('deferred login', () => {
           await gate.register
           events.push('register answered')
         }
+        if (gate.refuse_register)
+          return Response.json({ error: gate.refuse_register }, { status: 400 })
       }
       if (path === '/webauthn/login') {
         events.push('login sent')
@@ -227,7 +231,7 @@ describe('deferred login', () => {
       chains: [chain],
       storage: Storage.memory(),
     })
-    return { events, gate, provider }
+    return { authenticator, events, gate, provider }
   }
 
   /** Signs up, so the next connect logs in with a known passkey. */
@@ -462,6 +466,35 @@ describe('deferred login', () => {
         "register sent",
       ]
     `)
+  })
+
+  test('behavior: keeps a refused sign-up dropped when its login has an unknown outcome', async () => {
+    const { authenticator, events, gate, provider } = setup()
+    let land = () => {}
+    gate.register = new Promise<void>((resolve) => (land = resolve))
+    gate.refuse_register = 'Missing or expired challenge'
+    const address = await signUp(provider)
+
+    // The sign-up is refused while the login's passkey prompt is open, and the login's own
+    // outcome stays unknown.
+    const get = authenticator.credentials.get.bind(authenticator.credentials)
+    authenticator.credentials.get = async (options) => {
+      land()
+      await vi.waitFor(() => expect(events).toContain('register answered'))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      return get(options)
+    }
+    gate.unavailable = true
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await vi.waitFor(() => expect(events).toContain('logout'), { timeout: 5_000 })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(
+      (await provider.request({ method: 'eth_accounts' })).includes(address),
+    ).toMatchInlineSnapshot(`false`)
   })
 
   test('behavior: a sign-up waits for a login still verifying', async () => {
