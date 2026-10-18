@@ -131,9 +131,10 @@ export declare namespace verifyAuthentication {
     /**
      * Settles once the server has verified the login, when the ceremony
      * verifies it in the background (see {@link deferred}). `session` is
-     * `false` when the outcome is unknown (every attempt failed in transit, or
-     * a retry found the challenge consumed): no session is in place then, but
-     * the login wasn't refused. Rejects when the server refuses it.
+     * `false` when the outcome is unknown (every attempt failed in transit, a
+     * retry found the challenge consumed, or the server failed for a reason
+     * other than refusing the credential): the login wasn't refused, but no
+     * session of its own is in place. Rejects when the server refuses it.
      */
     verified?: Promise<{ session: boolean }> | undefined
   }
@@ -560,7 +561,8 @@ export declare namespace server {
  * disconnects wait for it. A refusal ends the session in place and the
  * adapter drops the account, as for a refused registration. A login whose
  * outcome stays unknown (it failed in transit, or a retry found its challenge
- * consumed) ends the session in place but keeps the account.
+ * consumed, or the server failed for a reason other than refusing the
+ * credential) ends the session in place but keeps the account.
  *
  * The request is sent with `keepalive`, so it completes when the page closes
  * right after answering, but retries only run while the page is open. If the
@@ -603,8 +605,27 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
     if (response.status >= 500 || response.status === 408 || response.status === 429)
       throw new TypeError(`Request failed with status ${response.status}`)
     const json = await response.json()
-    if (!response.ok) throw new Error((json as { error?: string }).error ?? 'Request failed')
+    if (!response.ok)
+      throw Object.assign(new Error((json as { error?: string }).error ?? 'Request failed'), {
+        status: response.status,
+      })
     return json as { publicKey?: Hex | undefined }
+  }
+
+  /**
+   * Whether a `/login` error is the server refusing the credential itself (it
+   * doesn't know it, the signature doesn't check out, or a hook denied it),
+   * rather than an error unrelated to the account (e.g. an expired challenge
+   * or a failing store).
+   */
+  function refused(error: unknown) {
+    const { message, status } = error as { message?: string; status?: number }
+    return (
+      status === 401 ||
+      status === 403 ||
+      message === 'Unknown credential' ||
+      message === 'Authentication failed'
+    )
   }
 
   return from({
@@ -690,11 +711,12 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
                 return await post('/login', response, signal)
               } catch (error) {
                 if (signal?.aborted) throw signal.reason
-                // As for registration. A refusal of the first attempt is the
-                // server's answer. A retry's may not be: an earlier attempt
-                // may have landed and consumed the challenge.
+                // As for registration. The first attempt's refusal of the
+                // credential is the server's answer. Any other error, or a
+                // retry's (an earlier attempt may have landed and consumed
+                // the challenge), leaves the outcome unknown.
                 const retryable = error instanceof TypeError || error instanceof SyntaxError
-                if (!retryable && attempt === 0) throw error
+                if (!retryable && attempt === 0 && refused(error)) throw error
                 if (!retryable || attempt >= 2) return undefined
                 await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
               }
@@ -704,9 +726,10 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
           if (answer && answer.publicKey?.toLowerCase() !== credential.publicKey.toLowerCase())
             throw new Error('Server stored a different public key')
           // Unknown outcome: the login wasn't refused, so keep the account,
-          // but end any session in place, which may be an earlier account's.
-          // If that fails, so does verification.
-          if (!answer) await base.logout?.()
+          // and end any session in place, which may be an earlier account's.
+          // A logout that fails too (e.g. still offline) leaves it to the
+          // caller's next request or login, rather than drop the account.
+          if (!answer) await base.logout?.().catch(() => {})
           return { session: !!answer }
         } catch (error) {
           // The app now runs as this account, so a session the server left

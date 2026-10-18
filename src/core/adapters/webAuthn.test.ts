@@ -195,11 +195,15 @@ describe('deferred login', () => {
       refuse: undefined as string | undefined,
       release: () => {},
       unavailable: false,
+      unavailable_logout: false,
     }
     vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
       const request = new Request(input, init)
       const path = new URL(request.url).pathname
-      if (path === '/webauthn/logout') events.push('logout')
+      if (path === '/webauthn/logout') {
+        events.push('logout')
+        if (gate.unavailable_logout) return Response.json({}, { status: 503 })
+      }
       if (path === '/webauthn/register') events.push('register sent')
       if (path === '/webauthn/login') {
         events.push('login sent')
@@ -311,6 +315,56 @@ describe('deferred login', () => {
           "login sent",
           "login sent",
           "login sent",
+          "logout",
+        ],
+      }
+    `)
+  })
+
+  test('behavior: keeps the account when the logout after a failed login fails too', async () => {
+    const { events, gate, provider } = setup()
+    const address = await signUp(provider)
+
+    gate.unavailable = true
+    gate.unavailable_logout = true
+    events.length = 0
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await vi.waitFor(() => expect(events).toContain('logout'), { timeout: 5_000 })
+    // Lets `track` settle.
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(
+      (await provider.request({ method: 'eth_accounts' })).includes(address),
+    ).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: keeps the account when the login fails for a reason other than the credential', async () => {
+    const { events, gate, provider } = setup()
+    const address = await signUp(provider)
+
+    events.length = 0
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    gate.refuse = 'Missing or expired challenge'
+    await vi.waitFor(() => expect(events).toContain('login sent'))
+    gate.release()
+    await vi.waitFor(() => expect(events).toContain('logout'))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect({
+      accounts: (await provider.request({ method: 'eth_accounts' })).includes(address),
+      events,
+    }).toMatchInlineSnapshot(`
+      {
+        "accounts": true,
+        "events": [
+          "login sent",
+          "login answered",
           "logout",
         ],
       }
