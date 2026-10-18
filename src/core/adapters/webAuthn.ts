@@ -72,7 +72,12 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
 
     // Server verifications still in flight (registrations and deferred logins). Each settles once
     // the server acknowledges or rejects the credential, or once it's cancelled.
-    const pending = new Set<{ controller: AbortController; promise: Promise<void> }>()
+    const pending = new Set<{
+      controller: AbortController
+      /** The credential ID being verified. */
+      id: string
+      promise: Promise<void>
+    }>()
     // Account addresses of credentials the server rejected. Their accounts and
     // access keys are dropped whenever they show up in the store, including
     // ones stored after the rejection (e.g. while a sign-up's signature prompt
@@ -155,7 +160,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         },
       )
       // One entry per verification, so overlapping ones for a credential are all waited for.
-      const entry = { controller, promise }
+      const entry = { controller, id: credential.id, promise }
       pending.add(entry)
       promise.then(
         () => pending.delete(entry),
@@ -166,20 +171,23 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     /**
      * Waits for registrations still verifying, for up to `timeout_pending`,
      * then cancels the rest, so none can land later and replace the session of
-     * the login, sign-up or disconnect that follows.
+     * the login, sign-up or disconnect that follows. Verifications of
+     * `options.except` (a credential ID) are neither waited for nor cancelled.
      */
-    async function settle() {
-      if (pending.size === 0) return
+    async function settle(options: { except?: string | undefined } = {}) {
+      const { except } = options
+      const waited = [...pending.values()].filter(({ id }) => id !== except)
+      if (waited.length === 0) return
       let timer: ReturnType<typeof setTimeout> | undefined
       const settled = await Promise.race([
-        Promise.allSettled([...pending.values()].map(({ promise }) => promise)).then(() => true),
+        Promise.allSettled(waited.map(({ promise }) => promise)).then(() => true),
         new Promise<false>((resolve) => {
           timer = setTimeout(() => resolve(false), timeout_pending)
         }),
       ]).finally(() => clearTimeout(timer))
       if (settled) return
       registered = undefined
-      for (const { controller } of pending.values()) controller.abort()
+      for (const { controller } of waited) controller.abort()
     }
 
     /** Returns the latest registration if it still owns a fresh server session. */
@@ -260,17 +268,25 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       async loadAccounts(parameters = {}) {
         const { digest, selectAccount } = parameters
 
-        // A login or the registration's session shortcut needs the server to
-        // know the credential, and a registration landing after a login would
-        // replace its session, so wait for registrations still verifying in
-        // the background. Their failures are handled by `track`.
-        await settle()
-
         const credentialId = selectAccount
           ? undefined
           : (parameters?.credentialId ??
             (await storage.getItem<string>('lastCredentialId')) ??
             undefined)
+
+        // A login needs the server to know the credential, and a registration
+        // landing after a login would replace its session, so wait for
+        // registrations still verifying in the background. Their failures are
+        // handled by `track`. The latest registration signing a digest with
+        // its own credential (the shortcut below) needs no login, and the
+        // session it issues when it lands is this account's, so it isn't
+        // waited for.
+        const latest =
+          digest && typeof credentialId === 'string' && registered?.credentialId === credentialId
+            ? credentialId
+            : undefined
+        await settle({ except: latest })
+
         const fresh = digest && typeof credentialId === 'string' ? current(credentialId) : undefined
         if (fresh && typeof credentialId === 'string') {
           const { publicKey, rpId, username } = fresh

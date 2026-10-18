@@ -611,6 +611,36 @@ describe('background registration', () => {
     expect(logins).toHaveBeenCalledTimes(0)
   })
 
+  test('behavior: signs a digest with the latest registration without waiting for it', async () => {
+    const { cancelled, logins, provider, verifications } = setup()
+    await register(provider)
+    const id = credentialOf(provider)?.id
+
+    // Its verification never answers, so a wait would hang the connect.
+    const { accounts } = await provider.request({
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: { method: 'login', credentialId: id, digest: `0x${'1'.repeat(64)}` },
+        } as never,
+      ],
+    })
+
+    expect({
+      cancelled: cancelled.length,
+      logins: logins.mock.calls.length,
+      signed: !!accounts[0]!.capabilities.signature,
+      verifications: verifications.length,
+    }).toMatchInlineSnapshot(`
+      {
+        "cancelled": 0,
+        "logins": 0,
+        "signed": true,
+        "verifications": 1,
+      }
+    `)
+  })
+
   test('behavior: keeps an account whose page closed before the server answered', async () => {
     // A popup closes as soon as it answers, so its verification never settles here.
     const storage = Storage.memory()
