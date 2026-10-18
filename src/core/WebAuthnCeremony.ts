@@ -639,7 +639,15 @@ export function deferred(options: deferred.Options): WebAuthnCeremony {
     for (let attempt = 0; ; attempt++) {
       signal?.throwIfAborted()
       try {
-        return await base.logout?.()
+        // Abortable, so a logout cancelled for a later session can't land after it and clear its
+        // cookie.
+        const response = await fetch(`${url}/logout`, {
+          credentials: credentials ?? 'include',
+          method: 'POST',
+          ...(signal ? { signal } : {}),
+        })
+        // A server without a logout route has no session to end.
+        if (response.ok || response.status === 404) return
       } catch {}
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(done, Math.min(250 * 2 ** attempt, 30_000))

@@ -201,10 +201,6 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
 
     const base = local({
       async createAccount(parameters) {
-        // A login or registration still verifying would replace this sign-up's session if it
-        // landed after it, so the server registration waits for it (the ceremony sends it once
-        // `ready` resolves; see `settle`).
-        const ready = settle()
         const { options } = await ceremony.getRegistrationOptions({
           ...parameters,
           // A random `userId` by default, so passkeys with the same name don't share a user
@@ -227,6 +223,11 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         // verification is still pending; it rethrows from the `await` below.
         signature?.catch(() => {})
         const controller = new AbortController()
+        // A login or registration still verifying would replace this sign-up's session if it
+        // landed after it, so the server registration waits for it (the ceremony sends it once
+        // `ready` resolves; see `settle`). Started only once the passkey exists, so a sign-up
+        // that fails before it cancels nothing.
+        const ready = settle()
         const { publicKey, username, verified } = await ceremony.verifyRegistration(credential, {
           name: parameters.name,
           ready,

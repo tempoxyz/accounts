@@ -850,6 +850,21 @@ describe('background registration', () => {
     `)
   })
 
+  test("behavior: a sign-up whose passkey prompt fails doesn't cancel earlier verifications", async () => {
+    const { authenticator, cancelled, provider } = setup()
+    await register(provider, 'alice')
+    authenticator.credentials.create = async () => {
+      throw new Error('The operation either timed out or was not allowed.')
+    }
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    await expect(register(provider, 'bob')).rejects.toThrow()
+    await vi.advanceTimersByTimeAsync(11_000)
+    vi.useRealTimers()
+
+    expect(cancelled.length).toMatchInlineSnapshot(`0`)
+  })
+
   test('behavior: keeps an account whose page closed before the server answered', async () => {
     // A popup closes as soon as it answers, so its verification never settles here.
     const storage = Storage.memory()
