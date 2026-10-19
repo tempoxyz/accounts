@@ -1,10 +1,11 @@
 import { Expiry } from 'accounts'
 import { parseUnits } from 'viem'
+import { pathusd } from 'viem/tokens'
 import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { tempoWallet } from 'wagmi/connectors'
 
-const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+const pathUsd = pathusd(42431).address
 
 export const config = createConfig({
   chains: [tempo, tempoModerato],

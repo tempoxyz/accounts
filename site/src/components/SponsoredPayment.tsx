@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Amount, Button } from 'regen-ui'
 import { formatUnits, toHex } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { pathusd } from 'viem/tokens'
 import { useConnection } from 'wagmi'
 import { tempoModerato } from 'wagmi/chains'
 import { Hooks } from 'wagmi/tempo'
@@ -11,7 +12,7 @@ import LucideCircleCheck from '~icons/lucide/circle-check'
 
 import * as Steps from './Steps.js'
 
-const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+const pathUsd = pathusd(42431).address
 const pathUsdDecimals = 6
 const pathUsdSymbol = 'pathUSD'
 const transferAmount = 1_000_000n

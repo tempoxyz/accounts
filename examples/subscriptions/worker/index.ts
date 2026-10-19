@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { Store } from 'mppx'
 import { Mppx, tempo } from 'mppx/hono'
 import { privateKeyToAccount } from 'viem/accounts'
+import { pathusd } from 'viem/tokens'
 
 const app = new Hono()
 const account = privateKeyToAccount(process.env.ACCOUNT_PRIVATE_KEY)
@@ -15,7 +16,7 @@ const mppx = Mppx.create({
   methods: [
     tempo.subscription({
       account,
-      currency: '0x20c0000000000000000000000000000000000000',
+      currency: pathusd(4217).address,
       feePayer: true,
       // The lookup key identifies *which* subscription a request belongs to.
       // For this example we scope subscriptions per `X-Subscriber` header

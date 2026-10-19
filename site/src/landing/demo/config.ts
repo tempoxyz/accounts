@@ -3,6 +3,7 @@ import { Hex } from 'ox'
 import { formatUnits, parseUnits } from 'viem'
 import { Actions } from 'viem/tempo'
 import { tempoModerato } from 'viem/tempo/chains'
+import { alphausd } from 'viem/tokens'
 
 import { FeeSponsorshipBody } from './bodies/FeeSponsorship'
 import { LogInBody } from './bodies/LogIn'
@@ -37,7 +38,7 @@ const SUBSCRIPTION_PERIOD_MS = SUBSCRIPTION_PERIOD_SECONDS * 1000
 const FEE_SPONSORSHIP_AMOUNT_USD = '1.00'
 const FEE_SPONSORSHIP_RECIPIENT = '0x0000000000000000000000000000000000000001' as const
 const SWAP_AMOUNT_USD = '1'
-const ALPHA_USD = '0x20c0000000000000000000000000000000000001' as const
+const ALPHA_USD = alphausd(42431).address
 
 async function connectedAddress(provider: Parameters<DemoDef['run']>[0]) {
   const accounts = (await provider.request({

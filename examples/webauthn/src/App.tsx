@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { parseUnits, stringify, type Hex } from 'viem'
 import { Actions } from 'viem/tempo'
+import { pathusd } from 'viem/tokens'
 import {
   useChains,
   useConnect,
@@ -12,7 +13,7 @@ import {
 } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
 
-const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+const pathUsd = pathusd(4217).address
 
 export default function App() {
   const { address, chainId, status } = useConnection()

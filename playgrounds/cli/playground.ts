@@ -4,11 +4,12 @@ import { Address, Hex } from 'ox'
 import { parseUnits } from 'viem'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
+import { alphausd, pathusd } from 'viem/tokens'
 
 import * as Provider from './provider.js'
 
-const alphaUsd = '0x20c0000000000000000000000000000000000001' as const
-const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+const alphaUsd = alphausd(42431).address
+const pathUsd = pathusd(4217).address
 const recipient = '0x0000000000000000000000000000000000000001' as const
 
 const cli = Cli.create('accounts-playground', {

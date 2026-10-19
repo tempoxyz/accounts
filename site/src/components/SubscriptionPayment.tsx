@@ -5,13 +5,14 @@ import { Receipt } from 'mppx'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Amount, Button } from 'regen-ui'
 import { stringify, toHex } from 'viem'
+import { pathusd } from 'viem/tokens'
 import { useConnection } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
 import LucideCircleCheck from '~icons/lucide/circle-check'
 
 import * as Steps from './Steps.js'
 
-const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+const pathUsd = pathusd(4217).address
 const pathUsdSymbol = 'pathUSD'
 const subscriptionPeriodMs = 10_000
 

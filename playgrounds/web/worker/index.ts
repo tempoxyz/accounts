@@ -3,8 +3,9 @@ import { Mppx, Store as MppStore, tempo } from 'mppx/server'
 import { Subscription } from 'mppx/tempo'
 import { privateKeyToAccount } from 'viem/accounts'
 import { tempo as tempoChain, tempoModerato } from 'viem/tempo/chains'
+import { pathusd } from 'viem/tokens'
 
-const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+const pathUsd = pathusd(42431).address
 const testnet = process.env.VITE_ENV !== 'mainnet'
 const account = privateKeyToAccount(process.env.PRIVATE_KEY)
 const subscriptionAccessAccount = privateKeyToAccount(

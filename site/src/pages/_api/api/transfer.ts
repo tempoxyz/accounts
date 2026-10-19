@@ -1,6 +1,7 @@
 import { Mppx, tempo } from 'mppx/server'
+import { pathusd } from 'viem/tokens'
 
-const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+const pathUsd = pathusd(4217).address
 
 const mppx = Mppx.create({
   methods: [

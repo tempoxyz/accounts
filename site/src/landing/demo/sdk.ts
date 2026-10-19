@@ -1,5 +1,6 @@
 import { Storage } from 'accounts'
 import { parseUnits } from 'viem'
+import { pathusd } from 'viem/tokens'
 import { type Config, createConfig, createStorage, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { tempoWallet } from 'wagmi/tempo'
@@ -11,7 +12,7 @@ export const DEMO_AMOUNT_USD = '0.01'
 /** Storage namespace so all demos register as one app in wallet.tempo.xyz. */
 export const STORAGE_KEY = 'tempo-accounts-demo'
 /** Tempo path-USD aggregate token (TokenId 0). */
-export const PATH_USD = '0x20c0000000000000000000000000000000000000' as const
+export const PATH_USD = pathusd(42431).address
 /** Tempo mainnet chain ID, used by demos that intentionally target production funds. */
 export const TEMPO_MAINNET_CHAIN_ID = tempo.id
 /** Tempo Moderato chain ID, used by demos that rely on the public testnet sponsor. */

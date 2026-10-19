@@ -1,10 +1,11 @@
 import { Expiry, Storage as AccountsStorage } from 'accounts'
 import { parseUnits } from 'viem'
+import { pathusd } from 'viem/tokens'
 import { type Config, createConfig, createStorage, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { tempoWallet } from 'wagmi/tempo'
 
-const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+const pathUsd = pathusd(42431).address
 const accountsStorage = AccountsStorage.idb()
 const wagmiStorage = createStorage({
   storage: typeof window !== 'undefined' ? window.localStorage : undefined,

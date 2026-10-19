@@ -20,14 +20,15 @@ import {
 import { parseUnits, type Address } from 'viem'
 import { Actions } from 'viem/tempo'
 import { tempoModerato } from 'viem/tempo/chains'
+import { pathusd, usdce } from 'viem/tokens'
 
 import ConnectForm from './ConnectForm'
 
 const chain = tempoModerato
 
 const tokens = {
-  pathUSD: '0x20c0000000000000000000000000000000000000' as Address,
-  'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726' as Address,
+  pathUSD: pathusd(42431).address as Address,
+  'USDC.e': usdce(42431).address as Address,
 }
 
 const redirectUri = 'xyz.tempo.accounts.playground:/auth'
