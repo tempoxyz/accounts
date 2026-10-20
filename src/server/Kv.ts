@@ -278,7 +278,7 @@ export declare namespace NonceStorage {
 
 /**
  * In-memory `Kv` for tests and single-process deployments. Lazily evicts
- * expired entries on read/write. Writes reclaim expired keys. An optional capacity rejects new keys without evicting live entries.
+ * expired entries on read/write. Writes reclaim expired keys at most once per second. An optional capacity rejects new keys without evicting live entries.
  *
  * Pass `now` to control the clock in tests.
  */
@@ -288,6 +288,7 @@ export function memory(options: memory.Options = {}): Kv {
   if (maxEntries !== undefined && (!Number.isSafeInteger(maxEntries) || maxEntries < 1))
     throw new RangeError('maxEntries must be a positive safe integer')
   let nextExpiry = Infinity
+  let nextSweep = 0
   const store = new Map<string, { value: unknown; expiresAt?: number }>()
 
   function isExpired(entry: { expiresAt?: number }) {
@@ -296,7 +297,8 @@ export function memory(options: memory.Options = {}): Kv {
 
   function pruneExpired() {
     const time = now()
-    if (time < nextExpiry) return
+    if (time < nextExpiry || time < nextSweep) return
+    nextSweep = time + 1000
     nextExpiry = Infinity
     for (const [key, entry] of store)
       if (entry.expiresAt !== undefined) {

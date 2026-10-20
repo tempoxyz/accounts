@@ -3,6 +3,23 @@ import { describe, expect, test } from 'vp/test'
 import * as Kv from './Kv.js'
 
 describe('memory', () => {
+  test('amortizes sweeps across staggered expirations', async () => {
+    let now = 0
+    const kv = Kv.memory({ now: () => now })
+    await kv.set('first', 'value', { ttl: 0.1 })
+    now = 100
+    await kv.set('second', 'value', { ttl: 0.1 })
+    now = 200
+    await kv.set('third', 'value')
+    now = 150
+    expect(await kv.get('first')).toMatchInlineSnapshot(`undefined`)
+    expect(await kv.get('second')).toMatchInlineSnapshot(`"value"`)
+    now = 1100
+    await kv.set('fourth', 'value')
+    now = 150
+    expect(await kv.get('second')).toMatchInlineSnapshot(`undefined`)
+  })
+
   test.each(['set', 'create'] as const)('%s has no implicit live-entry cap', async (method) => {
     const kv = Kv.memory()
     for (let i = 0; i < 10_001; i++) await kv[method]!(String(i), i)

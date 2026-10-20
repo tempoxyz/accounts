@@ -27,17 +27,45 @@ function counting() {
 }
 
 describe('cached', () => {
+  test.each([
+    { ttl: 1, storageTtl: 60 },
+    { ttl: 30, storageTtl: 60 },
+    { ttl: 60.5, storageTtl: 61 },
+    { ttl: Infinity, storageTtl: undefined },
+  ])('uses a Cloudflare-compatible storage TTL for $ttl', async ({ ttl, storageTtl }) => {
+    const writes: { value: string; ttl: number | undefined }[] = []
+    const kv = Kv.cloudflare({
+      get: async () => null,
+      delete: async () => {},
+      put: async (_key, value, options) => {
+        const expirationTtl = options?.expirationTtl
+        if (expirationTtl !== undefined && (!Number.isInteger(expirationTtl) || expirationTtl < 60))
+          throw new Error('invalid TTL')
+        writes.push({ value, ttl: expirationTtl })
+      },
+    })
+    const start = Date.now()
+    await cached(kv, 'key', async () => 'value', { ttl })
+    expect(writes).toHaveLength(1)
+    expect(writes[0]!.ttl).toBe(storageTtl)
+    if (Number.isFinite(ttl)) {
+      const entry = JSON.parse(writes[0]!.value)
+      expect(entry.expiresAt).toBeGreaterThanOrEqual(start + ttl * 1000)
+      expect(entry.expiresAt).toBeLessThanOrEqual(Date.now() + ttl * 1000)
+    }
+  })
+
   test.each([0, 1, Infinity])('propagates storage expiry for ttl=%s', async (ttl) => {
     let now = Date.now()
     const kv = Kv.memory({ now: () => now, maxEntries: 1 })
     await cached(kv, 'cache', async () => 'value', { ttl })
-    now += 2000
+    now += 61_000
     if (ttl === Infinity) {
       await expect(kv.set('new', 'value')).rejects.toThrow('capacity exceeded')
       expect(await kv.get('cache')).toBeDefined()
     } else {
       await kv.set('new', 'value')
-      now -= 2000
+      now -= 61_000
       expect(await kv.get('cache')).toMatchInlineSnapshot(`undefined`)
     }
   })
