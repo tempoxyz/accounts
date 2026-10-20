@@ -192,7 +192,13 @@ describe('mppx integration', () => {
       params: [{ capabilities: { method: 'register' } }],
     })
     const activeAccount = provider.store.getState().accounts[0]!
-    provider.store.setState({ accounts: [payerAccount, activeAccount], activeAccount: 1 })
+    expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+    provider.store.setState({ accounts: [payerAccount, activeAccount], activeAccount: 0 })
+    await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
+    provider.store.setState({ activeAccount: 1 })
     const active = activeAccount.address
     expect(active.toLowerCase()).not.toBe(payer.toLowerCase())
 

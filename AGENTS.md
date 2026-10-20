@@ -133,3 +133,4 @@
 
 - Validate the adapter's current account selection before using locally retained access keys; persisted account history is not session authorization.
 - A synchronous revocation API can still return a pending receipt. Remove local key state only after successful execution, or an explicit already-unavailable-key error.
+- Multi-account integration fixtures must reauthorize a payer key after replacing the connected wallet; restoring account history alone must not restore pruned signing authority.
