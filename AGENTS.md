@@ -134,3 +134,6 @@
 - Validate the adapter's current account selection before using locally retained access keys; persisted account history is not session authorization.
 - A synchronous revocation API can still return a pending receipt. Remove local key state only after successful execution, or an explicit already-unavailable-key error.
 - Multi-account integration fixtures must reauthorize a payer key after replacing the connected wallet; restoring account history alone must not restore pruned signing authority.
+
+- Retained-key authority checks must cover MPP resolution and fill signing, including action-based adapters such as Privy. Unsigned root fills must remain available when no usable key matches.
+- Memory KV capacity is opt-in: shared authentication stores also hold durable credentials and sessions, so a default hard cap can deny login. Cache TTLs must reach backing storage for reclamation.

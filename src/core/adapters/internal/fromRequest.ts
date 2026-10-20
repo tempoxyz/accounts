@@ -158,7 +158,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
         getAccount(parameters = {}) {
           return {
             account: {
-              address: parameters.address ?? getAccount({ signable: false }).address,
+              address: getAccount({ ...parameters, signable: false }).address,
               type: 'json-rpc' as const,
             },
             transport: custom(provider, { retryCount }),

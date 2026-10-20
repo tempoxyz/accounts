@@ -278,14 +278,14 @@ export declare namespace NonceStorage {
 
 /**
  * In-memory `Kv` for tests and single-process deployments. Lazily evicts
- * expired entries on read/write. Writes reclaim expired keys and reject new keys at capacity.
+ * expired entries on read/write. Writes reclaim expired keys. An optional capacity rejects new keys without evicting live entries.
  *
  * Pass `now` to control the clock in tests.
  */
 export function memory(options: memory.Options = {}): Kv {
   const now = options.now ?? Date.now
-  const maxEntries = options.maxEntries ?? 10_000
-  if (!Number.isSafeInteger(maxEntries) || maxEntries < 1)
+  const maxEntries = options.maxEntries
+  if (maxEntries !== undefined && (!Number.isSafeInteger(maxEntries) || maxEntries < 1))
     throw new RangeError('maxEntries must be a positive safe integer')
   let nextExpiry = Infinity
   const store = new Map<string, { value: unknown; expiresAt?: number }>()
@@ -306,7 +306,7 @@ export function memory(options: memory.Options = {}): Kv {
   }
 
   function write(key: string, value: unknown, ttl?: number) {
-    if (!store.has(key) && store.size >= maxEntries)
+    if (maxEntries !== undefined && !store.has(key) && store.size >= maxEntries)
       throw new RangeError('In-memory store capacity exceeded')
     const expiresAt = ttl ? now() + ttl * 1000 : undefined
     store.set(key, expiresAt !== undefined ? { value, expiresAt } : { value })
@@ -352,7 +352,7 @@ export function memory(options: memory.Options = {}): Kv {
 
 export declare namespace memory {
   type Options = {
-    /** Maximum retained entries. New keys fail at capacity; existing keys are not evicted. Defaults to 10,000. */
+    /** Optional maximum retained entries. New keys fail at capacity; live entries are never evicted. No limit by default. */
     maxEntries?: number | undefined
     /** Clock function for TTL accounting. Defaults to `Date.now`. */
     now?: (() => number) | undefined

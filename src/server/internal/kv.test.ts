@@ -27,6 +27,21 @@ function counting() {
 }
 
 describe('cached', () => {
+  test.each([0, 1, Infinity])('propagates storage expiry for ttl=%s', async (ttl) => {
+    let now = Date.now()
+    const kv = Kv.memory({ now: () => now, maxEntries: 1 })
+    await cached(kv, 'cache', async () => 'value', { ttl })
+    now += 2000
+    if (ttl === Infinity) {
+      await expect(kv.set('new', 'value')).rejects.toThrow('capacity exceeded')
+      expect(await kv.get('cache')).toBeDefined()
+    } else {
+      await kv.set('new', 'value')
+      now -= 2000
+      expect(await kv.get('cache')).toMatchInlineSnapshot(`undefined`)
+    }
+  })
+
   test('behavior: caches the result of fn for the configured ttl', async () => {
     const { calls, kv } = counting()
     let invocations = 0

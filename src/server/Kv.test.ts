@@ -3,6 +3,14 @@ import { describe, expect, test } from 'vp/test'
 import * as Kv from './Kv.js'
 
 describe('memory', () => {
+  test.each(['set', 'create'] as const)('%s has no implicit live-entry cap', async (method) => {
+    const kv = Kv.memory()
+    for (let i = 0; i < 10_001; i++) await kv[method]!(String(i), i)
+    await kv.set('challenge', 'challenge', { ttl: 300 })
+    expect(await kv.get('10000')).toMatchInlineSnapshot(`10000`)
+    expect(await kv.get('challenge')).toMatchInlineSnapshot(`"challenge"`)
+  })
+
   test.each(['set', 'create'] as const)(
     '%s reclaims abandoned expired keys before capacity checks',
     async (method) => {

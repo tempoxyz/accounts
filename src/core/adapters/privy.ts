@@ -510,6 +510,9 @@ export function privy<const client extends privy.Client>(
     }
 
     return {
+      async assertAccount(parameters) {
+        await getSigningAccount(parameters.address)
+      },
       cleanup() {},
       actions: {
         async createAccount(parameters) {

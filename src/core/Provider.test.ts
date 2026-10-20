@@ -14,6 +14,97 @@ import * as Store from './Store.js'
 const address = '0x0000000000000000000000000000000000000001'
 
 describe('eth_fillTransaction', () => {
+  test.each(['expired', 'other chain', 'scope mismatch', 'missing material'] as const)(
+    'falls back without session validation for %s keys',
+    async (kind) => {
+      const payer = accounts[0]!
+      const getAccount = vi.fn(() => {
+        throw new Error('session unavailable')
+      })
+      const provider = Provider.create({
+        adapter: Adapter.define({ name: 'Test', rdns: 'test' }, () => ({
+          actions: {
+            async createAccount() {
+              return { accounts: [] }
+            },
+            async loadAccounts() {
+              return { accounts: [] }
+            },
+          },
+          getAccount: getAccount as never,
+        })),
+        chains: [tempo],
+        storage: Storage.memory(),
+        transports: {
+          [tempo.id]: custom(
+            {
+              request: async () => {
+                throw new Error('root fill reached')
+              },
+            },
+            { retryCount: 0 },
+          ),
+        },
+      })
+      await provider.store.accessKeys.authorize({
+        account: payer,
+        chainId: kind === 'other chain' ? tempoModerato.id : tempo.id,
+        parameters: {
+          privateKey: privateKeys[2],
+          expiry: kind === 'expired' ? 1 : 9999999999,
+          ...(kind === 'scope mismatch'
+            ? { scopes: [{ address, selector: 'transfer(address,uint256)' }] }
+            : {}),
+        },
+      })
+      if (kind === 'missing material')
+        provider.store.setState({
+          accessKeys: provider.store
+            .getState()
+            .accessKeys.map(({ privateKey: _privateKey, ...key }) => key),
+        })
+      await expect(
+        provider.request({
+          method: 'eth_fillTransaction',
+          params: [{ from: payer.address, to: payer.address }],
+        }),
+      ).rejects.toThrow('root fill reached')
+      expect(getAccount).not.toHaveBeenCalled()
+    },
+  )
+
+  test('rejects a usable fill key before filling when its session is unavailable', async () => {
+    const payer = accounts[0]!
+    const provider = Provider.create({
+      adapter: Adapter.define({ name: 'Test', rdns: 'test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [] }
+          },
+          async loadAccounts() {
+            return { accounts: [] }
+          },
+        },
+        assertAccount: async () => {
+          throw new Error('session unavailable')
+        },
+      })),
+      chains: [tempo],
+      storage: Storage.memory(),
+    })
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId: tempo.id,
+      parameters: { privateKey: privateKeys[2], expiry: 9999999999 },
+    })
+    await expect(
+      provider.request({
+        method: 'eth_fillTransaction',
+        params: [{ from: payer.address, to: payer.address }],
+      }),
+    ).rejects.toThrow('session unavailable')
+  })
+
   test('behavior: forwards Tempo-formatted request capabilities', async () => {
     const capabilities: unknown[] = []
     const request = tempo.formatters.transactionRequest.format(
@@ -62,6 +153,41 @@ describe('eth_fillTransaction', () => {
 })
 
 describe('getMppxParameters', () => {
+  test.each([false, true])('validates the session for MPP keys (explicit=%s)', async (explicit) => {
+    const payer = accounts[0]!
+    const provider = Provider.create({
+      adapter: Adapter.define({ name: 'Test', rdns: 'test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [] }
+          },
+          async loadAccounts() {
+            return { accounts: [] }
+          },
+        },
+        assertAccount: async () => {
+          throw new Error('session unavailable')
+        },
+      })),
+      chains: [tempo],
+      storage: Storage.memory(),
+    })
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId: tempo.id,
+      parameters: { privateKey: privateKeys[2], expiry: 9999999999 },
+    })
+    provider.store.setState({ accounts: [{ address: payer.address }] })
+    const key = provider.store.getState().accessKeys[0]!
+    await expect(
+      provider.getMppxParameters(explicit ? { accessKey: key.address } : {}).resolveAccount({
+        account: { address: payer.address, type: 'json-rpc' },
+        chainId: tempo.id,
+        operation: { kind: 'authorizePaymentChannel' },
+      }),
+    ).rejects.toThrow('session unavailable')
+  })
+
   test('error: rejects unsupported chain IDs', () => {
     const provider = Provider.create({ storage: Storage.memory() })
     provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -1133,38 +1259,38 @@ describe('wallet replacement', () => {
     },
   )
 
-  test.each([
-    'eth_signTransaction',
-    'eth_sendTransaction',
-    'eth_sendTransactionSync',
-    'eth_fillTransaction',
-  ] as const)('%s checks the current adapter before selecting a retained key', async (method) => {
-    const next = '0x0000000000000000000000000000000000000002'
-    const create = vi.spyOn(AccessKeyTransaction, 'create')
-    const getAccount = vi.fn(() => {
-      throw new Error('owner no longer selected')
-    })
-    const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
-      actions: {
-        async createAccount() {
-          return { accounts: [{ address: next }] }
+  test.each(['eth_signTransaction', 'eth_sendTransaction', 'eth_sendTransactionSync'] as const)(
+    '%s checks the current adapter before selecting a retained key',
+    async (method) => {
+      const next = '0x0000000000000000000000000000000000000002'
+      const create = vi.spyOn(AccessKeyTransaction, 'create')
+      const getAccount = vi.fn(() => {
+        throw new Error('owner no longer selected')
+      })
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address: next }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address: next }] }
+          },
         },
-        async loadAccounts() {
-          return { accounts: [{ address: next }] }
-        },
-      },
-      getAccount: getAccount as never,
-    }))
-    const provider = Provider.create({ adapter, chains: [tempo], storage: Storage.memory() })
-    provider.store.setState({
-      accounts: [{ address: next }],
-      accessKeys: [{ access: address, address, chainId: tempo.id, keyType: 'secp256k1' }] as never,
-    })
-    await expect(
-      provider.request({ method, params: [{ from: address, to: next }] } as never),
-    ).rejects.toThrow('owner no longer selected')
-    expect(getAccount).toHaveBeenCalledWith({ address })
-    expect(create).not.toHaveBeenCalled()
-    create.mockRestore()
-  })
+        getAccount: getAccount as never,
+      }))
+      const provider = Provider.create({ adapter, chains: [tempo], storage: Storage.memory() })
+      provider.store.setState({
+        accounts: [{ address: next }],
+        accessKeys: [
+          { access: address, address, chainId: tempo.id, keyType: 'secp256k1' },
+        ] as never,
+      })
+      await expect(
+        provider.request({ method, params: [{ from: address, to: next }] } as never),
+      ).rejects.toThrow('owner no longer selected')
+      expect(getAccount).toHaveBeenCalledWith({ address })
+      expect(create).not.toHaveBeenCalled()
+      create.mockRestore()
+    },
+  )
 })

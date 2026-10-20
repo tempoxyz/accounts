@@ -103,3 +103,27 @@ describe.each([
     expect(requests).toEqual([])
   })
 })
+
+test.each([
+  'eth_signTransaction',
+  'eth_sendTransaction',
+  'eth_sendTransactionSync',
+  'eth_fillTransaction',
+] as const)('%s rejects an explicit account absent from the connected wallet', async (method) => {
+  const { provider, requests } = await connect(0)
+  await provider.store.accessKeys.authorize({
+    account: accessKey,
+    chainId: tempo.id,
+    parameters: {
+      expiry: 9999999999,
+      privateKey: '0x0000000000000000000000000000000000000000000000000000000000000003',
+    },
+  })
+  await expect(
+    provider.request({
+      method,
+      params: [{ from: accessKey.address, to: root.address }],
+    }),
+  ).rejects.toThrow('not found')
+  expect(requests).toMatchInlineSnapshot(`[]`)
+})

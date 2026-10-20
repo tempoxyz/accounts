@@ -248,6 +248,11 @@ export function create(options: create.Options = {}): create.ReturnType {
     return await instance.getAccount(options)
   }
 
+  async function assertAccessKeyAccount(address: Address.Address) {
+    if (instance.assertAccount) await instance.assertAccount({ address })
+    else if (instance.getAccount) await getAdapterAccount({ address })
+  }
+
   function getWalletClient(options: {
     account: Awaited<Adapter.getAccount.ReturnType>['account']
     chainId?: number | undefined
@@ -306,7 +311,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })(),
       })
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
-      if (address && instance.getAccount) await getAdapterAccount({ address })
+      if (address) await assertAccessKeyAccount(address)
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
@@ -346,7 +351,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })(),
       })
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
-      if (address && instance.getAccount) await getAdapterAccount({ address })
+      if (address) await assertAccessKeyAccount(address)
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
@@ -397,7 +402,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })(),
       })
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
-      if (address && instance.getAccount) await getAdapterAccount({ address })
+      if (address) await assertAccessKeyAccount(address)
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
@@ -885,6 +890,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     const account = AddressUtil.from(info.account.address)
     if (!account) return undefined
     assertMppAccountConnected(account)
+    await assertAccessKeyAccount(account)
 
     if (options_.accessKey) {
       const authority =
@@ -1125,11 +1131,6 @@ export function create(options: create.Options = {}): create.ReturnType {
                     // path can't be collapsed into the plain root fill. Falls back to
                     // the root account on failure.
                     if (address) {
-                      if (
-                        instance.getAccount &&
-                        state.accessKeys.some((key) => AddressUtil.isEqual(key.access, address))
-                      )
-                        await getAdapterAccount({ address })
                       const calls =
                         parameters.calls ??
                         (parameters.to ? [{ data: parameters.data, to: parameters.to }] : undefined)
@@ -1140,7 +1141,8 @@ export function create(options: create.Options = {}): create.ReturnType {
                         client,
                         store,
                       })
-                      if (transaction)
+                      if (transaction) {
+                        await assertAccessKeyAccount(address)
                         try {
                           return await transaction.fill({
                             ...parameters,
@@ -1151,6 +1153,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         } catch {
                           // Fall through to the root account fill.
                         }
+                      }
                     }
 
                     return await fill()

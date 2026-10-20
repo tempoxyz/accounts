@@ -56,10 +56,11 @@ export async function cached<value>(
     }
 
     const value = await fn()
+    if (ttl <= 0) return value
     const expiresAt = ttl === Infinity ? Infinity : Date.now() + ttl * 1000
     const fresh: Entry = { expiresAt, value }
     memory.set(key, fresh)
-    await kv.set(key, fresh).catch(() => {})
+    await kv.set(key, fresh, Number.isFinite(ttl) ? { ttl } : undefined).catch(() => {})
     return value
   })()
 

@@ -1,9 +1,10 @@
 import { Address as core_Address, Hex, Secp256k1, Signature } from 'ox'
 import { BaseError, decodeFunctionData, encodeEventTopics } from 'viem'
 import type { Address } from 'viem/accounts'
-import { Abis } from 'viem/tempo'
+import { Abis, Account } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
+import * as Provider from '../Provider.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { privy } from './privy.js'
@@ -28,6 +29,49 @@ function privateKeyForAddress(walletAddress: string): Hex.Hex {
 }
 
 describe('privy', () => {
+  test.each(['mpp', 'explicit mpp', 'fill'] as const)(
+    '%s rejects retained keys after session expiry',
+    async (path) => {
+      const client = createClient({ token: null })
+      const provider = Provider.create({
+        adapter: privy({ client, loadAccounts: async () => [address] }),
+        storage: Storage.memory(),
+      })
+      const chainId = provider.store.getState().chainId
+      await provider.store.accessKeys.authorize({
+        account: Account.fromSecp256k1(privateKeyA),
+        chainId,
+        parameters: { privateKey: privateKeyB, expiry: 9999999999 },
+      })
+      provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+      const key = provider.store.getState().accessKeys[0]!
+      const request =
+        path === 'fill'
+          ? provider.request({
+              method: 'eth_fillTransaction',
+              params: [{ from: address, to: other }],
+            })
+          : provider
+              .getMppxParameters(path === 'explicit mpp' ? { accessKey: key.address } : {})
+              .resolveAccount({
+                account: { address, type: 'json-rpc' },
+                chainId,
+                operation: { kind: 'authorizePaymentChannel' },
+              })
+      await expect(request).rejects.toThrow('Privy session expired')
+      expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+    },
+  )
+
+  test('validates the Privy session before retained-key use', async () => {
+    const { adapter, client, store } = setup({ token: null })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+    await expect(adapter.assertAccount!({ address })).rejects.toThrow('Privy session expired')
+    expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
   test('default: createAccount delegates registration and signs the requested digest', async () => {
     const { adapter, client } = setup()
 

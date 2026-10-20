@@ -162,6 +162,8 @@ export type Instance = {
         ) => Promise<withdrawZone.ReturnType>)
       | undefined
   }
+  /** Verifies current session authority before a locally retained access key is used. */
+  assertAccount?: ((options: getAccount.Options) => Promise<void>) | undefined
   /** Cleanup function called when the provider is destroyed. */
   cleanup?: (() => void) | undefined
   /** Materializes the adapter-managed account used for provider-owned RPC actions. */
