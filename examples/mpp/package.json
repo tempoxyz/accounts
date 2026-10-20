@@ -19,7 +19,7 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "viem": "latest",
-    "wagmi": "latest"
+    "wagmi": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:",

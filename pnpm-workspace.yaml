@@ -52,7 +52,7 @@ catalog:
   vite: npm:@voidzero-dev/vite-plus-core@~1.1.0
   vite-plus: ~1.1.0
   vp: npm:vite-plus@~1.1.0
-  wagmi: ^3.7.0
+  wagmi: 3.7.7
   wrangler: ^4.98.0
   zod: ^4.4.3
 
@@ -101,9 +101,8 @@ overrides:
   '@tanstack/query-core': '5.100.10'
   '@tanstack/react-query': '5.100.10'
   # Retain the base branch's latest wagmi v3 releases; newer releases are blocked in CI.
-  'wagmi@>3.7.7 <4': '3.7.7'
-  '@wagmi/core@>3.6.5 <4': '3.6.5'
-  '@wagmi/connectors@>8.2.0 <9': '8.2.0'
+  '@wagmi/core@>=3 <4': '3.6.5'
+  '@wagmi/connectors@>=8 <9': '8.2.0'
   # Keep the supported DevTools server dependency line; newer srvx releases are blocked in CI.
   'h3@>=2.0.1-rc.29 <3': '2.0.1-rc.29'
   'srvx@>=0.12.7': '0.12.7'
