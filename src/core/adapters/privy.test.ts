@@ -1,5 +1,5 @@
 import { Address as core_Address, Hex, Secp256k1, Signature } from 'ox'
-import { BaseError, decodeFunctionData } from 'viem'
+import { BaseError, decodeFunctionData, encodeEventTopics } from 'viem'
 import type { Address } from 'viem/accounts'
 import { Abis } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
@@ -276,6 +276,48 @@ describe('privy', () => {
     )
   })
 
+  test('revokeAccessKey retains the key until confirmation', async () => {
+    let confirm!: () => void
+    const confirmation = new Promise<void>((resolve) => {
+      confirm = resolve
+    })
+    const { adapter, client, store } = setup({ confirmation })
+    const keys = [{ access: address, address: other, chainId: 1, keyType: 'secp256k1' }] as never
+    store.setState({ accounts: [{ address }], activeAccount: 0, accessKeys: keys })
+    let finished = false
+    const pending = adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address },
+      { method: 'wallet_revokeAccessKey', params: [{ accessKeyAddress: other, address }] },
+    ).then(() => {
+      finished = true
+    })
+    for (let i = 0; i < 100 && client.transactions.length === 0; i++) await Promise.resolve()
+    expect(client.transactions.length).toMatchInlineSnapshot(`1`)
+    expect(finished).toMatchInlineSnapshot(`false`)
+    expect(store.getState().accessKeys).toEqual(keys)
+    confirm()
+    await pending
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
+  test.each(['pending', 'reverted'] as const)(
+    'revokeAccessKey rejects a %s receipt without removing the key',
+    async (receiptStatus) => {
+      const { adapter, store } = setup({ receiptStatus })
+      const keys = [{ access: address, address: other, chainId: 1, keyType: 'secp256k1' }] as never
+      store.setState({ accounts: [{ address }], activeAccount: 0, accessKeys: keys })
+      await expect(
+        adapter.actions.revokeAccessKey!(
+          { accessKeyAddress: other, address },
+          { method: 'wallet_revokeAccessKey', params: [{ accessKeyAddress: other, address }] },
+        ),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Error: Access-key revocation is not confirmed]`,
+      )
+      expect(store.getState().accessKeys).toEqual(keys)
+    },
+  )
+
   test('default: revokeAccessKey revokes with the connected Privy account', async () => {
     const { adapter, client, store } = setup()
     store.setState({
@@ -404,6 +446,7 @@ describe('privy', () => {
             },
             "data": "0x5ae7ab320000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf",
             "feePayer": true,
+            "throwOnReceiptRevert": true,
             "to": "0xaAAAaaAA00000000000000000000000000000000",
           },
         ],
@@ -499,6 +542,7 @@ describe('privy', () => {
             },
             "data": "0x5ae7ab320000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf",
             "feePayer": true,
+            "throwOnReceiptRevert": true,
             "to": "0xaAAAaaAA00000000000000000000000000000000",
           },
         ],
@@ -749,7 +793,9 @@ describe('privy', () => {
   })
 
   test('error: unsupported secp256k1_sign maps to UnsupportedMethodError', async () => {
-    const { adapter, store } = setup({ signError: { code: 4200, message: 'Method not supported' } })
+    const { adapter, store } = setup({
+      signError: { code: 4200, message: 'Method not supported' },
+    })
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
@@ -829,6 +875,24 @@ function setup(options: setup.Options = {}) {
       client.clientOptions.push(clientOptions)
       return {
         chain: { id: 1 },
+        sendTransactionSync: async (parameters: unknown) => {
+          client.transactions.push(parameters)
+          if (options.transactionError) throw options.transactionError
+          await options.confirmation
+          return {
+            status: options.receiptStatus ?? 'success',
+            logs: [
+              {
+                data: '0x',
+                topics: encodeEventTopics({
+                  abi: Abis.accountKeychain,
+                  eventName: 'KeyRevoked',
+                  args: { account: address, publicKey: other },
+                }),
+              },
+            ],
+          }
+        },
         sendTransaction: async (parameters: unknown) => {
           client.transactions.push(parameters)
           if (options.transactionError) throw options.transactionError
@@ -864,6 +928,8 @@ declare namespace setup {
     signError?: unknown
     /** Make the mock wallet client transaction fail. */
     transactionError?: unknown
+    confirmation?: Promise<void> | undefined
+    receiptStatus?: 'success' | 'pending' | 'reverted' | undefined
     /** Override the value returned by the embedded provider's `secp256k1_sign`. */
     signResult?: unknown
     /** Force the test wallet to sign with this private key (for wrong-signer tests). */

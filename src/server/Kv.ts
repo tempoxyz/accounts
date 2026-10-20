@@ -278,16 +278,39 @@ export declare namespace NonceStorage {
 
 /**
  * In-memory `Kv` for tests and single-process deployments. Lazily evicts
- * expired entries on read/write.
+ * expired entries on read/write. Writes reclaim expired keys and reject new keys at capacity.
  *
  * Pass `now` to control the clock in tests.
  */
 export function memory(options: memory.Options = {}): Kv {
   const now = options.now ?? Date.now
+  const maxEntries = options.maxEntries ?? 10_000
+  if (!Number.isSafeInteger(maxEntries) || maxEntries < 1)
+    throw new RangeError('maxEntries must be a positive safe integer')
+  let nextExpiry = Infinity
   const store = new Map<string, { value: unknown; expiresAt?: number }>()
 
   function isExpired(entry: { expiresAt?: number }) {
     return entry.expiresAt !== undefined && now() >= entry.expiresAt
+  }
+
+  function pruneExpired() {
+    const time = now()
+    if (time < nextExpiry) return
+    nextExpiry = Infinity
+    for (const [key, entry] of store)
+      if (entry.expiresAt !== undefined) {
+        if (time >= entry.expiresAt) store.delete(key)
+        else nextExpiry = Math.min(nextExpiry, entry.expiresAt)
+      }
+  }
+
+  function write(key: string, value: unknown, ttl?: number) {
+    if (!store.has(key) && store.size >= maxEntries)
+      throw new RangeError('In-memory store capacity exceeded')
+    const expiresAt = ttl ? now() + ttl * 1000 : undefined
+    store.set(key, expiresAt !== undefined ? { value, expiresAt } : { value })
+    if (expiresAt !== undefined) nextExpiry = Math.min(nextExpiry, expiresAt)
   }
 
   return from({
@@ -304,14 +327,14 @@ export function memory(options: memory.Options = {}): Kv {
       return entry.value as never
     },
     async set(key, value, options) {
-      const expiresAt = options?.ttl ? now() + options.ttl * 1000 : undefined
-      store.set(key, expiresAt !== undefined ? { value, expiresAt } : { value })
+      pruneExpired()
+      write(key, value, options?.ttl)
     },
     async create(key, value, options) {
+      pruneExpired()
       const entry = store.get(key)
       if (entry && !isExpired(entry)) return false
-      const expiresAt = options?.ttl ? now() + options.ttl * 1000 : undefined
-      store.set(key, expiresAt !== undefined ? { value, expiresAt } : { value })
+      write(key, value, options?.ttl)
       return true
     },
     // Atomic in-process: the synchronous `Map.get` + `Map.delete` runs
@@ -329,6 +352,8 @@ export function memory(options: memory.Options = {}): Kv {
 
 export declare namespace memory {
   type Options = {
+    /** Maximum retained entries. New keys fail at capacity; existing keys are not evicted. Defaults to 10,000. */
+    maxEntries?: number | undefined
     /** Clock function for TTL accounting. Defaults to `Date.now`. */
     now?: (() => number) | undefined
   }

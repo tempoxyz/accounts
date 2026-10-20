@@ -306,6 +306,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })(),
       })
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      if (address && instance.getAccount) await getAdapterAccount({ address })
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
@@ -345,6 +346,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })(),
       })
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      if (address && instance.getAccount) await getAdapterAccount({ address })
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
@@ -395,6 +397,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })(),
       })
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      if (address && instance.getAccount) await getAdapterAccount({ address })
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
@@ -1018,7 +1021,17 @@ export function create(options: create.Options = {}): create.ReturnType {
                       params: undefined,
                     })
 
-                    store.setState({ accounts: resolveAccounts(accounts), activeAccount: 0 })
+                    store.setState({
+                      accounts: resolveAccounts(accounts),
+                      accessKeys: store
+                        .getState()
+                        .accessKeys.filter((key) =>
+                          accounts.some((account) =>
+                            AddressUtil.isEqual(account.address, key.access),
+                          ),
+                        ),
+                      activeAccount: 0,
+                    })
 
                     return accounts.map(
                       (a) => a.address,
@@ -1112,6 +1125,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                     // path can't be collapsed into the plain root fill. Falls back to
                     // the root account on failure.
                     if (address) {
+                      if (
+                        instance.getAccount &&
+                        state.accessKeys.some((key) => AddressUtil.isEqual(key.access, address))
+                      )
+                        await getAdapterAccount({ address })
                       const calls =
                         parameters.calls ??
                         (parameters.to ? [{ data: parameters.data, to: parameters.to }] : undefined)
@@ -1517,6 +1535,13 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                     store.setState({
                       accounts: resolveAccounts(accounts),
+                      accessKeys: store
+                        .getState()
+                        .accessKeys.filter((key) =>
+                          accounts.some((account) =>
+                            AddressUtil.isEqual(account.address, key.access),
+                          ),
+                        ),
                       activeAccount: 0,
                       // Persist absolutized auth URLs so a later
                       // `wallet_disconnect` can hit logout even when the

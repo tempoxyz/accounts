@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import { accounts, privateKeys } from '../../test/config.js'
 import * as Adapter from './Adapter.js'
+import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
@@ -1096,5 +1097,74 @@ describe('adapter actions', () => {
         },
       ]
     `)
+  })
+})
+
+describe('wallet replacement', () => {
+  test.each([false, true])(
+    'prunes old owner keys even with persistAccounts=%s',
+    async (persistAccounts) => {
+      const next = '0x0000000000000000000000000000000000000002'
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        persistAccounts,
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address: next }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address: next }] }
+          },
+        },
+      }))
+      const provider = Provider.create({ adapter, storage: Storage.memory() })
+      provider.store.setState({
+        accounts: [{ address }],
+        accessKeys: [
+          { access: address, address, chainId: 1, keyType: 'secp256k1' },
+          { access: next, address: next, chainId: 1, keyType: 'secp256k1' },
+        ] as never,
+      })
+      await provider.request({ method: 'wallet_connect' })
+      expect(provider.store.getState().accessKeys.map((key) => key.access)).toMatchInlineSnapshot(`
+      [
+        "0x0000000000000000000000000000000000000002",
+      ]
+    `)
+    },
+  )
+
+  test.each([
+    'eth_signTransaction',
+    'eth_sendTransaction',
+    'eth_sendTransactionSync',
+    'eth_fillTransaction',
+  ] as const)('%s checks the current adapter before selecting a retained key', async (method) => {
+    const next = '0x0000000000000000000000000000000000000002'
+    const create = vi.spyOn(AccessKeyTransaction, 'create')
+    const getAccount = vi.fn(() => {
+      throw new Error('owner no longer selected')
+    })
+    const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+      actions: {
+        async createAccount() {
+          return { accounts: [{ address: next }] }
+        },
+        async loadAccounts() {
+          return { accounts: [{ address: next }] }
+        },
+      },
+      getAccount: getAccount as never,
+    }))
+    const provider = Provider.create({ adapter, chains: [tempo], storage: Storage.memory() })
+    provider.store.setState({
+      accounts: [{ address: next }],
+      accessKeys: [{ access: address, address, chainId: tempo.id, keyType: 'secp256k1' }] as never,
+    })
+    await expect(
+      provider.request({ method, params: [{ from: address, to: next }] } as never),
+    ).rejects.toThrow('owner no longer selected')
+    expect(getAccount).toHaveBeenCalledWith({ address })
+    expect(create).not.toHaveBeenCalled()
+    create.mockRestore()
   })
 })

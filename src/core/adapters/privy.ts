@@ -415,6 +415,7 @@ export function privy<const client extends privy.Client>(
 
       const state = store.getState()
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      if (address) await getSigningAccount(address)
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
@@ -573,7 +574,7 @@ export function privy<const client extends privy.Client>(
           const { feePayer } = parameters
           const chainId = Number(parameters.chainId ?? store.getState().chainId)
           try {
-            await Actions.accessKey.revoke(
+            const { receipt } = await Actions.accessKey.revokeSync(
               getClient({ chainId, feePayer: feePayer === true ? undefined : feePayer }),
               {
                 account: account as never,
@@ -584,6 +585,8 @@ export function privy<const client extends privy.Client>(
                   : {}),
               },
             )
+            if (receipt.status !== 'success')
+              throw new Error('Access-key revocation is not confirmed')
           } catch (error) {
             if (typeof feePayer === 'string' || !AccessKey.isUnavailableError(error)) throw error
           }

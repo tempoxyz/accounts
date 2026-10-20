@@ -3,6 +3,43 @@ import { describe, expect, test } from 'vp/test'
 import * as Kv from './Kv.js'
 
 describe('memory', () => {
+  test.each(['set', 'create'] as const)(
+    '%s reclaims abandoned expired keys before capacity checks',
+    async (method) => {
+      let now = 0
+      const kv = Kv.memory({ now: () => now, maxEntries: 2 })
+      await kv.set('abandoned', 'value', { ttl: 1 })
+      await kv.set('live', 'value')
+      now = 1000
+      await kv[method]!('new', 'value')
+      expect(await kv.get('live')).toMatchInlineSnapshot(`"value"`)
+      expect(await kv.get('new')).toMatchInlineSnapshot(`"value"`)
+      // Moving the test clock back exposes retained entries without relying on garbage collection.
+      now = 0
+      expect(await kv.get('abandoned')).toMatchInlineSnapshot(`undefined`)
+    },
+  )
+
+  test.each(['set', 'create'] as const)(
+    '%s rejects overflow without evicting active entries',
+    async (method) => {
+      const kv = Kv.memory({ maxEntries: 1 })
+      await kv.set('live', 'value')
+      await expect(kv[method]!('overflow', 'value')).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[RangeError: In-memory store capacity exceeded]`,
+      )
+      expect(await kv.get('live')).toMatchInlineSnapshot(`"value"`)
+      await kv.set('live', 'updated')
+      expect(await kv.get('live')).toMatchInlineSnapshot(`"updated"`)
+    },
+  )
+
+  test.each([0, -1, 1.5, Infinity, NaN])('rejects invalid capacity %s', (maxEntries) => {
+    expect(() => Kv.memory({ maxEntries })).toThrowErrorMatchingInlineSnapshot(
+      `[RangeError: maxEntries must be a positive safe integer]`,
+    )
+  })
+
   test('default: round-trips set/get/delete', async () => {
     const kv = Kv.memory()
 
