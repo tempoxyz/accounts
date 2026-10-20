@@ -100,6 +100,10 @@ overrides:
   # Retain the base branch's Query release; 5.104.5 is blocked as recently published in CI.
   '@tanstack/query-core': '5.100.10'
   '@tanstack/react-query': '5.100.10'
+  # Retain the base branch's latest wagmi v3 releases; newer releases are blocked in CI.
+  'wagmi@>3.7.7 <4': '3.7.7'
+  '@wagmi/core@>3.6.5 <4': '3.6.5'
+  '@wagmi/connectors@>8.2.0 <9': '8.2.0'
   # Keep the supported DevTools server dependency line; newer srvx releases are blocked in CI.
   'h3@>=2.0.1-rc.29 <3': '2.0.1-rc.29'
   'srvx@>=0.12.7': '0.12.7'
