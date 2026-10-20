@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --import tsx scripts/copy-vocs-theme.ts && NODE_OPTIONS='--import tsx' vite",
-    "build": "pnpm check:markdown && node --import tsx scripts/copy-vocs-theme.ts && vite build",
-    "preview": "vite preview",
+    "dev": "node --import tsx scripts/copy-vocs-theme.ts && NODE_OPTIONS='--import tsx' vp dev",
+    "build": "pnpm check:markdown && node --import tsx scripts/copy-vocs-theme.ts && vp build",
+    "preview": "vp preview",
     "sync:vocs": "node --import tsx scripts/copy-vocs-theme.ts",
     "check:markdown": "node --import tsx scripts/check-markdown.ts"
   },

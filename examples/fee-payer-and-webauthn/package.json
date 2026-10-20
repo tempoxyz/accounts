@@ -21,13 +21,14 @@
     "wagmi": "latest"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "latest",
+    "@cloudflare/vite-plugin": "catalog:",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
-    "vite-plus": "latest",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
     "wrangler": "^4.82.2"
   }
 }

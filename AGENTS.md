@@ -118,6 +118,7 @@
 - **`dialog` is a git submodule** — points to `git@github.com:tempoxyz/app.git`. Initialize with `git submodule update --init --recursive`.
 - **`VITE_NODE_TAG`** — accepts a Docker image tag (e.g. `latest`, `sha-abc123`) or an HTTP RPC URL (e.g. `https://rpc.moderato.tempo.xyz`) that resolves to a `sha-<hash>` tag via `web3_clientVersion`.
 - **Deduplicate `vp` in Vitest config** — in this workspace, mixed peer resolution (for example different `@types/node` versions across packages) can load two `vp` instances and break suite initialization; set `resolve.dedupe` to include `vp`.
+- **Vite+ 1.x re-exports Vitest** -- keep Vitest as a direct dev dependency for bare `vi.mock` imports. Ambient `declare module 'vitest'` shims mask the real exports and break `vp/test` types.
 - **CLI auth example URL inputs** — the example CLI flow is expected to support both `--url` and `AUTH_URL`-based defaults, and should avoid hardcoded personal hostnames in source.
 - **Test RPC port selection should auto-fallback** — localnet test setup should start from `VITE_RPC_PORT` (or `8545`) and select the next available port to avoid `EADDRINUSE` collisions.
 - **Force localnet env when running localnet tests from a testnet shell** — if `VITE_NODE_ENV=testnet` is exported, `*.localnet.test.ts` files will still target testnet RPCs; prefix targeted localnet runs with `VITE_NODE_ENV=localnet VITE_NODE_TAG=sha-...` to exercise the pinned Docker node.

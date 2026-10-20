@@ -3,6 +3,7 @@ import { defineConfig } from 'vp'
 
 export default defineConfig({
   resolve: {
+    dedupe: ['vp', 'vitest'],
     alias: {
       accounts: join(import.meta.dirname, './src'),
     },

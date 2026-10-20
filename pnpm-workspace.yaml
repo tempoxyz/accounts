@@ -27,7 +27,7 @@ allowBuilds:
 blockExoticSubdeps: true
 
 catalog:
-  '@cloudflare/vite-plugin': ^1.31.2
+  '@cloudflare/vite-plugin': ~1.33.2
   '@cloudflare/workers-types': ^4.20260317.1
   '@tanstack/react-query': ^5.97.0
   '@tanstack/react-router': ^1.168.19
@@ -36,7 +36,7 @@ catalog:
   '@types/node': ^25.6.0
   '@types/react': ^19.2.14
   '@types/react-dom': ^19.2.3
-  '@vitejs/devtools': ^0.2.0
+  '@vitejs/devtools': ^0.7.1
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.6.0
   hono: ^4.13.11
@@ -45,13 +45,13 @@ catalog:
   prool: ~0.2.4
   react: ^19.2.8
   react-dom: ^19.2.8
-  tsx: ^4.21.0
+  tsx: ^4.23.15
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
   viem: 2.57.1
-  vite: ^8.0.16
-  vite-plus: ~0.1.24
-  vp: npm:vite-plus@~0.1.24
+  vite: npm:@voidzero-dev/vite-plus-core@~1.1.0
+  vite-plus: ~1.1.0
+  vp: npm:vite-plus@~1.1.0
   wagmi: ^3.7.0
   wrangler: ^4.98.0
   zod: ^4.4.3
@@ -97,6 +97,9 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 
 overrides:
   accounts: 'workspace:*'
+  # Keep Vite plugin types on one Node type version across workspace peers.
+  '@types/node': '25.9.3'
+  tsx: '4.23.15'
   # GHSA-6qxp-vccf-f47h: prevent OAuth client credentials reaching an untrusted authorization server.
   '@modelcontextprotocol/sdk@>=1.12.0 <1.31.0': '1.31.0'
   # GHSA-hp3w-g68c-fv3c: remove unpatched sprintf-js via js-yaml's argparse v1.
@@ -149,7 +152,8 @@ overrides:
   # GHSA-rpw4-54j3-4h4q + GHSA-2vr4-cq9g-pvrc: ip-address trust-boundary bypasses.
   'ip-address@<10.7.1': '10.7.1'
   # GHSA-v6wh-96g9-6wx3: launch-editor NTLMv2 hash disclosure via UNC path (dev tooling).
-  'launch-editor@<=2.14.0': '2.14.1'
+  # GHSA-698v-4r3x-3vcv and GHSA-587h-7wmj-h5pm: Windows command injection.
+  'launch-editor@<2.14.2': '2.14.2'
   'js-cookie@<=3.0.5': '3.0.7'
   # GHSA-2883-xcg3-v3hh: maxTotalMergeKeys bypass with empty merge sources.
   js-yaml@^3: '3.15.2'
@@ -191,9 +195,8 @@ overrides:
   # GHSA-6gmq-8vp8-gcm6: xmldom XML namespace confusion.
   '@xmldom/xmldom@>=0.7.0 <0.8.15': '0.8.15'
   '@xmldom/xmldom@>=0.9.0 <0.9.12': '0.9.12'
-  # GHSA-fx2h-pf6j-xcff: vite server.fs.deny bypass on Windows alternate paths (dev tooling).
-  # Unconditional pin: range-keyed override does not rewrite `latest` importer specifiers (examples/basic).
-  'vite@8': '8.0.16'
+  # Keep plugins on Vite+'s patched core to avoid mixing incompatible Vite types.
+  'vite@*': 'npm:@voidzero-dev/vite-plus-core@~1.1.0'
   vite-plus: 'catalog:'
   vp: 'catalog:'
   # GHSA-96hv-2xvq-fx4p: ws memory-exhaustion DoS (v8 prod path via viem; v7 dev path via react-native metro).
@@ -212,6 +215,8 @@ packages:
 peerDependencyRules:
   allowedVersions:
     accounts: '*'
+    # Vite+ core uses the toolchain release version while implementing Vite 8.
+    vite: '1.1.0'
 
 shellEmulator: true
 
