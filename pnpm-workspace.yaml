@@ -72,7 +72,7 @@ minimumReleaseAgeExclude:
   - js-yaml@3.15.2
   - js-yaml@4.3.2
   - nanoid@3.3.18
-  - '@modelcontextprotocol/sdk@1.31.0'
+  - '@modelcontextprotocol/sdk@1.32.0'
   - sharp@0.35.5
   - shell-quote@1.11.0
   - postcss@8.5.23
@@ -97,11 +97,14 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 
 overrides:
   accounts: 'workspace:*'
+  # Retain the base branch's Query release; 5.104.5 is blocked as recently published in CI.
+  '@tanstack/query-core': '5.100.10'
+  '@tanstack/react-query': '5.100.10'
   # Keep Vite plugin types on one Node type version across workspace peers.
   '@types/node': '25.9.3'
   tsx: '4.23.15'
-  # GHSA-6qxp-vccf-f47h: prevent OAuth client credentials reaching an untrusted authorization server.
-  '@modelcontextprotocol/sdk@>=1.12.0 <1.31.0': '1.31.0'
+  # GHSA-6qxp-vccf-f47h and newer MCP OAuth/SSRF/DoS advisories: patched SDK release.
+  '@modelcontextprotocol/sdk@>=1.12.0 <1.32.0': '1.32.0'
   # GHSA-hp3w-g68c-fv3c: remove unpatched sprintf-js via js-yaml's argparse v1.
   # load-nyc-config uses load(), which remains supported by js-yaml v4.
   '@istanbuljs/load-nyc-config>js-yaml': '4.3.2'
@@ -144,7 +147,7 @@ overrides:
   'fast-uri@>=3.0.0 <3.1.8': '3.1.8'
   viem: 2.57.1
   file-type: '22.0.1'
-  follow-redirects: '1.16.0'
+  follow-redirects: '1.16.1'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
   'form-data@>=4.0.0 <4.0.6': '4.0.6'
   # Patch Hono static-path middleware bypass, traversal, body-parser, and query parsing advisories.
@@ -153,6 +156,7 @@ overrides:
   'ip-address@<10.7.1': '10.7.1'
   # GHSA-v6wh-96g9-6wx3: launch-editor NTLMv2 hash disclosure via UNC path (dev tooling).
   # GHSA-698v-4r3x-3vcv and GHSA-587h-7wmj-h5pm: Windows command injection.
+  # GHSA-r825-w8mm-5pxw: prevent editor flags from being interpreted as commands.
   'launch-editor@<2.14.2': '2.14.2'
   'js-cookie@<=3.0.5': '3.0.7'
   # GHSA-2883-xcg3-v3hh: maxTotalMergeKeys bypass with empty merge sources.
