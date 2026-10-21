@@ -1,10 +1,13 @@
 name: Verify
 on:
-  workflow_call:
-    secrets:
-      VITE_RPC_CREDENTIALS:
-        required: false
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -13,62 +16,83 @@ jobs:
   checks:
     name: Checks
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
+    timeout-minutes: 15
 
     steps:
-      - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
-
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
+
+      - name: Cache turbo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: .turbo/cache
+          key: turbo-checks-${{ github.sha }}
+          restore-keys: turbo-checks-
+
+      - name: Select affected packages
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "${BASE//0/}" ] && git merge-base --is-ancestor "$BASE" HEAD 2> /dev/null; then
+            echo "TURBO_SCM_BASE=$BASE" >> "$GITHUB_ENV"
+            echo "AFFECTED=true" >> "$GITHUB_ENV"
+          fi
 
       - name: Audit dependencies
         run: pnpm audit
 
       - name: Check code
-        run: pnpm -w check
-
-      - name: Check documentation Markdown
-        run: pnpm --filter site check:markdown
-
-      - name: Check build
-        run: pnpm -w build
+        run: pnpm check
 
       - name: Check types
-        run: pnpm check:types
+        run: pnpm exec tsc -b --noEmit
 
-  test-localnet:
-    name: 'Test Runtime (env: localnet)'
+      - name: Check workspaces
+        run: pnpm turbo run check:types check:markdown --filter='!accounts' ${AFFECTED:+--affected}
+
+      - name: Prune turbo cache
+        run: find .turbo/cache -type f -mtime +3 -delete
+
+  test:
+    name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-      id-token: write
     env:
       TESTCONTAINERS_RYUK_DISABLED: true
-    steps:
-      - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
 
+    steps:
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
-        with:
-          playwright: 'true'
 
-      - name: Setup Docker
-        uses: tempoxyz/gh-actions/vendor/docker/setup-docker-action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+      - name: Cache turbo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: .turbo/cache
+          key: turbo-test-${{ github.sha }}
+          restore-keys: turbo-test-
+
+      - name: Select affected packages
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "${BASE//0/}" ] && git merge-base --is-ancestor "$BASE" HEAD 2> /dev/null; then
+            echo "TURBO_SCM_BASE=$BASE" >> "$GITHUB_ENV"
+            echo "AFFECTED=true" >> "$GITHUB_ENV"
+          fi
 
       - name: Resolve Tempo image digest
         id: tempo-digest
@@ -94,8 +118,12 @@ jobs:
           docker save ghcr.io/tempoxyz/tempo:latest -o /tmp/tempo-image.tar
 
       - name: Run tests
-        run: pnpm test --bail=1
+        run: pnpm turbo run test ${AFFECTED:+--affected} -- --bail=1
         env:
           CI: true
+          TEMPO_IMAGE: ${{ steps.tempo-digest.outputs.digest }}
           VITE_NODE_TAG: latest
           VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
+
+      - name: Prune turbo cache
+        run: find .turbo/cache -type f -mtime +3 -delete
