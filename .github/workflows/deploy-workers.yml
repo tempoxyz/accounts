@@ -7,85 +7,115 @@ on:
 
 concurrency:
   group: deploy-workers-${{ github.event.pull_request.number || 'production' }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
 
 jobs:
   deploy:
-    name: ${{ matrix.worker.name }}
+    name: ${{ github.event_name == 'pull_request' && 'Preview' || 'Deploy' }}
+    # Fork and Dependabot pull requests have no Cloudflare credentials to upload previews with.
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      actions: read # to find the last successful deploy
       contents: read
-      deployments: write
-      id-token: write
-      pull-requests: write
-
-    strategy:
-      matrix:
-        worker:
-          - name: Playground
-            directory: playgrounds/web
-            build-env: |
-              VITE_WALLET_HOST=https://wallet.tempo.xyz/embed
-              VITE_ENV=mainnet
-              VITE_TURNKEY_ORGANIZATION_ID=1562c50f-1a48-4b10-8f42-87df4e8ef01d
-              VITE_TURNKEY_AUTH_PROXY_CONFIG_ID=eab55ad4-b2f4-414f-836b-a5e279f01ed2
-              VITE_PRIVY_APP_ID=cmixx4jol01zgl80cgjenqkps
-              VITE_PRIVY_CLIENT_ID=client-WY6TQmgzdwgp2ZkrEXJBDscCamyaXNyXrTYoVRkMYm2rk
-          - name: Wagmi
-            directory: playgrounds/wagmi
-          - name: Bench
-            directory: bench
+      pull-requests: write # to comment preview URLs
+    env:
+      VITE_WALLET_HOST: https://wallet.tempo.xyz/embed
+      VITE_ENV: mainnet
+      VITE_TURNKEY_ORGANIZATION_ID: 1562c50f-1a48-4b10-8f42-87df4e8ef01d
+      VITE_TURNKEY_AUTH_PROXY_CONFIG_ID: eab55ad4-b2f4-414f-836b-a5e279f01ed2
+      VITE_PRIVY_APP_ID: cmixx4jol01zgl80cgjenqkps
+      VITE_PRIVY_CLIENT_ID: client-WY6TQmgzdwgp2ZkrEXJBDscCamyaXNyXrTYoVRkMYm2rk
 
     steps:
-      - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
-
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
 
-      - name: Build accounts
-        run: pnpm build
+      - name: Cache turbo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: .turbo/cache
+          key: turbo-deploy-${{ github.sha }}
+          restore-keys: turbo-deploy-
 
-      - name: Configure build environment
-        if: matrix.worker.build-env != ''
-        run: printf '%s\n' "$BUILD_ENV" >> "$GITHUB_ENV"
+      # Pushes deploy what changed since the last successful deploy, so changes from a
+      # superseded or failed run are not skipped. Falls back to every worker.
+      - name: Select affected workers
+        if: github.event_name != 'workflow_dispatch'
         env:
-          BUILD_ENV: ${{ matrix.worker.build-env }}
-
-      - name: Build
-        working-directory: ${{ matrix.worker.directory }}
-        run: pnpm build
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          base="$BASE"
+          if [ "$EVENT" = push ]; then
+            last="$(gh run list --repo "$REPO" --workflow deploy-workers.yml --branch main --status success --limit 20 --json event,headSha \
+              --jq 'map(select(.event != "pull_request" and .headSha != env.SHA))[0].headSha // empty')" || last=''
+            base="${last:-$base}"
+          fi
+          if [ -n "${base//0/}" ] && git merge-base --is-ancestor "$base" HEAD 2> /dev/null; then
+            echo "TURBO_SCM_BASE=$base" >> "$GITHUB_ENV"
+            echo "AFFECTED=true" >> "$GITHUB_ENV"
+          fi
 
       - name: Deploy
         if: github.event_name != 'pull_request'
-        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: ${{ matrix.worker.directory }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm turbo run deploy --continue=dependencies-successful ${AFFECTED:+--affected}
 
       - name: Preview
-        id: preview
         if: github.event_name == 'pull_request'
-        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: ${{ matrix.worker.directory }}
-          command: versions upload
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_OUTPUT_FILE_DIRECTORY: ${{ runner.temp }}/wrangler
+        run: pnpm turbo run deploy:preview --continue=dependencies-successful ${AFFECTED:+--affected}
 
-      - name: Preview URL
-        if: github.event_name == 'pull_request'
-        uses: tempoxyz/gh-actions/actions/pr-comment@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
-        with:
-          header: deploy-${{ matrix.worker.name }}
-          message: |
-            | Worker | Preview |
-            |--------|---------|
-            | ${{ matrix.worker.name }} | ${{ steps.preview.outputs.deployment-url }} |
+      # Upserts one sticky comment, found by its marker, and removes older copies.
+      - name: Comment on pull request
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          OUTPUT: ${{ runner.temp }}/wrangler
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=("$OUTPUT"/*.json)
+          [ ${#files[@]} -gt 0 ] || exit 0
+          marker='<!-- pr-comment: deploy-workers -->'
+          body="$RUNNER_TEMP/deploy-workers-comment.md"
+          {
+            printf '| Worker | Preview |\n|--------|---------|\n'
+            jq -r 'select(.type == "version-upload") | "| \(.worker_name) | \(.preview_url // "-") |"' "${files[@]}" | sort
+            printf '\n%s\n' "$marker"
+          } > "$body"
+          ids="$(gh api "repos/$REPO/issues/$NUMBER/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id")"
+          latest="$(printf '%s\n' "$ids" | sed '/^$/d' | tail -n 1)"
+          if [ -n "$latest" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$latest" -F body=@"$body" > /dev/null
+          else
+            gh api -X POST "repos/$REPO/issues/$NUMBER/comments" -F body=@"$body" > /dev/null
+          fi
+          for id in $(printf '%s\n' "$ids" | sed '/^$/d' | head -n -1); do
+            gh api -X DELETE "repos/$REPO/issues/comments/$id"
+          done
+
+      - name: Prune turbo cache
+        run: find .turbo/cache -type f -mtime +3 -delete

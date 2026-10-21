@@ -1,0 +1,31 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "globalDependencies": [
+    "src/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test-d.ts",
+    "package.json",
+    "pnpm-lock.yaml",
+    "tsconfig.base.json"
+  ],
+  "globalPassThroughEnv": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "WRANGLER_OUTPUT_FILE_DIRECTORY"],
+  "tasks": {
+    "//#test": {
+      "env": ["TEMPO_IMAGE", "VITE_NODE_ENV", "VITE_NODE_TAG"],
+      "inputs": ["src/**", "test/**", "scripts/**", "env.d.ts", "tsconfig*.json", "vitest.config.ts"],
+      "passThroughEnv": ["CI", "DOCKER_*", "TESTCONTAINERS_*", "VITE_*"]
+    },
+    "build": {
+      "env": ["VITE_*"],
+      "outputs": ["dist/**", ".wrangler/deploy/**"]
+    },
+    "check:markdown": {},
+    "check:types": {},
+    "bench#deploy": { "cache": false, "dependsOn": ["build"] },
+    "bench#deploy:preview": { "cache": false, "dependsOn": ["build"] },
+    "playground#deploy": { "cache": false, "dependsOn": ["build"] },
+    "playground#deploy:preview": { "cache": false, "dependsOn": ["build"] },
+    "wagmi-playground#deploy": { "cache": false, "dependsOn": ["build"] },
+    "wagmi-playground#deploy:preview": { "cache": false, "dependsOn": ["build"] }
+  }
+}

@@ -92,6 +92,7 @@
 ## Git Conventions
 
 - **Conventional commits** — use `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:` prefixes. Scope is optional (e.g. `feat(parser): add array coercion`).
+- **Push to main** — work in the main checkout on main and push each completed change directly to main. Never create worktrees or feature branches. Commit only your own changes and leave other dirty or untracked files alone; if a push is rejected, rebase onto origin/main, resolve conflicts and push again.
 
 ## Learned User Preferences
 

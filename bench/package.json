@@ -6,8 +6,10 @@
   "scripts": {
     "badges": "tsx scripts/badges.ts",
     "bench": "tsx scripts/bench.ts",
-    "build": "tsc --noEmit && vp build",
+    "build": "vp build",
     "check:types": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "deploy:preview": "wrangler versions upload",
     "dev": "vp dev",
     "preview": "vp preview"
   },
