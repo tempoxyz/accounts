@@ -692,7 +692,7 @@ describe('behavior: app-provided feePayer URL bypasses wallet validate', () => {
         internal_allowUnsafeUrls: true,
         transports: { [chain.id]: http() },
         feePayer: {
-          account: feePayerAccount,
+          account: accounts[1]!,
           name: 'Wallet Sponsor',
           validate: () => false,
         },
@@ -719,6 +719,66 @@ describe('behavior: app-provided feePayer URL bypasses wallet validate', () => {
     expect(result.transaction.maxFeePerGas).not.toBe(0n)
     expect(result.capabilities?.sponsored).toBe(true)
     expect(result.capabilities?.sponsor?.name).toBe('App Sponsor')
+
+    // The app's fee payer pays, not the wallet's.
+    const signed = await userAccount.signTransaction(result.transaction as never)
+    const receipt = (await getClient().request({
+      method: 'eth_sendRawTransactionSync' as never,
+      params: [signed],
+    })) as { feePayer?: string | undefined }
+    expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+  })
+})
+
+describe('behavior: app-provided feePayer URL that does not sign', () => {
+  let appServer: Server
+  let walletServer: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+
+  beforeAll(async () => {
+    // App relay without a fee payer: it fills but never signs as fee payer.
+    appServer = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+      }).listener,
+    )
+
+    // The wallet's own fee payer rejects every request, so it must not sign the app's fill either.
+    walletServer = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        internal_allowUnsafeUrls: true,
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: accounts[1]!,
+          name: 'Wallet Sponsor',
+          validate: () => false,
+        },
+      }).listener,
+    )
+
+    client = getClient({ transport: http(walletServer.url) })
+  })
+
+  afterAll(() => {
+    appServer.close()
+    walletServer.close()
+  })
+
+  test('behavior: refuses instead of signing with the wallet fee payer', async () => {
+    // Before the fix the wallet relay signed the app's unsigned fill with its own fee payer.
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: appServer.url as never,
+    }).then(
+      ({ transaction }) => ({ feePayerSignature: transaction.feePayerSignature !== undefined }),
+      (error: BaseError) => error.name,
+    )
+
+    expect(result).toMatchInlineSnapshot(`"TransactionExecutionError"`)
   })
 })
 

@@ -432,6 +432,12 @@ export function relay(options: relay.Options = {}): Handler {
             })(),
             // Sign as fee payer (if sponsored and not already signed).
             (async () => {
+              // An app's own fee payer URL is the sponsorship authority, so its fill must come
+              // back signed. Signing it here would spend this relay's fee payer without `validate`.
+              if (externalFeePayerUrl && !alreadySigned)
+                throw new RpcResponse.InvalidParamsError({
+                  message: 'The app fee payer did not sign the transaction.',
+                })
               if (!(sponsored && feePayerOptions && !alreadySigned)) return transaction_filled
               return Sponsorship.sign({
                 account: feePayerOptions.account,
