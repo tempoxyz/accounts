@@ -27,7 +27,7 @@ allowBuilds:
 blockExoticSubdeps: true
 
 catalog:
-  '@cloudflare/vite-plugin': ~1.33.2
+  '@cloudflare/vite-plugin': ~1.64.0
   '@cloudflare/workers-types': ^4.20260317.1
   '@tanstack/react-query': ^5.97.0
   '@tanstack/react-router': ^1.168.19
@@ -36,11 +36,11 @@ catalog:
   '@types/node': ^25.6.0
   '@types/react': ^19.2.14
   '@types/react-dom': ^19.2.3
-  '@vitejs/devtools': 0.7.1
+  '@vitejs/devtools': 0.8.0
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.6.0
   hono: ^4.13.11
-  mppx: ^0.12.0
+  mppx: ^0.13.5
   ox: 0.14.45
   prool: ~0.2.4
   react: ^19.2.8
