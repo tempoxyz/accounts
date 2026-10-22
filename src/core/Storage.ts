@@ -156,9 +156,13 @@ export declare namespace cookie {
   type Options = from.Options
 }
 
-/** Creates an IndexedDB-backed storage adapter. Stores raw values (no JSON serialization). */
+/** Creates an IndexedDB-backed storage adapter. Stores raw values (no JSON serialization). Falls back to in-memory storage in runtimes without IndexedDB (e.g. React Native, some SSR). */
 export function idb(options: idb.Options = {}): Storage {
-  const store = typeof indexedDB !== 'undefined' ? createStore('tempo', 'store') : undefined
+  // idb-keyval treats an `undefined` store as "use the default store", which
+  // opens IndexedDB and throws where it is unavailable — so degrade to memory
+  // rather than passing `undefined` through.
+  if (typeof indexedDB === 'undefined') return memory(options)
+  const store = createStore('tempo', 'store')
   const storage = from(
     {
       async getItem(name) {
