@@ -140,3 +140,5 @@
 
 - Retained-key authority checks must cover MPP resolution and fill signing, including action-based adapters such as Privy. Unsigned root fills must remain available when no usable key matches.
 - Memory KV capacity is opt-in: shared authentication stores also hold durable credentials and sessions, so a default hard cap can deny login. Cache TTLs must reach backing storage for reclamation.
+
+- Bind cached Privy wallets to the authenticated user ID, not token presence; recheck identity after asynchronous wallet loading and before cached signing.

@@ -64,6 +64,73 @@ describe('privy', () => {
     },
   )
 
+  test.each(['send', 'fill', 'mpp', 'personal_sign'] as const)(
+    '%s rejects a warm cache after the Privy user changes',
+    async (path) => {
+      const client = createClient()
+      const provider = Provider.create({
+        adapter: privy({ client, loadAccounts: async () => undefined }),
+        storage: Storage.memory(),
+      })
+      await provider.request({ method: 'wallet_connect' })
+      const chainId = provider.store.getState().chainId
+      await provider.store.accessKeys.authorize({
+        account: Account.fromSecp256k1(privateKeyA),
+        chainId,
+        parameters: { privateKey: privateKeyB, expiry: 9999999999 },
+      })
+      client.userId = 'user_2'
+      client.wallets = [client.makeWallet(other)]
+      const request =
+        path === 'mpp'
+          ? provider.getMppxParameters().resolveAccount({
+              account: { address, type: 'json-rpc' },
+              chainId,
+              operation: { kind: 'authorizePaymentChannel' },
+            })
+          : path === 'personal_sign'
+            ? provider.request({ method: 'personal_sign', params: ['0x1234', address] })
+            : provider.request({
+                method: path === 'send' ? 'eth_sendTransaction' : 'eth_fillTransaction',
+                params: [{ from: address, to: other }],
+              })
+      await expect(request).rejects.toThrow('Privy session changed')
+      expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+      expect(provider.store.getState().accounts).toMatchInlineSnapshot(`[]`)
+      await provider.request({ method: 'wallet_connect' })
+      expect(provider.store.getState().accounts.map((account) => account.address)).toEqual([other])
+      await provider.request({ method: 'personal_sign', params: ['0x1234', other] })
+      expect(client.signWith).toEqual([other])
+    },
+  )
+
+  test('reconnecting after a user switch replaces cached accounts', async () => {
+    const { adapter, client, store } = setup()
+    await connect({ adapter, store })
+    client.userId = 'user_2'
+    client.wallets = [client.makeWallet(other)]
+    const result = await adapter.actions.loadAccounts(
+      {},
+      { method: 'wallet_connect', params: undefined },
+    )
+    expect(result.accounts.map((account) => account.address)).toEqual([other])
+  })
+
+  test('rejects a user switch while loading wallet providers', async () => {
+    const { adapter, client } = setup()
+    const getProvider = client.embeddedWallet.getEthereumProvider
+    client.embeddedWallet.getEthereumProvider = async (parameters) => {
+      const provider = await getProvider(parameters)
+      client.userId = 'user_2'
+      return provider
+    }
+    await expect(
+      adapter.actions.loadAccounts({}, { method: 'wallet_connect', params: undefined }),
+    ).rejects.toThrow('Privy session changed')
+    expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+  })
+
   test('validates the Privy session before retained-key use', async () => {
     const { adapter, client, store } = setup({ token: null })
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -285,7 +352,7 @@ describe('privy', () => {
     )
 
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
-    expect(client.restoreCalls).toMatchInlineSnapshot(`1`)
+    expect(client.restoreCalls).toMatchInlineSnapshot(`4`)
     expect(result).toMatchInlineSnapshot(`
     	{
     	  "keyAuthorization": {
@@ -603,7 +670,7 @@ describe('privy', () => {
       { method: 'personal_sign', params: ['0x68656c6c6f', address] },
     )
 
-    expect(client.restoreCalls).toMatchInlineSnapshot(`1`)
+    expect(client.restoreCalls).toMatchInlineSnapshot(`4`)
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
   })
 
@@ -618,7 +685,7 @@ describe('privy', () => {
     ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Privy account connected.]')
 
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
-    expect(client.restoreCalls).toMatchInlineSnapshot(`0`)
+    expect(client.restoreCalls).toMatchInlineSnapshot(`1`)
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
   })
 
@@ -989,6 +1056,7 @@ type MockClient = privy.Client & {
   logoutCalls: number
   logoutWith: (string | undefined)[]
   restoreCalls: number
+  userId: string
   signPayloads: Hex.Hex[]
   signWith: string[]
   transactions: unknown[]
@@ -1006,6 +1074,7 @@ function createClient(options: setup.Options = {}) {
     logoutCalls: 0,
     logoutWith: [] as (string | undefined)[],
     restoreCalls: 0,
+    userId: 'user_1',
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
     transactions: [] as unknown[],
@@ -1068,7 +1137,7 @@ function createClient(options: setup.Options = {}) {
         if (options.restoreError) throw options.restoreError
         return {
           user: {
-            id: 'user_1',
+            id: client.userId,
             linked_accounts: client.wallets.map((wallet, index) => ({
               address: wallet.address,
               chain_type: 'ethereum',

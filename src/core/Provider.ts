@@ -612,12 +612,13 @@ export function create(options: create.Options = {}): create.ReturnType {
       })
     } else {
       try {
-        await Actions.accessKey.revokeSync(client, {
+        const { receipt } = await Actions.accessKey.revokeSync(client, {
           account: selected.account as TempoAccount.Account,
           accessKey: parameters.accessKeyAddress,
           ...(feePayer ? { feePayer: true as never } : {}),
           ...(parameters.keyAuthorization ? { keyAuthorization: parameters.keyAuthorization } : {}),
         })
+        if (receipt.status !== 'success') throw new Error('Access-key revocation is not confirmed')
       } catch (error) {
         if (typeof feePayer === 'string' || !AccessKey.isUnavailableError(error)) throw error
       }

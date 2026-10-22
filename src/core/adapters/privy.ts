@@ -61,6 +61,7 @@ export function privy<const client extends privy.Client>(
   return Adapter.define({ icon, name, rdns }, ({ getClient, store }) => {
     let privyClient_promise: Promise<client> | undefined
     let restore_promise: Promise<void> | undefined
+    let owner: string | undefined
     let walletAccounts: readonly privy.EmbeddedWallet[] | undefined
 
     async function getPrivyClient(): Promise<client> {
@@ -84,8 +85,10 @@ export function privy<const client extends privy.Client>(
     // Tempo signing through Privy's raw `secp256k1_sign` provider method.
     function toSigningAccount(account: privy.EmbeddedWallet) {
       const address = core_Address.from(account.address)
+      const owner_ = owner
 
       async function sign(parameters: { hash: Hex.Hex }) {
+        await requireSession(owner_)
         return await signPayload({
           payload: parameters.hash,
           walletAccount: account,
@@ -111,6 +114,7 @@ export function privy<const client extends privy.Client>(
     async function clear() {
       restore_promise = undefined
       walletAccounts = undefined
+      owner = undefined
       store.disconnect()
     }
 
@@ -134,6 +138,11 @@ export function privy<const client extends privy.Client>(
       privyClient: privy.Client,
     ): Promise<readonly privy.EmbeddedWallet[]> {
       const { user } = await privyClient.user.get()
+      if (!user?.id) {
+        await clear()
+        throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
+      }
+      owner = user.id
       const wallets = (user?.linked_accounts ?? [])
         .filter(
           (account) =>
@@ -158,7 +167,7 @@ export function privy<const client extends privy.Client>(
       if (!primary) return []
       const entropyId = primary.address as string
 
-      return await Promise.all(
+      const accounts = await Promise.all(
         wallets.map(async (wallet) => ({
           address: core_Address.from(wallet.address as string),
           provider: await privyClient.embeddedWallet.getEthereumProvider({
@@ -168,6 +177,8 @@ export function privy<const client extends privy.Client>(
           }),
         })),
       )
+      await requireSession(user.id)
+      return accounts
     }
 
     function selectWalletAccounts(
@@ -241,10 +252,20 @@ export function privy<const client extends privy.Client>(
       }
     }
 
-    async function requireSession() {
-      if (await hasValidSession()) return
-      await clear()
-      throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
+    async function requireSession(expected = owner) {
+      if (!(await hasValidSession())) {
+        await clear()
+        throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
+      }
+      const { user } = await (await getPrivyClient()).user.get().catch(async (error) => {
+        if (!isSessionError(error)) throw error
+        await clear()
+        throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
+      })
+      if (!user?.id || (expected !== undefined && expected !== user.id)) {
+        await clear()
+        throw new ox_Provider.DisconnectedError({ message: 'Privy session changed. Reconnect.' })
+      }
     }
 
     async function getSigningAccount(address: Address | undefined) {
@@ -373,6 +394,7 @@ export function privy<const client extends privy.Client>(
       privyClient: privy.Client
     }) {
       const { authorizeAccessKey, label, personalSign, privyClient, selection } = parameters
+      if (owner !== undefined && (await privyClient.user.get()).user?.id !== owner) await clear()
       await requireSession()
       const wallets = await loadEthereumWallets(privyClient)
       const selected = selectWalletAccounts(wallets, selection)
@@ -394,6 +416,7 @@ export function privy<const client extends privy.Client>(
           : undefined
 
       const signature = digest && account ? await account.sign({ hash: digest }) : undefined
+      await requireSession()
       walletAccounts = selected
       restore_promise = undefined
 
