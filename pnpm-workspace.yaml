@@ -49,9 +49,9 @@ catalog:
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
   viem: 2.57.1
-  vite: npm:@voidzero-dev/vite-plus-core@~1.1.0
-  vite-plus: ~1.1.0
-  vp: npm:vite-plus@~1.1.0
+  vite: npm:@voidzero-dev/vite-plus-core@~1.3.0
+  vite-plus: ~1.3.0
+  vp: npm:vite-plus@~1.3.0
   wagmi: 3.7.7
   wrangler: ^4.98.0
   zod: ^4.4.3
@@ -145,7 +145,7 @@ overrides:
   'brace-expansion@>=2.0.0 <2.1.7': '2.1.7'
   'brace-expansion@>=3.0.0 <5.0.12': '5.0.12'
   # GHSA-rp9w-3fw7-7cwq et al: DOMPurify hook/config sanitization bypasses.
-  'dompurify@<=3.4.15': '3.4.16'
+  'dompurify@<3.4.17': '3.4.17'
   # GHSA-vcc3-ghjq-m6fr: decode-uri-component malformed-input DoS; the advisory's 0.4.3 floor is unpublished.
   'decode-uri-component@<=0.4.2': '0.5.0'
   esbuild: '0.28.1'
@@ -159,7 +159,7 @@ overrides:
   # Patch Hono static-path middleware bypass, traversal, body-parser, and query parsing advisories.
   'hono@>=4.0.0 <4.13.11': '4.13.11'
   # GHSA-rpw4-54j3-4h4q + GHSA-2vr4-cq9g-pvrc: ip-address trust-boundary bypasses.
-  'ip-address@<10.7.1': '10.7.1'
+  'ip-address@<10.7.4': '10.7.4'
   # GHSA-v6wh-96g9-6wx3: launch-editor NTLMv2 hash disclosure via UNC path (dev tooling).
   # GHSA-698v-4r3x-3vcv and GHSA-587h-7wmj-h5pm: Windows command injection.
   # GHSA-r825-w8mm-5pxw: prevent editor flags from being interpreted as commands.
@@ -190,7 +190,7 @@ overrides:
   react-dom: 'catalog:'
   tar: '7.5.21'
   # GHSA-82x6-q7mm-w9cf and GHSA-v5mp-jgw5-2x6j: prototype pollution in dotted key paths.
-  'toml@<4.2.0': '4.2.0'
+  'toml@<5.0.1': '5.0.1'
   'tmp@<0.2.7': '0.2.7'
   # GHSA-vmh5-mc38-953g et al: undici proxy TLS/cache/WebSocket advisories.
   'undici@>=7.0.0 <7.29.1': '7.29.1'
@@ -206,7 +206,7 @@ overrides:
   '@xmldom/xmldom@>=0.7.0 <0.8.15': '0.8.15'
   '@xmldom/xmldom@>=0.9.0 <0.9.12': '0.9.12'
   # Keep plugins on Vite+'s patched core to avoid mixing incompatible Vite types.
-  'vite@*': 'npm:@voidzero-dev/vite-plus-core@~1.1.0'
+  'vite@*': 'npm:@voidzero-dev/vite-plus-core@~1.3.0'
   vite-plus: 'catalog:'
   vp: 'catalog:'
   # GHSA-96hv-2xvq-fx4p: ws memory-exhaustion DoS (v8 prod path via viem; v7 dev path via react-native metro).
@@ -226,7 +226,7 @@ peerDependencyRules:
   allowedVersions:
     accounts: '*'
     # Vite+ core uses the toolchain release version while implementing Vite 8.
-    vite: '1.1.0'
+    vite: '1.3.0'
 
 shellEmulator: true
 

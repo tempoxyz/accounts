@@ -62,7 +62,7 @@
     "typescript": "catalog:",
     "viem": "catalog:",
     "vite": "catalog:",
-    "vitest": "5.0.3",
+    "vitest": "5.0.5",
     "vp": "catalog:",
     "wagmi": "catalog:",
     "zile": "^0.0.25"

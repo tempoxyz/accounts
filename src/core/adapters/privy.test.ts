@@ -131,6 +131,37 @@ describe('privy', () => {
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
   })
 
+  test('connect retains its loaded owner after a concurrent clear', async () => {
+    const { adapter, client, store } = setup()
+    await connect({ adapter, store })
+    const wallet = client.wallets[0]!
+    const request = wallet.provider.request.bind(wallet.provider)
+    wallet.provider.request = async (parameters) => {
+      client.userId = 'other-user'
+      await expect(adapter.assertAccount!({ address })).rejects.toThrow('Privy session changed')
+      client.userId = 'user_1'
+      return request(parameters)
+    }
+    const result = await adapter.actions.loadAccounts(
+      { digest: '0x1234' },
+      { method: 'wallet_connect', params: undefined },
+    )
+    store.setState({ accounts: result.accounts, activeAccount: 0 })
+    client.userId = 'other-user'
+    await expect(adapter.assertAccount!({ address })).rejects.toThrow('Privy session changed')
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('reconnect clears stale accounts on user lookup session errors', async () => {
+    const { adapter, client, store } = setup()
+    await connect({ adapter, store })
+    client.user.get = async () => {
+      throw Object.assign(new Error('session expired'), { code: 'session_expired' })
+    }
+    await expect(connect({ adapter, store })).rejects.toThrow('Privy session expired')
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
   test('validates the Privy session before retained-key use', async () => {
     const { adapter, client, store } = setup({ token: null })
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -685,7 +716,7 @@ describe('privy', () => {
     ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Privy account connected.]')
 
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
-    expect(client.restoreCalls).toMatchInlineSnapshot(`1`)
+    expect(client.restoreCalls).toMatchInlineSnapshot(`0`)
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
   })
 
