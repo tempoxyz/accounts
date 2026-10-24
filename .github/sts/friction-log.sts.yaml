@@ -1,0 +1,11 @@
+# Allow the Friction Log workflow on main to push frog/sync and open or
+# update its pull request. Replaces the built-in GITHUB_TOKEN, which the
+# org does not allow to create pull requests.
+subject: repo:tempoxyz@211589300/accounts@1178309114:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: tempoxyz/accounts/\.github/workflows/friction-log\.yml@refs/heads/main
+permissions:
+  contents: write
+  issues: write
+  pull_requests: write
+max_ttl: 15m
