@@ -101,6 +101,9 @@
 
 ## Learned Workspace Facts
 
+- **Capture the call-batch chain before awaiting** -- `wallet_sendCalls` must use one effective chain for authorization, submission, response metadata, and the status ID. Reading the active chain after submission can route `wallet_getCallsStatus` to a different chain.
+- **Forward the captured chain to default-key authorization** -- pass the transaction chain in adapter parameters and encoded RPC params when the configured authorization omits `chainId`. Key selection alone does not bind a later asynchronous adapter authorization to that chain. Preserve explicit values, including `0n`.
+
 - **CI registry policy also applies to frozen installs** -- lockfile refreshes can select recently published transitive DevTools packages even when the direct tool is older. Retain compatible established dependency versions when updating the security-patched Vite toolchain.
 
 - **Fee-token balances do not prove FeeAMM eligibility** — transaction filling can succeed for tokens that pool admission rejects. For automatic selection, check reserves against the maximum fee, including quote-token routing, and exclude failed candidates even when they are the user's funded on-chain preference. Keep explicit fee-token choices and swap funding-source selection separate.

@@ -869,7 +869,10 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
     if (existing) return
     if (!AccessKey.canAuthorizeCalls({ parameters, calls: options_.calls })) return
-    const decoded = stripAuthorizeAccessKey(parameters)
+    const decoded = {
+      ...stripAuthorizeAccessKey(parameters),
+      chainId: parameters.chainId ?? BigInt(options_.chainId),
+    }
     await authorizeAccessKeyAction(decoded, {
       method: 'wallet_authorizeAccessKey',
       params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, decoded)!],
@@ -1237,18 +1240,20 @@ export function create(options: create.Options = {}): create.ReturnType {
                     try {
                       assertConnected()
                       const decoded = request._decoded.params?.[0]
-                      const { calls = [], capabilities, chainId, from } = decoded ?? {}
+                      const { calls = [], capabilities, from } = decoded ?? {}
                       const sync = capabilities?.sync
                       const feePayer = resolveFeePayer(
                         capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
                       )
                       const state = store.getState()
+                      const chainId = decoded?.chainId ?? state.chainId
+                      const chainId_hex = Hex.fromNumber(chainId)
                       const from_ = from ?? state.accounts[state.activeAccount]?.address
                       if (from_)
                         await authorizeDefaultAccessKeyForTransaction({
                           address: from_,
                           calls,
-                          chainId: chainId ?? state.chainId,
+                          chainId,
                         })
                       const txRequest = {
                         calls,
@@ -1261,8 +1266,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                           method: 'eth_sendTransaction',
                           params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
                         })
-                        const chainId = Hex.fromNumber(store.getState().chainId)
-                        const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
+                        const id = Hex.concat(hash, Hex.padLeft(chainId_hex, 32), sendCallsMagic)
                         return { capabilities: { sync }, id }
                       }
                       const receipt = await sendTransactionSyncAction(txRequest as never, {
@@ -1270,12 +1274,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                         params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
                       })
                       const hash = receipt.transactionHash
-                      const chainIdHex = Hex.fromNumber(store.getState().chainId)
-                      const id = Hex.concat(hash, Hex.padLeft(chainIdHex, 32), sendCallsMagic)
+                      const id = Hex.concat(hash, Hex.padLeft(chainId_hex, 32), sendCallsMagic)
                       return {
                         atomic: true,
                         capabilities: { sync },
-                        chainId: chainIdHex,
+                        chainId: chainId_hex,
                         id,
                         receipts: [receipt],
                         status: (receipt as { status: string }).status === '0x1' ? 200 : 500,
