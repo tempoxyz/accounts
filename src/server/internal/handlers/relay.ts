@@ -350,7 +350,7 @@ export function relay(options: relay.Options = {}): Handler {
             const sponsoredTx = { ...baseTx, feePayer: true }
 
             if (Sponsorship.isPreparedTransaction(sponsoredTx)) {
-              // Already prepared — skip fills, just validate sponsorship.
+              // Validate prepared sponsorship before deciding whether to refill.
               const prepared = {
                 transaction: Utils.normalizeTempoTransaction(sponsoredTx),
                 sponsor: undefined,
@@ -360,7 +360,13 @@ export function relay(options: relay.Options = {}): Handler {
                 transaction: prepared.transaction,
                 validate: feePayerOptions!.validate,
               })
-              filled = prepared
+              if (sponsored) {
+                filled = prepared
+              } else {
+                const { result, token } = await fillUnsponsored()
+                filled = result
+                feeToken = token
+              }
             } else {
               const options = {
                 autoSwap,
