@@ -136,6 +136,7 @@
 
 - Validate the adapter's current account selection before using locally retained access keys; persisted account history is not session authorization.
 - A synchronous revocation API can still return a pending receipt. Remove local key state only after successful execution, or an explicit already-unavailable-key error.
+- Locally signed access-key limit updates must require a successful receipt before reporting RPC success. Synchronous submission can return pending or reverted receipts; preserve stored key metadata when rejecting them. Return a non-retryable structured RPC error with receipt status and transaction hash: default Viem custom transports retry `-32603` by resubmitting the entire wallet request.
 - Multi-account integration fixtures must reauthorize a payer key after replacing the connected wallet; restoring account history alone must not restore pruned signing authority.
 
 - Retained-key authority checks must cover MPP resolution and fill signing, including action-based adapters such as Privy. Unsigned root fills must remain available when no usable key matches.

@@ -661,10 +661,20 @@ export function create(options: create.Options = {}): create.ReturnType {
         token: limit.token,
       }),
     )
-    await viem_sendTransactionSync(getClient({ chainId }), {
+    const receipt = await viem_sendTransactionSync(getClient({ chainId }), {
       account: selected.account,
       calls,
     })
+    // A generic error becomes -32603, which clients may retry by submitting another update.
+    if (receipt.status !== 'success')
+      throw new RpcResponse.ResourceUnavailableError({
+        message: 'Access-key update is not confirmed',
+        data: {
+          chainId,
+          status: receipt.status,
+          transactionHash: receipt.transactionHash,
+        },
+      })
   }
 
   async function signTransactionAction(
