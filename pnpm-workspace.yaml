@@ -1,5 +1,8 @@
 auditConfig:
   ignoreGhsas:
+    # Zod 4 is upgraded; Zod 3 has no fixed release. Backport its size gate below.
+    # scripts/zod-security.test.ts guards the patch and all installed Zod versions.
+    - GHSA-mrhx-c7xc-m3w5
     - GHSA-5p2g-fcmc-qvqq # transitive image-size build-tooling DoS; patched 2.0.3 is not published on npm.
     - GHSA-w3rx-r6r6-pgpr # transitive image-size build-tooling DoS; patched 2.0.3 is not published on npm.
     - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
@@ -54,7 +57,7 @@ catalog:
   vp: npm:vite-plus@~1.3.0
   wagmi: 3.7.7
   wrangler: ^4.98.0
-  zod: ^4.4.3
+  zod: ^4.6.7
 
 minimumReleaseAge: 1440
 
@@ -77,8 +80,9 @@ minimumReleaseAgeExclude:
   - shell-quote@1.11.0
   - postcss@8.5.23
   - socket.io-parser@4.2.7
-  - undici@7.29.1
-  - undici@8.10.2
+  - undici@6.29.1
+  - undici@7.30.1
+  - undici@8.12.2
   - react@19.2.8
   - react-dom@19.2.8
   - react-server-dom-webpack@19.2.8
@@ -96,6 +100,11 @@ minimumReleaseAgeExclude:
 nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=DeprecationWarning'
 
 overrides:
+  "zod@>=4.0.0 <4.6.7": "4.6.7"
+  # Keep v3 consumers API-compatible and apply the collection-size backport.
+  "zod@<4": "3.25.76"
+  "fast-uri@>=3.0.0 <3.1.9": "3.1.9"
+  "body-parser@>=2.0.0 <2.4.0": "2.4.0"
   accounts: 'workspace:*'
   # Retain the base branch's Query release; 5.104.5 is blocked as recently published in CI.
   '@tanstack/query-core': '5.100.10'
@@ -139,7 +148,7 @@ overrides:
   # GHSA-p95v-992w-h6c3: prototype pollution via nested decoder keys.
   '@toon-format/toon@<2.3.1': '2.3.1'
   'axios@>=1.0.0 <1.20.0': '1.20.0'
-  'body-parser@>=2.0.0 <2.3.0': '2.3.0'
+  'body-parser@>=2.0.0 <2.3.0': '2.4.0'
   # GHSA-3jxr-9vmj-r5cp and GHSA-mh99-v99m-4gvg: brace-expansion DoS.
   'brace-expansion@<1.1.21': '1.1.21'
   'brace-expansion@>=2.0.0 <2.1.7': '2.1.7'
@@ -150,7 +159,7 @@ overrides:
   'decode-uri-component@<=0.4.2': '0.5.0'
   esbuild: '0.28.1'
   # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname, scheme, and authority confusion.
-  'fast-uri@>=3.0.0 <3.1.8': '3.1.8'
+  'fast-uri@>=3.0.0 <3.1.8': '3.1.9'
   viem: 2.57.1
   file-type: '22.0.1'
   follow-redirects: '1.16.1'
@@ -193,13 +202,12 @@ overrides:
   'toml@<5.0.1': '5.0.1'
   'tmp@<0.2.7': '0.2.7'
   # GHSA-vmh5-mc38-953g et al: undici proxy TLS/cache/WebSocket advisories.
-  'undici@>=7.0.0 <7.29.1': '7.29.1'
-  # pkg-pr-new: the registry policy rejects these versions as recently published.
-  # Pin the latest earlier releases, none of which has an advisory.
-  '@actions/http-client>undici': '6.29.0'
+  'undici@>=7.0.0 <7.30.1': '7.30.1'
+  # pkg-pr-new: retain registry-policy-compatible helper releases.
+  'undici@>=6.0.0 <6.29.1': '6.29.1'
   'pkg-pr-new>query-registry': '4.3.0'
   'query-registry>url-join': '5.0.0'
-  'undici@>=8.0.0 <8.10.2': '8.10.2'
+  'undici@>=8.0.0 <8.12.2': '8.12.2'
   'uuid@<11.1.1': '11.1.1'
   valibot: '1.4.2'
   # GHSA-6gmq-8vp8-gcm6: xmldom XML namespace confusion.
@@ -248,3 +256,4 @@ trustPolicyExclude:
 
 patchedDependencies:
   vocs@2.0.0: patches/vocs@2.0.0.patch
+  zod@3.25.76: patches/zod@3.25.76.patch
