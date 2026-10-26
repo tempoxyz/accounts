@@ -66,7 +66,14 @@ export function fromFetchHandler(
   const onError = options?.onError ?? defaultErrorHandler
 
   return async (req, res) => {
-    const request = createRequest(req, res, options)
+    let request: Request
+    try {
+      request = createRequest(req, res, options)
+    } catch {
+      // An unparseable `Host` header or request target must not escape as an unhandled rejection.
+      await sendResponse(res, new Response('Bad Request', { status: 400 }))
+      return
+    }
     const client = {
       address: req.socket.remoteAddress!,
       family: req.socket.remoteFamily! as ClientAddress['family'],
