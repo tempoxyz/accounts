@@ -413,7 +413,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     Body: OnRampBody,
     async run(provider) {
       // wallet_deposit opens the wallet's native Deposit dialog
-      // ($20/$50/$100/Other, Apple Pay, Deposit crypto, etc.).
+      // ($20/$50/$100/Other, MACH, Deposit crypto, etc.).
       // Pre-fill with $0.01 so the demo amount stays consistent.
       void provider
         .request({
