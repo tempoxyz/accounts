@@ -21,6 +21,11 @@ test('the audit exception covers only patched Zod versions', () => {
   `)
 })
 
+test('all Vite peers resolve to Vite+ core', () => {
+  const lock = readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8')
+  expect(/^  ['"]?vite@\d/m.test(lock)).toMatchInlineSnapshot('false')
+})
+
 describe.each([
   ['v3 ESM', legacy],
   ['v3 CommonJS', require('zod-v3') as typeof legacy],

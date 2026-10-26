@@ -134,6 +134,8 @@
 
 - **Keep the Zod audit exception coupled to the backport** -- Zod 3 consumers require v3 APIs and have no patched upstream release for GHSA-mrhx-c7xc-m3w5. Keep them on patched `3.25.76`, keep Zod 4 on `4.6.7` or later, and retain the collection-bound regression tests when updating either version or the patch.
 
+- **Retain Vite+ peers during lockfile refreshes** -- pnpm can resolve bare Vite peers despite the npm-alias override. Preserve the existing Vite+ peer graph and keep the lockfile regression check rejecting real `vite@` versions.
+
 ## Access-key lifecycle invariants
 
 - Validate the adapter's current account selection before using locally retained access keys; persisted account history is not session authorization.
