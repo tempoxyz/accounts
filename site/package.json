@@ -29,9 +29,9 @@
     "tsx": "catalog:",
     "viem": "catalog:",
     "vite": "catalog:",
-    "vocs": "2.0.0",
+    "vocs": "2.11.0",
     "wagmi": "catalog:",
-    "waku": "1.0.0-beta.1"
+    "waku": "1.0.0-rc.3"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.93",

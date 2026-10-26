@@ -22,6 +22,7 @@ allowBuilds:
   simple-git-hooks: true
   ssh2: true
   utf-8-validate: false
+  vue-demi: false
   workerd: true
 
 blockExoticSubdeps: true
@@ -43,8 +44,8 @@ catalog:
   mppx: ^0.12.0
   ox: 0.14.45
   prool: ~0.2.4
-  react: ^19.2.8
-  react-dom: ^19.2.8
+  react: ^19.3.0
+  react-dom: ^19.3.0
   tsx: ^4.23.15
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
@@ -79,16 +80,13 @@ minimumReleaseAgeExclude:
   - socket.io-parser@4.2.7
   - undici@7.29.1
   - undici@8.10.2
-  - react@19.2.8
-  - react-dom@19.2.8
-  - react-server-dom-webpack@19.2.8
   - tar@7.5.21
   - valibot@1.4.2
   - wata
   - regen-ui
   - secretlint
   - tmp
-  - vocs
+  - vocs@2.11.0
   - viem
   - vite-plus
   - wagmi
@@ -176,7 +174,7 @@ overrides:
   '@protobufjs/utf8': '1.1.1'
   # GHSA-x5fp-wj9c-mxmx and GHSA-4mjr-xmp4-gh2g: qs arrayLimit bypass and prototype pollution.
   qs: '6.16.0'
-  react-server-dom-webpack: '19.2.8'
+  react-server-dom-webpack: '19.3.1'
   # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
   reselect: '5.1.0'
   # GHSA-p6vx-979v-rg4c and GHSA-jp82-f5mq-hwhp: unsafe deserialization and memory exhaustion.
@@ -247,4 +245,4 @@ trustPolicyExclude:
   - undici-types@6.19.8
 
 patchedDependencies:
-  vocs@2.0.0: patches/vocs@2.0.0.patch
+  vocs@2.11.0: patches/vocs@2.11.0.patch
