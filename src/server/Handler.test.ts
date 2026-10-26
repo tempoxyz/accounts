@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia'
 import express from 'express'
 import { Hono } from 'hono'
+import * as Net from 'node:net'
 import { describe, expect, test } from 'vp/test'
 
 import { createServer } from '../../test/utils.js'
@@ -510,6 +511,43 @@ describe('from', () => {
 
     const data = await response.json()
     expect(data).toEqual({ message: 'hello from listener' })
+  })
+
+  test('behavior: .listener rejects an unparseable host or request target', async () => {
+    const handler = Handler.from()
+    handler.get('/test', () => new Response('test'))
+
+    const server = await createServer(handler.listener)
+    const { port } = new URL(server.url)
+
+    // Raw sockets, since `fetch` refuses to send these requests.
+    const send = (head: string) =>
+      new Promise<string | undefined>((resolve) => {
+        let data = ''
+        const socket = Net.connect(Number(port), 'localhost', () =>
+          socket.end(`${head}\r\nConnection: close\r\n\r\n`),
+        )
+        socket.setTimeout(2_000, () => socket.destroy())
+        socket.on('data', (chunk) => (data += chunk))
+        socket.on('close', () => resolve(data.split('\r\n')[0]))
+      })
+
+    expect([
+      await send('GET /test HTTP/1.1\r\nHost: a b'),
+      await send('GET /test HTTP/1.1\r\nHost: ['),
+      await send('GET //[ HTTP/1.1\r\nHost: localhost'),
+    ]).toMatchInlineSnapshot(`
+      [
+        "HTTP/1.1 400 Bad Request",
+        "HTTP/1.1 400 Bad Request",
+        "HTTP/1.1 400 Bad Request",
+      ]
+    `)
+
+    const response = await fetch(`${server.url}/test`)
+    expect(response.status).toBe(200)
+
+    await server.closeAsync()
   })
 
   test('behavior: headers', async () => {

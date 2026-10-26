@@ -19,7 +19,7 @@ export function OnRampBody({ status, result, onAction, delay, connectedBalance }
         </p>
       </div>
       <p className="text-[14px] text-foreground-muted">
-        Open the wallet deposit flow with cards, Apple Pay, crypto, and X verification.
+        Open the wallet deposit flow with MACH, crypto, and X verification.
       </p>
       <PrimaryButton label="Add funds" status={status} onClick={onAction} className="h-11 w-full" />
       {result?.summary ? (
