@@ -1,5 +1,8 @@
 auditConfig:
   ignoreGhsas:
+    # Zod 4 is upgraded; Zod 3 has no fixed release. Backport its size gate below.
+    # scripts/zod-security.test.ts guards the patch and all installed Zod versions.
+    - GHSA-mrhx-c7xc-m3w5
     - GHSA-5p2g-fcmc-qvqq # transitive image-size build-tooling DoS; patched 2.0.3 is not published on npm.
     - GHSA-w3rx-r6r6-pgpr # transitive image-size build-tooling DoS; patched 2.0.3 is not published on npm.
     - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
@@ -77,8 +80,9 @@ minimumReleaseAgeExclude:
   - shell-quote@1.11.0
   - postcss@8.5.23
   - socket.io-parser@4.2.7
-  - undici@7.29.1
-  - undici@8.10.2
+  - undici@6.29.1
+  - undici@7.30.1
+  - undici@8.12.2
   - react@19.2.8
   - react-dom@19.2.8
   - react-server-dom-webpack@19.2.8
@@ -97,6 +101,8 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 
 overrides:
   "zod@>=4.0.0 <4.6.6": "4.6.7"
+  # Keep v3 consumers API-compatible and apply the collection-size backport.
+  "zod@<4": "3.25.76"
   "fast-uri@>=3.0.0 <3.1.9": "3.1.9"
   "body-parser@>=2.0.0 <2.4.0": "2.4.0"
   accounts: 'workspace:*'
@@ -196,13 +202,12 @@ overrides:
   'toml@<5.0.1': '5.0.1'
   'tmp@<0.2.7': '0.2.7'
   # GHSA-vmh5-mc38-953g et al: undici proxy TLS/cache/WebSocket advisories.
-  'undici@>=7.0.0 <7.29.1': '7.29.1'
-  # pkg-pr-new: the registry policy rejects these versions as recently published.
-  # Pin the latest earlier releases, none of which has an advisory.
-  '@actions/http-client>undici': '6.29.0'
+  'undici@>=7.0.0 <7.30.1': '7.30.1'
+  # pkg-pr-new: retain registry-policy-compatible helper releases.
+  'undici@>=6.0.0 <6.29.1': '6.29.1'
   'pkg-pr-new>query-registry': '4.3.0'
   'query-registry>url-join': '5.0.0'
-  'undici@>=8.0.0 <8.10.2': '8.10.2'
+  'undici@>=8.0.0 <8.12.2': '8.12.2'
   'uuid@<11.1.1': '11.1.1'
   valibot: '1.4.2'
   # GHSA-6gmq-8vp8-gcm6: xmldom XML namespace confusion.
@@ -251,3 +256,4 @@ trustPolicyExclude:
 
 patchedDependencies:
   vocs@2.0.0: patches/vocs@2.0.0.patch
+  zod@3.25.76: patches/zod@3.25.76.patch

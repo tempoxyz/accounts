@@ -132,6 +132,8 @@
 - **Normalize no-expiry authorization metadata** -- `expiry: 0` is the request compatibility value for non-expiring access keys. Canonical signed metadata uses absent expiry (RPC `null`); stored zero from older SDK versions must remain selectable. Do not confuse this with on-chain metadata expiry zero for missing/revoked keys, and preserve omitted permissions versus explicit empty lists.
 - **Remove sprintf-js through its YAML parent** -- `@istanbuljs/load-nyc-config@1.1.0` calls `js-yaml.load()`, so its dependency can be scoped to js-yaml v4 to remove argparse v1 and unpatched sprintf-js. Keep the override scoped to this caller and verify YAML configuration loading; other v3 callers may rely on removed APIs or schemas.
 
+- **Keep the Zod audit exception coupled to the backport** -- Zod 3 consumers require v3 APIs and have no patched upstream release for GHSA-mrhx-c7xc-m3w5. Keep them on patched `3.25.76`, keep Zod 4 on `4.6.7` or later, and retain the collection-bound regression tests when updating either version or the patch.
+
 ## Access-key lifecycle invariants
 
 - Validate the adapter's current account selection before using locally retained access keys; persisted account history is not session authorization.
