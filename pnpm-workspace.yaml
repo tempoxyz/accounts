@@ -44,14 +44,14 @@ catalog:
   '@wagmi/core': ^3.6.0
   hono: ^4.13.11
   mppx: ^0.12.0
-  ox: 0.14.45
+  ox: 0.14.59
   prool: ~0.2.4
   react: ^19.2.8
   react-dom: ^19.2.8
   tsx: ^4.23.15
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: 2.57.1
+  viem: 2.57.12
   vite: npm:@voidzero-dev/vite-plus-core@~1.3.0
   vite-plus: ~1.3.0
   vp: npm:vite-plus@~1.3.0
@@ -160,7 +160,7 @@ overrides:
   esbuild: '0.28.1'
   # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname, scheme, and authority confusion.
   'fast-uri@>=3.0.0 <3.1.8': '3.1.9'
-  viem: 2.57.1
+  viem: 2.57.12
   file-type: '22.0.1'
   follow-redirects: '1.16.1'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
@@ -179,7 +179,7 @@ overrides:
   js-yaml@4: '4.3.2'
   mermaid: '11.16.1'
   'nanoid@<3.3.18': '3.3.18'
-  ox: 0.14.45
+  ox: 0.14.59
   postcss: '8.5.23'
   protobufjs: '7.6.5'
   '@protobufjs/utf8': '1.1.1'
