@@ -764,16 +764,67 @@ Received 2 bytes.]`)
 
     expect(result.success).toBe(false)
     if (result.success) return
-    expect(result.error.issues).toEqual([
-      {
-        code: 'too_big',
-        inclusive: true,
-        maximum: 10,
-        message: 'Invalid input',
-        origin: 'array',
-        path: ['limits'],
-      },
-    ])
+    expect(result.error.issues).toMatchInlineSnapshot(`
+      [
+        {
+          "code": "invalid_union",
+          "errors": [
+            [
+              {
+                "code": "too_big",
+                "inclusive": true,
+                "maximum": 10,
+                "message": "Invalid input",
+                "origin": "array",
+                "path": [
+                  "limits",
+                ],
+              },
+            ],
+            [
+              {
+                "code": "invalid_value",
+                "message": "Invalid input",
+                "path": [
+                  "action",
+                ],
+                "values": [
+                  "updateAccessKey",
+                ],
+              },
+              {
+                "code": "invalid_type",
+                "expected": "string",
+                "message": "Expected address",
+                "path": [
+                  "accessKeyAddress",
+                ],
+              },
+              {
+                "code": "invalid_type",
+                "expected": "string",
+                "message": "Expected address",
+                "path": [
+                  "account",
+                ],
+              },
+              {
+                "code": "too_big",
+                "inclusive": true,
+                "maximum": 10,
+                "message": "Invalid input",
+                "origin": "array",
+                "path": [
+                  "limits",
+                ],
+              },
+            ],
+          ],
+          "message": "Invalid input",
+          "path": [],
+        },
+      ]
+    `)
   })
 
   test('behavior: rejects malformed limit tokens', async () => {

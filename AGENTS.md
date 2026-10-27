@@ -54,7 +54,7 @@
 ## Site Styling Conventions
 
 - **Use Tailwind utilities, not arbitrary `var()` values** — never write `bg-[var(--background-color-surface)]` or `border-[var(--vocs-border-color-primary)]`. Use the corresponding Tailwind utility class. Both vocs and regen-ui register their tokens via `@theme`, so every token has a generated utility.
-- **No `vocs:` prefix in our app code** — vocs uses a `vocs:` prefix internally for its own components, but our `_root.css` re-imports vocs's theme tokens at the **root** `@theme` layer (via `_vocs.generated.css`), so vocs tokens are available as plain unprefixed utilities in our code: `bg-primary`, `bg-surface`, `border-primary`, `text-primary`/`text-secondary`/`text-muted`, `bg-info-tint`, `text-info`, `border-info-tint`, etc. Writing `vocs:bg-info-tint` will silently no-op because Tailwind has no `vocs:` prefix registered for our own source files.
+- **No `vocs:` prefix in our app code** — vocs uses a `vocs:` prefix internally for its own components, but our `_root.css` imports vocs's theme tokens at the **root** `@theme` layer (via `@import 'vocs/styles/theme.css'`, which leaves Tailwind's palette intact), so vocs tokens are available as plain unprefixed utilities in our code: `bg-primary`, `bg-surface`, `border-primary`, `text-primary`/`text-secondary`/`text-muted`, `bg-info-tint`, `text-info`, `border-info-tint`, etc. Writing `vocs:bg-info-tint` will silently no-op because Tailwind has no `vocs:` prefix registered for our own source files.
 - **Regen-ui tokens are also unprefixed** — regen tokens are imported into the root `@theme` and are available as plain Tailwind utilities: `bg-pane`, `bg-secondary`, `border-border`, `text-foreground`, `text-foreground-secondary`, etc. Where regen and vocs both define a token of the same name (e.g. `--background-color-primary`), vocs wins because it is imported last.
 - **Arbitrary values only when no token exists** — if a value isn't covered by a token (e.g. a custom `color-mix(...)` blend, a one-off pixel size), inline it with `[...]` syntax, but prefer utility classes wherever possible.
 
@@ -131,6 +131,10 @@
 - **PostMessage iframe color schemes must match the wallet page** — read the explicit `scheme` URL parameter when mounting the iframe. A mismatched scheme can make its transparent canvas opaque black on light macOS.
 - **Normalize no-expiry authorization metadata** -- `expiry: 0` is the request compatibility value for non-expiring access keys. Canonical signed metadata uses absent expiry (RPC `null`); stored zero from older SDK versions must remain selectable. Do not confuse this with on-chain metadata expiry zero for missing/revoked keys, and preserve omitted permissions versus explicit empty lists.
 - **Remove sprintf-js through its YAML parent** -- `@istanbuljs/load-nyc-config@1.1.0` calls `js-yaml.load()`, so its dependency can be scoped to js-yaml v4 to remove argparse v1 and unpatched sprintf-js. Keep the override scoped to this caller and verify YAML configuration loading; other v3 callers may rely on removed APIs or schemas.
+
+- **Keep the Zod audit exception coupled to the backport** -- Zod 3 consumers require v3 APIs and have no patched upstream release for GHSA-mrhx-c7xc-m3w5. Keep them on patched `3.25.76`, keep Zod 4 on `4.6.7` or later, and retain the collection-bound regression tests when updating either version or the patch.
+
+- **Retain Vite+ peers during lockfile refreshes** -- pnpm can resolve bare Vite peers despite the npm-alias override. Preserve the existing Vite+ peer graph and keep the lockfile regression check rejecting real `vite@` versions.
 
 ## Access-key lifecycle invariants
 
