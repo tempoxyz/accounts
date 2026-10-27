@@ -1112,7 +1112,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         {
           "contractAddress": null,
           "feeToken": "0x20c0000000000000000000000000000000000000",
-          "multisig": undefined,
+          "operation": undefined,
           "status": "success",
           "to": "0x20c0000000000000000000000000000000000000",
           "type": "0x76",
