@@ -30,6 +30,7 @@
     "tsx": "catalog:",
     "typescript": "catalog:default",
     "unplugin-icons": "^23.0.1",
+    "vite": "catalog:",
     "vp": "catalog:",
     "wrangler": "catalog:"
   }

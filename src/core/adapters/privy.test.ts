@@ -635,7 +635,7 @@ describe('privy', () => {
 
       Docs: https://viem.sh/docs/contract/writeContract
       Details: execution reverted
-      Version: viem@2.57.1]
+      Version: viem@2.57.12]
     `)
 
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`

@@ -52,7 +52,7 @@ describe.each([
       [RpcResponse.InternalError: An unknown RPC error occurred.
 
       Details: request rejected
-      Version: viem@2.57.1]
+      Version: viem@2.57.12]
     `)
     expect(requests.map(({ method }) => method)).toEqual([request.method])
     expect(requests.map(({ context }) => context)).toMatchInlineSnapshot(`
@@ -72,7 +72,7 @@ describe.each([
       [RpcResponse.InternalError: An unknown RPC error occurred.
 
       Details: request rejected
-      Version: viem@2.57.1]
+      Version: viem@2.57.12]
     `)
     expect(requests.map(({ method }) => method)).toEqual([request.method, request.method])
     expect(requests.map(({ context }) => context)).toMatchInlineSnapshot(`

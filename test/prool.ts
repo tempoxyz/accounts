@@ -24,7 +24,7 @@ export async function setupServer({ port }: { port: number }) {
 
   const tag = await (async () => {
     if (!import.meta.env.VITE_NODE_TAG?.startsWith('http'))
-      return import.meta.env.VITE_NODE_TAG || 'latest'
+      return import.meta.env.VITE_NODE_TAG || 'sha-179347b'
 
     const client = getClient({
       transport: http(import.meta.env.VITE_NODE_TAG, {
