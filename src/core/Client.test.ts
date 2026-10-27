@@ -598,7 +598,7 @@ describe('rawTransactionTransport', () => {
       Double check you have provided the correct parameters.
 
       Details: nonce too low: next nonce 1, tx nonce 0
-      Version: viem@2.57.1]
+      Version: viem@2.57.12]
     `)
   })
 })

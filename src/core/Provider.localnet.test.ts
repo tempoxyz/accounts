@@ -1112,7 +1112,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         {
           "contractAddress": null,
           "feeToken": "0x20c0000000000000000000000000000000000000",
-          "multisig": undefined,
+          "operation": undefined,
           "status": "success",
           "to": "0x20c0000000000000000000000000000000000000",
           "type": "0x76",
@@ -1390,7 +1390,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
           from:  0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
         Details: plain send failure
-        Version: viem@2.57.1]
+        Version: viem@2.57.12]
       `)
     })
   })
@@ -2569,7 +2569,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         method: 'eth_fillTransaction',
         params: [{ from: address, ...fillTx }],
       })
-      expect(result.tx.gas).toBeDefined()
+      expect((result.tx as { gas?: unknown }).gas).toBeDefined()
       // secp256k1 root fills keep the legacy shape (top-level `to`); p256/webAuthn
       // roots are routed through the tempo envelope, which carries the target in
       // `calls` so the node can size gas for the larger signature.
@@ -2595,7 +2595,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         method: 'eth_fillTransaction',
         params: [{ from: address, ...fillTx }],
       })
-      expect(result.tx.gas).toBeDefined()
+      expect((result.tx as { gas?: unknown }).gas).toBeDefined()
       expect((result.tx as { keyAuthorization?: unknown }).keyAuthorization).toBeDefined()
     })
 
@@ -2613,7 +2613,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         method: 'eth_fillTransaction',
         params: [fillTx],
       })
-      expect(result.tx.gas).toBeDefined()
+      expect((result.tx as { gas?: unknown }).gas).toBeDefined()
       expect((result.tx as { keyAuthorization?: unknown }).keyAuthorization).toBeDefined()
     })
 
@@ -2641,7 +2641,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
           },
         ],
       })
-      expect(result.tx.gas).toBeDefined()
+      expect((result.tx as { gas?: unknown }).gas).toBeDefined()
     })
 
     test('behavior: published access key uses its key type without re-authorizing', async () => {
