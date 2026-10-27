@@ -73,7 +73,7 @@ jobs:
       - name: Resolve Tempo image digest
         id: tempo-digest
         run: |
-          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:sha-179347b -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:sha-179347b --format '{{.Manifest.Digest}}')
+          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:latest -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:latest --format '{{.Manifest.Digest}}')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Cache Tempo Docker image
@@ -90,12 +90,12 @@ jobs:
       - name: Pull and cache Tempo image
         if: "steps.docker-cache.outputs.cache-hit != 'true'"
         run: |
-          docker pull ghcr.io/tempoxyz/tempo:sha-179347b
-          docker save ghcr.io/tempoxyz/tempo:sha-179347b -o /tmp/tempo-image.tar
+          docker pull ghcr.io/tempoxyz/tempo:latest
+          docker save ghcr.io/tempoxyz/tempo:latest -o /tmp/tempo-image.tar
 
       - name: Run tests
         run: pnpm test --bail=1
         env:
           CI: true
-          VITE_NODE_TAG: sha-179347b
+          VITE_NODE_TAG: latest
           VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
