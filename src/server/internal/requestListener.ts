@@ -151,14 +151,32 @@ export function createRequest(
   const init: RequestInit = { headers, method, signal: controller.signal }
 
   if (method !== 'GET' && method !== 'HEAD') {
+    let cleanup = () => {}
     init.body = new ReadableStream({
       start(controller) {
-        req.on('data', (chunk) => {
+        const on_data = (chunk) => {
           controller.enqueue(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength))
-        })
-        req.on('end', () => {
+        }
+        const on_end = () => {
+          cleanup()
           controller.close()
-        })
+        }
+        cleanup = () => {
+          req.off('data', on_data)
+          req.off('end', on_end)
+        }
+        req.on('data', on_data)
+        req.on('end', on_end)
+      },
+      cancel() {
+        cleanup()
+        if (req.readableEnded) return
+
+        // Stop the upload, but allow the error response to finish before closing it.
+        req.pause()
+        if ('shouldKeepAlive' in res) res.shouldKeepAlive = false
+        if (res.writableFinished || res.destroyed) req.destroy()
+        else res.once('finish', () => req.destroy())
       },
     })
 
