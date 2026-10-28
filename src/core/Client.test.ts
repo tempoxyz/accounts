@@ -598,7 +598,7 @@ describe('rawTransactionTransport', () => {
       Double check you have provided the correct parameters.
 
       Details: nonce too low: next nonce 1, tx nonce 0
-      Version: viem@0.0.0-d18ea6dc3d66f8bc327005bf1e764450f20f5c5b]
+      Version: viem@0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26]
     `)
   })
 })
