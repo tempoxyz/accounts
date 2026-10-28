@@ -39,18 +39,20 @@ export declare namespace tempoWallet {
   export type Options = Omit<postMessage.Options, 'host' | 'name' | 'rdns'> & {
     /**
      * Continue requests on a phone. When this computer's browser has no passkey for the account,
-     * the wallet shows a QR code; the phone that scans it approves the same request with its
-     * passkey, and this tab receives the result either way (an access key, a signature).
-     * `url` picks where the person lands afterwards: a page on this app's origin that the
-     * phone's browser opens, with `#tempo_wallet=approved&account=0x…` (or `rejected`) in the
-     * fragment. Without it, the phone shows the result and the person returns to this tab.
-     * `false` hides the QR code.
+     * the wallet shows a QR code; the phone that scans it approves the request with its passkey.
+     * Where the person lands is where the result goes:
+     * - default: the phone shows the result and this tab receives it (accounts, access key,
+     *   signature), as if approved here.
+     * - `url`: the phone's browser opens that page on this app's origin, which receives the result
+     *   and an access key the phone generated for it; read them with `Handoff.read()`. This
+     *   tab's request fails with code `4001` and `data.reason: 'handoff'`.
+     * - `false`: no QR code.
      * @default {}
      */
     handoff?:
       | false
       | {
-          /** Page on this app's origin (absolute or relative) that the phone opens after it answers. */
+          /** Page on this app's origin (absolute or relative) that the phone opens, and that gets the result. */
           url?: string | undefined
         }
       | undefined
