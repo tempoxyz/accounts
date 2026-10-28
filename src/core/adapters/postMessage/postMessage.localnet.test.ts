@@ -260,6 +260,35 @@ describe('create', () => {
     `)
   })
 
+  test('behavior: tempoWallet bakes the phone handoff onto the wallet page URL', async () => {
+    const opened = await Promise.all(
+      [{ url: 'https://app.example/play?seat=blue' }, false as const].map(async (handoff) => {
+        const wallet = createWallet()
+        const provider = Provider.create({
+          adapter: tempoWallet({ handoff, target: wallet.target }),
+          chains: [chain],
+          storage: Storage.memory(),
+        })
+        await provider.request({
+          method: 'wallet_connect',
+          params: [{ capabilities: { method: 'login' } }],
+        })
+        return wallet.opened()
+      }),
+    )
+
+    expect(opened).toMatchInlineSnapshot(`
+      [
+        [
+          "https://wallet.tempo.xyz/post-message?handoff_url=https%3A%2F%2Fapp.example%2Fplay%3Fseat%3Dblue",
+        ],
+        [
+          "https://wallet.tempo.xyz/post-message?handoff=off",
+        ],
+      ]
+    `)
+  })
+
   test('behavior: accepts explicit postMessage adapter', async () => {
     const wallet = createWallet()
     const provider = Provider.create({
