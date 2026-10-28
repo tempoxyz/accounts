@@ -11,6 +11,7 @@ auditConfig:
     - GHSA-h67p-54hq-rp68 # over-broad <=4.1.1 range flags terminal js-yaml@3.14.2 (v3 has no merge-key DoS, no later v3 to upgrade to); v4 deps already pinned to patched 4.2.0.
     - GHSA-86w9-cpqp-85rv # transitive Expo CLI code-signing node-forge usage; patched 1.4.1 is not published on npm.
     - GHSA-vfj7-8cjw-p6xm # transitive glob/watch tooling DoS; patched braces 3.0.4 is not published on npm. Remove when available.
+    - GHSA-gcqx-w48m-w2h4 # transitive Expo config deepmerge prototype poisoning; patched 4.3.2 is not published on npm. Remove when available.
 
 allowBuilds:
   '@reown/appkit': false
@@ -52,7 +53,7 @@ catalog:
   tsx: ^4.23.15
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: 2.57.12
+  viem: 0.0.0-de39e106022f313a16c3b7367d8330753748c516
   vite: npm:@voidzero-dev/vite-plus-core@~1.3.0
   vite-plus: ~1.3.0
   vp: npm:vite-plus@~1.3.0
@@ -158,7 +159,7 @@ overrides:
   esbuild: '0.28.1'
   # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname, scheme, and authority confusion.
   'fast-uri@>=3.0.0 <3.1.8': '3.1.9'
-  viem: 2.57.12
+  viem: 0.0.0-de39e106022f313a16c3b7367d8330753748c516
   file-type: '22.0.1'
   follow-redirects: '1.16.1'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
@@ -181,8 +182,8 @@ overrides:
   postcss: '8.5.23'
   protobufjs: '7.6.5'
   '@protobufjs/utf8': '1.1.1'
-  # GHSA-x5fp-wj9c-mxmx and GHSA-4mjr-xmp4-gh2g: qs arrayLimit bypass and prototype pollution.
-  qs: '6.16.0'
+  # GHSA-x5fp-wj9c-mxmx, GHSA-4mjr-xmp4-gh2g, and GHSA-6pq8-jhm2-2vcw: qs arrayLimit bypass and prototype pollution.
+  qs: '6.16.1'
   react-server-dom-webpack: '19.3.1'
   # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
   reselect: '5.1.0'
