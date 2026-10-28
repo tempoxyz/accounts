@@ -170,8 +170,7 @@ test('fee liquidity: producer discovery overlaps real pending balance RPCs', asy
     gas: transaction.gas,
     maxFeePerGas: transaction.maxFeePerGas,
     maxPriorityFeePerGas: transaction.maxPriorityFeePerGas,
-    // A fill formats Tempo nonces as bigints (TIP-1106). This one is a sequence nonce, so it fits.
-    nonce: Number(transaction.nonce),
+    nonce: transaction.nonce,
     account: state.sender,
   })
   expect({
@@ -367,8 +366,7 @@ test('fee liquidity: a real two-hop pool settles the selected fee token at broad
     gas: transaction.gas,
     maxFeePerGas: transaction.maxFeePerGas,
     maxPriorityFeePerGas: transaction.maxPriorityFeePerGas,
-    // A fill formats Tempo nonces as bigints (TIP-1106). This one is a sequence nonce, so it fits.
-    nonce: Number(transaction.nonce),
+    nonce: transaction.nonce,
   })
   expect({
     selectedMach: isAddressEqual(transaction.feeToken!, state.token),

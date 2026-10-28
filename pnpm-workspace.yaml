@@ -53,7 +53,7 @@ catalog:
   tsx: ^4.23.15
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: 0.0.0-de39e106022f313a16c3b7367d8330753748c516
+  viem: 0.0.0-d18ea6dc3d66f8bc327005bf1e764450f20f5c5b
   vite: npm:@voidzero-dev/vite-plus-core@~1.3.0
   vite-plus: ~1.3.0
   vp: npm:vite-plus@~1.3.0
@@ -159,7 +159,7 @@ overrides:
   esbuild: '0.28.1'
   # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname, scheme, and authority confusion.
   'fast-uri@>=3.0.0 <3.1.8': '3.1.9'
-  viem: 0.0.0-de39e106022f313a16c3b7367d8330753748c516
+  viem: 0.0.0-d18ea6dc3d66f8bc327005bf1e764450f20f5c5b
   file-type: '22.0.1'
   follow-redirects: '1.16.1'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
