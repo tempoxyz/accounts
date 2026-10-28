@@ -1216,7 +1216,7 @@ describe('getStatus', () => {
 
       Docs: https://viem.sh/docs/contract/readContract
       Details: RPC unavailable.
-      Version: viem@0.0.0-de39e106022f313a16c3b7367d8330753748c516]
+      Version: viem@0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26]
     `)
   })
 
