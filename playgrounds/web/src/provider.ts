@@ -17,6 +17,7 @@ import { Mppx } from 'mppx/client'
 import { getAddress } from 'viem'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
+import { tempoDevnet } from 'viem/tempo/chains'
 import { alphausd, betausd, pathusd, thetausd, usdce } from 'viem/tokens'
 
 import { requestTurnkeyEmailOtp, type TurnkeyEmailOtpClient } from './turnkeyOtpStore.js'
@@ -48,6 +49,13 @@ export const env: Env = (() => {
 })()
 
 export const testnet = env !== 'mainnet'
+
+/**
+ * Chains of the selected network. Devnet's is the only chain, so the provider starts on it and its
+ * requests name devnet (31318), where Tempo Wallet signs in with Tempo ID's configurable accounts.
+ * Mainnet and testnet keep the provider's default chains.
+ */
+export const chains = env === 'devnet' ? ([tempoDevnet] as const) : undefined
 
 export const tokensMap = {
   testnet: {
@@ -113,6 +121,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         theme,
       }),
       mpp: mpp(),
+      chains,
       testnet,
     })
 
@@ -129,6 +138,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         rdns: 'xyz.tempo',
       }),
       mpp: mpp(),
+      chains,
       testnet,
     })
   }
@@ -141,6 +151,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         theme,
       }),
       mpp: mpp(),
+      chains,
       testnet,
     })
 
@@ -149,6 +160,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: webAuthn({ ceremony }),
       mpp: mpp(),
+      chains,
       testnet,
     })
   }
@@ -173,6 +185,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         },
       }),
       mpp: mpp(),
+      chains,
       testnet,
     })
   }
@@ -184,6 +197,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: privy(),
       mpp: true,
+      chains,
       testnet,
     })
   }
@@ -200,6 +214,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       },
     }),
     mpp: mpp(),
+    chains,
     testnet,
   })
 }
