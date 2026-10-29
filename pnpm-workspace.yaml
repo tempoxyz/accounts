@@ -141,8 +141,9 @@ overrides:
   # GHSA-c83g-rgw3-j3cx and GHSA-73wf-gq98-2v4g: Browserslist path traversal and ReDoS.
   'browserslist@<=4.28.6': '4.28.7'
   '@grpc/grpc-js': '1.14.5'
-  # GHSA-frvp-7c67-39w9 and GHSA-9mqv-5hh9-4cgg: v2 preserves the getRequestListener API used by wata.
-  '@hono/node-server@>=1.0.0 <2.0.10': '2.0.10'
+  # GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg and GHSA-rmxm-3fg6-px4f: v2 preserves the
+  # getRequestListener API used by wata.
+  '@hono/node-server@>=1.0.0 <2.1.5': '2.1.5'
   '@sinclair/typebox': '^0.34.0'
   # GHSA-p95v-992w-h6c3: prototype pollution via nested decoder keys.
   '@toon-format/toon@<2.3.1': '2.3.1'
@@ -187,8 +188,10 @@ overrides:
   react-server-dom-webpack: '19.3.1'
   # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
   reselect: '5.1.0'
-  # GHSA-p6vx-979v-rg4c and GHSA-jp82-f5mq-hwhp: unsafe deserialization and memory exhaustion.
-  seroval: '1.6.3'
+  # GHSA-p6vx-979v-rg4c, GHSA-jp82-f5mq-hwhp, GHSA-97r2-qh9m-474h, GHSA-wp97-x4hv-qvhp,
+  # GHSA-7rv5-mrxv-xcr9, GHSA-f86p-h4j2-7qgj and GHSA-9wx9-5pv9-3349: unsafe deserialization,
+  # memory exhaustion and script injection.
+  seroval: '1.6.12'
   'socket.io-parser@>=4.0.0 <4.2.7': '4.2.7'
   # GHSA-rgj7-g3m4-5g8c and GHSA-wq5f-xc86-pv6w: inherited image-library vulnerabilities.
   'sharp@<0.35.5': '0.35.5'
