@@ -69,7 +69,7 @@ overrides:
   '@babel/core@<=7.29.0': 7.29.6
   browserslist@<=4.28.6: 4.28.7
   '@grpc/grpc-js': 1.14.5
-  '@hono/node-server@>=1.0.0 <2.0.10': 2.0.10
+  '@hono/node-server@>=1.0.0 <2.1.5': 2.1.5
   '@sinclair/typebox': ^0.34.0
   '@toon-format/toon@<2.3.1': 2.3.1
   axios@>=1.0.0 <1.20.0: 1.20.0
@@ -100,7 +100,7 @@ overrides:
   qs: 6.16.1
   react-server-dom-webpack: 19.3.1
   reselect: 5.1.0
-  seroval: 1.6.3
+  seroval: 1.6.12
   socket.io-parser@>=4.0.0 <4.2.7: 4.2.7
   sharp@<0.35.5: 0.35.5
   shell-quote@>=1.1.0 <1.11.0: 1.11.0
@@ -2704,12 +2704,6 @@ packages:
     resolution: {integrity: sha512-LMcepvRaS9LYHJGsF0zzmgKCUim/X3N/DQKc4jepAXJ7l8QxJ1PmxJzqplF2Z3FE4PqBAIGyJAQ/w4B5dsqbtQ==}
     peerDependencies:
       react: ^19.3.0
-
-  '@hono/node-server@2.0.10':
-    resolution: {integrity: sha512-ZcnNVhKTmyDJeg0UlnZjvM73JBsTAuhrH/J4fjwGOw59PwOW51r4J+p6CsKZWXdKSme4MFqU62CZMOsdDrU4CA==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      hono: 4.13.11
 
   '@hono/node-server@2.1.5':
     resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
@@ -10637,10 +10631,10 @@ packages:
     resolution: {integrity: sha512-qpY0Cl+fKYFn4GOf3cMiq6l72CpuVaawb6ILjubOQ+diJ54LfOWaSSPsaswN8DRPIPW4Yq+tE1k5aKd7ILyaFg==}
     engines: {node: '>=10'}
     peerDependencies:
-      seroval: 1.6.3
+      seroval: 1.6.12
 
-  seroval@1.6.3:
-    resolution: {integrity: sha512-5PwLbVPpT4DEki1hYVSSsoxWY6xCNMVucAVLK/CH0mXSDfp/I4KaAex72q80GNt5hpn7CCMGdSpIg4YGqH/wXQ==}
+  seroval@1.6.12:
+    resolution: {integrity: sha512-CqbIVfk/7GL3ITwZI55lcPbpQbjHZ2DD5cUj4iH7E9YsCfHNJV1mx7yNp86Z84w5IpmkZZS/2s5vPOWmVWSdQg==}
     engines: {node: '>=10'}
 
   serve-static@1.16.3:
@@ -14250,10 +14244,6 @@ snapshots:
     dependencies:
       react: 19.3.1
 
-  '@hono/node-server@2.0.10(hono@4.13.11)':
-    dependencies:
-      hono: 4.13.11
-
   '@hono/node-server@2.1.5(hono@4.13.11)':
     dependencies:
       hono: 4.13.11
@@ -14866,7 +14856,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.0(@cfworker/json-schema@4.1.1)(zod@4.6.7)':
     dependencies:
-      '@hono/node-server': 2.0.10(hono@4.13.11)
+      '@hono/node-server': 2.1.5(hono@4.13.11)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -17909,15 +17899,15 @@ snapshots:
     dependencies:
       '@tanstack/history': 1.161.6
       cookie-es: 3.1.1
-      seroval: 1.6.3
-      seroval-plugins: 1.5.2(seroval@1.6.3)
+      seroval: 1.6.12
+      seroval-plugins: 1.5.2(seroval@1.6.12)
 
   '@tanstack/router-core@1.168.15':
     dependencies:
       '@tanstack/history': 1.161.6
       cookie-es: 3.1.1
-      seroval: 1.6.3
-      seroval-plugins: 1.5.2(seroval@1.6.3)
+      seroval: 1.6.12
+      seroval-plugins: 1.5.2(seroval@1.6.12)
 
   '@tanstack/router-generator@1.166.32':
     dependencies:
@@ -25503,11 +25493,11 @@ snapshots:
 
   serialize-error@2.1.0: {}
 
-  seroval-plugins@1.5.2(seroval@1.6.3):
+  seroval-plugins@1.5.2(seroval@1.6.12):
     dependencies:
-      seroval: 1.6.3
+      seroval: 1.6.12
 
-  seroval@1.6.3: {}
+  seroval@1.6.12: {}
 
   serve-static@1.16.3:
     dependencies:
@@ -26633,7 +26623,7 @@ snapshots:
     dependencies:
       '@base-ui/react': 1.5.0(@types/react@19.2.14)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@codesandbox/sandpack-react': 2.20.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@hono/node-server': 2.0.10(hono@4.13.11)
+      '@hono/node-server': 2.1.5(hono@4.13.11)
       '@iconify-json/lucide': 1.2.108
       '@iconify-json/ri': 1.2.10
       '@iconify-json/simple-icons': 1.2.83
@@ -26952,7 +26942,7 @@ snapshots:
 
   wata@0.4.2(react@19.3.1)(typescript@5.9.3):
     dependencies:
-      '@hono/node-server': 2.0.10(hono@4.13.11)
+      '@hono/node-server': 2.1.5(hono@4.13.11)
       '@noble/ciphers': 2.2.0
       '@noble/hashes': 2.2.0
       hono: 4.13.11

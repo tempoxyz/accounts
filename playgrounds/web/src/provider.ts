@@ -8,6 +8,7 @@ import {
   local,
   postMessage,
   Provider,
+  Storage,
   turnkey,
   webAuthn,
 } from 'accounts'
@@ -17,6 +18,7 @@ import { Mppx } from 'mppx/client'
 import { getAddress } from 'viem'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 import { alphausd, betausd, pathusd, thetausd, usdce } from 'viem/tokens'
 
 import { requestTurnkeyEmailOtp, type TurnkeyEmailOtpClient } from './turnkeyOtpStore.js'
@@ -48,6 +50,21 @@ export const env: Env = (() => {
 })()
 
 export const testnet = env !== 'mainnet'
+
+/**
+ * Provider options of the selected network. On devnet, devnet's chain comes first, so the provider
+ * starts on it and its requests name devnet (31318), where Tempo Wallet signs in with Tempo ID's
+ * configurable accounts. Moderato and mainnet stay configured, so the worker's MPP challenges still
+ * pay. Devnet keeps its own storage, so a chain that another network saved never replaces it.
+ * Mainnet and testnet keep the provider's defaults.
+ */
+export const network =
+  env === 'devnet'
+    ? {
+        chains: [tempoDevnet, tempoModerato, tempo] as const,
+        storage: Storage.combine(Storage.idb({ key: 'tempo.devnet' }), Storage.memory()),
+      }
+    : {}
 
 export const tokensMap = {
   testnet: {
@@ -113,6 +130,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         theme,
       }),
       mpp: mpp(),
+      ...network,
       testnet,
     })
 
@@ -129,6 +147,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         rdns: 'xyz.tempo',
       }),
       mpp: mpp(),
+      ...network,
       testnet,
     })
   }
@@ -149,6 +168,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: webAuthn({ ceremony }),
       mpp: mpp(),
+      ...network,
       testnet,
     })
   }
@@ -173,6 +193,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         },
       }),
       mpp: mpp(),
+      ...network,
       testnet,
     })
   }
@@ -184,6 +205,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: privy(),
       mpp: true,
+      ...network,
       testnet,
     })
   }
@@ -200,6 +222,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       },
     }),
     mpp: mpp(),
+    ...network,
     testnet,
   })
 }
