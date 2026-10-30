@@ -36,7 +36,7 @@ beforeAll(async () => {
       },
     ],
     root: process.cwd(),
-    server: { host: '0.0.0.0', port: 0 },
+    server: { host: '127.0.0.1', port: 0 },
     optimizeDeps: { include: ['ox', 'viem', 'viem/tempo/chains'] },
   })
   await server.listen()
