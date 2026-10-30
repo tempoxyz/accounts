@@ -148,3 +148,7 @@
 - Memory KV capacity is opt-in: shared authentication stores also hold durable credentials and sessions, so a default hard cap can deny login. Cache TTLs must reach backing storage for reclamation.
 
 - Bind cached Privy wallets to the authenticated user ID, not token presence; recheck identity after asynchronous wallet loading and before cached signing.
+
+- **Bound dialog startup, never approval** -- iframe and popup readiness waits expire after 15 seconds and propagate `Dialog.TransportError` (`code: -32000`, `data: { origin, stage }`) to the pending request. `dialog_ready` means startup, `dispatch` means sending failed, and `closed` means cancellation/teardown. Keep origins free of paths/queries and never attach request data or raw causes. Cancellation and teardown invalidate waiting sends; retry only on a fresh request, reloading an unready document then rather than replaying signing. Disconnect the iframe remount observer before removing its root. Run the isolated Chromium regressions with `pnpm test --config vitest.dialog.config.ts` after `pnpm exec playwright-core install chromium`.
+
+- **Preserve transport diagnostics across viem and Ox** -- viem wraps RPC errors in a cause chain; Ox reparses known codes and can drop that cause. Recover only the safe dialog origin/stage at the Provider boundary before Ox parses it. Guard asynchronous queue errors by sync revision so a superseded startup attempt cannot fail a newer sync of the same request ID.
