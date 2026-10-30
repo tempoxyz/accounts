@@ -155,8 +155,8 @@ overrides:
   'brace-expansion@>=3.0.0 <5.0.12': '5.0.12'
   # GHSA-rp9w-3fw7-7cwq et al: DOMPurify hook/config sanitization bypasses.
   'dompurify@<3.4.17': '3.4.17'
-  # GHSA-vcc3-ghjq-m6fr: decode-uri-component malformed-input DoS; the advisory's 0.4.3 floor is unpublished.
-  'decode-uri-component@<=0.4.2': '0.5.0'
+  # GHSA-vcc3-ghjq-m6fr and GHSA-qr28-fpjm-wq7f: decode-uri-component DoS; 0.5.1 patches both.
+  'decode-uri-component@<=0.5.0': '0.5.1'
   esbuild: '0.28.1'
   # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname, scheme, and authority confusion.
   'fast-uri@>=3.0.0 <3.1.8': '3.1.9'

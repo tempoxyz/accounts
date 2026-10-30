@@ -7,6 +7,26 @@ import * as TrustedHosts from './TrustedHosts.js'
 /** Dialog interface — manages the iframe/popup lifecycle for cross-origin auth. */
 export type Dialog = SetupFn & Meta
 
+/** Safe transport diagnostics. Never includes request data or a URL path/query. */
+export class TransportError extends Error {
+  /** JSON-RPC server error code. */
+  code = -32000
+  /** Safe diagnostics suitable for a caller's error UI. */
+  data: { origin: string; stage: 'dialog_ready' | 'dispatch' | 'closed' }
+
+  constructor(host: string, stage: TransportError['data']['stage']) {
+    const origin = new URL(host).origin
+    const message = {
+      dialog_ready: `Wallet startup did not complete at ${origin}. Check that the wallet is running and reachable, then try again.`,
+      dispatch: `Could not send the request to the wallet at ${origin}. Check the wallet connection before trying again.`,
+      closed: `The wallet connection at ${origin} was closed. Start a new request to continue.`,
+    }[stage]
+    super(message)
+    this.name = 'Dialog.TransportError'
+    this.data = { origin, stage }
+  }
+}
+
 /** Static metadata attached to a dialog function. */
 export type Meta = {
   /** Identifier for the dialog type (e.g. `'iframe'`, `'popup'`). */
@@ -35,6 +55,8 @@ export declare namespace SetupFn {
     host: string
     /** Reactive state store. */
     store: Store.Store
+    /** Called when an asynchronous transport handoff fails. */
+    onError?: ((error: TransportError, ids: readonly number[]) => void) | undefined
     /** Called when the user rejects the currently displayed requests. */
     onReject: (ids: readonly number[]) => void
     /** Called when the remote UI responds to a request. */
@@ -128,6 +150,9 @@ export function iframe(): Dialog {
     }
 
     let open = false
+    let destroyed = false
+    let startup: AbortController | undefined
+    let retry = false
 
     const referrer = getReferrer()
 
@@ -202,7 +227,9 @@ export function iframe(): Dialog {
     let switchedToPopup = false
 
     function rejectDisplayedRequests() {
-      parameters.onReject(requests_displayed.map((x) => x.request.id))
+      const ids = requests_displayed.map((x) => x.request.id)
+      instance.close()
+      parameters.onReject(ids)
     }
 
     function createMessenger() {
@@ -216,12 +243,16 @@ export function iframe(): Dialog {
         waitForReady: true,
       })
       m.on('rpc-response', (response) => parameters.onResponse(response))
-      m.waitForReady().then((result) => {
-        readyResult = result
-        if (result.colorScheme) frame.style.colorScheme = result.colorScheme
-        // Ask the wallet to verify the SDK's stored accounts are still valid.
-        syncAccounts(m, refs.store)
-      })
+      void m
+        .waitForReady()
+        .then((result) => {
+          if (destroyed || m !== messenger) return
+          readyResult = result
+          if (result.colorScheme) frame.style.colorScheme = result.colorScheme
+          // Ask the wallet to verify the SDK's stored accounts are still valid.
+          syncAccounts(m, refs.store)
+        })
+        .catch(() => {})
       m.on('sync', ({ valid }) => {
         if (valid === false) refs.store.disconnect()
       })
@@ -231,8 +262,17 @@ export function iframe(): Dialog {
         open = false
         switchedToPopup = true
 
-        if (sync_displayed && requests_displayed.length > 0)
-          refs.fallback.syncRequests(sync_displayed)
+        if (sync_displayed && requests_displayed.length > 0) {
+          const sync = sync_displayed
+          const ids = requests_displayed.map((x) => x.request.id)
+          void refs.fallback.syncRequests(sync).catch((error) => {
+            if (sync_displayed !== sync) return
+            parameters.onError?.(
+              error instanceof TransportError ? error : new TransportError(host, 'dispatch'),
+              ids,
+            )
+          })
+        }
       })
       return m
     }
@@ -242,7 +282,8 @@ export function iframe(): Dialog {
 
     // Re-mount if removed (e.g. React hydration clears non-server-rendered elements).
     // The iframe reloads on re-append, so the messenger must be re-established.
-    new MutationObserver((mutations) => {
+    const mountObserver = new MutationObserver((mutations) => {
+      if (destroyed) return
       for (const mutation of mutations) {
         for (const node of mutation.removedNodes) {
           if (node !== root) continue
@@ -252,7 +293,8 @@ export function iframe(): Dialog {
           return
         }
       }
-    }).observe(document.body, { childList: true })
+    })
+    mountObserver.observe(document.body, { childList: true })
 
     let savedOverflow = ''
     let opener: HTMLElement | null = null
@@ -326,6 +368,9 @@ export function iframe(): Dialog {
 
     const instance: Instance = {
       close() {
+        startup?.abort()
+        sync_displayed = undefined
+        requests_displayed = []
         refs.fallback.close()
         open = false
 
@@ -333,6 +378,11 @@ export function iframe(): Dialog {
         activatePage()
       },
       destroy() {
+        if (destroyed) return
+        destroyed = true
+        const ids = requests_displayed.map((x) => x.request.id)
+        startup?.abort()
+        mountObserver.disconnect()
         if (cached?.instance === instance) cached = undefined
 
         refs.fallback.close()
@@ -345,8 +395,10 @@ export function iframe(): Dialog {
         messenger.destroy()
         root.remove()
         inertObserver.disconnect()
+        if (ids.length > 0) parameters.onError?.(new TransportError(host, 'closed'), ids)
       },
       open() {
+        if (destroyed) throw new TransportError(host, 'closed')
         if (open) return
         open = true
 
@@ -354,55 +406,84 @@ export function iframe(): Dialog {
         activateDialog()
       },
       async syncRequests(sync) {
-        const { requests } = sync
-        sync_displayed = sync
-        requests_displayed = requests
-        if (switchedToPopup) {
-          refs.fallback.syncRequests(sync)
-          return
+        if (destroyed) throw new TransportError(host, 'closed')
+        startup?.abort()
+        const controller = new AbortController()
+        startup = controller
+        // Reload a failed document only for a fresh caller request, never replay an old one.
+        if (retry && !readyResult) {
+          messenger.destroy()
+          frame.src = hostUrl.toString()
+          messenger = createMessenger()
         }
+        retry = false
+        let stage: TransportError['data']['stage'] = 'dialog_ready'
+        try {
+          const { requests } = sync
+          sync_displayed = sync
+          requests_displayed = requests
+          if (switchedToPopup) {
+            return await refs.fallback.syncRequests(sync)
+          }
 
-        const { trustedHosts } = readyResult ?? (await messenger.waitForReady())
+          const { trustedHosts } =
+            readyResult ??
+            (await messenger.waitForReady({
+              signal: controller.signal,
+              timeout: 15_000,
+            }))
+          if (controller.signal.aborted || destroyed) throw new TransportError(host, 'closed')
+          stage = 'dispatch'
 
-        // Safari does not support WebAuthn credential creation in iframes.
-        if (
-          isSafari() &&
-          requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
-        ) {
-          refs.fallback.syncRequests(sync)
-          return
-        }
+          // Safari does not support WebAuthn credential creation in iframes.
+          if (
+            isSafari() &&
+            requests.some((x) =>
+              ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method),
+            )
+          ) {
+            return await refs.fallback.syncRequests(sync)
+          }
 
-        const ioSupported = IO.supported()
-        const hostname = window.location.hostname.replace(/^www\./, '')
-        const trusted = Boolean(
-          trustedHosts && TrustedHosts.match(trustedHosts, hostname, hostUrl.hostname),
-        )
-        const secure = ioSupported || trusted
-
-        if (!secure) {
-          console.warn(
-            [
-              `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
-              'Falling back to popup dialog.',
-              '',
-              'To enable the iframe dialog, add your hostname to the trusted hosts list.',
-            ].join('\n'),
+          const ioSupported = IO.supported()
+          const hostname = window.location.hostname.replace(/^www\./, '')
+          const trusted = Boolean(
+            trustedHosts && TrustedHosts.match(trustedHosts, hostname, hostUrl.hostname),
           )
-          refs.fallback.syncRequests(sync)
-        } else {
-          const requiresConfirm = requests.some((x) => x.status === 'pending')
-          if (!open && requiresConfirm) this.open()
-          messenger.send('rpc-requests', {
-            account: sync.account,
-            chainId: sync.chainId,
-            requests,
-          })
+          const secure = ioSupported || trusted
+
+          if (!secure) {
+            console.warn(
+              [
+                `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
+                'Falling back to popup dialog.',
+                '',
+                'To enable the iframe dialog, add your hostname to the trusted hosts list.',
+              ].join('\n'),
+            )
+            await refs.fallback.syncRequests(sync)
+          } else {
+            const requiresConfirm = requests.some((x) => x.status === 'pending')
+            if (!open && requiresConfirm) this.open()
+            await messenger.send('rpc-requests', {
+              account: sync.account,
+              chainId: sync.chainId,
+              requests,
+            })
+          }
+        } catch (error) {
+          const cancelled = controller.signal.aborted
+          if (startup === controller) {
+            retry = !cancelled && stage === 'dialog_ready'
+            this.close()
+          }
+          if (error instanceof TransportError) throw error
+          throw new TransportError(host, cancelled ? 'closed' : stage)
         }
       },
       syncTheme(theme) {
         frame.style.colorScheme = theme?.scheme ?? 'light dark'
-        messenger.send('theme', theme ?? {})
+        void messenger.send('theme', theme ?? {}).catch(() => {})
       },
     }
 
@@ -473,6 +554,8 @@ export function popup(options: popup.Options = {}): Dialog {
     return {
       close() {
         overlay.style.display = 'none'
+        messenger?.destroy()
+        messenger = undefined
         if (!win) return
         win.close()
         win = null
@@ -509,7 +592,7 @@ export function popup(options: popup.Options = {}): Dialog {
           '_blank',
           `width=${size.width},height=${size.height},left=${left},top=${top}`,
         )
-        if (!win) throw new Error('Failed to open popup')
+        if (!win) throw new TransportError(host, 'dispatch')
 
         messenger = Messenger.bridge({
           from: Messenger.fromWindow(window, { targetOrigin: hostUrl.origin }),
@@ -522,18 +605,30 @@ export function popup(options: popup.Options = {}): Dialog {
         overlay.style.display = 'flex'
       },
       async syncRequests(sync) {
-        const { requests } = sync
-        requests_displayed = requests
-        const requiresConfirm = requests.some((x) => x.status === 'pending')
-        if (requiresConfirm) {
-          if (!win || win.closed) this.open()
-          else win.focus()
+        let stage: TransportError['data']['stage'] = 'dispatch'
+        try {
+          const { requests } = sync
+          requests_displayed = requests
+          const requiresConfirm = requests.some((x) => x.status === 'pending')
+          if (requiresConfirm) {
+            if (!win || win.closed) this.open()
+            else win.focus()
+          }
+          const current = messenger
+          if (!current) return
+          stage = 'dialog_ready'
+          await current.waitForReady({ timeout: 15_000 })
+          if (current !== messenger) throw new TransportError(host, 'closed')
+          stage = 'dispatch'
+          await current.send('rpc-requests', {
+            account: sync.account,
+            chainId: sync.chainId,
+            requests,
+          })
+        } catch (error) {
+          if (error instanceof TransportError) throw error
+          throw new TransportError(host, stage)
         }
-        messenger?.send('rpc-requests', {
-          account: sync.account,
-          chainId: sync.chainId,
-          requests,
-        })
       },
       syncTheme() {},
     }
@@ -562,7 +657,7 @@ export function noop(): Dialog {
 function syncAccounts(messenger: Messenger.Bridge, store: Store.Store) {
   const { accounts } = store.getState()
   if (accounts.length === 0) return
-  messenger.send('sync', { addresses: accounts.map((a) => a.address) })
+  void messenger.send('sync', { addresses: accounts.map((a) => a.address) }).catch(() => {})
 }
 
 /**

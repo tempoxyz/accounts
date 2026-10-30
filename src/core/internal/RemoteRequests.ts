@@ -1,6 +1,6 @@
 import { Provider as ox_Provider, RpcRequest } from 'ox'
 
-import type * as Dialog from '../Dialog.js'
+import * as Dialog from '../Dialog.js'
 import type * as Remote from '../Remote.js'
 import type * as core_Store from '../Store.js'
 
@@ -12,6 +12,8 @@ type StoredRequest = {
   chainId: number
   /** Rejects the provider request promise. */
   reject: (error: Error) => void
+  /** Current sync attempt; stale attempts cannot reject a newer one. */
+  revision: number
   /** JSON-RPC request sent to the remote. */
   request: RpcRequest.RpcRequest
   /** Resolves the provider request promise. */
@@ -66,8 +68,9 @@ export function attach(host: string, options: AttachOptions): () => void {
   const attachment = Symbol()
   context.attachments.add(attachment)
 
-  const next = options.dialog({
+  const next: Dialog.Instance = options.dialog({
     host: options.host,
+    onError: (error, ids) => fail(host, next, ids, error),
     onReject: (ids) => reject(host, ids),
     onResponse: (response) => respond(host, response),
     store: options.store,
@@ -98,6 +101,7 @@ export function request(host: string, options: RequestOptions): Promise<unknown>
       account: options.account,
       chainId: options.chainId,
       reject,
+      revision: 0,
       request,
       resolve,
       status: 'pending',
@@ -110,8 +114,10 @@ export function request(host: string, options: RequestOptions): Promise<unknown>
 /** Clears a host-scoped request coordinator. */
 export function reset(host: string): void {
   const context = contexts.get(key(host))
-  context?.dialog?.destroy()
   contexts.delete(key(host))
+  context?.dialog?.destroy()
+  for (const request of context?.requestQueue ?? [])
+    request.reject(new Dialog.TransportError(host, 'closed'))
 }
 
 /** Converts a host URL into a request coordinator key. */
@@ -191,13 +197,43 @@ function sync(host: string, options: sync.Options = {}) {
   const request = pending[0]!
   if (!options.force && request.synced) return
   request.synced = true
+  const revision = ++request.revision
 
   context.synced = true
-  dialog.syncRequests({
-    account: request.account,
-    chainId: request.chainId,
-    requests: [toRequest(request)],
-  })
+  try {
+    void dialog
+      .syncRequests({
+        account: request.account,
+        chainId: request.chainId,
+        requests: [toRequest(request)],
+      })
+      .catch((error) => {
+        if (request.revision !== revision) return
+        fail(host, dialog, [request.request.id], error)
+      })
+  } catch (error) {
+    fail(host, dialog, [request.request.id], error)
+  }
+}
+
+/** Fail pending work without replaying any request after an uncertain transport failure. */
+function fail(
+  host: string,
+  dialog: Dialog.Instance | undefined,
+  ids: readonly number[],
+  error: unknown,
+) {
+  const context = contexts.get(key(host))
+  if (!context || context.dialog !== dialog) return
+  if (!context.requestQueue.some((queued) => ids.includes(queued.request.id))) return
+  const pending = context.requestQueue
+  context.requestQueue = []
+  context.synced = false
+  dialog?.close()
+  const failure =
+    error instanceof Dialog.TransportError ? error : new Dialog.TransportError(host, 'dispatch')
+  for (const request of pending) request.reject(failure)
+  release(host)
 }
 
 declare namespace sync {

@@ -32,6 +32,7 @@ import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import * as AddressUtil from './internal/address.js'
+import * as DialogError from './internal/DialogError.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Keystore from './Keystore.js'
 import * as Schema from './Schema.js'
@@ -1899,7 +1900,9 @@ export function create(options: create.Options = {}): create.ReturnType {
               enabled: shouldDedupe,
               id: Json.stringify({ method, params }),
             },
-          )
+          ).catch((error) => {
+            throw DialogError.parse(error)
+          })
         },
       },
       { schema: Schema.ox },

@@ -33,7 +33,12 @@ export type Bridge = Messenger & {
   /** Signal readiness (called by the remote frame). */
   ready: (options?: ReadyOptions | undefined) => void
   /** Promise that resolves when the remote frame signals ready. */
-  waitForReady: () => Promise<ReadyOptions>
+  waitForReady: (options?: {
+    /** Cancel this wait without changing readiness for other callers. */
+    signal?: AbortSignal | undefined
+    /** Bound only this readiness wait, in milliseconds. */
+    timeout?: number | undefined
+  }) => Promise<ReadyOptions>
 }
 
 /** Message schema for cross-frame communication. */
@@ -134,23 +139,31 @@ export declare namespace fromWindow {
 export function bridge(parameters: bridge.Parameters): Bridge {
   const { from: from_, to, waitForReady = false } = parameters
 
-  let pending = false
+  let destroyed = false
+  let received = false
 
   const ready = withResolvers<ReadyOptions>()
-  from_.on('ready', (payload) => ready.resolve(payload ?? {}))
+  // Destruction can precede the first caller waiting for readiness.
+  void ready.promise.catch(() => {})
+  from_.on('ready', (payload) => {
+    if (destroyed) return
+    received = true
+    ready.resolve(payload ?? {})
+  })
 
   const messenger = from({
     destroy() {
+      destroyed = true
       from_.destroy()
       to.destroy()
-      if (pending) ready.reject()
+      ready.reject(new Error('Messenger closed.'))
     },
     on(topic, listener, id) {
       return from_.on(topic, listener, id)
     },
     async send(topic, payload) {
-      pending = true
-      if (waitForReady) await ready.promise.finally(() => (pending = false))
+      if (waitForReady && !received) await ready.promise
+      if (destroyed) throw new Error('Messenger closed.')
       return to.send(topic, payload)
     },
   })
@@ -158,10 +171,39 @@ export function bridge(parameters: bridge.Parameters): Bridge {
   return {
     ...messenger,
     ready(options) {
-      void messenger.send('ready', options ?? {})
+      void messenger.send('ready', options ?? {}).catch(() => {})
     },
-    waitForReady() {
-      return ready.promise
+    waitForReady(options = {}) {
+      const { signal, timeout } = options
+      if (destroyed) return Promise.reject(new Error('Messenger closed.'))
+      if (signal?.aborted) return Promise.reject(new Error('Readiness wait cancelled.'))
+      return new Promise((resolve, reject) => {
+        let timer: ReturnType<typeof setTimeout> | undefined
+        function cleanup() {
+          clearTimeout(timer)
+          signal?.removeEventListener('abort', abort)
+        }
+        function abort() {
+          cleanup()
+          reject(new Error('Readiness wait cancelled.'))
+        }
+        signal?.addEventListener('abort', abort, { once: true })
+        if (timeout !== undefined)
+          timer = setTimeout(() => {
+            cleanup()
+            reject(new Error('Wallet readiness timed out.'))
+          }, timeout)
+        ready.promise.then(
+          (result) => {
+            cleanup()
+            resolve(result)
+          },
+          (error) => {
+            cleanup()
+            reject(error)
+          },
+        )
+      })
     },
   }
 }

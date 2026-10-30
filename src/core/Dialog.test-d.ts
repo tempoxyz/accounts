@@ -8,6 +8,7 @@ describe('Dialog', () => {
   test('has name and setup returning open, close, destroy, syncRequests', () => {
     expectTypeOf<Dialog.SetupFn.Parameters>().toEqualTypeOf<{
       host: string
+      onError?: ((error: Dialog.TransportError, ids: readonly number[]) => void) | undefined
       store: Store.Store
       onReject: (ids: readonly number[]) => void
       onResponse: (response: {
@@ -29,4 +30,12 @@ describe('Dialog', () => {
       syncRequests: (sync: Remote.Sync) => Promise<void>
     }>()
   })
+})
+
+test('transport diagnostics expose only safe origin and stable stage fields', () => {
+  expectTypeOf<Dialog.TransportError['data']>().toEqualTypeOf<{
+    origin: string
+    stage: 'dialog_ready' | 'dispatch' | 'closed'
+  }>()
+  expectTypeOf<Dialog.TransportError['code']>().toEqualTypeOf<number>()
 })
