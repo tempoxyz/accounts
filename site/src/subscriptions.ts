@@ -1,6 +1,7 @@
 import { Store } from 'mppx'
 import { Mppx, tempo } from 'mppx/server'
 import { privateKeyToAccount } from 'viem/accounts'
+import { pathusd } from 'viem/tokens'
 
 const privateKey =
   process.env.SUBSCRIPTIONS_PRIVATE_KEY ??
@@ -36,7 +37,7 @@ export const subscriptions: Subscriptions = Mppx.create({
   methods: [
     tempo.subscription({
       account: privateKeyToAccount(privateKey as `0x${string}`),
-      currency: '0x20c0000000000000000000000000000000000000',
+      currency: pathusd(4217).address,
       feePayer: true,
       resolve({ input }) {
         const subscriber = input.headers.get('X-Subscriber')

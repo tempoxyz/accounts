@@ -1,3 +1,5 @@
+import { getAddress } from 'viem'
+import { pathusd, usdce } from 'viem/tokens'
 import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { tempoWallet } from 'wagmi/connectors'
@@ -11,12 +13,12 @@ export const testnet = (() => {
 
 export const tokensMap = {
   testnet: {
-    pathUSD: '0x20c0000000000000000000000000000000000000',
-    'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726',
+    pathUSD: pathusd(42431).address,
+    'USDC.e': usdce(42431).address,
   },
   mainnet: {
-    pathUSD: '0x20c0000000000000000000000000000000000000',
-    'USDC.e': '0x20C000000000000000000000b9537d11c60E8b50',
+    pathUSD: pathusd(4217).address,
+    'USDC.e': getAddress(usdce(4217).address),
   },
 } as const
 

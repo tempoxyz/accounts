@@ -27,6 +27,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
     name,
     rdns,
     request: requestRemote,
+    retryCount,
   } = options
 
   return Adapter.define(
@@ -51,6 +52,22 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
           })
         },
       })
+
+      /**
+       * Returns a transport for access-key requests that name their own
+       * account and chain in the request context. It is viem's `custom`
+       * transport, so `retryCount` applies as it does to requests sent
+       * through the account transport.
+       */
+      function getTransport(context: { account: string; chainId: number }) {
+        return custom(
+          {
+            request: (args: Parameters<typeof requestRemote>[0]) =>
+              requestRemote({ ...args, context }),
+          },
+          { retryCount },
+        )({})
+      }
 
       // Connect capabilities are read from the first account only: the remote
       // wallet connects a single account per exchange.
@@ -97,6 +114,20 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
           // chain selection is local state the provider handles itself, and
           // forwarding it would open a wallet session for nothing.
           ...(close ? { disconnect: close } : {}),
+          // The wallet revokes on the chain named in the request context, so
+          // the context carries the key's chain rather than the active one.
+          async revokeAccessKey(parameters) {
+            const chainId = Number(parameters.chainId ?? store.getState().chainId)
+            await getTransport({ account: parameters.address, chainId }).request({
+              method: 'wallet_revokeAccessKey',
+              params: [z.encode(Rpc.wallet_revokeAccessKey.parameters, parameters)],
+            })
+            store.accessKeys.remove({
+              accessKey: parameters.accessKeyAddress,
+              account: parameters.address,
+              chainId,
+            })
+          },
           async swap(_parameters, request) {
             return (await provider.request(request)) as Rpc.wallet_swap.Encoded['returns']
           },
@@ -105,6 +136,15 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
               ...request,
               params: [z.encode(Rpc.wallet_transfer.parameters, parameters)] as const,
             })) as Rpc.wallet_transfer.Encoded['returns']
+          },
+          // The wallet updates on the chain named in the request context, so
+          // the context carries the key's chain rather than the active one.
+          async updateAccessKey(parameters) {
+            const chainId = Number(parameters.chainId ?? store.getState().chainId)
+            await getTransport({ account: parameters.address, chainId }).request({
+              method: 'wallet_updateAccessKey',
+              params: [z.encode(Rpc.wallet_updateAccessKey.parameters, parameters)],
+            })
           },
           async withdrawZone(parameters, request) {
             return (await provider.request({
@@ -118,10 +158,10 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
         getAccount(parameters = {}) {
           return {
             account: {
-              address: parameters.address ?? getAccount({ signable: false }).address,
+              address: getAccount({ ...parameters, signable: false }).address,
               type: 'json-rpc' as const,
             },
-            transport: custom(provider),
+            transport: custom(provider, { retryCount }),
           }
         },
       }
@@ -184,5 +224,11 @@ export declare namespace fromRequest {
       /** Session selectors (active account + chain) for the wallet to act on. */
       context?: { account?: string | undefined; chainId?: number | undefined } | undefined
     }) => Promise<unknown>
+    /**
+     * Max retries for a failed wallet request sent through viem's transport
+     * (e.g. signing, sending a transaction, or revoking an access key).
+     * Defaults to viem's transport default.
+     */
+    retryCount?: number | undefined
   }
 }

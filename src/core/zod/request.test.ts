@@ -6,6 +6,25 @@ import * as RpcRequest from './request.js'
 import * as Rpc from './rpc.js'
 
 describe('validate', () => {
+  test('preserves destinationToken separately from the source hint', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_deposit',
+      params: [{ chainId: '0x1079', token: 'USDC', destinationToken: 'OUSD', intent: 'crypto' }],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_deposit",
+        "params": [
+          {
+            "chainId": 4217,
+            "destinationToken": "OUSD",
+            "intent": "crypto",
+            "token": "USDC",
+          },
+        ],
+      }
+    `)
+  })
   test('default: validates eth_accounts', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'eth_accounts',
@@ -69,6 +88,58 @@ describe('validate', () => {
     `)
   })
 
+  test('behavior: preserves access-key revocation sponsorship', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_revokeAccessKey',
+      params: [
+        {
+          accessKeyAddress: '0x2222222222222222222222222222222222222222',
+          address: '0x1111111111111111111111111111111111111111',
+          feePayer: 'https://app.example.com/fee-payer',
+        },
+      ],
+    })
+
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_revokeAccessKey",
+        "params": [
+          {
+            "accessKeyAddress": "0x2222222222222222222222222222222222222222",
+            "address": "0x1111111111111111111111111111111111111111",
+            "feePayer": "https://app.example.com/fee-payer",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('behavior: decodes access-key revocation chainId', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_revokeAccessKey',
+      params: [
+        {
+          accessKeyAddress: '0x2222222222222222222222222222222222222222',
+          address: '0x1111111111111111111111111111111111111111',
+          chainId: '0xa5bf',
+        },
+      ],
+    })
+
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_revokeAccessKey",
+        "params": [
+          {
+            "accessKeyAddress": "0x2222222222222222222222222222222222222222",
+            "address": "0x1111111111111111111111111111111111111111",
+            "chainId": 42431n,
+          },
+        ],
+      }
+    `)
+  })
+
   test('default: validates wallet_switchEthereumChain with hex chainId', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'wallet_switchEthereumChain',
@@ -115,13 +186,14 @@ describe('validate', () => {
     `)
   })
 
-  test('default: validates wallet_deposit with amount and token symbol', () => {
+  test('default: validates wallet_deposit with MACH intent and pre-filled fields', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'wallet_deposit',
       params: [
         {
           amount: '50',
           displayName: 'DoorDash',
+          intent: 'mach',
           token: 'USDC',
         },
       ],
@@ -133,6 +205,7 @@ describe('validate', () => {
           {
             "amount": "50",
             "displayName": "DoorDash",
+            "intent": "mach",
             "token": "USDC",
           },
         ],

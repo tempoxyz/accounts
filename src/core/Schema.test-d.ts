@@ -1,4 +1,5 @@
 import type { RpcSchema } from 'ox'
+import type { KeyAuthorization } from 'ox/tempo'
 import type { Hex } from 'viem'
 import { describe, expectTypeOf, test } from 'vp/test'
 
@@ -205,6 +206,9 @@ describe('Encoded', () => {
   })
 
   test('wallet_deposit', () => {
+    expectTypeOf<
+      NonNullable<Rpc.wallet_deposit.Encoded['params']>[0]['destinationToken']
+    >().toEqualTypeOf<string | undefined>()
     expectTypeOf<Rpc.wallet_deposit.Encoded>().toMatchTypeOf<{
       method: 'wallet_deposit'
       params:
@@ -214,6 +218,8 @@ describe('Encoded', () => {
               amount?: string | undefined
               chainId?: Hex | undefined
               displayName?: string | undefined
+              destinationToken?: string | undefined
+              intent?: 'credits' | 'crypto' | 'faucet' | 'mach' | 'referralCode' | 'x' | undefined
               token?: Hex | string | undefined
             },
           ]
@@ -298,6 +304,20 @@ describe('Request', () => {
   test('wallet_switchEthereumChain has decoded params', () => {
     type SwitchChain = Extract<Schema.Request, { method: 'wallet_switchEthereumChain' }>
     expectTypeOf<SwitchChain['params']>().toEqualTypeOf<readonly [{ chainId: number }]>()
+  })
+
+  test('wallet_revokeAccessKey supports chain selection and app-provided fee sponsorship', () => {
+    expectTypeOf<Rpc.wallet_revokeAccessKey.Decoded['params']>().toEqualTypeOf<
+      readonly [
+        {
+          accessKeyAddress: Hex
+          address: Hex
+          chainId?: bigint | undefined
+          feePayer?: boolean | string | undefined
+          keyAuthorization?: KeyAuthorization.Signed | undefined
+        },
+      ]
+    >()
   })
 
   test('eth_accounts has no params', () => {

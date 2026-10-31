@@ -13,21 +13,30 @@ jobs:
   checks:
     name: Checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
       - name: Install dependencies
-        uses: ./.github/actions/install-dependencies
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
 
       - name: Audit dependencies
         run: pnpm audit
 
       - name: Check code
         run: pnpm -w check
+
+      - name: Check documentation Markdown
+        run: pnpm --filter site check:markdown
 
       - name: Check build
         run: pnpm -w build
@@ -36,41 +45,38 @@ jobs:
         run: pnpm check:types
 
   test-localnet:
-    name: 'Test Runtime (env: localnet, tag: ${{ matrix.tag }})'
+    name: 'Test Runtime (env: localnet)'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
     env:
       TESTCONTAINERS_RYUK_DISABLED: true
-    strategy:
-      matrix:
-        tag:
-          - latest
-          - sha-7825976
-          - https://rpc.moderato.tempo.xyz
-
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
       - name: Install dependencies
-        uses: ./.github/actions/install-dependencies
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
         with:
           playwright: 'true'
 
       - name: Setup Docker
-        uses: docker/setup-docker-action@b2189fbf2a6592b51fee7cdd93ee2bfaeba733db # v5.1.0
+        uses: tempoxyz/gh-actions/vendor/docker/setup-docker-action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
 
       - name: Resolve Tempo image digest
-        if: "!startsWith(matrix.tag, 'http')"
         id: tempo-digest
         run: |
-          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:${{ matrix.tag }} -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:${{ matrix.tag }} --format '{{.Manifest.Digest}}')
+          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:latest -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:latest --format '{{.Manifest.Digest}}')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Cache Tempo Docker image
-        if: "!startsWith(matrix.tag, 'http')"
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         id: docker-cache
         with:
@@ -78,23 +84,18 @@ jobs:
           key: tempo-image-${{ steps.tempo-digest.outputs.digest }}
 
       - name: Load cached Tempo image
-        if: "!startsWith(matrix.tag, 'http') && steps.docker-cache.outputs.cache-hit == 'true'"
+        if: "steps.docker-cache.outputs.cache-hit == 'true'"
         run: docker load -i /tmp/tempo-image.tar
 
       - name: Pull and cache Tempo image
-        if: "!startsWith(matrix.tag, 'http') && steps.docker-cache.outputs.cache-hit != 'true'"
+        if: "steps.docker-cache.outputs.cache-hit != 'true'"
         run: |
-          docker pull ghcr.io/tempoxyz/tempo:${{ matrix.tag }}
-          docker save ghcr.io/tempoxyz/tempo:${{ matrix.tag }} -o /tmp/tempo-image.tar
+          docker pull ghcr.io/tempoxyz/tempo:latest
+          docker save ghcr.io/tempoxyz/tempo:latest -o /tmp/tempo-image.tar
 
       - name: Run tests
-        run: |
-          if [[ "${{ matrix.tag }}" == sha-* ]]; then
-            pnpm test src/server/internal/handlers/multisig.localnet.test.ts --bail=1
-          else
-            pnpm test --bail=1
-          fi
+        run: pnpm test --bail=1
         env:
           CI: true
-          VITE_NODE_TAG: ${{ matrix.tag }}
+          VITE_NODE_TAG: latest
           VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}

@@ -11,6 +11,7 @@ describe('create', () => {
       host?: string | undefined
       open?: ((url: string, prompt: DeviceCode.Prompt) => Promise<void> | void) | undefined
       pollingInterval?: number | undefined
+      retryCount?: number | undefined
       timeout?: number | undefined
     }>()
   })

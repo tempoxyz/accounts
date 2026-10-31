@@ -1,6 +1,10 @@
+import { Hash, Secp256k1 } from 'ox'
+import { TxEnvelopeTempo } from 'ox/tempo'
 import { custom, http } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Transaction } from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
-import { describe, expect, test } from 'vp/test'
+import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import { secp256k1 } from '../../test/adapters.js'
 import * as Client from './Client.js'
@@ -252,6 +256,37 @@ describe('providerTransport', () => {
 })
 
 describe('feePayerTransport', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const sender = privateKeyToAccount(
+    '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  )
+  const feePayerPrivateKey = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+
+  async function sponsoredTransaction(data: `0x${string}`) {
+    const requested = await sender.signTransaction(
+      {
+        calls: [{ data, to: '0x20c0000000000000000000000000000000000000' }],
+        chainId: tempo.id,
+        feePayer: true,
+        gas: 100_000n,
+        maxFeePerGas: 2n,
+        maxPriorityFeePerGas: 1n,
+        nonce: 1,
+      } as never,
+      { serializer: Transaction.serialize },
+    )
+    const envelope = TxEnvelopeTempo.deserialize(requested as TxEnvelopeTempo.Serialized)
+    const feePayerSignature = Secp256k1.sign({
+      payload: TxEnvelopeTempo.getFeePayerSignPayload(envelope, { sender: envelope.from! }),
+      privateKey: feePayerPrivateKey,
+    })
+    return {
+      requested,
+      signed: TxEnvelopeTempo.serialize(envelope, { feePayerSignature }),
+    }
+  }
+
   test('behavior: passes through unrelated methods to the base transport', async () => {
     const store = setup()
     const baseRequests: { method: string; params?: unknown }[] = []
@@ -335,6 +370,235 @@ describe('feePayerTransport', () => {
       [
         "eth_fillTransaction",
       ]
+    `)
+  })
+
+  test('behavior: accepts a fee payer signature for the requested transaction', async () => {
+    const store = setup()
+    const { requested, signed } = await sponsoredTransaction('0x1234')
+    vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { id: number }
+      return Response.json({ id: body.id, jsonrpc: '2.0', result: signed })
+    })
+    const baseRequests: { method: string; params?: unknown }[] = []
+    const hash = `0x${'11'.repeat(32)}` as `0x${string}`
+    const client = Client.fromChainId(tempo.id, {
+      chains: [tempo],
+      feePayer: 'https://relay.example.com',
+      store,
+      transports: {
+        [tempo.id]: custom({
+          async request({ method, params }) {
+            baseRequests.push({ method, params })
+            return hash
+          },
+        }),
+      },
+    })
+
+    const result = await client.request({
+      method: 'eth_sendRawTransaction',
+      params: [requested],
+    })
+
+    expect(result).toMatchInlineSnapshot(
+      `"0x1111111111111111111111111111111111111111111111111111111111111111"`,
+    )
+    expect(baseRequests.map((request) => request.method)).toMatchInlineSnapshot(`
+      [
+        "eth_sendRawTransaction",
+      ]
+    `)
+    const sent = baseRequests[0]?.params as readonly unknown[] | undefined
+    expect(sent?.[0]).toBe(signed)
+  })
+
+  test('error: rejects a fee payer signature for a different transaction', async () => {
+    const store = setup()
+    const { requested } = await sponsoredTransaction('0x1234')
+    const { signed } = await sponsoredTransaction('0x5678')
+    vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { id: number }
+      return Response.json({ id: body.id, jsonrpc: '2.0', result: signed })
+    })
+    const baseRequests: unknown[] = []
+    const client = Client.fromChainId(tempo.id, {
+      chains: [tempo],
+      feePayer: 'https://relay.example.com',
+      store,
+      transports: {
+        [tempo.id]: custom({
+          async request(request) {
+            baseRequests.push(request)
+            return null
+          },
+        }),
+      },
+    })
+
+    await expect(
+      client.request({ method: 'eth_sendRawTransaction', params: [requested] }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Fee payer changed the requested transaction intent.]`,
+    )
+    expect(baseRequests).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('error: rejects a filled transaction that changes the requested call', async () => {
+    const store = setup()
+    const request = {
+      calls: [{ data: '0x1234', to: '0x20c0000000000000000000000000000000000000', value: '0x' }],
+      chainId: '0x1079',
+      feePayer: true,
+      from: sender.address,
+      type: '0x76',
+    } as const
+    vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { id: number }
+      return Response.json({
+        id: body.id,
+        jsonrpc: '2.0',
+        result: {
+          raw: '0x',
+          tx: {
+            ...request,
+            calls: [{ ...request.calls[0], data: '0x5678' }],
+          },
+        },
+      })
+    })
+    const baseRequests: unknown[] = []
+    const client = Client.fromChainId(tempo.id, {
+      chains: [tempo],
+      feePayer: 'https://relay.example.com',
+      store,
+      transports: {
+        [tempo.id]: custom({
+          async request(request) {
+            baseRequests.push(request)
+            return null
+          },
+        }),
+      },
+    })
+
+    await expect(
+      client.request({ method: 'eth_fillTransaction' as never, params: [request] as never }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Fee payer changed the requested transaction intent.]`,
+    )
+    expect(baseRequests).toMatchInlineSnapshot(`[]`)
+  })
+})
+
+describe('rawTransactionTransport', () => {
+  const serialized = '0x76deadbeef'
+  const hash = Hash.keccak256(serialized)
+  const receipt = { status: '0x1', transactionHash: hash }
+
+  /**
+   * Base transport whose first raw submission is accepted by the node but
+   * fails in transit (e.g. a 502 after the node took it), so viem retries it
+   * and the node rejects the copy with `rejection`.
+   */
+  function flaky(
+    rejection: string,
+    options: { known?: boolean | undefined; mined?: boolean | undefined } = {},
+  ) {
+    const { known = true, mined = true } = options
+    const requests: string[] = []
+    let accepted = false
+    const transport = custom({
+      async request({ method, params }) {
+        requests.push(method)
+        if (method === 'eth_sendRawTransaction' || method === 'eth_sendRawTransactionSync') {
+          if (!accepted) {
+            accepted = true
+            throw new Error('fetch failed')
+          }
+          throw { code: -32000, message: rejection }
+        }
+        const found = known && (params as readonly unknown[])[0] === hash
+        if (method === 'eth_getTransactionByHash') return found ? { hash } : null
+        if (method === 'eth_getTransactionReceipt') return found && mined ? receipt : null
+        return null
+      },
+    })
+    return { requests, transport }
+  }
+
+  function client(transport: ReturnType<typeof custom>) {
+    return Client.fromChainId(tempo.id, {
+      chains: [tempo],
+      store: setup(),
+      transports: { [tempo.id]: transport },
+    })
+  }
+
+  test('behavior: waits for the receipt no longer than the sync timeout', async () => {
+    const { transport } = flaky('already known', { mined: false })
+    const start = Date.now()
+
+    await expect(
+      client(transport).request({
+        method: 'eth_sendRawTransactionSync' as never,
+        params: [serialized, 300] as never,
+      }),
+    ).rejects.toThrowError('already known')
+    expect(Date.now() - start).toBeLessThan(5_000)
+  })
+
+  test('behavior: resolves a retried sync submission the node already knows', async () => {
+    const { requests, transport } = flaky('already known')
+
+    const result = await client(transport).request({
+      method: 'eth_sendRawTransactionSync' as never,
+      params: [serialized] as never,
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "status": "0x1",
+        "transactionHash": "0x8addb664b3fd09d9911a80e8930de7cba6e70ed84ec0514fee6a298d421b11d7",
+      }
+    `)
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        "eth_sendRawTransactionSync",
+        "eth_sendRawTransactionSync",
+        "eth_getTransactionByHash",
+        "eth_getTransactionReceipt",
+      ]
+    `)
+  })
+
+  test('behavior: resolves a retried submission that was already mined', async () => {
+    const { transport } = flaky('nonce too low: next nonce 1, tx nonce 0')
+
+    const result = await client(transport).request({
+      method: 'eth_sendRawTransaction' as never,
+      params: [serialized] as never,
+    })
+
+    expect(result).toMatchInlineSnapshot(
+      `"0x8addb664b3fd09d9911a80e8930de7cba6e70ed84ec0514fee6a298d421b11d7"`,
+    )
+  })
+
+  test('error: rethrows a nonce rejection for a transaction the node does not know', async () => {
+    const { transport } = flaky('nonce too low: next nonce 1, tx nonce 0', { known: false })
+
+    await expect(
+      client(transport).request({
+        method: 'eth_sendRawTransaction' as never,
+        params: [serialized] as never,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`
+      [InvalidInputRpcError: Missing or invalid parameters.
+      Double check you have provided the correct parameters.
+
+      Details: nonce too low: next nonce 1, tx nonce 0
+      Version: viem@0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26]
     `)
   })
 })

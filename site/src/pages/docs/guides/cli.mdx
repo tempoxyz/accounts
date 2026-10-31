@@ -130,7 +130,7 @@ When this runs, the provider registers a device code, opens the verification URL
 
 ### Submit a Transfer
 
-Read the active account from the provider, then submit a transfer that fits the approved policy. The local managed key signs the request, and the key authorization is included with the transaction.
+Wait for the provider to load its stored state, read the active account, then submit a transfer that fits the approved policy. The local managed key signs the request, and the key authorization is included with the transaction.
 
 ```ts twoslash [cli.ts]
 // @noErrors
@@ -140,6 +140,7 @@ import { Actions } from 'viem/tempo'
 cli.command('send', {
   description: 'Send 1 pathUSD to the connected account',
   async run() {
+    await provider.ready()
     const account = provider.getAccount()
     const client = provider.getClient()
 

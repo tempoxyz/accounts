@@ -1,10 +1,11 @@
 import { Handler } from 'accounts/server'
 import { Mppx, tempo } from 'mppx/server'
+import { pathusd } from 'viem/tokens'
 
 const payment = Mppx.create({
   methods: [
     tempo.charge({
-      currency: '0x20c0000000000000000000000000000000000000',
+      currency: pathusd(4217).address,
       recipient: '0x0000000000000000000000000000000000000001',
       testnet: true,
     }),

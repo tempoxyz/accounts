@@ -162,6 +162,8 @@ export type Instance = {
         ) => Promise<withdrawZone.ReturnType>)
       | undefined
   }
+  /** Verifies current session authority before a locally retained access key is used. */
+  assertAccount?: ((options: getAccount.Options) => Promise<void>) | undefined
   /** Cleanup function called when the provider is destroyed. */
   cleanup?: (() => void) | undefined
   /** Materializes the adapter-managed account used for provider-owned RPC actions. */
@@ -443,6 +445,12 @@ export declare namespace revokeAccessKey {
     address: Address
     /** Address of the access key to revoke. */
     accessKeyAddress: Address
+    /** Chain ID the access key is scoped to. Defaults to the active chain. */
+    chainId?: bigint | undefined
+    /** App-provided fee sponsorship for the revocation transaction. */
+    feePayer?: boolean | string | undefined
+    /** Signed authorization for an access key that has not been published on-chain. */
+    keyAuthorization?: KeyAuthorization.Signed | undefined
   }
 }
 

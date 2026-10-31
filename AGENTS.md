@@ -54,7 +54,7 @@
 ## Site Styling Conventions
 
 - **Use Tailwind utilities, not arbitrary `var()` values** — never write `bg-[var(--background-color-surface)]` or `border-[var(--vocs-border-color-primary)]`. Use the corresponding Tailwind utility class. Both vocs and regen-ui register their tokens via `@theme`, so every token has a generated utility.
-- **No `vocs:` prefix in our app code** — vocs uses a `vocs:` prefix internally for its own components, but our `_root.css` re-imports vocs's theme tokens at the **root** `@theme` layer (via `_vocs.generated.css`), so vocs tokens are available as plain unprefixed utilities in our code: `bg-primary`, `bg-surface`, `border-primary`, `text-primary`/`text-secondary`/`text-muted`, `bg-info-tint`, `text-info`, `border-info-tint`, etc. Writing `vocs:bg-info-tint` will silently no-op because Tailwind has no `vocs:` prefix registered for our own source files.
+- **No `vocs:` prefix in our app code** — vocs uses a `vocs:` prefix internally for its own components, but our `_root.css` imports vocs's theme tokens at the **root** `@theme` layer (via `@import 'vocs/styles/theme.css'`, which leaves Tailwind's palette intact), so vocs tokens are available as plain unprefixed utilities in our code: `bg-primary`, `bg-surface`, `border-primary`, `text-primary`/`text-secondary`/`text-muted`, `bg-info-tint`, `text-info`, `border-info-tint`, etc. Writing `vocs:bg-info-tint` will silently no-op because Tailwind has no `vocs:` prefix registered for our own source files.
 - **Regen-ui tokens are also unprefixed** — regen tokens are imported into the root `@theme` and are available as plain Tailwind utilities: `bg-pane`, `bg-secondary`, `border-border`, `text-foreground`, `text-foreground-secondary`, etc. Where regen and vocs both define a token of the same name (e.g. `--background-color-primary`), vocs wins because it is imported last.
 - **Arbitrary values only when no token exists** — if a value isn't covered by a token (e.g. a custom `color-mix(...)` blend, a one-off pixel size), inline it with `[...]` syntax, but prefer utility classes wherever possible.
 
@@ -86,6 +86,8 @@
 - **Unit and type tests as you go** — write unit tests and `.test-d.ts` type tests alongside implementation for each module. Save high-level integration tests (with and without browser) for the end.
 - **Validate `.test-d.ts` with TypeScript** — `pnpm test <file>.test-d.ts` does not match the Vitest project includes; use `pnpm exec tsc -b --noEmit` for type-test coverage.
 - **Mark localnet tests explicitly** — tests that touch RPC/localnet should use the `*.localnet.test.ts` suffix so only those files inherit `test/setup.ts`; pure `*.test.ts` files run in the no-setup `lib/pure` project.
+- **Exercise fee selection on real localnet** — use real TIP-20 balances, funded FeeAMM pools, and signed broadcasts instead of mocked RPC responses. Transport gates can prove overlapping requests while forwarding every response unchanged. Select the matching hardfork for two-hop routing; viem's localnet chain defaults to T3.
+- **Confirm fee preferences before testing selection** — `Actions.fee.setUserToken` returns a transaction hash before inclusion. Send `Actions.fee.setUserToken.call` with `sendTransactionSync` in dependent fixtures so the relay cannot cache a missing preference while its setup transaction is pending. This also avoids requiring a `UserTokenSet` event when an unchanged preference emits none.
 
 ## Git Conventions
 
@@ -98,6 +100,13 @@
 - **Understand full request flow before changing CLI UX** — trace the complete path (CLI → server → browser → server → CLI polling) before modifying feedback or error handling in CLI scripts.
 
 ## Learned Workspace Facts
+
+- **Node request-body cancellation must detach listeners** -- remove `IncomingMessage` data/end callbacks when the Web stream is canceled, and close unfinished uploads after the response finishes so later events cannot touch a closed controller or leave an upload open.
+
+- **CI registry policy also applies to frozen installs** -- lockfile refreshes can select recently published transitive DevTools packages even when the direct tool is older. Retain compatible established dependency versions when updating the security-patched Vite toolchain.
+
+- **Fee-token balances do not prove FeeAMM eligibility** — transaction filling can succeed for tokens that pool admission rejects. For automatic selection, check reserves against the maximum fee, including quote-token routing, and exclude failed candidates even when they are the user's funded on-chain preference. Keep explicit fee-token choices and swap funding-source selection separate.
+- **Prefetch fee reserves with balance discovery** — overlap reserve reads with automatic unsponsored token discovery and reuse request-scoped balance/reserve promises across retries. Evaluate reserves against the filled maximum fee, and consume speculative errors only when the corresponding candidate or route is needed.
 
 - **Fill-transaction capabilities must survive request decoding** — `Provider` forwards decoded `eth_fillTransaction` parameters, so the transaction request schema must retain capabilities such as `errors` for relay recovery.
 - **Expo/Metro should get built entrypoints via `react-native` export conditions** — React Native consumers may resolve package `exports` before `default`, and loading `src/*.ts` directly can fail on `.js`-suffixed relative imports. For mobile consumers, add a `react-native` condition that points at `dist/*` entrypoints.
@@ -113,11 +122,35 @@
 - **`dialog` is a git submodule** — points to `git@github.com:tempoxyz/app.git`. Initialize with `git submodule update --init --recursive`.
 - **`VITE_NODE_TAG`** — accepts a Docker image tag (e.g. `latest`, `sha-abc123`) or an HTTP RPC URL (e.g. `https://rpc.moderato.tempo.xyz`) that resolves to a `sha-<hash>` tag via `web3_clientVersion`.
 - **Deduplicate `vp` in Vitest config** — in this workspace, mixed peer resolution (for example different `@types/node` versions across packages) can load two `vp` instances and break suite initialization; set `resolve.dedupe` to include `vp`.
+- **Vite+ 1.x re-exports Vitest** -- keep Vitest as a direct dev dependency for bare `vi.mock` imports. Ambient `declare module 'vitest'` shims mask the real exports and break `vp/test` types.
 - **CLI auth example URL inputs** — the example CLI flow is expected to support both `--url` and `AUTH_URL`-based defaults, and should avoid hardcoded personal hostnames in source.
 - **Test RPC port selection should auto-fallback** — localnet test setup should start from `VITE_RPC_PORT` (or `8545`) and select the next available port to avoid `EADDRINUSE` collisions.
 - **Force localnet env when running localnet tests from a testnet shell** — if `VITE_NODE_ENV=testnet` is exported, `*.localnet.test.ts` files will still target testnet RPCs; prefix targeted localnet runs with `VITE_NODE_ENV=localnet VITE_NODE_TAG=sha-...` to exercise the pinned Docker node.
-- **Relay multisig bootstrap must preserve init after store claims** — persistent `Handler.relay({ multisig })` stores may return a claimed operation without the in-memory `initConfig` field even though the current raw approval still carries `multisig_init`. Finalization should fall back to the locally resolved init config so the first native multisig transaction does not drop `multisig_init`.
 - **Turnkey adapter stays structurally typed** — avoid importing `@turnkey/core` directly from the root SDK adapter so non-Turnkey consumers do not inherit a hard dependency; accept an app-provided client with the minimal client shape instead.
 - **Privy React embedded wallets can precede hook readiness** — `useWallets()` may expose a usable embedded wallet while `ready` is still false. Select it with both `walletClientType === 'privy'` and `connectorType === 'embedded'`, and treat its presence as wallet readiness.
 - **Standalone access-key deposit prompts have no event filter** -- `wallet_authorizeAccessKey.showDeposit` supports boolean or deposit hints and intentionally omits `on`; use `wallet_connect.capabilities.showDeposit.on` for login/register filtering.
 - **Connect access-key params do not carry deposit prompts** -- `wallet_connect.capabilities.authorizeAccessKey` omits `showDeposit`; connect deposit prompts belong on `wallet_connect.capabilities.showDeposit` only.
+- **PostMessage iframe color schemes must match the wallet page** — read the explicit `scheme` URL parameter when mounting the iframe. A mismatched scheme can make its transparent canvas opaque black on light macOS.
+- **Normalize no-expiry authorization metadata** -- `expiry: 0` is the request compatibility value for non-expiring access keys. Canonical signed metadata uses absent expiry (RPC `null`); stored zero from older SDK versions must remain selectable. Do not confuse this with on-chain metadata expiry zero for missing/revoked keys, and preserve omitted permissions versus explicit empty lists.
+- **Remove sprintf-js through its YAML parent** -- `@istanbuljs/load-nyc-config@1.1.0` calls `js-yaml.load()`, so its dependency can be scoped to js-yaml v4 to remove argparse v1 and unpatched sprintf-js. Keep the override scoped to this caller and verify YAML configuration loading; other v3 callers may rely on removed APIs or schemas.
+
+- **Keep the Zod audit exception coupled to the backport** -- Zod 3 consumers require v3 APIs and have no patched upstream release for GHSA-mrhx-c7xc-m3w5. Keep them on patched `3.25.76`, keep Zod 4 on `4.6.7` or later, and retain the collection-bound regression tests when updating either version or the patch.
+
+- **Retain Vite+ peers during lockfile refreshes** -- pnpm can resolve bare Vite peers despite the npm-alias override. Preserve the existing Vite+ peer graph and keep the lockfile regression check rejecting real `vite@` versions.
+
+## Access-key lifecycle invariants
+
+- Validate the adapter's current account selection before using locally retained access keys; persisted account history is not session authorization.
+- A synchronous revocation API can still return a pending receipt. Remove local key state only after successful execution, or an explicit already-unavailable-key error.
+- Multi-account integration fixtures must reauthorize a payer key after replacing the connected wallet; restoring account history alone must not restore pruned signing authority.
+
+- Retained-key authority checks must cover MPP resolution and fill signing, including action-based adapters such as Privy. Unsigned root fills must remain available when no usable key matches.
+- Memory KV capacity is opt-in: shared authentication stores also hold durable credentials and sessions, so a default hard cap can deny login. Cache TTLs must reach backing storage for reclamation.
+
+- Bind cached Privy wallets to the authenticated user ID, not token presence; recheck identity after asynchronous wallet loading and before cached signing.
+
+- **Bound dialog startup, never approval** -- iframe and popup readiness waits expire after 15 seconds and propagate `Dialog.TransportError` (`code: -32000`, `data: { origin, stage }`) to the pending request. `dialog_ready` means startup, `dispatch` means sending failed, and `closed` means cancellation/teardown. Keep origins free of paths/queries and never attach request data or raw causes. Cancellation and teardown invalidate waiting sends; retry only on a fresh request, reloading an unready document then rather than replaying signing. Disconnect the iframe remount observer before removing its root. Run the isolated Chromium regressions with `pnpm test --config vitest.dialog.config.ts` after `pnpm exec playwright-core install chromium`.
+
+- **Preserve transport diagnostics across viem and Ox** -- viem wraps RPC errors in a cause chain; Ox reparses known codes and can drop that cause. Recover only the safe dialog origin/stage at the Provider boundary before Ox parses it. Guard asynchronous queue errors by sync revision so a superseded startup attempt cannot fail a newer sync of the same request ID.
+
+- **Keep dialog browser fixtures local and rejection-aware** -- bind standalone Vite test servers to loopback, not all interfaces. Cancellation tests must handle and assert the startup rejection; a discarded `syncRequests` promise becomes an unhandled error after close or destroy. Keep the older browser suite aligned even while its default project is disabled.

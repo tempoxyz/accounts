@@ -49,6 +49,7 @@ type Page =
   | { path: '/docs/api/trustedHosts'; render: 'static' }
   | { path: '/docs/api/turnkey'; render: 'static' }
   | { path: '/docs/api/webAuthn'; render: 'static' }
+  | { path: '/docs/api/webauthnceremony.deferred'; render: 'static' }
   | { path: '/docs/api/webauthnceremony.from'; render: 'static' }
   | { path: '/docs/api/webauthnceremony'; render: 'static' }
   | { path: '/docs/api/webauthnceremony.server'; render: 'static' }

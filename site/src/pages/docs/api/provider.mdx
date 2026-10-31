@@ -7,7 +7,7 @@ description: Create an EIP-1193 provider for managing accounts on Tempo.
 
 Creates an EIP-1193 provider with a pluggable adapter for managing accounts on Tempo.
 
-The returned object implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) (`request`, `on`, `removeListener`, `emit`, ...) and exposes a few convenience helpers (`getAccount`, `getAccessKeyStatus`, `getClient`, `getMppxParameters`, `store`, `chains`). See [Return Type](#return-type) for the full surface.
+The returned object implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) (`request`, `on`, `removeListener`, `emit`, ...) and exposes a few convenience helpers (`getAccount`, `getAccessKeyStatus`, `getClient`, `getMppxParameters`, `ready`, `store`, `chains`). See [Return Type](#return-type) for the full surface.
 
 ## Usage
 
@@ -73,6 +73,19 @@ const status = await provider.getAccessKeyStatus({ // [!code focus]
 if (status === 'pending') {
   // The next matching transaction will publish the key authorization.
 }
+```
+
+### Waiting for Stored State
+
+The provider loads its stored state from [`storage`](#storage) in the background. `request` waits for it, but `getAccount` reads it synchronously and throws `Store.HydrationError` until it has loaded, so await `ready` first.
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+
+await provider.ready() // [!code focus]
+const account = provider.getAccount() // [!code focus]
 ```
 
 ## Parameters
@@ -293,6 +306,21 @@ const provider = Provider.create({
 })
 ```
 
+### hydrationTimeout
+
+- **Type:** `number`
+- **Default:** `10_000`
+
+Milliseconds to wait for stored state to load from [`storage`](#storage). When the load fails or takes longer than this, `ready` rejects with `Store.HydrationError`, and `request` rejects with an `RpcResponse.InternalError` whose `cause` is that `Store.HydrationError`.
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  hydrationTimeout: 30_000, // [!code focus]
+})
+```
+
 ### identity
 
 - **Type:** `{ audience?: string; issuer: string }`
@@ -399,9 +427,9 @@ const provider = Provider.create({
 ### storage
 
 - **Type:** `Storage`
-- **Default:** `Storage.idb()` in browser, `Storage.memory()` otherwise
+- **Default:** `Storage.idb()` with a `Storage.memory()` fallback where IndexedDB is available, `Storage.memory()` otherwise
 
-Storage adapter for persistence. The default uses IndexedDB in browsers (via `Storage.idb()`) and an in-memory map elsewhere.
+Storage adapter for persistence. The default uses IndexedDB in browsers (via `Storage.idb()`) and an in-memory map elsewhere, including React Native. When IndexedDB exists but fails, the default keeps state in memory for the session. A storage adapter you pass yourself has no fallback, so its failures reach `ready`, `request` and `getAccount`.
 
 ```ts twoslash
 import { Provider, Storage } from 'accounts'
@@ -479,6 +507,8 @@ export type Provider = ox_Provider.Provider & ox_Provider.Emitter & {
     getClient: NonNullable<mppx_tempo.Parameters['getClient']>
     resolveAccount: NonNullable<mppx_tempo.Parameters['resolveAccount']>
   }
+  /** Resolves once the provider has loaded its stored state. */
+  ready(): Promise<void>
   /** Reactive state store. */
   store: Store
 }

@@ -32,6 +32,7 @@ import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import * as AddressUtil from './internal/address.js'
+import * as DialogError from './internal/DialogError.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Keystore from './Keystore.js'
 import * as Schema from './Schema.js'
@@ -61,6 +62,13 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     }): ViemClient<Transport, typeof tempo>
     /** Returns mppx Tempo client parameters backed by this provider. */
     getMppxParameters(options?: getMppxParameters.Options | undefined): MppxParameters
+    /**
+     * Resolves once the provider has loaded its persisted state from `storage`.
+     * Rejects with `Store.HydrationError` when the load fails or takes longer than
+     * `hydrationTimeout`. `request` waits for this itself and rejects with an
+     * `RpcResponse.InternalError` caused by that error; await it before `getAccount`.
+     */
+    ready(): Promise<void>
     /** Reactive state store. */
     store: Store.Store
   }
@@ -99,11 +107,16 @@ export function create(options: create.Options = {}): create.ReturnType {
   const {
     adapter = dialog(),
     chains = [tempo, tempoModerato, tempoDevnet],
+    hydrationTimeout,
     maxAccounts,
     persistCredentials,
     relay,
     testnet,
-    storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
+    // React Native can expose `window` without `indexedDB`. Where IndexedDB exists but
+    // fails, memory keeps the default usable instead of failing every request.
+    storage = typeof window !== 'undefined' && typeof indexedDB !== 'undefined'
+      ? Storage.combine(Storage.idb(), Storage.memory())
+      : Storage.memory(),
   } = options
   const authorizeAccessKey_default = options.accessKey?.authorize ?? options.authorizeAccessKey
   // Filled in below once the adapter instance exists (adapters may supply
@@ -147,7 +160,11 @@ export function create(options: create.Options = {}): create.ReturnType {
     storage,
   })
 
-  const getAccount: Account.Find = (options = {}) => Account.find({ ...options, store }) as never
+  const getAccount: Account.Find = (options = {}) => {
+    // An unloaded store holds no accounts yet, so reading it would report none.
+    Store.assertHydrated(store)
+    return Account.find({ ...options, store }) as never
+  }
   // Lazy reference — assigned after the provider is created so the client
   // transport can route provider methods (wallet_connect, etc.) through it.
   let providerRef: ox_Provider.Provider | undefined
@@ -232,6 +249,11 @@ export function create(options: create.Options = {}): create.ReturnType {
     return await instance.getAccount(options)
   }
 
+  async function assertAccessKeyAccount(address: Address.Address) {
+    if (instance.assertAccount) await instance.assertAccount({ address })
+    else if (instance.getAccount) await getAdapterAccount({ address })
+  }
+
   function getWalletClient(options: {
     account: Awaited<Adapter.getAccount.ReturnType>['account']
     chainId?: number | undefined
@@ -290,6 +312,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })(),
       })
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      if (address) await assertAccessKeyAccount(address)
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
@@ -329,6 +352,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })(),
       })
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      if (address) await assertAccessKeyAccount(address)
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
@@ -346,7 +370,10 @@ export function create(options: create.Options = {}): create.ReturnType {
             ...(feePayer ? { feePayer: true as never } : {}),
           })
           return await prepared.send()
-        } catch {}
+        } catch (error) {
+          // Signing again with the root account could send the calls twice.
+          if (AccessKeyTransaction.maybeSubmitted(error)) throw error
+        }
     }
 
     const { feePayer, ...rest } = parameters
@@ -376,6 +403,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })(),
       })
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      if (address) await assertAccessKeyAccount(address)
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
@@ -393,7 +421,10 @@ export function create(options: create.Options = {}): create.ReturnType {
             ...(feePayer ? { feePayer: true as never } : {}),
           })
           return await prepared.sendSync()
-        } catch {}
+        } catch (error) {
+          // Signing again with the root account could send the calls twice.
+          if (AccessKeyTransaction.maybeSubmitted(error)) throw error
+        }
     }
 
     const { feePayer, ...rest } = parameters
@@ -558,34 +589,45 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
-  async function revokeAccessKey(parameters: {
-    address: Address.Address
-    accessKeyAddress: Address.Address
-  }) {
+  async function revokeAccessKey(parameters: Adapter.revokeAccessKey.Parameters) {
     const selected = await getAdapterAccount({ address: parameters.address })
+    const feePayer = parameters.feePayer
+    const chainId = Number(parameters.chainId ?? store.getState().chainId)
     const client = getWalletClient({
       account: selected.account,
+      chainId,
+      feePayer: feePayer === true ? undefined : feePayer,
       transport: selected.transport,
     })
     if (selected.account.type === 'json-rpc') {
+      // A wallet reached only through the account transport acts on the
+      // active chain, so this path cannot route a revocation elsewhere.
+      const { chainId: active } = store.getState()
+      if (chainId !== active)
+        throw new ox_Provider.UnsupportedChainIdError({
+          message: `Revoking on chain ${chainId} requires it to be the active chain (${active}).`,
+        })
       await client.request({
         method: 'wallet_revokeAccessKey' as never,
-        params: [parameters] as never,
+        params: [z.encode(Rpc.wallet_revokeAccessKey.parameters, parameters)] as never,
       })
     } else {
       try {
-        await Actions.accessKey.revokeSync(getClient(), {
+        const { receipt } = await Actions.accessKey.revokeSync(client, {
           account: selected.account as TempoAccount.Account,
           accessKey: parameters.accessKeyAddress,
+          ...(feePayer ? { feePayer: true as never } : {}),
+          ...(parameters.keyAuthorization ? { keyAuthorization: parameters.keyAuthorization } : {}),
         })
+        if (receipt.status !== 'success') throw new Error('Access-key revocation is not confirmed')
       } catch (error) {
-        if (!AccessKey.isUnavailableError(error)) throw error
+        if (typeof feePayer === 'string' || !AccessKey.isUnavailableError(error)) throw error
       }
     }
     store.accessKeys.remove({
       accessKey: parameters.accessKeyAddress,
       account: parameters.address,
-      chainId: store.getState().chainId,
+      chainId,
     })
   }
 
@@ -593,6 +635,13 @@ export function create(options: create.Options = {}): create.ReturnType {
     const selected = await getAdapterAccount({ address: parameters.address })
     const chainId = Number(parameters.chainId ?? getClient().chain.id)
     if (selected.account.type === 'json-rpc') {
+      // A wallet reached only through the account transport acts on the
+      // active chain, so this path cannot route an update elsewhere.
+      const { chainId: active } = store.getState()
+      if (parameters.chainId !== undefined && chainId !== active)
+        throw new ox_Provider.UnsupportedChainIdError({
+          message: `Updating on chain ${chainId} requires it to be the active chain (${active}).`,
+        })
       const client = getWalletClient({
         account: selected.account,
         chainId,
@@ -677,6 +726,24 @@ export function create(options: create.Options = {}): create.ReturnType {
     parameters: Adapter.revokeAccessKey.Parameters,
     request: Pick<Rpc.wallet_revokeAccessKey.Encoded, 'method' | 'params'>,
   ) {
+    if (
+      parameters.keyAuthorization &&
+      !AddressUtil.isEqual(parameters.keyAuthorization.address, parameters.accessKeyAddress)
+    )
+      throw new RpcResponse.InvalidParamsError({
+        message: '`keyAuthorization` must authorize `accessKeyAddress`.',
+      })
+    // Clients fall back to the default chain for unknown chain IDs, which
+    // would revoke on a chain the caller did not name.
+    if (
+      parameters.chainId !== undefined &&
+      !chains.some((chain) => chain.id === Number(parameters.chainId))
+    )
+      throw new ox_Provider.UnsupportedChainIdError({
+        message: `Chain ${parameters.chainId} not configured.`,
+      })
+    // An unknown account fails here instead of reaching a remote wallet.
+    getAccount({ address: parameters.address })
     if (actions.revokeAccessKey) return await actions.revokeAccessKey(parameters, request)
     if (instance.getAccount) return await revokeAccessKey(parameters)
     unsupported('revokeAccessKey')
@@ -686,6 +753,17 @@ export function create(options: create.Options = {}): create.ReturnType {
     parameters: Adapter.updateAccessKey.Parameters,
     request: Pick<Rpc.wallet_updateAccessKey.Encoded, 'method' | 'params'>,
   ) {
+    // Clients fall back to the default chain for unknown chain IDs, which
+    // would update a key on a chain the caller did not name.
+    if (
+      parameters.chainId !== undefined &&
+      !chains.some((chain) => chain.id === Number(parameters.chainId))
+    )
+      throw new ox_Provider.UnsupportedChainIdError({
+        message: `Chain ${parameters.chainId} not configured.`,
+      })
+    // An unknown account fails here instead of reaching a remote wallet.
+    getAccount({ address: parameters.address })
     if (actions.updateAccessKey) return await actions.updateAccessKey(parameters, request)
     if (instance.getAccount) return await updateAccessKey(parameters)
     unsupported('updateAccessKey')
@@ -711,6 +789,12 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (url.startsWith('http://') || url.startsWith('https://')) return url
     if (typeof window !== 'undefined') return new URL(url, window.location.origin).href
     return url
+  }
+
+  function resolveRevocationFeePayer(
+    feePayer: string | boolean | undefined,
+  ): Adapter.revokeAccessKey.Parameters['feePayer'] {
+    return resolveFeePayer(feePayer) ?? (feePayer === true ? true : undefined)
   }
 
   function stripAuthorizeAccessKey(
@@ -808,6 +892,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     const account = AddressUtil.from(info.account.address)
     if (!account) return undefined
     assertMppAccountConnected(account)
+    await assertAccessKeyAccount(account)
 
     if (options_.accessKey) {
       const authority =
@@ -898,7 +983,7 @@ export function create(options: create.Options = {}): create.ReturnType {
       {
         ...(emitter as unknown as ox_Provider.Emitter),
         async request({ method, params }: { method: string; params?: any }) {
-          await Store.waitForHydration(store)
+          await Store.waitForHydration(store, { timeout: hydrationTimeout })
 
           const shouldDedupe = [
             'eth_accounts',
@@ -944,7 +1029,17 @@ export function create(options: create.Options = {}): create.ReturnType {
                       params: undefined,
                     })
 
-                    store.setState({ accounts: resolveAccounts(accounts), activeAccount: 0 })
+                    store.setState({
+                      accounts: resolveAccounts(accounts),
+                      accessKeys: store
+                        .getState()
+                        .accessKeys.filter((key) =>
+                          accounts.some((account) =>
+                            AddressUtil.isEqual(account.address, key.access),
+                          ),
+                        ),
+                      activeAccount: 0,
+                    })
 
                     return accounts.map(
                       (a) => a.address,
@@ -1048,7 +1143,8 @@ export function create(options: create.Options = {}): create.ReturnType {
                         client,
                         store,
                       })
-                      if (transaction)
+                      if (transaction) {
+                        await assertAccessKeyAccount(address)
                         try {
                           return await transaction.fill({
                             ...parameters,
@@ -1059,6 +1155,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         } catch {
                           // Fall through to the root account fill.
                         }
+                      }
                     }
 
                     return await fill()
@@ -1417,7 +1514,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                             ...(capabilities.showDeposit !== undefined
                               ? { showDeposit: capabilities.showDeposit }
                               : {}),
-                            userId: capabilities.userId ?? Hex.random(16),
+                            // Without one, the ceremony binds a random one.
+                            ...(capabilities.userId !== undefined
+                              ? { userId: capabilities.userId }
+                              : {}),
                             ...(personalSign_request ? { personalSign: personalSign_request } : {}),
                           },
                           request,
@@ -1440,6 +1540,13 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                     store.setState({
                       accounts: resolveAccounts(accounts),
+                      accessKeys: store
+                        .getState()
+                        .accessKeys.filter((key) =>
+                          accounts.some((account) =>
+                            AddressUtil.isEqual(account.address, key.access),
+                          ),
+                        ),
                       activeAccount: 0,
                       // Persist absolutized auth URLs so a later
                       // `wallet_disconnect` can hit logout even when the
@@ -1475,8 +1582,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                         const nonce =
                           (typeof email === 'object' ? email.nonce : undefined) ??
                           (auth ? parseAuthNonce(auth.message) : undefined)
-                        return await mintIdentity(options.identity.issuer, {
+                        return await mintIdentity({
                           audience,
+                          credentials: options.identity.credentials,
+                          issuer: options.identity.issuer,
                           nonce,
                           subject: accountAddress,
                         }).catch(() => undefined)
@@ -1606,7 +1715,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'wallet_revokeAccessKey': {
                     assertConnected()
                     const [decoded] = request._decoded.params
-                    await revokeAccessKeyAction({ ...decoded }, request)
+                    await revokeAccessKeyAction(
+                      { ...decoded, feePayer: resolveRevocationFeePayer(decoded.feePayer) },
+                      request,
+                    )
                     return
                   }
 
@@ -1788,7 +1900,9 @@ export function create(options: create.Options = {}): create.ReturnType {
               enabled: shouldDedupe,
               id: Json.stringify({ method, params }),
             },
-          )
+          ).catch((error) => {
+            throw DialogError.parse(error)
+          })
         },
       },
       { schema: Schema.ox },
@@ -1825,6 +1939,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })
       },
       getMppxParameters,
+      ready: () => Store.waitForHydration(store, { timeout: hydrationTimeout }),
       store,
     },
   )
@@ -1944,6 +2059,13 @@ export declare namespace create {
     /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
     feePayer?: Client.fromChainId.Options['feePayer']
     /**
+     * Milliseconds to wait for persisted state to load from `storage`. Past this,
+     * `ready` rejects with `Store.HydrationError`, and `request` with an
+     * `RpcResponse.InternalError` caused by it.
+     * @default 10_000
+     */
+    hydrationTimeout?: number | undefined
+    /**
      * Identity (verified email) token minting for local adapters. When a
      * `wallet_connect` request asks for `identity.email` and the adapter
      * returns no identity claims (local adapters have no wallet host to mint
@@ -1955,6 +2077,8 @@ export declare namespace create {
       | {
           /** Audience (`aud`) bound into minted tokens. @default `location.origin` */
           audience?: string | undefined
+          /** Credential mode for token requests. @default "same-origin" */
+          credentials?: RequestCredentials | undefined
           /** OIDC issuer whose `/token` route mints the id token. */
           issuer: string
         }
@@ -1985,7 +2109,10 @@ export declare namespace create {
      * ```
      */
     relay?: string | undefined
-    /** Storage adapter for persistence. @default Storage.idb() in browser, Storage.memory() otherwise. */
+    /**
+     * Storage adapter for persistence.
+     * @default Storage.idb() with a Storage.memory() fallback where IndexedDB is available, Storage.memory() otherwise.
+     */
     storage?: Storage.Storage | undefined
     /**
      * Use testnet.
@@ -2319,16 +2446,21 @@ function parseAuthNonce(message: string) {
  * without a wallet host, so the provider mints the token itself when
  * configured (see `create.Options.identity`).
  */
-async function mintIdentity(
-  issuer: string,
-  body: { audience: string; nonce?: string | undefined; subject: string },
-): Promise<{ email: string | null; idToken: string }> {
+async function mintIdentity(options: {
+  audience: string
+  credentials?: RequestCredentials | undefined
+  issuer: string
+  nonce?: string | undefined
+  subject: string
+}): Promise<{ email: string | null; idToken: string }> {
+  const { audience, credentials, issuer, nonce, subject } = options
   const res = await fetch(`${issuer.replace(/\/+$/, '')}/token`, {
     body: JSON.stringify({
-      audience: body.audience,
-      ...(body.nonce ? { nonce: body.nonce } : {}),
-      subject: body.subject,
+      audience,
+      ...(nonce ? { nonce } : {}),
+      subject,
     }),
+    ...(credentials ? { credentials } : {}),
     headers: { 'content-type': 'application/json' },
     method: 'POST',
   })

@@ -1,5 +1,5 @@
-import { Provider as ox_Provider } from 'ox'
-import { tempoLocalnet } from 'viem/tempo/chains'
+import { Hex, Provider as ox_Provider } from 'ox'
+import { tempoLocalnet, tempoModerato } from 'viem/tempo/chains'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vp/test'
 
 import { accounts, privateKeys } from '../../../test/config.js'
@@ -476,5 +476,164 @@ describe('dialog', () => {
       }
     `)
     expect(typeof result.transport).toMatchInlineSnapshot(`"function"`)
+  })
+
+  describe('revokeAccessKey', () => {
+    const chainIds = [tempoLocalnet.id, tempoModerato.id]
+
+    function setupKeys() {
+      const setup_ = setup()
+      setup_.store.setState({
+        accounts: [{ address }],
+        activeAccount: 0,
+        accessKeys: chainIds.map(
+          (chainId) =>
+            ({ access: address, address: accessKey, chainId, keyType: 'secp256k1' }) as never,
+        ),
+      })
+      return setup_
+    }
+
+    test.each([
+      { case: 'the active chain by default', chainId: undefined, synced: tempoLocalnet.id },
+      { case: 'an explicit chainId', chainId: tempoModerato.id, synced: tempoModerato.id },
+    ])('behavior: queues the revocation on $case', async ({ chainId, synced }) => {
+      const { adapter, dialog, store } = setupKeys()
+
+      const promise = adapter.actions.revokeAccessKey!(
+        { accessKeyAddress: accessKey, address, ...(chainId ? { chainId: BigInt(chainId) } : {}) },
+        { method: 'wallet_revokeAccessKey', params: [{ accessKeyAddress: accessKey, address }] },
+      )
+      const queued = await dialog.takeRequest()
+      dialog.success(queued, null)
+      await promise
+
+      expect({
+        account: dialog.syncs[0]!.account,
+        chainId: dialog.syncs[0]!.chainId,
+        params: queued.request.params,
+      }).toEqual({
+        account: { address },
+        chainId: synced,
+        params: [
+          {
+            accessKeyAddress: accessKey,
+            address,
+            ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+          },
+        ],
+      })
+      expect(store.getState().accessKeys.map((key) => key.chainId)).toEqual(
+        chainIds.filter((id) => id !== synced),
+      )
+    })
+
+    test('error: keeps the local key when the dialog rejects', async () => {
+      const { adapter, dialog, store } = setupKeys()
+
+      const promise = adapter.actions.revokeAccessKey!(
+        { accessKeyAddress: accessKey, address, chainId: BigInt(tempoModerato.id) },
+        { method: 'wallet_revokeAccessKey', params: [{ accessKeyAddress: accessKey, address }] },
+      )
+      const queued = await dialog.takeRequest()
+      dialog.failure(queued, { code: 4001, message: 'Rejected' })
+
+      await expect(promise).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UserRejectedRequestError: Rejected]`,
+      )
+      expect(store.getState().accessKeys.map((key) => key.chainId)).toEqual(chainIds)
+    })
+  })
+
+  describe('updateAccessKey', () => {
+    const limits = [{ token: address, limit: 1n }] as const
+    const request = {
+      method: 'wallet_updateAccessKey',
+      params: [
+        { accessKeyAddress: accessKey, address, limits: [{ token: address, limit: '0x1' }] },
+      ],
+    } as const
+
+    test.each([
+      { case: 'the active chain by default', chainId: undefined, synced: tempoLocalnet.id },
+      { case: 'an explicit chainId', chainId: tempoModerato.id, synced: tempoModerato.id },
+    ])('behavior: queues the update on $case', async ({ chainId, synced }) => {
+      const { adapter, dialog } = setup()
+
+      const promise = adapter.actions.updateAccessKey!(
+        {
+          accessKeyAddress: accessKey,
+          address,
+          limits,
+          ...(chainId ? { chainId: BigInt(chainId) } : {}),
+        },
+        request,
+      )
+      const queued = await dialog.takeRequest()
+      dialog.success(queued, null)
+      await promise
+
+      expect({
+        account: dialog.syncs[0]!.account,
+        chainId: dialog.syncs[0]!.chainId,
+        params: queued.request.params,
+      }).toEqual({
+        account: { address },
+        chainId: synced,
+        params: [
+          {
+            ...request.params[0],
+            ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+          },
+        ],
+      })
+    })
+
+    test('error: rejects when the dialog rejects', async () => {
+      const { adapter, dialog } = setup()
+
+      const promise = adapter.actions.updateAccessKey!(
+        { accessKeyAddress: accessKey, address, chainId: BigInt(tempoModerato.id), limits },
+        request,
+      )
+      const queued = await dialog.takeRequest()
+      dialog.failure(queued, { code: 4001, message: 'Rejected' })
+
+      await expect(promise).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UserRejectedRequestError: Rejected]`,
+      )
+    })
+  })
+
+  describe.each([
+    {
+      method: 'wallet_revokeAccessKey',
+      params: [{ accessKeyAddress: accessKey, address: accessKey }],
+    },
+    {
+      method: 'wallet_updateAccessKey',
+      params: [
+        {
+          accessKeyAddress: accessKey,
+          address: accessKey,
+          limits: [{ token: address, limit: '0x1' }],
+        },
+      ],
+    },
+  ] as const)('provider $method', (request) => {
+    test('error: rejects an account that is not connected without opening the dialog', async () => {
+      const dialog_ = createDialog()
+      const provider = Provider.create({
+        adapter: dialog({ dialog: dialog_.dialog, host }),
+        chains: [tempoLocalnet],
+        storage: Storage.memory(),
+      })
+      provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+      await expect(provider.request(request)).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UnauthorizedError: Account "0x0000000000000000000000000000000000000002" not found.]`,
+      )
+      expect(dialog_.syncs).toEqual([])
+    })
   })
 })

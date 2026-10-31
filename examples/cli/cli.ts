@@ -4,6 +4,7 @@ import { Hex } from 'ox'
 import { parseUnits } from 'viem'
 import { connect } from 'viem/experimental/erc7846'
 import { Actions } from 'viem/tempo'
+import { pathusd } from 'viem/tokens'
 
 import { Provider } from '../../src/cli/index.js'
 
@@ -13,7 +14,7 @@ const provider = Provider.create({
   testnet: true,
 })
 
-const token = '0x20c0000000000000000000000000000000000000' as const
+const token = pathusd(4217).address
 
 const cli = Cli.create('example', {
   async run() {
@@ -58,6 +59,7 @@ const cli = Cli.create('example', {
 }).command('update-access-key', {
   description: 'Update the connected access key spend limit',
   async run() {
+    await provider.ready()
     const account = provider.getAccount()
     const accessKey = await provider.store.accessKeys.select({
       account: account.address,

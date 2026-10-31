@@ -1,4 +1,5 @@
-import { type Provider as ox_Provider } from 'ox'
+import { Hash, type Hex, type Provider as ox_Provider } from 'ox'
+import { TxEnvelopeTempo } from 'ox/tempo'
 import {
   type Chain,
   createClient,
@@ -47,7 +48,7 @@ export function fromChainId(
   let client = cache.get(key)
   if (!client) {
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
-    const base = transports?.[id] ?? http()
+    const base = rawTransactionTransport(transports?.[id] ?? http())
     const transport_base = provider
       ? providerTransport(provider, base, chainId === undefined ? undefined : chain.id)
       : base
@@ -163,11 +164,14 @@ function feePayerTransport(
             typeof request === 'object' &&
             'feePayer' in request &&
             (request.feePayer === true || typeof request.feePayer === 'string')
-          )
-            return sponsor.request({
+          ) {
+            const response = await sponsor.request({
               method,
               params: [{ ...request, feePayer: true }],
             })
+            assertFilledTransactionIntent(request, response)
+            return response
+          }
         }
 
         if (method === 'eth_sendRawTransaction' || method === 'eth_sendRawTransactionSync') {
@@ -182,6 +186,7 @@ function feePayerTransport(
                 method: 'eth_signRawTransaction',
                 params: [serialized],
               })
+              assertSignedTransactionIntent(serialized, signed)
               return await baseTransport.request({ method, params: [signed] })
             }
           }
@@ -191,4 +196,123 @@ function feePayerTransport(
       },
     } as ReturnType<Transport>
   }
+}
+
+/**
+ * Makes raw transaction submission idempotent. viem's transports retry a
+ * request after a timeout, a network error or a 5xx response, including
+ * `eth_sendRawTransaction(Sync)`. When the node accepted the first attempt,
+ * the retry is rejected (`already known` while pending, `nonce too low` once
+ * mined), although the transaction landed. On such a rejection, look the
+ * transaction up by its hash: when the node knows it, the submission
+ * succeeded, so return its hash (or, for the sync method, its receipt).
+ * Otherwise rethrow, since another transaction took the nonce.
+ */
+function rawTransactionTransport(base: Transport): Transport {
+  return (params) => {
+    const transport = base(params)
+    return {
+      ...transport,
+      async request(args: { method: string; params?: unknown }, options?: unknown) {
+        const { method } = args
+        if (method !== 'eth_sendRawTransaction' && method !== 'eth_sendRawTransactionSync')
+          return await transport.request(args as never, options as never)
+        try {
+          return await transport.request(args as never, options as never)
+        } catch (error) {
+          const serialized = (args.params as readonly unknown[] | undefined)?.[0]
+          if (typeof serialized !== 'string' || !isDuplicateError(error)) throw error
+          const hash = Hash.keccak256(serialized as Hex.Hex)
+          const known = await transport
+            .request({ method: 'eth_getTransactionByHash', params: [hash] } as never)
+            .catch(() => null)
+          if (!known) throw error
+          if (method === 'eth_sendRawTransaction') return hash
+          // Waits for the receipt as long as the sync method would: the
+          // caller's timeout, or 30 s.
+          const timeout = (args.params as readonly unknown[])[1]
+          const deadline = Date.now() + (typeof timeout === 'number' ? timeout : 30_000)
+          for (;;) {
+            const receipt = await transport
+              .request({ method: 'eth_getTransactionReceipt', params: [hash] } as never)
+              .catch(() => null)
+            if (receipt) return receipt
+            if (Date.now() > deadline) throw error
+            await new Promise((resolve) => setTimeout(resolve, 250))
+          }
+        }
+      },
+    } as ReturnType<Transport>
+  }
+}
+
+function isDuplicateError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /already known|known transaction|nonce too low|already imported/i.test(message)
+}
+
+function assertFilledTransactionIntent(request: Record<string, unknown>, response: unknown) {
+  if (!isObject(response) || !isObject(response.tx))
+    throw new Error('Fee payer returned an invalid filled transaction.')
+
+  const transaction = response.tx
+  if (
+    (request.from !== undefined && !sameAddress(request.from, transaction.from)) ||
+    (request.chainId !== undefined && !sameQuantity(request.chainId, transaction.chainId)) ||
+    (request.calls !== undefined && !sameCalls(request.calls, transaction.calls))
+  )
+    throw new Error('Fee payer changed the requested transaction intent.')
+}
+
+function assertSignedTransactionIntent(serialized: string, signed: unknown) {
+  if (typeof signed !== 'string' || (!signed.startsWith('0x76') && !signed.startsWith('0x78')))
+    throw new Error('Fee payer returned an invalid signed transaction.')
+
+  const requested = TxEnvelopeTempo.deserialize(serialized as TxEnvelopeTempo.Serialized)
+  const transaction = TxEnvelopeTempo.deserialize(signed as TxEnvelopeTempo.Serialized)
+  if (
+    !transaction.feePayerSignature ||
+    !sameAddress(requested.from, transaction.from) ||
+    TxEnvelopeTempo.getSignPayload(requested) !== TxEnvelopeTempo.getSignPayload(transaction)
+  )
+    throw new Error('Fee payer changed the requested transaction intent.')
+}
+
+function sameCalls(a: unknown, b: unknown) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+  return a.every((call, index) => {
+    const other = b[index]
+    return (
+      isObject(call) &&
+      isObject(other) &&
+      sameAddress(call.to, other.to) &&
+      sameQuantity(call.value, other.value) &&
+      sameHex(call.data, other.data)
+    )
+  })
+}
+
+function sameAddress(a: unknown, b: unknown) {
+  if (a === undefined && b === undefined) return true
+  return typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase()
+}
+
+function sameHex(a: unknown, b: unknown) {
+  const normalize = (value: unknown) =>
+    typeof value === 'string' ? value.toLowerCase() : value === undefined ? '0x' : undefined
+  return normalize(a) === normalize(b)
+}
+
+function sameQuantity(a: unknown, b: unknown) {
+  const normalize = (value: unknown) => {
+    if (value === undefined || value === null || value === '0x') return 0n
+    if (typeof value === 'bigint') return value
+    if (typeof value === 'number' || typeof value === 'string') return BigInt(value)
+    return undefined
+  }
+  return normalize(a) === normalize(b)
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }

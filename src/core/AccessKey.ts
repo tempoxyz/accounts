@@ -44,6 +44,8 @@ export type AccessKey = {
   keyType: 'secp256k1' | 'p256' | 'webAuthn' | 'webCrypto'
   /** TIP-20 spending limits for the access key. */
   limits?: { token: Address.Address; limit: bigint; period?: number | undefined }[] | undefined
+  /** Version of stored permission semantics: omitted fields are unrestricted, empty arrays deny all. Absent on legacy records. */
+  permissionSemantics?: 1 | undefined
   /** Call scopes restricting which contracts/selectors this key can call. */
   scopes?:
     | {
@@ -235,18 +237,10 @@ export declare namespace createManager {
 export async function prepareAuthorization(
   options: prepareAuthorization.Options,
 ): Promise<prepareAuthorization.ReturnType> {
-  const {
-    address,
-    chainId,
-    expiry,
-    keystores,
-    keyType,
-    limits,
-    privateKey,
-    publicKey,
-    scopes,
-    witness,
-  } = options
+  const { address, chainId, keystores, keyType, limits, privateKey, publicKey, scopes, witness } =
+    options
+
+  const expiry = options.expiry === 0 ? undefined : options.expiry
 
   if (privateKey) {
     const type = keyType ?? 'secp256k1'
@@ -315,7 +309,7 @@ export declare namespace prepareAuthorization {
     address?: Address.Address | undefined
     /** Chain ID the key authorization is scoped to. */
     chainId: bigint | number
-    /** Unix timestamp when the key expires. */
+    /** Unix timestamp when the key expires. Use `0` for no expiry. */
     expiry: number
     /**
      * Keystores used to create key material when none is provided.
@@ -345,7 +339,9 @@ export declare namespace prepareAuthorization {
     /** Keystore-created key material reference. */
     key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
     /** Unsigned key authorization to sign with the root account. */
-    keyAuthorization: KeyAuthorization.KeyAuthorization<false>
+    keyAuthorization: KeyAuthorization.KeyAuthorization<false> & {
+      type: NonNullable<Options['keyType']>
+    }
     /** Exported private key backing an external access key. */
     privateKey?: Hex.Hex | undefined
   }
@@ -515,41 +511,45 @@ export declare namespace get {
   type ReturnType = TempoAccount.AccessKeyAccount | undefined
 }
 
-function createKeyAuthorizationManager(store: ManagerOptions) {
-  return TempoKeyAuthorizationManager.from({
-    source: {
-      get(key) {
-        return list({
-          account: key.address,
-          accessKey: key.accessKey,
-          chainId: key.chainId,
-          store,
-        })[0]?.keyAuthorization
-      },
-      remove(key) {
-        clearAuthorization({
-          account: key.address,
-          accessKey: key.accessKey,
-          chainId: key.chainId,
-          store,
-        })
-      },
-      set(key, keyAuthorization) {
-        updateAuthorization({
-          account: key.address,
-          accessKey: key.accessKey,
-          authorization: keyAuthorization,
-          chainId: key.chainId,
-          store,
-        })
-      },
+function createKeyAuthorizationManager(
+  store: ManagerOptions,
+): TempoKeyAuthorizationManager.KeyAuthorizationManager {
+  return {
+    get(key) {
+      return list({
+        account: key.address,
+        accessKey: key.accessKey,
+        chainId: key.chainId,
+        store,
+      })[0]?.keyAuthorization
     },
-  })
+    remove(key) {
+      clearAuthorization({
+        account: key.address,
+        accessKey: key.accessKey,
+        chainId: key.chainId,
+        store,
+      })
+    },
+    set(key, keyAuthorization) {
+      updateAuthorization({
+        account: key.address,
+        accessKey: key.accessKey,
+        authorization: keyAuthorization,
+        chainId: key.chainId,
+        store,
+      })
+    },
+  }
 }
 
 /** Adds a signed access key authorization. */
 export function add(options: add.Options): add.ReturnType {
-  const { account, authorization, handle, keyPair, privateKey, publicKey } = options
+  const { account, handle, keyPair, privateKey, publicKey } = options
+  const authorization =
+    options.authorization.expiry === 0
+      ? { ...options.authorization, expiry: undefined }
+      : options.authorization
   const { store } = options
   const base = {
     address: authorization.address,
@@ -558,6 +558,7 @@ export function add(options: add.Options): add.ReturnType {
     expiry: authorization.expiry ?? undefined,
     keyAuthorization: authorization,
     keyType: authorization.type,
+    permissionSemantics: 1 as const,
     limits: authorization.limits as AccessKey['limits'],
     scopes: authorization.scopes as AccessKey['scopes'],
   }
@@ -618,12 +619,15 @@ function clearAuthorization(options: Key & { store: ManagerOptions }): void {
 }
 
 function updateAuthorization(options: updateAuthorization.Options): void {
-  const { authorization, store, ...key } = options
+  const { authorization: authorization_, store, ...key } = options
+  const authorization =
+    authorization_.expiry === 0 ? { ...authorization_, expiry: undefined } : authorization_
   patch({
     ...key,
     patch: {
       expiry: authorization.expiry ?? undefined,
       keyAuthorization: authorization,
+      permissionSemantics: 1,
       limits: authorization.limits as AccessKey['limits'],
       scopes: authorization.scopes as AccessKey['scopes'],
     },
@@ -875,7 +879,7 @@ async function hydrate(
 }
 
 function isExpired(expiry: number | undefined, now: number): boolean {
-  return typeof expiry === 'number' && expiry < now
+  return typeof expiry === 'number' && expiry !== 0 && expiry < now
 }
 
 async function getPublishedStatus(

@@ -69,6 +69,57 @@ describe('auto', () => {
   })
 })
 
+describe('iframe', () => {
+  test('behavior: matches the iframe color scheme to the wallet theme', () => {
+    const elements: Record<string, unknown>[] = []
+    vi.stubGlobal('document', {
+      body: {
+        appendChild() {},
+      },
+      createElement(tag: string) {
+        const element = {
+          appendChild() {},
+          contentWindow: null,
+          dataset: {},
+          innerHTML: '',
+          remove() {},
+          setAttribute() {},
+          style: {},
+          tag,
+        }
+        elements.push(element)
+        return element
+      },
+    })
+    vi.stubGlobal(
+      'MutationObserver',
+      class {
+        disconnect() {}
+        observe() {}
+      },
+    )
+
+    Mount.iframe()({
+      host: 'https://wallet.tempo.xyz/post-message?scheme=dark',
+      onDismiss() {},
+      onInvalidate() {},
+    })
+
+    expect(elements.find((element) => element.tag === 'iframe')?.style).toMatchInlineSnapshot(`
+      {
+        "backgroundColor": "transparent",
+        "border": "0",
+        "colorScheme": "dark",
+        "height": "100%",
+        "left": "0",
+        "position": "fixed",
+        "top": "0",
+        "width": "100%",
+      }
+    `)
+  })
+})
+
 describe('postMessage', () => {
   test('behavior: derives trusted hosts from the wallet host', () => {
     const factory = Object.assign(

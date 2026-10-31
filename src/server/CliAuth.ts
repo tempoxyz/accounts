@@ -765,11 +765,12 @@ export function from(options: from.Options = {}): CliAuth {
       })
 
       const client = options.client ?? cache.get(current.chainId)
+      const signature = SignatureEnvelope.fromRpc(actual.signature)
       const valid = await verifyHash(client, {
         address: options.request.accountAddress,
         hash: TempoKeyAuthorization.getSignPayload(signed),
-        signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature), {
-          magic: actual.signature.type === 'webAuthn',
+        signature: SignatureEnvelope.serialize(signature, {
+          magic: signature.type === 'webAuthn',
         }),
       })
       if (!valid) throw new Error('Key authorization signature is invalid.')
@@ -1258,11 +1259,12 @@ async function verifyKeyAuthorizationSignature(options: {
     ...(actual.limits ? { limits: actual.limits } : {}),
     type: actual.keyType,
   })
+  const signature = SignatureEnvelope.fromRpc(actual.signature)
   const valid = await verifyHash(options.client, {
     address: options.account,
     hash: TempoKeyAuthorization.getSignPayload(unsigned),
-    signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature), {
-      magic: actual.signature.type === 'webAuthn',
+    signature: SignatureEnvelope.serialize(signature, {
+      magic: signature.type === 'webAuthn',
     }),
   })
   if (!valid) throw new Error('Key authorization signature is invalid.')

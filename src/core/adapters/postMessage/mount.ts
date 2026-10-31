@@ -96,7 +96,9 @@ export function iframe(): Factory {
   return Object.assign(
     (parameters: Factory.Parameters): Mount => {
       const { host, onDismiss, onInvalidate } = parameters
-      const origin = new URL(host).origin
+      const url = new URL(host)
+      const origin = url.origin
+      const scheme = url.searchParams.get('scheme')
 
       const root = document.createElement('dialog')
       // Distinct marker from the bespoke `Dialog.iframe` (`data-tempo-wallet`)
@@ -132,7 +134,7 @@ export function iframe(): Factory {
       Object.assign(frame.style, {
         backgroundColor: 'transparent',
         border: '0',
-        colorScheme: 'light dark',
+        colorScheme: scheme === 'light' || scheme === 'dark' ? scheme : 'light dark',
         height: '100%',
         left: '0',
         position: 'fixed',

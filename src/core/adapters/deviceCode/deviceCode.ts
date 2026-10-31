@@ -25,6 +25,7 @@ export function deviceCode(options: deviceCode.Options): Adapter.Adapter {
     onPrompt,
     pollingInterval,
     rdns,
+    retryCount = 0,
     timeout = 300_000,
     url,
   } = options
@@ -35,6 +36,7 @@ export function deviceCode(options: deviceCode.Options): Adapter.Adapter {
     ...(keystores ? { keystores } : {}),
     name,
     rdns,
+    retryCount,
     async request(request) {
       if (methods && !methods.includes(request.method))
         throw new core_Provider.UnsupportedMethodError({
@@ -119,6 +121,13 @@ export declare namespace deviceCode {
     pollingInterval?: number | undefined
     /** Reverse-DNS provider identifier. */
     rdns: string
+    /**
+     * Max retries for a failed or timed-out wallet request (e.g. signing,
+     * sending a transaction, or revoking an access key). Each attempt starts a
+     * new device-code approval, so requests are sent once by default.
+     * @default 0
+     */
+    retryCount?: number | undefined
     /** Overall wait for user approval in milliseconds. @default 300000 */
     timeout?: number | undefined
     /** Base URL of the host's device-code endpoints (derives `/register` and `/token`). */

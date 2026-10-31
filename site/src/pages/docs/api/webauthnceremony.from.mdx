@@ -47,6 +47,14 @@ declare function verifyRegistration(
   options?: {
     /** Credential display name forwarded from `getRegistrationOptions`. */
     name?: string | undefined
+    /**
+     * Resolves once earlier verifications have settled. A ceremony that calls
+     * a server should await it before sending, so an earlier registration or
+     * login landing later can't replace this one's session.
+     */
+    ready?: Promise<unknown> | undefined
+    /** Aborts verification still in flight (e.g. superseded by a later session). */
+    signal?: AbortSignal | undefined
   } | undefined,
 ): Promise<{
   /** The registered credential's ID. */
@@ -57,8 +65,16 @@ declare function verifyRegistration(
   publicKey: Hex
   /** Username associated with the account. */
   username?: string | null | undefined
+  /**
+   * For a ceremony that answers before the server stores the credential:
+   * resolves once it lands (`session` is whether its response issued the
+   * session), and rejects if the server refuses it.
+   */
+  verified?: Promise<{ session: boolean }> | undefined
 }>
 ```
+
+A ceremony that calls a server should await `options.ready` before sending its request. One that ignores it loses the ordering behind earlier verifications.
 
 ### getAuthenticationOptions
 
@@ -80,7 +96,20 @@ declare function getAuthenticationOptions(parameters?: {
 Verify an authentication response and extract the public key.
 
 ```ts
-declare function verifyAuthentication(response: Authentication.Response): Promise<{
+declare function verifyAuthentication(
+  response: Authentication.Response,
+  options?: {
+    /**
+     * The known credential's challenge, public key and RP ID, so the ceremony
+     * can check the passkey's signature itself.
+     */
+    credential?: { challenge: Hex; publicKey: Hex; rpId: string } | undefined
+    /** Resolves once earlier verifications have settled; await it before sending (as for `verifyRegistration`). */
+    ready?: Promise<unknown> | undefined
+    /** Aborts verification still in flight. */
+    signal?: AbortSignal | undefined
+  } | undefined,
+): Promise<{
   /** The authenticated credential's ID. */
   credentialId: string
   /** Email associated with the account. */
@@ -91,5 +120,11 @@ declare function verifyAuthentication(response: Authentication.Response): Promis
   userId?: string | undefined
   /** Username associated with the account. */
   username?: string | null | undefined
+  /**
+   * For a ceremony that answers before the server verifies the login:
+   * resolves once it lands (`session` is whether it issued the session), and
+   * rejects if the server refuses the credential.
+   */
+  verified?: Promise<{ session: boolean }> | undefined
 }>
 ```

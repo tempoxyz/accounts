@@ -1,7 +1,14 @@
 import { Address, Hex, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { BaseError, encodeErrorResult, encodeFunctionResult } from 'viem'
+import {
+  BaseError,
+  encodeErrorResult,
+  encodeFunctionResult,
+  HttpRequestError,
+  RpcRequestError,
+} from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
+import { tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
 import { accounts, privateKeys } from '../../test/config.js'
@@ -23,7 +30,7 @@ function createKeyAuthorization(
   options: {
     chainId?: bigint | undefined
     expiry?: number | undefined
-    keyType?: KeyAuthorization.KeyAuthorization['type'] | undefined
+    keyType?: AccessKey.prepareAuthorization.Options['keyType'] | undefined
     limits?: { token: `0x${string}`; limit: bigint; period?: number | undefined }[] | undefined
     scopes?: KeyAuthorization.Scope[] | undefined
   } = {},
@@ -49,7 +56,11 @@ function createRevert(errorName: string) {
 
 function createMetadataClient(
   accessKey: Hex.Hex,
-  options: { isRevoked?: boolean | undefined; keyId?: Hex.Hex | undefined } = {},
+  options: {
+    expiry?: bigint | undefined
+    isRevoked?: boolean | undefined
+    keyId?: Hex.Hex | undefined
+  } = {},
 ) {
   return {
     call: async () => ({
@@ -58,7 +69,7 @@ function createMetadataClient(
         functionName: 'getKey',
         result: {
           enforceLimits: false,
-          expiry: 0n,
+          expiry: options.expiry ?? 0n,
           isRevoked: options.isRevoked ?? false,
           keyId: options.keyId ?? accessKey,
           signatureType: 1,
@@ -287,6 +298,131 @@ describe('create invalidation', () => {
   })
 })
 
+describe('maybeSubmitted', () => {
+  async function send(error: Error) {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const account = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    await addAuthorization({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(account.accessKeyAddress),
+      keyPair,
+      store,
+    })
+    const methods: string[] = []
+    const transaction = await AccessKeyTransaction.create({
+      address: rootAddress,
+      chainId: 1,
+      client: {
+        chain: { ...tempoModerato, id: 1 },
+        request: async ({ method }: { method: string }) => {
+          methods.push(method)
+          if (method === 'eth_sendRawTransactionSync') throw error
+          // The key is already authorized on-chain.
+          if (method === 'eth_call')
+            return encodeFunctionResult({
+              abi: Abis.accountKeychain,
+              functionName: 'getKey',
+              result: {
+                enforceLimits: false,
+                expiry: 0n,
+                isRevoked: false,
+                keyId: account.accessKeyAddress,
+                signatureType: 1,
+              },
+            } as never)
+          throw new Error(`unexpected ${method}`)
+        },
+      } as never,
+      store,
+    })
+    const prepared = await transaction!.prepare({
+      calls: [{ to: rootAddress }],
+      chainId: 1,
+      gas: 100_000n,
+      maxFeePerGas: 2n,
+      maxPriorityFeePerGas: 1n,
+      nonce: 0,
+      nonceKey: 0n,
+    } as never)
+    return { methods, result: await prepared.sendSync().catch((error) => error) }
+  }
+
+  test('behavior: a lost response may have landed the transaction', async () => {
+    const { methods, result } = await send(
+      new HttpRequestError({ body: {}, details: 'fetch failed', url: 'https://rpc.example' }),
+    )
+
+    expect(methods).toMatchInlineSnapshot(`
+      [
+        "eth_call",
+        "eth_sendRawTransactionSync",
+      ]
+    `)
+    expect(AccessKeyTransaction.maybeSubmitted(result)).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: a sync send that timed out may still land', async () => {
+    const { result } = await send(
+      new RpcRequestError({
+        body: {},
+        error: { code: 4, message: 'transaction not included within the timeout' },
+        url: 'https://rpc.example',
+      }),
+    )
+
+    expect(AccessKeyTransaction.maybeSubmitted(result)).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: a transaction the node refused did not land', async () => {
+    const { result } = await send(
+      new RpcRequestError({
+        body: {},
+        error: { code: -32003, message: 'insufficient funds' },
+        url: 'https://rpc.example',
+      }),
+    )
+
+    expect(AccessKeyTransaction.maybeSubmitted(result)).toMatchInlineSnapshot(`false`)
+  })
+
+  test('behavior: an HTTP refusal did not land, a gateway error or rate limit may have', async () => {
+    const results = await Promise.all(
+      [401, 429, 502].map(
+        async (status) =>
+          (await send(new HttpRequestError({ body: {}, status, url: 'https://rpc.example' })))
+            .result,
+      ),
+    )
+
+    expect(results.map(AccessKeyTransaction.maybeSubmitted)).toMatchInlineSnapshot(`
+      [
+        false,
+        true,
+        true,
+      ]
+    `)
+  })
+
+  test('behavior: an unconfirmed duplicate may have landed', async () => {
+    const { result } = await send(
+      new RpcRequestError({
+        body: {},
+        error: { code: -32000, message: 'nonce too low' },
+        url: 'https://rpc.example',
+      }),
+    )
+
+    expect(AccessKeyTransaction.maybeSubmitted(result)).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: an error before submission did not land', () => {
+    expect(
+      AccessKeyTransaction.maybeSubmitted(new HttpRequestError({ url: 'https://rpc.example' })),
+    ).toMatchInlineSnapshot(`false`)
+  })
+})
+
 describe('isUnavailableError', () => {
   test('default: recognizes unavailable key revert errors', () => {
     expect(AccessKey.isUnavailableError(createRevert('KeyNotFound'))).toMatchInlineSnapshot(`true`)
@@ -506,18 +642,19 @@ describe('authorize', () => {
     `)
     expect(store.getState().accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey))
       .toMatchInlineSnapshot(`
-      [
-        {
-          "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-          "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
-          "chainId": 1,
-          "expiry": 123,
-          "keyType": "secp256k1",
-          "limits": undefined,
-          "scopes": undefined,
-        },
-      ]
-    `)
+        [
+          {
+            "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+            "chainId": 1,
+            "expiry": 123,
+            "keyType": "secp256k1",
+            "limits": undefined,
+            "permissionSemantics": 1,
+            "scopes": undefined,
+          },
+        ]
+      `)
   })
 
   test('behavior: provisions a handle-backed record via the keystore', async () => {
@@ -590,19 +727,20 @@ describe('authorize', () => {
 
     expect(store.getState().accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey))
       .toMatchInlineSnapshot(`
-      [
-        {
-          "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-          "address": "${accessKey.address}",
-          "chainId": 1,
-          "expiry": 123,
-          "keyType": "secp256k1",
-          "limits": undefined,
-          "privateKey": "${privateKeys[1]}",
-          "scopes": undefined,
-        },
-      ]
-    `)
+        [
+          {
+            "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "address": "${accessKey.address}",
+            "chainId": 1,
+            "expiry": 123,
+            "keyType": "secp256k1",
+            "limits": undefined,
+            "permissionSemantics": 1,
+            "privateKey": "${privateKeys[1]}",
+            "scopes": undefined,
+          },
+        ]
+      `)
   })
 })
 
@@ -1078,7 +1216,7 @@ describe('getStatus', () => {
 
       Docs: https://viem.sh/docs/contract/readContract
       Details: RPC unavailable.
-      Version: viem@2.56.0]
+      Version: viem@0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26]
     `)
   })
 
@@ -1152,4 +1290,131 @@ describe('getStatus', () => {
 
     expect(result).toMatchInlineSnapshot(`"missing"`)
   })
+})
+
+describe('non-expiring authorizations', () => {
+  test.each(['privateKey', 'address', 'keystore'] as const)(
+    'prepares canonical expiry for %s keys',
+    async (source) => {
+      const prepared = await AccessKey.prepareAuthorization({
+        chainId: 1,
+        expiry: 0,
+        ...(source === 'privateKey' ? { privateKey: privateKeys[1] } : {}),
+        ...(source === 'address' ? { address: accounts[1].address } : {}),
+        ...(source === 'keystore' ? { keystores: { p256: testKeystore() } } : {}),
+      })
+      expect(prepared.keyAuthorization.expiry).toBeUndefined()
+      expect(
+        KeyAuthorization.fromTuple(KeyAuthorization.toTuple(prepared.keyAuthorization)).expiry,
+      ).toBeUndefined()
+    },
+  )
+
+  test('imports legacy zero and normalizes manager updates without changing the signed payload', async () => {
+    const store = createStore()
+    const authorization = createKeyAuthorization(accounts[1].address, {
+      expiry: 0,
+      keyType: 'secp256k1',
+    })
+    const record = store.accessKeys.add({
+      account: rootAddress,
+      authorization,
+      privateKey: privateKeys[1],
+    })
+    expect(record.expiry).toBeUndefined()
+    expect(record.keyAuthorization!.expiry).toBeUndefined()
+    expect(KeyAuthorization.getSignPayload(record.keyAuthorization!)).toBe(
+      KeyAuthorization.getSignPayload(authorization),
+    )
+    const account = await store.accessKeys.select({
+      account: rootAddress,
+      chainId: 1,
+      now: 10_000_000_000,
+    })
+    const key = { address: rootAddress, accessKey: authorization.address, chainId: 1 }
+    await account!.keyAuthorizationManager!.set(key, { ...authorization, limits: [], scopes: [] })
+    const updated = store.getState().accessKeys[0]!
+    expect(updated.expiry).toBeUndefined()
+    expect(updated.keyAuthorization!.expiry).toBeUndefined()
+    expect(updated.limits).toEqual([])
+    expect(updated.scopes).toEqual([])
+    expect(
+      await store.accessKeys.select({
+        account: rootAddress,
+        chainId: 1,
+        calls: [{ to: rootAddress }],
+      }),
+    ).toBeUndefined()
+  })
+
+  test.each([true, false])(
+    'rehydrates stored zero with pending authorization: %s',
+    async (pending) => {
+      const storage = Storage.memory()
+      const authorization = createKeyAuthorization(accounts[1].address, {
+        expiry: 0,
+        keyType: 'secp256k1',
+      })
+      await storage.setItem('store', {
+        version: 0,
+        state: {
+          accessKeys: [
+            {
+              access: rootAddress,
+              address: accounts[1].address,
+              chainId: 1,
+              expiry: 0,
+              keyType: 'secp256k1',
+              privateKey: privateKeys[1],
+              permissionSemantics: 1,
+              ...(pending ? { keyAuthorization: authorization } : {}),
+            },
+          ],
+        },
+      })
+      const store = Store.create({ chainId: 1, storage })
+      await Store.waitForHydration(store)
+      const record = store.getState().accessKeys[0]!
+      expect(record.expiry).toBeUndefined()
+      expect(record.keyAuthorization?.expiry).toBeUndefined()
+      const query = { account: rootAddress, chainId: 1, now: 10_000_000_000 }
+      expect(await store.accessKeys.select(query)).toBeDefined()
+      expect(await store.accessKeys.get({ ...query, accessKey: accounts[1].address })).toBeDefined()
+      expect(
+        await AccessKey.hasReusableAuthorization({
+          store: { state: store, keystores: Keystore.defaults },
+          ...query,
+          parameters: { expiry: 0, reuse: { minExpiry: query.now } },
+        }),
+      ).toBe(true)
+      expect(store.getState().accessKeys).toHaveLength(1)
+    },
+  )
+})
+
+test('perpetual on-chain metadata retains uint64 precision and revoked publication is missing', async () => {
+  const store = createStore()
+  const authorization = createKeyAuthorization(accounts[1].address, {
+    expiry: 0,
+    keyType: 'secp256k1',
+  })
+  store.accessKeys.add({ account: rootAddress, authorization, privateKey: privateKeys[1] })
+  const query = { account: rootAddress, chainId: 1, now: 10_000_000_000 }
+  expect(
+    await store.accessKeys.getStatus({ ...query, client: createMissingClient() as never }),
+  ).toBe('pending')
+  expect(
+    await store.accessKeys.getStatus({
+      ...query,
+      client: createMetadataClient(authorization.address, { expiry: 2n ** 64n - 1n }) as never,
+    }),
+  ).toBe('published')
+  expect(store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
+  expect(await store.accessKeys.select(query)).toBeDefined()
+  expect(
+    await store.accessKeys.getStatus({
+      ...query,
+      client: createMetadataClient(authorization.address, { isRevoked: true }) as never,
+    }),
+  ).toBe('missing')
 })

@@ -6,12 +6,105 @@ import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import { accounts, privateKeys } from '../../test/config.js'
 import * as Adapter from './Adapter.js'
+import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
+import * as Store from './Store.js'
 
 const address = '0x0000000000000000000000000000000000000001'
 
 describe('eth_fillTransaction', () => {
+  test.each(['expired', 'other chain', 'scope mismatch', 'missing material'] as const)(
+    'falls back without session validation for %s keys',
+    async (kind) => {
+      const payer = accounts[0]!
+      const getAccount = vi.fn(() => {
+        throw new Error('session unavailable')
+      })
+      const provider = Provider.create({
+        adapter: Adapter.define({ name: 'Test', rdns: 'test' }, () => ({
+          actions: {
+            async createAccount() {
+              return { accounts: [] }
+            },
+            async loadAccounts() {
+              return { accounts: [] }
+            },
+          },
+          getAccount: getAccount as never,
+        })),
+        chains: [tempo],
+        storage: Storage.memory(),
+        transports: {
+          [tempo.id]: custom(
+            {
+              request: async () => {
+                throw new Error('root fill reached')
+              },
+            },
+            { retryCount: 0 },
+          ),
+        },
+      })
+      await provider.store.accessKeys.authorize({
+        account: payer,
+        chainId: kind === 'other chain' ? tempoModerato.id : tempo.id,
+        parameters: {
+          privateKey: privateKeys[2],
+          expiry: kind === 'expired' ? 1 : 9999999999,
+          ...(kind === 'scope mismatch'
+            ? { scopes: [{ address, selector: 'transfer(address,uint256)' }] }
+            : {}),
+        },
+      })
+      if (kind === 'missing material')
+        provider.store.setState({
+          accessKeys: provider.store
+            .getState()
+            .accessKeys.map(({ privateKey: _privateKey, ...key }) => key),
+        })
+      await expect(
+        provider.request({
+          method: 'eth_fillTransaction',
+          params: [{ from: payer.address, to: payer.address }],
+        }),
+      ).rejects.toThrow('root fill reached')
+      expect(getAccount).not.toHaveBeenCalled()
+    },
+  )
+
+  test('rejects a usable fill key before filling when its session is unavailable', async () => {
+    const payer = accounts[0]!
+    const provider = Provider.create({
+      adapter: Adapter.define({ name: 'Test', rdns: 'test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [] }
+          },
+          async loadAccounts() {
+            return { accounts: [] }
+          },
+        },
+        assertAccount: async () => {
+          throw new Error('session unavailable')
+        },
+      })),
+      chains: [tempo],
+      storage: Storage.memory(),
+    })
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId: tempo.id,
+      parameters: { privateKey: privateKeys[2], expiry: 9999999999 },
+    })
+    await expect(
+      provider.request({
+        method: 'eth_fillTransaction',
+        params: [{ from: payer.address, to: payer.address }],
+      }),
+    ).rejects.toThrow('session unavailable')
+  })
+
   test('behavior: forwards Tempo-formatted request capabilities', async () => {
     const capabilities: unknown[] = []
     const request = tempo.formatters.transactionRequest.format(
@@ -60,6 +153,41 @@ describe('eth_fillTransaction', () => {
 })
 
 describe('getMppxParameters', () => {
+  test.each([false, true])('validates the session for MPP keys (explicit=%s)', async (explicit) => {
+    const payer = accounts[0]!
+    const provider = Provider.create({
+      adapter: Adapter.define({ name: 'Test', rdns: 'test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [] }
+          },
+          async loadAccounts() {
+            return { accounts: [] }
+          },
+        },
+        assertAccount: async () => {
+          throw new Error('session unavailable')
+        },
+      })),
+      chains: [tempo],
+      storage: Storage.memory(),
+    })
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId: tempo.id,
+      parameters: { privateKey: privateKeys[2], expiry: 9999999999 },
+    })
+    provider.store.setState({ accounts: [{ address: payer.address }] })
+    const key = provider.store.getState().accessKeys[0]!
+    await expect(
+      provider.getMppxParameters(explicit ? { accessKey: key.address } : {}).resolveAccount({
+        account: { address: payer.address, type: 'json-rpc' },
+        chainId: tempo.id,
+        operation: { kind: 'authorizePaymentChannel' },
+      }),
+    ).rejects.toThrow('session unavailable')
+  })
+
   test('error: rejects unsupported chain IDs', () => {
     const provider = Provider.create({ storage: Storage.memory() })
     provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -304,6 +432,148 @@ describe('getMppxParameters', () => {
   })
 })
 
+describe('ready', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+    actions: {
+      async createAccount() {
+        return { accounts: [{ address }] }
+      },
+      async loadAccounts() {
+        return { accounts: [{ address }] }
+      },
+    },
+  }))
+
+  const stored = {
+    state: { accounts: [{ address }], activeAccount: 0, chainId: tempo.id },
+    version: 0,
+  }
+
+  test('default: synchronous storage loads before create returns', async () => {
+    const storage = Storage.memory()
+    storage.setItem('store', stored)
+    const provider = Provider.create({ storage })
+
+    expect(provider.getAccount()).toMatchInlineSnapshot(`
+      {
+        "address": "0x0000000000000000000000000000000000000001",
+        "type": "json-rpc",
+      }
+    `)
+    expect(await provider.request({ method: 'eth_accounts' })).toMatchInlineSnapshot(`
+      [
+        "0x0000000000000000000000000000000000000001",
+      ]
+    `)
+  })
+
+  test('behavior: request and getAccount wait for a slow storage read', async () => {
+    let resolve!: () => void
+    const read = new Promise<void>((r) => (resolve = r))
+    const storage = {
+      async getItem<value>(name: string) {
+        await read
+        if (name !== 'store') return null
+        return stored as value
+      },
+      removeItem() {},
+      setItem() {},
+    } satisfies Storage.Storage
+    const provider = Provider.create({ storage })
+
+    expect(() => provider.getAccount()).toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Persisted state is still loading from storage. Await \`provider.ready()\` first.]`,
+    )
+    const accounts = provider.request({ method: 'eth_accounts' })
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    resolve()
+
+    expect(await accounts).toMatchInlineSnapshot(`
+      [
+        "0x0000000000000000000000000000000000000001",
+      ]
+    `)
+    await provider.ready()
+    expect(provider.getAccount()).toMatchInlineSnapshot(`
+      {
+        "address": "0x0000000000000000000000000000000000000001",
+        "type": "json-rpc",
+      }
+    `)
+  })
+
+  test('behavior: default storage is memory where window has no IndexedDB', async () => {
+    // React Native exposes `window` without `indexedDB`.
+    vi.stubGlobal('window', new EventTarget())
+    const provider = Provider.create({ adapter })
+
+    await provider.ready()
+    expect(await provider.request({ method: 'eth_accounts' })).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: default storage falls back to memory when IndexedDB fails', async () => {
+    vi.stubGlobal('window', new EventTarget())
+    vi.stubGlobal('indexedDB', {
+      open() {
+        const request: { error?: Error; onerror?: () => void } = {}
+        queueMicrotask(() => {
+          request.error = new Error('IndexedDB unavailable')
+          request.onerror?.()
+        })
+        return request
+      },
+    })
+    const provider = Provider.create({ adapter })
+
+    await provider.ready()
+    expect(await provider.request({ method: 'eth_accounts' })).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('error: rejects when the storage read fails', async () => {
+    const storage = {
+      async getItem<value>(): Promise<value | null> {
+        throw new Error('disk unavailable')
+      },
+      removeItem() {},
+      setItem() {},
+    } satisfies Storage.Storage
+    const provider = Provider.create({ storage })
+
+    await expect(provider.ready()).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Failed to load persisted state from storage.]`,
+    )
+    await expect(
+      provider.request({ method: 'eth_accounts' }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InternalError: Failed to load persisted state from storage.]`,
+    )
+    await expect(provider.request({ method: 'eth_accounts' })).rejects.toHaveProperty(
+      'cause',
+      expect.any(Store.HydrationError),
+    )
+    expect(() => provider.getAccount()).toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Failed to load persisted state from storage.]`,
+    )
+  })
+
+  test('error: rejects when storage does not load within hydrationTimeout', async () => {
+    const storage = {
+      getItem: () => new Promise<never>(() => {}),
+      removeItem() {},
+      setItem() {},
+    } satisfies Storage.Storage
+    const provider = Provider.create({ hydrationTimeout: 10, storage })
+
+    await expect(
+      provider.request({ method: 'eth_accounts' }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InternalError: Persisted state did not load from storage within 10ms.]`,
+    )
+  })
+})
+
 describe('wallet_connect', () => {
   test('behavior: forwards allowed credential IDs to the adapter', async () => {
     const loadAccounts = vi.fn(async (_parameters?: Adapter.loadAccounts.Parameters) => ({
@@ -415,6 +685,79 @@ describe('wallet_connect', () => {
 
   describe('identity + auth', () => {
     afterEach(() => vi.unstubAllGlobals())
+
+    test('uses the default credential mode when omitted', async () => {
+      let request: RequestInit | undefined
+      vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+        request = init
+        return Response.json({
+          idToken: 'eyJhbGciOiJub25lIn0.eyJlbWFpbCI6ImFsaWNlQGV4YW1wbGUuY29tIn0.sig',
+        })
+      })
+
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address }] }
+          },
+        },
+      }))
+      const provider = Provider.create({
+        adapter,
+        identity: {
+          audience: 'https://console.example.com',
+          issuer: 'https://wallet.example.com/oidc',
+        },
+        storage: Storage.memory(),
+      })
+
+      await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { identity: { email: true } } }],
+      })
+
+      expect(request?.credentials).toMatchInlineSnapshot(`undefined`)
+    })
+
+    test('includes configured credentials when minting identity tokens', async () => {
+      let request: RequestInit | undefined
+      vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+        request = init
+        return Response.json({
+          idToken: 'eyJhbGciOiJub25lIn0.eyJlbWFpbCI6ImFsaWNlQGV4YW1wbGUuY29tIn0.sig',
+        })
+      })
+
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address }] }
+          },
+        },
+      }))
+      const provider = Provider.create({
+        adapter,
+        identity: {
+          audience: 'https://console.example.com',
+          credentials: 'include',
+          issuer: 'https://wallet.example.com/oidc',
+        },
+        storage: Storage.memory(),
+      })
+
+      await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { identity: { email: true } } }],
+      })
+
+      expect(request?.credentials).toMatchInlineSnapshot(`"include"`)
+    })
 
     test('behavior: forwards identity.idToken into the auth verify request body', async () => {
       // Capture the body POSTed to the verify endpoint. The challenge endpoint
@@ -700,6 +1043,146 @@ describe('wallet_connect', () => {
   })
 })
 
+const accessKeyAddress = '0x0000000000000000000000000000000000000002'
+
+/** Creates a provider whose json-rpc account reaches its wallet only through the account transport. */
+function setupTransportWallet() {
+  const requests: unknown[] = []
+  const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+    actions: {
+      async createAccount() {
+        return { accounts: [{ address }] }
+      },
+      async loadAccounts() {
+        return { accounts: [{ address }] }
+      },
+    },
+    getAccount: () => ({
+      account: { address, type: 'json-rpc' as const },
+      transport: custom(
+        {
+          async request(request) {
+            requests.push(request)
+            return null
+          },
+        },
+        { retryCount: 0 },
+      ),
+    }),
+  }))
+  const provider = Provider.create({
+    adapter,
+    chains: [tempo, tempoModerato],
+    storage: Storage.memory(),
+  })
+  provider.store.setState({
+    accounts: [{ address }],
+    activeAccount: 0,
+    accessKeys: [tempo.id, tempoModerato.id].map(
+      (chainId) =>
+        ({ access: address, address: accessKeyAddress, chainId, keyType: 'secp256k1' }) as never,
+    ),
+  })
+  return { provider, requests }
+}
+
+describe('wallet_revokeAccessKey', () => {
+  test.each([
+    { case: 'omitted', chainId: undefined },
+    { case: 'the active chain', chainId: tempo.id },
+  ])(
+    'behavior: forwards through the account transport when chainId is $case',
+    async ({ chainId }) => {
+      const { provider, requests } = setupTransportWallet()
+
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [
+          {
+            accessKeyAddress,
+            address,
+            ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+          },
+        ],
+      })
+
+      expect(requests).toEqual([
+        {
+          method: 'wallet_revokeAccessKey',
+          params: [
+            {
+              accessKeyAddress,
+              address,
+              ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+            },
+          ],
+        },
+      ])
+      expect(provider.store.getState().accessKeys.map((key) => key.chainId)).toEqual([
+        tempoModerato.id,
+      ])
+    },
+  )
+
+  test('error: rejects a chainId off the active chain without forwarding', async () => {
+    const { provider, requests } = setupTransportWallet()
+
+    await expect(
+      provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress, address, chainId: Hex.fromNumber(tempoModerato.id) }],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnsupportedChainIdError: Revoking on chain 42431 requires it to be the active chain (4217).]`,
+    )
+    expect(requests).toEqual([])
+    expect(provider.store.getState().accessKeys.map((key) => key.chainId)).toEqual([
+      tempo.id,
+      tempoModerato.id,
+    ])
+  })
+})
+
+describe('wallet_updateAccessKey', () => {
+  const limits = [{ token: '0x20c0000000000000000000000000000000000000', limit: '0x1' }] as const
+
+  test.each([
+    { case: 'omitted', chainId: undefined },
+    { case: 'the active chain', chainId: tempo.id },
+  ])(
+    'behavior: forwards through the account transport when chainId is $case',
+    async ({ chainId }) => {
+      const { provider, requests } = setupTransportWallet()
+      const parameters = {
+        accessKeyAddress,
+        address,
+        limits,
+        ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+      } as const
+
+      await provider.request({ method: 'wallet_updateAccessKey', params: [parameters] })
+
+      expect(requests).toEqual([{ method: 'wallet_updateAccessKey', params: [parameters] }])
+    },
+  )
+
+  test('error: rejects a chainId off the active chain without forwarding', async () => {
+    const { provider, requests } = setupTransportWallet()
+    const accessKeys = provider.store.getState().accessKeys
+
+    await expect(
+      provider.request({
+        method: 'wallet_updateAccessKey',
+        params: [{ accessKeyAddress, address, chainId: Hex.fromNumber(tempoModerato.id), limits }],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnsupportedChainIdError: Updating on chain 42431 requires it to be the active chain (4217).]`,
+    )
+    expect(requests).toEqual([])
+    expect(provider.store.getState().accessKeys).toEqual(accessKeys)
+  })
+})
+
 describe('adapter actions', () => {
   test('behavior: explicit adapter action overrides provider default', async () => {
     const getAccount = vi.fn(() => {
@@ -741,4 +1224,73 @@ describe('adapter actions', () => {
       ]
     `)
   })
+})
+
+describe('wallet replacement', () => {
+  test.each([false, true])(
+    'prunes old owner keys even with persistAccounts=%s',
+    async (persistAccounts) => {
+      const next = '0x0000000000000000000000000000000000000002'
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        persistAccounts,
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address: next }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address: next }] }
+          },
+        },
+      }))
+      const provider = Provider.create({ adapter, storage: Storage.memory() })
+      provider.store.setState({
+        accounts: [{ address }],
+        accessKeys: [
+          { access: address, address, chainId: 1, keyType: 'secp256k1' },
+          { access: next, address: next, chainId: 1, keyType: 'secp256k1' },
+        ] as never,
+      })
+      await provider.request({ method: 'wallet_connect' })
+      expect(provider.store.getState().accessKeys.map((key) => key.access)).toMatchInlineSnapshot(`
+      [
+        "0x0000000000000000000000000000000000000002",
+      ]
+    `)
+    },
+  )
+
+  test.each(['eth_signTransaction', 'eth_sendTransaction', 'eth_sendTransactionSync'] as const)(
+    '%s checks the current adapter before selecting a retained key',
+    async (method) => {
+      const next = '0x0000000000000000000000000000000000000002'
+      const create = vi.spyOn(AccessKeyTransaction, 'create')
+      const getAccount = vi.fn(() => {
+        throw new Error('owner no longer selected')
+      })
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address: next }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address: next }] }
+          },
+        },
+        getAccount: getAccount as never,
+      }))
+      const provider = Provider.create({ adapter, chains: [tempo], storage: Storage.memory() })
+      provider.store.setState({
+        accounts: [{ address: next }],
+        accessKeys: [
+          { access: address, address, chainId: tempo.id, keyType: 'secp256k1' },
+        ] as never,
+      })
+      await expect(
+        provider.request({ method, params: [{ from: address, to: next }] } as never),
+      ).rejects.toThrow('owner no longer selected')
+      expect(getAccount).toHaveBeenCalledWith({ address })
+      expect(create).not.toHaveBeenCalled()
+      create.mockRestore()
+    },
+  )
 })

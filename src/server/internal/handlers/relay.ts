@@ -26,7 +26,7 @@ import { type Handler, from } from '../../Handler.js'
 import * as Kv from '../../Kv.js'
 import { cached } from '../kv.js'
 import * as Tokenlist from '../tokenlist.js'
-import * as Multisig from './multisig.js'
+import * as FeeLiquidity from './feeLiquidity.js'
 import * as Sponsorship from './sponsorship.js'
 import * as Utils from './utils.js'
 
@@ -84,7 +84,6 @@ export function relay(options: relay.Options = {}): Handler {
     ...rest
   } = options
   const feePayerOptions = options.feePayer
-  const multisigOptions = options.multisig
 
   // Resolves the verified tokenlist for `chainId`, sharing the KV cache with
   // `Handler.exchange` so a single `kv: Kv.cloudflare(env.KV)` covers both.
@@ -182,6 +181,19 @@ export function relay(options: relay.Options = {}): Handler {
             ...(sponsoredFeeToken ? { feeToken: sponsoredFeeToken } : {}),
           }
 
+          // Simulation needs only the calls, so start it alongside the fill. It is used when the
+          // fill keeps the requested calls (no swap prepended), and its failure only surfaces then.
+          const calls_requested = extractCalls(baseTx)
+          const simulation_early =
+            features.simulate && requireBalanceDiffs && calls_requested.length > 0
+              ? simulate(client, {
+                  account: from === zeroAddress ? undefined : from,
+                  calls: calls_requested,
+                  kv,
+                })
+              : undefined
+          void simulation_early?.catch(() => {})
+
           let filled: Awaited<ReturnType<typeof fill>>
           let sponsored = false
           let feeToken = sponsoredFeeToken
@@ -211,6 +223,74 @@ export function relay(options: relay.Options = {}): Handler {
               (t) => !configuredTokens.some((rt) => rt.toLowerCase() === t.toLowerCase()),
             ),
           ]
+
+          async function fillUnsponsored() {
+            const excluded = new Set<string>()
+            const balances = new Map<string, Promise<bigint>>()
+            const liquidity = new Map<string, ReturnType<typeof FeeLiquidity.prepare>>()
+            function prepareFeeToken(token: Address) {
+              const key = token.toLowerCase()
+              let pending = liquidity.get(key)
+              if (!pending) {
+                pending = FeeLiquidity.prepare(client, { token, kv })
+                liquidity.set(key, pending)
+                void pending.catch(() => {})
+              }
+              return pending
+            }
+            let liquidityError: Error | undefined
+            for (;;) {
+              const token = features.feeTokenResolution
+                ? await resolveFeeToken(client, {
+                    account: from,
+                    feeToken: requestFeeToken,
+                    kv,
+                    tokens: unsponsoredTokens,
+                    excluded,
+                    balances,
+                    prepareFeeToken,
+                  })
+                : requestFeeToken
+              if (!token && liquidityError) throw liquidityError
+              try {
+                const result = await fill(client, {
+                  autoSwap,
+                  feeToken: token,
+                  // Fee-token resolution already read these balances.
+                  getBalance: (token) => balances.get(token.toLowerCase()),
+                  kv,
+                  resolveFeeToken: resolveFeeTokenForSwap,
+                  transaction: { ...normalized, chainId, ...(token ? { feeToken: token } : {}) },
+                })
+                // Estimation can succeed even when the fee AMM cannot settle
+                // the fee. Check the filled maximum fee before asking for a signature.
+                if (token && !requestFeeToken && features.feeTokenResolution) {
+                  const { gas, maxFeePerGas } = result.transaction
+                  if (
+                    gas &&
+                    maxFeePerGas &&
+                    !(await (
+                      await prepareFeeToken(token)
+                    )((gas * maxFeePerGas + 10n ** 12n - 1n) / 10n ** 12n))
+                  )
+                    throw new Error('Insufficient liquidity in FeeAMM pool for transaction fee.')
+                }
+                return { result, token }
+              } catch (error) {
+                // Never change an explicit fee-token choice or retry unrelated failures.
+                if (
+                  !token ||
+                  requestFeeToken ||
+                  !features.feeTokenResolution ||
+                  !(error instanceof Error) ||
+                  !/insufficient liquidity in FeeAMM pool/i.test(error.message)
+                )
+                  throw error
+                excluded.add(token.toLowerCase())
+                liquidityError = error
+              }
+            }
+          }
 
           // When the app provides its own fee payer URL, route the fill
           // through that service so it can sign the transaction.
@@ -301,44 +381,16 @@ export function relay(options: relay.Options = {}): Handler {
                 filled = fill_sponsored
               } else {
                 // Sponsor rejected — resolve fee token and fill unsponsored.
-                const feeToken_unsponsored = features.feeTokenResolution
-                  ? await resolveFeeToken(client, {
-                      account: from,
-                      feeToken: requestFeeToken,
-                      kv,
-                      tokens: unsponsoredTokens,
-                    })
-                  : requestFeeToken
-                const tx_unsponsored = {
-                  ...baseTx,
-                  ...(feeToken_unsponsored ? { feeToken: feeToken_unsponsored } : {}),
-                }
-                filled = await fill(client, {
-                  ...options,
-                  feeToken: feeToken_unsponsored,
-                  transaction: tx_unsponsored,
-                })
-                feeToken = feeToken_unsponsored
+                const { result, token } = await fillUnsponsored()
+                filled = result
+                feeToken = token
               }
             }
           } else {
             // Path C: no sponsorship configured — resolve fee token, fill once.
-            feeToken = features.feeTokenResolution
-              ? await resolveFeeToken(client, {
-                  account: from,
-                  feeToken: requestFeeToken,
-                  kv,
-                  tokens: unsponsoredTokens,
-                })
-              : requestFeeToken
-            const transaction = { ...baseTx, ...(feeToken ? { feeToken } : {}) }
-            filled = await fill(client, {
-              autoSwap,
-              feeToken,
-              kv,
-              resolveFeeToken: resolveFeeTokenForSwap,
-              transaction,
-            })
+            const { result, token } = await fillUnsponsored()
+            filled = result
+            feeToken = token
           }
 
           const transaction_filled = filled.transaction
@@ -368,6 +420,7 @@ export function relay(options: relay.Options = {}): Handler {
                   gas: transaction_filled.gas,
                   kv,
                   maxFeePerGas: transaction_filled.maxFeePerGas,
+                  simulation: sameCalls(calls, calls_requested) ? simulation_early : undefined,
                 })
               const fee = await computeFee(client, {
                 feeToken,
@@ -379,6 +432,12 @@ export function relay(options: relay.Options = {}): Handler {
             })(),
             // Sign as fee payer (if sponsored and not already signed).
             (async () => {
+              // An app's own fee payer URL is the sponsorship authority, so its fill must come
+              // back signed. Signing it here would spend this relay's fee payer without `validate`.
+              if (externalFeePayerUrl && !alreadySigned)
+                throw new RpcResponse.InvalidParamsError({
+                  message: 'The app fee payer did not sign the transaction.',
+                })
               if (!(sponsored && feePayerOptions && !alreadySigned)) return transaction_filled
               return Sponsorship.sign({
                 account: feePayerOptions.account,
@@ -519,33 +578,6 @@ export function relay(options: relay.Options = {}): Handler {
       case 'eth_sendRawTransactionSync': {
         try {
           const serialized = params[0]
-          if (
-            multisigOptions &&
-            (request.method === 'eth_sendRawTransaction' ||
-              request.method === 'eth_sendRawTransactionSync') &&
-            typeof serialized === 'string' &&
-            Multisig.isMultisigTransaction(serialized as Hex.Hex)
-          ) {
-            const result = await Multisig.handleRawTransaction({
-              claimTtl: multisigOptions.claimTtl,
-              finalize: multisigOptions.finalize,
-              getClient,
-              method: request.method,
-              request: { params: 'params' in request ? request.params : undefined },
-              resolveConfig: multisigOptions.resolveConfig,
-              sponsor: feePayerOptions
-                ? {
-                    account: feePayerOptions.account,
-                    feeToken: feePayerOptions.feeToken,
-                    resolveFeeToken: async (chainId) => (await getTokens(chainId))[0],
-                    validate: feePayerOptions.validate,
-                  }
-                : undefined,
-              store: multisigOptions.store,
-            })
-            return RpcResponse.from({ result } as never, { request } as never)
-          }
-
           if (!feePayerOptions) {
             // eth_signRawTransaction is a signing method that only the
             // relay can fulfill — forwarding it to the RPC node returns
@@ -585,27 +617,6 @@ export function relay(options: relay.Options = {}): Handler {
             validate: feePayerOptions.validate,
           })
           return RpcResponse.from({ result } as never, { request } as never)
-        } catch (error) {
-          return Utils.rpcErrorJson(request, error)
-        }
-      }
-
-      case 'eth_getTransactionByHash':
-      case 'eth_getTransactionReceipt': {
-        try {
-          if (multisigOptions) {
-            const aliased = await Multisig.handleGetTransaction({
-              getClient,
-              method: request.method,
-              request: { params: 'params' in request ? request.params : undefined },
-              store: multisigOptions.store,
-            })
-            if (aliased)
-              return RpcResponse.from({ result: aliased.result } as never, { request } as never)
-          }
-
-          const result = await client.request(request as never)
-          return RpcResponse.from({ result }, { request })
         } catch (error) {
           return Utils.rpcErrorJson(request, error)
         }
@@ -696,12 +707,6 @@ export namespace relay {
           url?: string | undefined
         }
       | undefined
-    /**
-     * Native multisig configuration. When provided, the relay collects owner
-     * approvals from multisig raw transaction submissions and broadcasts once
-     * collected owner weight meets the configured threshold.
-     */
-    multisig?: Multisig.Options | undefined
     /**
      * Relay features.
      *
@@ -854,10 +859,11 @@ async function fill(client: Client, options: fill.Options) {
         : 0n
       if (fromAddress && resolvedFeeToken && gas > 0n && maxFeePerGas > 0n) {
         const [balance, metadata] = await Promise.all([
-          Actions.token
-            .getBalance(client, { account: fromAddress, token: resolvedFeeToken })
-            .then(({ amount }) => amount)
-            .catch(() => 0n),
+          options.getBalance?.(resolvedFeeToken) ??
+            Actions.token
+              .getBalance(client, { account: fromAddress, token: resolvedFeeToken })
+              .then(({ amount }) => amount)
+              .catch(() => 0n),
           resolveTokenMetadata(client, { token: resolvedFeeToken, kv }).catch(() => undefined),
         ])
         if (metadata) {
@@ -902,6 +908,8 @@ declare namespace fill {
   type Options = {
     autoSwap?: { slippage: number } | undefined
     feeToken?: Address | undefined
+    /** The sender's balance of a token, when already read (e.g. during fee-token resolution). */
+    getBalance?: ((token: Address) => Promise<bigint> | undefined) | undefined
     kv?: Kv.Kv | undefined
     resolveFeeToken?: ((insufficientToken: Address) => Promise<Address | undefined>) | undefined
     transaction: Record<string, unknown>
@@ -915,6 +923,20 @@ async function resolveFeeToken(
   const { feeToken, account, kv, tokens } = options
   if (feeToken) return feeToken
   if (!account) return undefined
+  const sender = account
+
+  function getBalance(token: Address) {
+    options.prepareFeeToken?.(token)
+    const key = token.toLowerCase()
+    const pending = options.balances?.get(key)
+    if (pending) return pending
+    const balance = Actions.token
+      .getBalance(client, { account: sender, token })
+      .then(({ amount }) => amount)
+      .catch(() => 0n)
+    options.balances?.set(key, balance)
+    return balance
+  }
 
   // Cache the user's preferred fee token for `userTokenCacheTtl` seconds.
   // The on-chain preference rarely changes; a short TTL avoids the
@@ -941,17 +963,14 @@ async function resolveFeeToken(
       ? Promise.all(
           tokens.map(async (token) => ({
             address: token,
-            balance: await Actions.token
-              .getBalance(client, { account, token })
-              .then(({ amount }) => amount)
-              .catch(() => 0n),
+            balance: await getBalance(token),
           })),
         )
       : [],
   ])
 
   // If on-chain preference is set and user has balance, use it.
-  if (userToken) {
+  if (userToken && !options.excluded?.has(userToken.address.toLowerCase())) {
     const match = balances.find(
       (b) => b.address.toLowerCase() === userToken.address.toLowerCase() && b.balance > 0n,
     )
@@ -960,11 +979,7 @@ async function resolveFeeToken(
     // Token list may not include the preference — check on-chain directly.
     if (!match) {
       try {
-        const balance = await Actions.token.getBalance(client, {
-          account,
-          token: userToken.address,
-        })
-        if (balance.amount > 0n) return userToken.address
+        if ((await getBalance(userToken.address)) > 0n) return userToken.address
       } catch {}
     }
   }
@@ -973,6 +988,7 @@ async function resolveFeeToken(
   let best: { address: Address; balance: bigint } | undefined
   for (const asset of balances) {
     if (asset.balance <= 0n) continue
+    if (options.excluded?.has(asset.address.toLowerCase())) continue
     if (!best || asset.balance > best.balance) best = asset
   }
   if (best) return best.address
@@ -984,6 +1000,9 @@ declare namespace resolveFeeToken {
     account?: Address | undefined
     kv?: Kv.Kv | undefined
     tokens?: readonly Address[] | undefined
+    excluded?: Set<string> | undefined
+    balances?: Map<string, Promise<bigint>> | undefined
+    prepareFeeToken?: ((token: Address) => void) | undefined
     /** TTL in seconds for the cached `userTokens` lookup. @default 60 */
     userTokenCacheTtl?: number | undefined
   }
@@ -1093,9 +1112,35 @@ function extractCalls(transaction: Record<string, unknown>): readonly Call[] {
   ] as readonly Call[]
 }
 
+/** Whether two call lists are the same calls, whatever the encoding of their values. */
+function sameCalls(a: readonly Call[], b: readonly Call[]) {
+  const value = (v: unknown) =>
+    typeof v === 'bigint' ? v : typeof v === 'string' && v !== '0x' ? BigInt(v) : 0n
+  return (
+    a.length === b.length &&
+    a.every(
+      (call, i) =>
+        call.to?.toLowerCase() === b[i]!.to?.toLowerCase() &&
+        (call.data ?? '0x').toLowerCase() === (b[i]!.data ?? '0x').toLowerCase() &&
+        value(call.value) === value(b[i]!.value),
+    )
+  )
+}
+
 // TODO: cleanup/remove
 async function simulate(client: Client, options: simulate.Options) {
-  const { account, calls } = options
+  const { account, calls, kv } = options
+  // Nodes without `tempo_simulateV1` answer every fill with "method not found", so skip it for a
+  // while once seen rather than spend a round trip on it each time.
+  const unsupported = `simulate.tempoUnsupported:${client.chain?.id ?? 0}`
+  async function fallback() {
+    const { results } = await simulateCalls(client, {
+      ...(account ? { account } : {}),
+      calls: calls as Call[],
+    })
+    return { results, tokenMetadata: undefined }
+  }
+  if (kv && (await kv.get(unsupported).catch(() => undefined))) return fallback()
   try {
     return await Actions.simulate.simulateCalls(client, {
       ...(account ? { account } : {}),
@@ -1110,11 +1155,8 @@ async function simulate(client: Client, options: simulate.Options) {
       (error as { code?: number | undefined }).code ??
       (error as { cause?: { code?: number | undefined } | undefined }).cause?.code
     if (code !== -32601) throw error
-    const { results } = await simulateCalls(client, {
-      ...(account ? { account } : {}),
-      calls: calls as Call[],
-    })
-    return { results, tokenMetadata: undefined }
+    await kv?.set(unsupported, true, { ttl: 10 * 60 }).catch(() => {})
+    return fallback()
   }
 }
 
@@ -1122,6 +1164,7 @@ declare namespace simulate {
   type Options = {
     account?: Address | undefined
     calls: readonly Call[]
+    kv?: Kv.Kv | undefined
   }
 }
 
@@ -1129,10 +1172,12 @@ async function simulateAndParseDiffs(client: Client, options: simulateAndParseDi
   const { account, calls, swap, feeToken, gas, kv, maxFeePerGas } = options
 
   try {
-    const { results, tokenMetadata } = await simulate(client, {
-      account: account === zeroAddress ? undefined : account,
-      calls,
-    })
+    const { results, tokenMetadata } = await (options.simulation ??
+      simulate(client, {
+        account: account === zeroAddress ? undefined : account,
+        calls,
+        kv,
+      }))
 
     // Collect all logs across all call results.
     const logs: (typeof results)[number]['logs'] = []
@@ -1177,6 +1222,8 @@ declare namespace simulateAndParseDiffs {
     gas?: bigint | undefined
     kv?: Kv.Kv | undefined
     maxFeePerGas?: bigint | undefined
+    /** A simulation of `calls` already in flight, started before the fill. */
+    simulation?: ReturnType<typeof simulate> | undefined
   }
 }
 

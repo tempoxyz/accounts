@@ -264,7 +264,12 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
         // The wallet can assert before the store finishes rehydrating its
         // persisted accounts; wait so we both see the cached account and
         // win against the hydration that would otherwise re-add it.
-        await Store.waitForHydration(store)
+        try {
+          await Store.waitForHydration(store)
+        } catch {
+          // A store that failed to load holds no cached session to drop.
+          return
+        }
         const cached = store.getState().accounts
         if (cached.length === 0) return
         const asserted = new Set(accounts.map((address) => address.toLowerCase()))
@@ -300,7 +305,16 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
         .catch(() => undefined)
         .finally(() => {
           pending -= 1
-          if (pending === 0) mount?.hide()
+          if (pending !== 0) return
+          mount?.hide()
+          if (mount?.mode !== 'popup') return
+          // Closing the popup ends its session. Close the session with it
+          // instead of leaving the transport on the closed handle until its
+          // 250 ms closed-window poll notices: a request sent in between
+          // reaches the closed window. The next request waits for the close,
+          // then reconnects through a fresh popup.
+          const closing = session?.close().catch(() => {})
+          queue = queue.then(() => closing)
         })
       return result
     },

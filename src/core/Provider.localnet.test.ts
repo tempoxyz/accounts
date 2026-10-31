@@ -11,6 +11,9 @@ import {
 } from 'viem'
 import {
   getBalance,
+  getBlockNumber,
+  getLogs,
+  getTransactionReceipt,
   sendCalls,
   sendTransactionSync,
   signMessage,
@@ -1109,6 +1112,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         {
           "contractAddress": null,
           "feeToken": "0x20c0000000000000000000000000000000000000",
+          "operation": undefined,
           "status": "success",
           "to": "0x20c0000000000000000000000000000000000000",
           "type": "0x76",
@@ -1386,7 +1390,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
           from:  0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
         Details: plain send failure
-        Version: viem@2.56.0]
+        Version: viem@0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26]
       `)
     })
   })
@@ -2189,9 +2193,116 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         }),
       ).rejects.toThrow(/key.*not.*found|KeyNotFound/i)
     })
+
+    test.each([{ chainId: 1 }, { chainId: tempoModerato.id }])(
+      'error: rejects unconfigured chain $chainId without updating',
+      async ({ chainId }) => {
+        const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+        const address = await connect(provider)
+        await fund(address)
+
+        const { keyAuthorization } = await provider.request({
+          method: 'wallet_authorizeAccessKey',
+          params: [
+            {
+              expiry: Expiry.days(1),
+              limits: [{ token: Addresses.pathUsd, limit: Hex.fromNumber(parseUnits('5', 6)) }],
+            },
+          ],
+        })
+        // Publish the key.
+        await provider.request({
+          method: 'eth_sendTransactionSync',
+          params: [{ calls: [transferCall] }],
+        })
+        const accessKey = keyAuthorization.address!
+        const query = { account: address, accessKey, token: Addresses.pathUsd } as const
+        const before = await Actions.accessKey.getRemainingLimit(getClient(), query)
+        const accessKeys = provider.store.getState().accessKeys
+
+        await expect(
+          provider.request({
+            method: 'wallet_updateAccessKey',
+            params: [
+              {
+                address,
+                accessKeyAddress: accessKey,
+                chainId: Hex.fromNumber(chainId),
+                limits: [{ token: Addresses.pathUsd, limit: Hex.fromNumber(parseUnits('9', 6)) }],
+              },
+            ],
+          }),
+        ).rejects.toMatchObject({
+          message: `Chain ${chainId} not configured.`,
+          name: 'Provider.UnsupportedChainIdError',
+        })
+        expect(await Actions.accessKey.getRemainingLimit(getClient(), query)).toEqual(before)
+        expect(provider.store.getState().accessKeys).toEqual(accessKeys)
+      },
+    )
   })
 
   describe('wallet_revokeAccessKey', () => {
+    test('error: rejects an authorization for a different access key', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      await connect(provider)
+
+      const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
+      const first = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      const second = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      await expect(
+        provider.request({
+          method: 'wallet_revokeAccessKey',
+          params: [
+            {
+              address: connected,
+              accessKeyAddress: first.keyAuthorization.address!,
+              keyAuthorization: second.keyAuthorization,
+            },
+          ],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[RpcResponse.InvalidParamsError: \`keyAuthorization\` must authorize \`accessKeyAddress\`.]`,
+      )
+    })
+
+    test('behavior: atomically authorizes and revokes an unpublished access key', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      await connect(provider)
+
+      const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
+      await fund(connected)
+
+      const { keyAuthorization } = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [
+          {
+            address: connected,
+            accessKeyAddress: keyAuthorization.address!,
+            keyAuthorization,
+          },
+        ],
+      })
+
+      const metadata = await Actions.accessKey.getMetadata(getClient(), {
+        account: connected,
+        accessKey: keyAuthorization.address!,
+      })
+      expect(metadata.isRevoked).toMatchInlineSnapshot(`true`)
+    })
+
     test('default: revokes a granted access key on-chain', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)
@@ -2257,6 +2368,71 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+    })
+
+    test('behavior: revokes on an explicit chainId', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain, tempoModerato] })
+      await connect(provider)
+
+      const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
+      await fund(connected)
+
+      const { keyAuthorization } = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      // Register the key on-chain.
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      // Leave the key's chain so only `chainId` routes the revocation back to it.
+      await provider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: Hex.fromNumber(tempoModerato.id) }],
+      })
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [
+          {
+            address: connected,
+            accessKeyAddress: keyAuthorization.address!,
+            chainId: Hex.fromNumber(chain.id),
+          },
+        ],
+      })
+
+      const metadata = await Actions.accessKey.getMetadata(getClient(), {
+        account: connected,
+        accessKey: keyAuthorization.address!,
+      })
+      expect(metadata.isRevoked).toMatchInlineSnapshot(`true`)
+      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+    })
+
+    test('error: rejects an unconfigured chainId', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      await connect(provider)
+
+      const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
+      const { keyAuthorization } = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      await expect(
+        provider.request({
+          method: 'wallet_revokeAccessKey',
+          params: [
+            { address: connected, accessKeyAddress: keyAuthorization.address!, chainId: '0x1' },
+          ],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UnsupportedChainIdError: Chain 1 not configured.]`,
+      )
+      expect(provider.store.getState().accessKeys).toHaveLength(1)
     })
 
     test('behavior: root key still works after revoking access key', async () => {
@@ -2393,7 +2569,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         method: 'eth_fillTransaction',
         params: [{ from: address, ...fillTx }],
       })
-      expect(result.tx.gas).toBeDefined()
+      expect((result.tx as { gas?: unknown }).gas).toBeDefined()
       // secp256k1 root fills keep the legacy shape (top-level `to`); p256/webAuthn
       // roots are routed through the tempo envelope, which carries the target in
       // `calls` so the node can size gas for the larger signature.
@@ -2419,7 +2595,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         method: 'eth_fillTransaction',
         params: [{ from: address, ...fillTx }],
       })
-      expect(result.tx.gas).toBeDefined()
+      expect((result.tx as { gas?: unknown }).gas).toBeDefined()
       expect((result.tx as { keyAuthorization?: unknown }).keyAuthorization).toBeDefined()
     })
 
@@ -2437,7 +2613,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         method: 'eth_fillTransaction',
         params: [fillTx],
       })
-      expect(result.tx.gas).toBeDefined()
+      expect((result.tx as { gas?: unknown }).gas).toBeDefined()
       expect((result.tx as { keyAuthorization?: unknown }).keyAuthorization).toBeDefined()
     })
 
@@ -2465,7 +2641,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
           },
         ],
       })
-      expect(result.tx.gas).toBeDefined()
+      expect((result.tx as { gas?: unknown }).gas).toBeDefined()
     })
 
     test('behavior: published access key uses its key type without re-authorizing', async () => {
@@ -3230,6 +3406,57 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       expect((result.tx as { feePayerSignature?: unknown }).feePayerSignature).toBeDefined()
+    })
+
+    test('behavior: feePayer URL sponsors wallet_revokeAccessKey', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const connected = await connect(provider)
+      await fund(connected)
+      const { keyAuthorization } = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      const rpc = getClient()
+      const blockNumber = await getBlockNumber(rpc)
+
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [
+          {
+            accessKeyAddress: keyAuthorization.address!,
+            address: connected,
+            feePayer: server.url,
+          },
+        ],
+      })
+
+      const logs = await getLogs(rpc, {
+        address: Addresses.accountKeychain,
+        fromBlock: blockNumber,
+        toBlock: 'latest',
+      })
+      const event = Actions.accessKey.revoke.extractEvent(logs)
+      const receipt = await getTransactionReceipt(rpc, { hash: event.transactionHash })
+      const metadata = await Actions.accessKey.getMetadata(rpc, {
+        account: connected,
+        accessKey: keyAuthorization.address!,
+      })
+      expect({
+        feePayer: receipt.feePayer,
+        isRevoked: metadata.isRevoked,
+        status: receipt.status,
+      }).toMatchInlineSnapshot(`
+        {
+          "feePayer": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+          "isRevoked": true,
+          "status": "success",
+        }
+      `)
     })
 
     test('behavior: feePayer: true uses default from Provider.create', async () => {

@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { Mppx, tempo } from 'mppx/hono'
 import { privateKeyToAccount } from 'viem/accounts'
+import { pathusd } from 'viem/tokens'
 
 const app = new Hono()
 
@@ -17,7 +18,7 @@ const mppx = Mppx.create({
       account,
       feePayer: true,
       // pathUSD on Tempo testnet.
-      currency: '0x20c0000000000000000000000000000000000000',
+      currency: pathusd(4217).address,
       testnet: true,
     }),
   ],

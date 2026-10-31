@@ -14,6 +14,7 @@ jobs:
     name: Verify
     permissions:
       contents: read
-    uses: ./.github/workflows/verify.yml
+      id-token: write
+    uses: ./.github/workflows/verify.yml # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
     secrets:
       VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}

@@ -1,3 +1,4 @@
+import { Base64 } from 'ox'
 import { vi } from 'vitest'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 import { Registration } from 'webauthx/server'
@@ -36,6 +37,77 @@ describe('POST /register/options', () => {
     expect(typeof options.publicKey!.challenge).toMatchInlineSnapshot(`"string"`)
   })
 
+  test('behavior: issues a challenge without a name', async () => {
+    const kv = Kv.memory()
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost' })
+    const response = await handler.fetch(
+      new Request('http://localhost/register/options', { body: '{}', method: 'POST' }),
+    )
+    const { options, ttl } = (await response.json()) as {
+      options: Registration.Options
+      ttl: number
+    }
+    const { created, userId, ...stored } = (await kv.get<{ created: number; userId: string }>(
+      `challenge:${options.publicKey!.challenge}`,
+    ))!
+    expect({
+      created: typeof created,
+      status: response.status,
+      stored,
+      ttl,
+      // A random one, bound as the options' `user.id`.
+      userId: options.publicKey!.user.id === Base64.fromString(userId, { pad: false, url: true }),
+    }).toMatchInlineSnapshot(`
+        {
+          "created": "number",
+          "status": 200,
+          "stored": {},
+          "ttl": 300,
+          "userId": true,
+        }
+      `)
+  })
+
+  test('behavior: binds an empty name, and a userId sent without a name', async () => {
+    const kv = Kv.memory()
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost' })
+    const options = async (body: unknown) => {
+      const response = await handler.fetch(
+        new Request('http://localhost/register/options', {
+          body: JSON.stringify(body),
+          method: 'POST',
+        }),
+      )
+      const { options } = (await response.json()) as { options: Registration.Options }
+      const { created: _, ...stored } = (await kv.get<{ created: number; name?: string }>(
+        `challenge:${options.publicKey!.challenge}`,
+      ))!
+      return { stored, user: options.publicKey!.user }
+    }
+    const { stored, user } = await options({ name: '' })
+    expect({
+      empty: { name: stored.name, user: user.name },
+      userId: await options({ userId: 'user-1' }),
+    }).toMatchInlineSnapshot(`
+      {
+        "empty": {
+          "name": "",
+          "user": "",
+        },
+        "userId": {
+          "stored": {
+            "userId": "user-1",
+          },
+          "user": {
+            "displayName": "",
+            "id": "dXNlci0x",
+            "name": "",
+          },
+        },
+      }
+    `)
+  })
+
   test('behavior: each call generates a unique challenge', async () => {
     const { options: a } = await ceremony.getRegistrationOptions({ name: 'Test' })
     const { options: b } = await ceremony.getRegistrationOptions({ name: 'Test' })
@@ -49,6 +121,20 @@ describe('POST /login/options', () => {
     expect(options.publicKey).toBeDefined()
     expect(options.publicKey!.rpId).toMatchInlineSnapshot(`"localhost"`)
     expect(typeof options.publicKey!.challenge).toMatchInlineSnapshot(`"string"`)
+  })
+
+  test('behavior: sends the challenge TTL', async () => {
+    const handler = webAuthn({
+      kv: Kv.memory(),
+      origin: 'http://localhost',
+      rpId: 'localhost',
+      ttl: { challenge: 60 },
+    })
+    const response = await handler.fetch(
+      new Request('http://localhost/login/options', { body: '{}', method: 'POST' }),
+    )
+    const { ttl } = (await response.json()) as { ttl: number }
+    expect(ttl).toMatchInlineSnapshot(`60`)
   })
 
   test('behavior: each call generates a unique challenge', async () => {
@@ -78,6 +164,87 @@ describe('POST /login/options', () => {
 })
 
 describe('POST /register', () => {
+  /**
+   * Registers `credential` against challenge `0x01`, stored as `challenge`.
+   * Returns the hook's name and `userId`.
+   */
+  async function register(challenge: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), ...challenge })
+    let name: string | undefined
+    let userId: string | undefined
+    const handler = webAuthn({
+      kv,
+      onRegister: (parameters) => {
+        name = parameters.name
+        userId = parameters.userId
+      },
+      origin: 'http://localhost',
+      rpId: 'localhost',
+      session: false,
+    })
+    const response = await handler.fetch(registerRequest(extra))
+    return {
+      body: response.ok ? undefined : await response.json(),
+      name,
+      status: response.status,
+      userId,
+    }
+  }
+
+  test('behavior: a challenge issued without a name takes the one sent with the credential', async () => {
+    // The `userId` stays the one bound when the challenge was issued.
+    expect(await register({ userId: 'user-1' }, { name: 'alice', userId: 'user-2' }))
+      .toMatchInlineSnapshot(`
+        {
+          "body": undefined,
+          "name": "alice",
+          "status": 200,
+          "userId": "dXNlci0x",
+        }
+      `)
+  })
+
+  test('behavior: the name the challenge was issued with wins', async () => {
+    expect(await register({ name: 'Test', userId: 'user-1' }, { name: 'alice', userId: 'user-2' }))
+      .toMatchInlineSnapshot(`
+      {
+        "body": undefined,
+        "name": "Test",
+        "status": 200,
+        "userId": "dXNlci0x",
+      }
+    `)
+  })
+
+  test('error: a login challenge cannot register', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', Date.now())
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost', session: false })
+    const response = await handler.fetch(registerRequest({ name: 'alice' }))
+    expect({ body: await response.json(), status: response.status }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Missing or expired challenge",
+        },
+        "status": 400,
+      }
+    `)
+  })
+
+  test('error: a challenge issued without a name needs one with the credential', async () => {
+    expect(await register({})).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Missing name",
+        },
+        "name": undefined,
+        "status": 400,
+        "userId": undefined,
+      }
+    `)
+  })
+
   test('error: invalid credential → 400', async () => {
     const response = await fetch(`${server.url}/register`, {
       method: 'POST',
@@ -226,6 +393,240 @@ describe('hooks', () => {
     } finally {
       await hookServer.closeAsync()
     }
+  })
+
+  test('behavior: register defers the challenge deletion to waitUntil without take', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    const events: string[] = []
+    let release = () => {}
+    const { take: _, ...rest } = kv
+    const handler = webAuthn({
+      kv: {
+        ...rest,
+        async delete(key) {
+          events.push(`delete:${key}`)
+          await new Promise<void>((resolve) => {
+            release = resolve
+          })
+          await kv.delete(key)
+        },
+      },
+      origin: 'http://localhost',
+      rpId: 'localhost',
+      session: false,
+    })
+    const waitUntil: Promise<unknown>[] = []
+
+    const response = await handler.fetch(registerRequest(), {}, {
+      passThroughOnException() {},
+      props: {},
+      waitUntil: (promise: Promise<unknown>) => void waitUntil.push(promise),
+    } as never)
+
+    expect(response.status).toMatchInlineSnapshot(`200`)
+    expect(events).toMatchInlineSnapshot(`
+      [
+        "delete:challenge:0x01",
+      ]
+    `)
+    expect(waitUntil).toHaveLength(1)
+    const { created: _created, ...challenge } = (await kv.get<{ created: number }>(
+      'challenge:0x01',
+    ))!
+    expect(challenge).toMatchInlineSnapshot(`
+      {
+        "name": "Test",
+      }
+    `)
+
+    release()
+    await Promise.all(waitUntil)
+    expect(await kv.get('challenge:0x01')).toMatchInlineSnapshot(`undefined`)
+    expect(await kv.get('credential:credential')).toMatchInlineSnapshot(`
+      {
+        "publicKey": "0x04ab891400140fc4f8e941ce0ff90e419de9470acaca613bbd717a4775435031a7d884318e919fd3b3e5a631d866d8a380b44063e70f0c381ee16e0652f7f97554",
+      }
+    `)
+  })
+
+  test('behavior: register consumes the challenge with take', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost', session: false })
+
+    const first = await handler.fetch(registerRequest())
+    // A second credential against the same challenge.
+    await kv.delete('credential:credential')
+    const second = await handler.fetch(registerRequest())
+
+    expect({
+      first: first.status,
+      second: { body: await second.json(), status: second.status },
+    }).toMatchInlineSnapshot(`
+      {
+        "first": 200,
+        "second": {
+          "body": {
+            "error": "Missing or expired challenge",
+          },
+          "status": 400,
+        },
+      }
+    `)
+  })
+
+  test('behavior: a retry after a stored registration answers that the credential exists', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost', session: false })
+    const request = registerRequest()
+    // The same request sent again, as after a lost response.
+    const retry = request.clone()
+
+    const first = await handler.fetch(request)
+    const second = await handler.fetch(retry)
+
+    expect({
+      first: first.status,
+      second: { body: await second.json(), status: second.status },
+    }).toMatchInlineSnapshot(`
+      {
+        "first": 200,
+        "second": {
+          "body": {
+            "error": "Credential already exists",
+          },
+          "status": 400,
+        },
+      }
+    `)
+  })
+
+  test('behavior: register revokes the session presented with it', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    await kv.set('session:tok-A', { credentialId: 'cred-1' }, { ttl: 60 })
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost' })
+    const request = registerRequest()
+
+    const response = await handler.fetch(
+      new Request(request, {
+        headers: { 'Content-Type': 'application/json', cookie: 'accounts_webauthn=tok-A' },
+      }),
+    )
+
+    expect(response.status).toMatchInlineSnapshot(`200`)
+    expect(await kv.get('session:tok-A')).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test('behavior: login consumes the challenge with take', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', Date.now())
+    await kv.set('credential:credential', { publicKey: registerPublicKey })
+    const handler = webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost' })
+    const login = () =>
+      handler.fetch(
+        new Request('http://localhost/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: 'credential',
+            metadata: { authenticatorData: '0x00', clientDataJSON: '{"challenge":"AQ"}' },
+            raw: {
+              authenticatorAttachment: null,
+              id: 'credential',
+              rawId: 'Y3JlZGVudGlhbA',
+              response: { clientDataJSON: 'e30' },
+              type: 'public-key',
+            },
+            signature: '0x00',
+          }),
+        }),
+      )
+
+    const first = await login()
+    const second = await login()
+
+    expect({
+      first: (await first.json()).error,
+      second: (await second.json()).error,
+    }).toMatchInlineSnapshot(`
+      {
+        "first": "Value \`0x00\` is an invalid signature size.
+
+      Expected: 64 bytes or 65 bytes.
+      Received 1 bytes.",
+        "second": "Missing or expired challenge",
+      }
+    `)
+  })
+
+  test('behavior: register reads the challenge and the credential in parallel without create', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    const events: string[] = []
+    const handler = webAuthn({
+      kv: {
+        async delete(key) {
+          events.push(`delete:${key}`)
+          await kv.delete(key)
+        },
+        async get(key) {
+          events.push(`get:${key}`)
+          await new Promise((resolve) => setTimeout(resolve, 10))
+          events.push(`got:${key}`)
+          return await kv.get(key)
+        },
+        async set(key, value) {
+          events.push(`set:${key}`)
+          await kv.set(key, value)
+        },
+      },
+      origin: 'http://localhost',
+      rpId: 'localhost',
+      session: false,
+    })
+
+    const response = await handler.fetch(registerRequest())
+
+    expect(response.status).toMatchInlineSnapshot(`200`)
+    expect(events).toMatchInlineSnapshot(`
+      [
+        "get:challenge:0x01",
+        "get:credential:credential",
+        "got:challenge:0x01",
+        "got:credential:credential",
+        "set:credential:credential",
+        "delete:challenge:0x01",
+      ]
+    `)
+  })
+
+  test('error: register rejects a credential that already exists without create', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    await kv.set('credential:credential', { publicKey: '0x01' })
+    const handler = webAuthn({
+      kv: { delete: kv.delete, get: kv.get, set: kv.set },
+      origin: 'http://localhost',
+      rpId: 'localhost',
+      session: false,
+    })
+
+    const response = await handler.fetch(registerRequest())
+
+    expect(response.status).toMatchInlineSnapshot(`400`)
+    expect(await response.json()).toMatchInlineSnapshot(`
+      {
+        "error": "Credential already exists",
+      }
+    `)
+    expect(await kv.get('credential:credential')).toMatchInlineSnapshot(`
+      {
+        "publicKey": "0x01",
+      }
+    `)
   })
 
   test('behavior: onAuthenticate error does not call hook', async () => {
@@ -409,3 +810,35 @@ describe('session — getSession & /logout', () => {
     expect(await kv.get('session:tok-D')).toBeDefined()
   })
 })
+
+/**
+ * `/register` request for credential `credential` against challenge `0x01`,
+ * with `Registration.verify` mocked to accept it.
+ */
+function registerRequest(extra: Record<string, unknown> = {}) {
+  vi.mocked(Registration.verify).mockReturnValueOnce({
+    credential: { publicKey: registerPublicKey },
+  } as never)
+  const clientDataJSON = 'eyJjaGFsbGVuZ2UiOiJBUSJ9'
+  return new Request('http://localhost/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      attestationObject: 'AA',
+      clientDataJSON,
+      id: 'credential',
+      publicKey: registerPublicKey,
+      raw: {
+        authenticatorAttachment: null,
+        id: 'credential',
+        rawId: 'Y3JlZGVudGlhbA',
+        response: { clientDataJSON },
+        type: 'public-key',
+      },
+      ...extra,
+    }),
+  })
+}
+
+const registerPublicKey =
+  '0x04ab891400140fc4f8e941ce0ff90e419de9470acaca613bbd717a4775435031a7d884318e919fd3b3e5a631d866d8a380b44063e70f0c381ee16e0652f7f97554'

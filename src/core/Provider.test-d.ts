@@ -95,6 +95,12 @@ describe('create options', () => {
     })
   })
 
+  test('ready waits for persisted state', () => {
+    const provider = Provider.create({ hydrationTimeout: 30_000, mpp: false })
+
+    expectTypeOf(provider.ready).returns.toEqualTypeOf<Promise<void>>()
+  })
+
   test('getMppxParameters returns mppx tempo parameters', () => {
     const provider = Provider.create({ mpp: false })
     const account = {} as ReturnType<typeof provider.getAccount>

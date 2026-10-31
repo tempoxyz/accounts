@@ -1,5 +1,124 @@
 # accounts
 
+## 0.21.1
+
+### Patch Changes
+
+- b2535d3: Reclaim expired in-memory KV entries on writes and propagate finite cache TTLs to backing storage. Capacity remains unlimited by default; opt in with `Kv.memory({ maxEntries })` to reject new keys at a chosen capacity without evicting live authentication state. Deployments must size an explicit cap and apply admission controls to avoid blocking legitimate writes.
+  
+  Validate the current adapter account before local access-key transaction paths and discard keys belonging to accounts omitted by a new wallet selection. Privy revocation now waits for successful execution before deleting local key state, retaining keys on pending or failed revocations.
+  
+  Upgrade Hono to 4.13.11 to fix double-decoding of static paths that could bypass middleware.
+- 00b6ee3: Updated `viem` to 2.57.12 and `ox` to 0.14.59, which derive configurable account addresses from the hash of the initial config. The `viem` peer range now starts at 2.57.12, since an earlier Viem derives other addresses.
+- 80bdb13: `Handler.relay` no longer signs as its own fee payer when a request names an app's fee payer URL and that relay returns an unsigned fill. It answers with an invalid-params error instead, so an app's URL can no longer make the relay's fee payer pay without its `validate`.
+- b38af80: Treat a retried `eth_sendRawTransaction` or `eth_sendRawTransactionSync` that the node rejects with `already known` or `nonce too low` as successful when the node knows the transaction's hash. viem's transports retry a submission after a timeout, a network error or a 5xx response, so a transaction that landed on the first attempt could previously fail the send.
+  
+  An access-key send that times out or loses its response no longer falls back to signing the same calls with the root account, which could send them twice.
+- 581bf10: Fixed `Handler` listeners to respond with a 400 to requests with an unparseable `Host` header or request target.
+- 9c6dee1: Fixed Node request listeners to safely cancel oversized uploads and close unfinished connections after sending the response.
+- 51f3b65: Added `handoff` to the postMessage `tempoWallet()` adapter and `Handoff.read()`. Tempo Wallet shows a QR code so someone without a passkey on the computer can approve the request with their phone. By default the requesting tab receives the result. With `handoff.url`, the phone's browser opens that page on the app's origin instead, and it receives the result and an access key the phone generated, which `Handoff.read()` returns. `handoff: false` hides the QR code.
+- 5fa1ac9: Close the postMessage popup session when its popup closes. A request sent within 250 ms after the previous popup closed (for example `eth_sendTransaction` right after `wallet_connect`) no longer reaches the closed window and fails; it opens a new popup instead.
+- afddb6d: `Handler.relay` answers `eth_fillTransaction` in fewer sequential RPC rounds. It simulates the requested calls alongside the fill instead of after it, and reuses that simulation unless a swap was prepended. It skips `tempo_simulateV1` for 10 minutes after the node reports it unsupported. The autoSwap balance check reuses the fee-token balance already read during fee-token resolution.
+- 2c059cb: Removed the `applePay` deposit intent from `wallet_deposit`, `wallet_connect` and `wallet_authorizeAccessKey`. Tempo Wallet no longer offers fiat or card onramps; use `mach` for MACH checkout.
+- 85642db: Invalidate cached Privy accounts and access keys when the authenticated user changes. Preserve local access keys until shared revocation confirms successful execution.
+- 7b24e3e: Added `WebAuthnCeremony.deferred`, a `WebAuthnCeremony.server` variant that answers registration as soon as the passkey is created and verifies it with the server in the background, retrying requests that fail in transit. The `webAuthn` adapter makes logins and disconnects wait for that verification for up to 10 s, then cancels it, so it can't replace the session that follows. A registration whose server-parsed public key differs from the client's is refused, and one acknowledged without its session ends the session in place. If the server rejects the registration while the page is open, the adapter removes the account and its access keys and keeps the public key in storage; a later login with the passkey restores the account. `WebAuthnCeremony.server` now also ends its session on `wallet_disconnect` when passed as `ceremony`. `WebAuthnCeremony.server`'s `logout` now fails on an error response other than 404. `Handler.webAuthn`'s `/register` revokes the session presented with it when it issues a new one, and answers a retry after a stored registration with `Credential already exists` even when the challenge was already used.
+- 904e9b0: `WebAuthnCeremony.deferred` now also answers a login with a known passkey as soon as its signature checks out against the stored public key, and verifies it with the server (`POST /login`) in the background. `verifyAuthentication` takes an optional `credential` (the signed challenge, public key and RP ID) and `signal`, and may return `verified`, which resolves `{ session }`. The `webAuthn` adapter passes its stored credential and makes later logins, sign-ups and disconnects wait for the verification. A login the server refuses (it doesn't know the credential, the signature fails, or a hook denies it with 401 or 403) ends the session in place and drops the account. A login whose outcome stays unknown (it failed in transit, a retry found its challenge consumed, or the server failed for another reason) ends the session in place (retrying the logout until it succeeds or a later login, sign-up or disconnect cancels it) and keeps the account. `WebAuthnCeremony.server`'s `verifyAuthentication` now returns only its declared fields. Signing a digest with the latest registration's own credential (e.g. an access key authorized right after sign-up) no longer waits for that registration to land, since it needs no server login. `verifyAuthentication` also takes `ready`, a promise a server-backed ceremony waits for before sending `/login`: the adapter passes its wait for earlier registrations, so a deferred login answers at once and only its background `/login` waits. `verifyRegistration` takes `ready` too: a sign-up answers at once, and its background `/register` waits for logins and registrations still verifying, so it still sets the session last.
+- 84d2087: Added `prefetch` to `WebAuthnCeremony.server` and `WebAuthnCeremony.deferred`. It fetches a login and a registration challenge ahead of the ceremonies that use them, so their options are built locally instead of waiting for the server to store a challenge. Each challenge taken is replaced in the background. The `webAuthn` adapter's login with a known passkey uses a prefetched challenge (`takeChallenge`) instead of registering a random one. `Handler.webAuthn`'s `/register/options` issues a challenge without a `name`, and `/register` then takes the name sent with the credential. It binds a random `userId` when none is sent, so `Provider` no longer generates one for `wallet_connect` sign-ups; `WebAuthnCeremony.local`, and `WebAuthnCeremony.server` when it requests its own options, generate a random one instead. The `webAuthn` adapter still passes a random one to ceremonies that don't prefetch.
+  
+  `Handler.webAuthn`'s `/register/options` and `/login/options` now return the challenge `ttl` (seconds) alongside `options`, and `/register` rejects a login challenge.
+- 6a163eb: `Handler.webAuthn`: `/register` reads the challenge and checks for a duplicate credential in parallel, and deletes the challenge after responding when the runtime exposes `waitUntil` (pass the execution context to `handler.fetch`). Stores with `take` (e.g. `Kv.memory`, `Kv.durableObject`) now consume register and login challenges atomically, so each is single-use.
+
+## 0.21.0
+
+### Minor Changes
+
+- a60b2c6: Added `provider.ready()`, which resolves once the provider has loaded its stored state and rejects with `Store.HydrationError` when the storage read fails or takes longer than the new `hydrationTimeout` option (default 10 seconds). `request` now waits for the load instead of continuing with an empty store after 100ms, and rejects with an `RpcResponse.InternalError` caused by the `Store.HydrationError` when the load fails. `getAccount` throws `Store.HydrationError` until the load finishes instead of reporting no accounts.
+  
+  The default storage now uses IndexedDB only where `indexedDB` exists, so React Native gets memory storage, and keeps state in memory when IndexedDB fails.
+- 4008d21: Add an optional `chainId` to `wallet_revokeAccessKey` so callers can revoke an access key on a specific chain. The provider rejects a chain it is not configured for. Local, Privy, dialog, device-code (including CLI), postMessage and mobile web auth revocations target that chain and remove the local key for it only after the revocation succeeds. Other JSON-RPC adapters reject a `chainId` other than the active chain. Omitting `chainId` keeps revoking on the active chain.
+
+### Patch Changes
+
+- 0488591: Limit the WebAuthn adapter's post-registration signing shortcut to the most recent registration, for 5 minutes, so it only applies while that registration still owns the server session. Any later registration, server login or disconnect falls back to server authentication.
+- 0488591: Prompt for the passkey while the WebAuthn ceremony registers the login challenge when the credential is already known (stored account or this session's registration), instead of after the `/login/options` round trip. Falls back to the ceremony's options if they differ from the locally built ones.
+- 6ec2640: Apply `retryCount` to `wallet_revokeAccessKey` in request-based adapters (device code, CLI, postMessage, mobile web auth), which now send revocations through the same transport as other wallet requests. Device-code and CLI revocations are still sent once by default, on the chain named in the request context.
+- af5e9b8: Send device-code wallet requests once by default. A failed or timed-out request such as `eth_sendTransactionSync` or `wallet_revokeAccessKey` was retried up to three times, starting a new approval (and possibly a second transaction) on each attempt. Added `retryCount` to `deviceCode`, `cli`, and the CLI `Provider.create` to opt back into retries. Chain reads still retry.
+- 6b06ace: Route `wallet_updateAccessKey` to the requested `chainId` for dialog, device-code, postMessage and mobile web auth adapters by carrying it in the request context, as `wallet_revokeAccessKey` does, instead of sending it only in params while the context names the active chain. Request-based updates honor `retryCount` like revocations. Mobile web auth now forwards the request context (account and chain) to the wallet like the other Wata transports, which also fixes chain routing for its revocations. Other JSON-RPC adapters reject a `chainId` other than the active chain instead of updating on it. `wallet_revokeAccessKey` and `wallet_updateAccessKey` reject an `address` that is not a connected account before any adapter runs, instead of opening the wallet for it.
+- 2a088fc: Reject `wallet_updateAccessKey` with `UnsupportedChainIdError` when `chainId` is not one of the provider's configured chains, instead of updating the key on the default chain. The request fails before any adapter or wallet approval runs and leaves local access-key state unchanged.
+
+## 0.20.0
+
+### Minor Changes
+
+- 56efdd1: Add an optional `destinationToken` to `wallet_deposit` for destination-aware crypto deposits. Keep the existing `token` source hint and omitted-parameter behavior unchanged. Callers must check the wallet host's destination support before using the new parameter.
+- 56efdd1: Add `Mach.fund` and `Mach.getFundingUrl` to open wallet-bound MACH checkout from browser, mobile, and CLI contexts. Support a funding intent in post-connect and access-key approval deposit prompts. MACH remains distinct from legacy MPP Credits; checkout initiation does not imply payment completion.
+
+### Patch Changes
+
+- e348647: Sign a requested `wallet_connect` digest (for example a `personalSign` SIWE message) during WebAuthn registration while the server verifies the new credential, instead of after verification returns.
+- ceaf876: Remove the authentication challenge resource-count limit while preserving per-resource length and line-break validation.
+- e348647: Sign locally when `wallet_connect` re-authenticates a credential the WebAuthn adapter registered in the same session (for example authorizing an access key right after sign-up), skipping the server authentication options and verification round trips. Disconnecting clears this.
+- 232cc59: Treat access-key authorization expiry `0` as non-expiring when signing, importing, updating, and restoring stored grants. Preserve omitted unrestricted permissions and explicit empty restrictions.
+
+## 0.19.1
+
+### Patch Changes
+
+- 9cf6d39: Updated `mppx` to `0.12.0` and raised the `viem` peer dependency to `>=2.57.1`.
+- f06dd91: Updated `wata` to `0.4.2`. This fixes device-code `/token` polls overwriting the user's approval on eventually-consistent stores like Cloudflare KV.
+- bdf2170: Check fee AMM liquidity before automatically selecting a transaction fee token, falling back to another funded token when the preferred or highest-balance token cannot settle the fee.
+
+## 0.19.0
+
+### Minor Changes
+
+- f059161: Removed multisig relay support and updated Viem to 2.56.9.
+
+### Patch Changes
+
+- 90c760a: Mark newly recorded access-key permissions so consumers can distinguish omitted and empty fields from legacy metadata.
+
+## 0.18.5
+
+### Patch Changes
+
+- d726b78: Allow unpublished access keys to be revoked atomically.
+- 77280cf: Added `mercator.sh` to the list of trusted hosts.
+- f541ab9: Upgraded `mppx` to 0.11.0.
+- a578c58: Applied remote color schemes to wallet theme selectors.
+- c47231a: Allow applications to sponsor access-key revocation transactions.
+
+## 0.18.4
+
+### Patch Changes
+
+- 9146cef: Matched the postMessage iframe color scheme to the wallet theme so transparent backdrops remain translucent.
+- 9531cc2: Added the `mach` wallet deposit intent.
+
+## 0.18.3
+
+### Patch Changes
+
+- 042f584: Added opt-in browser credentials for server-backed WebAuthn ceremonies and OIDC identity token requests.
+
+## 0.18.2
+
+### Patch Changes
+
+- b07bd65: Added chain-aware SIWE signature verification and surfaced RPC failures separately from invalid signatures.
+
+  ```ts
+  Handler.auth({
+    getClient: (chainId) => clients.get(chainId)!,
+  });
+  ```
+
+## 0.18.1
+
+### Patch Changes
+
+- 98968f1: Updated `wata` to 0.4.1.
+
 ## 0.18.0
 
 ### Minor Changes

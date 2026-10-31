@@ -8,14 +8,18 @@ import {
   local,
   postMessage,
   Provider,
+  Storage,
   turnkey,
   webAuthn,
 } from 'accounts'
 import { Mount } from 'accounts'
 import { privy } from 'accounts/react/privy'
 import { Mppx } from 'mppx/client'
+import { getAddress } from 'viem'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
+import { alphausd, betausd, pathusd, thetausd, usdce } from 'viem/tokens'
 
 import { requestTurnkeyEmailOtp, type TurnkeyEmailOtpClient } from './turnkeyOtpStore.js'
 
@@ -47,23 +51,38 @@ export const env: Env = (() => {
 
 export const testnet = env !== 'mainnet'
 
+/**
+ * Provider options of the selected network. On devnet, devnet's chain comes first, so the provider
+ * starts on it and its requests name devnet (31318), where Tempo Wallet signs in with Tempo ID's
+ * configurable accounts. Moderato and mainnet stay configured, so the worker's MPP challenges still
+ * pay. Devnet keeps its own storage, so a chain that another network saved never replaces it.
+ * Mainnet and testnet keep the provider's defaults.
+ */
+export const network =
+  env === 'devnet'
+    ? {
+        chains: [tempoDevnet, tempoModerato, tempo] as const,
+        storage: Storage.combine(Storage.idb({ key: 'tempo.devnet' }), Storage.memory()),
+      }
+    : {}
+
 export const tokensMap = {
   testnet: {
-    pathUSD: '0x20c0000000000000000000000000000000000000',
-    alphaUSD: '0x20c0000000000000000000000000000000000001',
-    betaUSD: '0x20c0000000000000000000000000000000000002',
-    thetaUSD: '0x20c0000000000000000000000000000000000003',
-    'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726',
+    pathUSD: pathusd(42431).address,
+    alphaUSD: alphausd(42431).address,
+    betaUSD: betausd(42431).address,
+    thetaUSD: thetausd(42431).address,
+    'USDC.e': usdce(42431).address,
   },
   devnet: {
-    pathUSD: '0x20c0000000000000000000000000000000000000',
-    alphaUSD: '0x20c0000000000000000000000000000000000001',
-    betaUSD: '0x20c0000000000000000000000000000000000002',
-    thetaUSD: '0x20c0000000000000000000000000000000000003',
+    pathUSD: pathusd(4217).address,
+    alphaUSD: alphausd(42431).address,
+    betaUSD: betausd(42431).address,
+    thetaUSD: thetausd(42431).address,
   },
   mainnet: {
-    pathUSD: '0x20c0000000000000000000000000000000000000',
-    'USDC.e': '0x20C000000000000000000000b9537d11c60E8b50',
+    pathUSD: pathusd(4217).address,
+    'USDC.e': getAddress(usdce(4217).address),
   },
 } as const
 
@@ -111,6 +130,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         theme,
       }),
       mpp: mpp(),
+      ...network,
       testnet,
     })
 
@@ -127,6 +147,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         rdns: 'xyz.tempo',
       }),
       mpp: mpp(),
+      ...network,
       testnet,
     })
   }
@@ -147,6 +168,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: webAuthn({ ceremony }),
       mpp: mpp(),
+      ...network,
       testnet,
     })
   }
@@ -171,6 +193,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         },
       }),
       mpp: mpp(),
+      ...network,
       testnet,
     })
   }
@@ -182,6 +205,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: privy(),
       mpp: true,
+      ...network,
       testnet,
     })
   }
@@ -198,6 +222,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       },
     }),
     mpp: mpp(),
+    ...network,
     testnet,
   })
 }

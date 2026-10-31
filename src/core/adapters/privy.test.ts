@@ -1,9 +1,10 @@
 import { Address as core_Address, Hex, Secp256k1, Signature } from 'ox'
-import { decodeFunctionData } from 'viem'
+import { BaseError, decodeFunctionData, encodeEventTopics } from 'viem'
 import type { Address } from 'viem/accounts'
-import { Abis } from 'viem/tempo'
+import { Abis, Account } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
+import * as Provider from '../Provider.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { privy } from './privy.js'
@@ -28,6 +29,147 @@ function privateKeyForAddress(walletAddress: string): Hex.Hex {
 }
 
 describe('privy', () => {
+  test.each(['mpp', 'explicit mpp', 'fill'] as const)(
+    '%s rejects retained keys after session expiry',
+    async (path) => {
+      const client = createClient({ token: null })
+      const provider = Provider.create({
+        adapter: privy({ client, loadAccounts: async () => [address] }),
+        storage: Storage.memory(),
+      })
+      const chainId = provider.store.getState().chainId
+      await provider.store.accessKeys.authorize({
+        account: Account.fromSecp256k1(privateKeyA),
+        chainId,
+        parameters: { privateKey: privateKeyB, expiry: 9999999999 },
+      })
+      provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+      const key = provider.store.getState().accessKeys[0]!
+      const request =
+        path === 'fill'
+          ? provider.request({
+              method: 'eth_fillTransaction',
+              params: [{ from: address, to: other }],
+            })
+          : provider
+              .getMppxParameters(path === 'explicit mpp' ? { accessKey: key.address } : {})
+              .resolveAccount({
+                account: { address, type: 'json-rpc' },
+                chainId,
+                operation: { kind: 'authorizePaymentChannel' },
+              })
+      await expect(request).rejects.toThrow('Privy session expired')
+      expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+    },
+  )
+
+  test.each(['send', 'fill', 'mpp', 'personal_sign'] as const)(
+    '%s rejects a warm cache after the Privy user changes',
+    async (path) => {
+      const client = createClient()
+      const provider = Provider.create({
+        adapter: privy({ client, loadAccounts: async () => undefined }),
+        storage: Storage.memory(),
+      })
+      await provider.request({ method: 'wallet_connect' })
+      const chainId = provider.store.getState().chainId
+      await provider.store.accessKeys.authorize({
+        account: Account.fromSecp256k1(privateKeyA),
+        chainId,
+        parameters: { privateKey: privateKeyB, expiry: 9999999999 },
+      })
+      client.userId = 'user_2'
+      client.wallets = [client.makeWallet(other)]
+      const request =
+        path === 'mpp'
+          ? provider.getMppxParameters().resolveAccount({
+              account: { address, type: 'json-rpc' },
+              chainId,
+              operation: { kind: 'authorizePaymentChannel' },
+            })
+          : path === 'personal_sign'
+            ? provider.request({ method: 'personal_sign', params: ['0x1234', address] })
+            : provider.request({
+                method: path === 'send' ? 'eth_sendTransaction' : 'eth_fillTransaction',
+                params: [{ from: address, to: other }],
+              })
+      await expect(request).rejects.toThrow('Privy session changed')
+      expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+      expect(provider.store.getState().accounts).toMatchInlineSnapshot(`[]`)
+      await provider.request({ method: 'wallet_connect' })
+      expect(provider.store.getState().accounts.map((account) => account.address)).toEqual([other])
+      await provider.request({ method: 'personal_sign', params: ['0x1234', other] })
+      expect(client.signWith).toEqual([other])
+    },
+  )
+
+  test('reconnecting after a user switch replaces cached accounts', async () => {
+    const { adapter, client, store } = setup()
+    await connect({ adapter, store })
+    client.userId = 'user_2'
+    client.wallets = [client.makeWallet(other)]
+    const result = await adapter.actions.loadAccounts(
+      {},
+      { method: 'wallet_connect', params: undefined },
+    )
+    expect(result.accounts.map((account) => account.address)).toEqual([other])
+  })
+
+  test('rejects a user switch while loading wallet providers', async () => {
+    const { adapter, client } = setup()
+    const getProvider = client.embeddedWallet.getEthereumProvider
+    client.embeddedWallet.getEthereumProvider = async (parameters) => {
+      const provider = await getProvider(parameters)
+      client.userId = 'user_2'
+      return provider
+    }
+    await expect(
+      adapter.actions.loadAccounts({}, { method: 'wallet_connect', params: undefined }),
+    ).rejects.toThrow('Privy session changed')
+    expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('connect retains its loaded owner after a concurrent clear', async () => {
+    const { adapter, client, store } = setup()
+    await connect({ adapter, store })
+    const wallet = client.wallets[0]!
+    const request = wallet.provider.request.bind(wallet.provider)
+    wallet.provider.request = async (parameters) => {
+      client.userId = 'other-user'
+      await expect(adapter.assertAccount!({ address })).rejects.toThrow('Privy session changed')
+      client.userId = 'user_1'
+      return request(parameters)
+    }
+    const result = await adapter.actions.loadAccounts(
+      { digest: '0x1234' },
+      { method: 'wallet_connect', params: undefined },
+    )
+    store.setState({ accounts: result.accounts, activeAccount: 0 })
+    client.userId = 'other-user'
+    await expect(adapter.assertAccount!({ address })).rejects.toThrow('Privy session changed')
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('reconnect clears stale accounts on user lookup session errors', async () => {
+    const { adapter, client, store } = setup()
+    await connect({ adapter, store })
+    client.user.get = async () => {
+      throw Object.assign(new Error('session expired'), { code: 'session_expired' })
+    }
+    await expect(connect({ adapter, store })).rejects.toThrow('Privy session expired')
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('validates the Privy session before retained-key use', async () => {
+    const { adapter, client, store } = setup({ token: null })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+    await expect(adapter.assertAccount!({ address })).rejects.toThrow('Privy session expired')
+    expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
   test('default: createAccount delegates registration and signs the requested digest', async () => {
     const { adapter, client } = setup()
 
@@ -241,7 +383,7 @@ describe('privy', () => {
     )
 
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
-    expect(client.restoreCalls).toMatchInlineSnapshot(`1`)
+    expect(client.restoreCalls).toMatchInlineSnapshot(`4`)
     expect(result).toMatchInlineSnapshot(`
     	{
     	  "keyAuthorization": {
@@ -275,6 +417,48 @@ describe('privy', () => {
       `[RpcResponse.InvalidParamsError: \`keyType: "secp256k1"\` requires externally generated key material; provide \`publicKey\` or \`address\`.]`,
     )
   })
+
+  test('revokeAccessKey retains the key until confirmation', async () => {
+    let confirm!: () => void
+    const confirmation = new Promise<void>((resolve) => {
+      confirm = resolve
+    })
+    const { adapter, client, store } = setup({ confirmation })
+    const keys = [{ access: address, address: other, chainId: 1, keyType: 'secp256k1' }] as never
+    store.setState({ accounts: [{ address }], activeAccount: 0, accessKeys: keys })
+    let finished = false
+    const pending = adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address },
+      { method: 'wallet_revokeAccessKey', params: [{ accessKeyAddress: other, address }] },
+    ).then(() => {
+      finished = true
+    })
+    for (let i = 0; i < 100 && client.transactions.length === 0; i++) await Promise.resolve()
+    expect(client.transactions.length).toMatchInlineSnapshot(`1`)
+    expect(finished).toMatchInlineSnapshot(`false`)
+    expect(store.getState().accessKeys).toEqual(keys)
+    confirm()
+    await pending
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
+  test.each(['pending', 'reverted'] as const)(
+    'revokeAccessKey rejects a %s receipt without removing the key',
+    async (receiptStatus) => {
+      const { adapter, store } = setup({ receiptStatus })
+      const keys = [{ access: address, address: other, chainId: 1, keyType: 'secp256k1' }] as never
+      store.setState({ accounts: [{ address }], activeAccount: 0, accessKeys: keys })
+      await expect(
+        adapter.actions.revokeAccessKey!(
+          { accessKeyAddress: other, address },
+          { method: 'wallet_revokeAccessKey', params: [{ accessKeyAddress: other, address }] },
+        ),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Error: Access-key revocation is not confirmed]`,
+      )
+      expect(store.getState().accessKeys).toEqual(keys)
+    },
+  )
 
   test('default: revokeAccessKey revokes with the connected Privy account', async () => {
     const { adapter, client, store } = setup()
@@ -323,6 +507,191 @@ describe('privy', () => {
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: revokeAccessKey targets an explicit chainId', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({
+      accounts: [{ address }],
+      activeAccount: 0,
+      accessKeys: [1, 4217].map(
+        (chainId) =>
+          ({
+            access: address,
+            address: other,
+            chainId,
+            keyType: 'secp256k1',
+          }) as never,
+      ),
+    })
+
+    await adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address, chainId: 4217n },
+      {
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress: other, address, chainId: '0x1079' }],
+      },
+    )
+
+    expect({
+      accessKeys: store.getState().accessKeys,
+      clientOptions: client.clientOptions,
+    }).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [
+          {
+            "access": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+            "address": "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+            "chainId": 1,
+            "keyType": "secp256k1",
+          },
+        ],
+        "clientOptions": [
+          {
+            "chainId": 4217,
+            "feePayer": undefined,
+          },
+        ],
+      }
+    `)
+  })
+
+  test('behavior: revokeAccessKey forwards a fee payer URL', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address, feePayer: 'https://example.com/fee-payer' },
+      {
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress: other, address, feePayer: 'https://example.com/fee-payer' }],
+      },
+    )
+
+    expect({
+      clientOptions: client.clientOptions,
+      transactions: client.transactions,
+    }).toMatchInlineSnapshot(`
+      {
+        "clientOptions": [
+          {
+            "chainId": 1,
+            "feePayer": "https://example.com/fee-payer",
+          },
+        ],
+        "transactions": [
+          {
+            "account": {
+              "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+              "sign": [Function],
+              "signTransaction": [Function],
+              "source": "privy",
+              "type": "local",
+            },
+            "data": "0x5ae7ab320000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf",
+            "feePayer": true,
+            "throwOnReceiptRevert": true,
+            "to": "0xaAAAaaAA00000000000000000000000000000000",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('error: revokeAccessKey preserves local state on external fee payer errors', async () => {
+    const transactionError = new BaseError('revoke failed', {
+      cause: Object.assign(new Error('execution reverted'), {
+        data: { errorName: 'KeyAlreadyRevoked' },
+      }),
+    })
+    const { adapter, store } = setup({ transactionError })
+    store.setState({
+      accounts: [{ address }],
+      activeAccount: 0,
+      accessKeys: [
+        {
+          access: address,
+          address: other,
+          chainId: 1,
+          keyType: 'secp256k1',
+        } as never,
+      ],
+    })
+
+    await expect(
+      adapter.actions.revokeAccessKey!(
+        { accessKeyAddress: other, address, feePayer: 'https://example.com/fee-payer' },
+        {
+          method: 'wallet_revokeAccessKey',
+          params: [{ accessKeyAddress: other, address, feePayer: 'https://example.com/fee-payer' }],
+        },
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`
+      [ContractFunctionExecutionError: revoke failed
+
+      Contract Call:
+        address:   0xaAAAaaAA00000000000000000000000000000000
+        function:  revokeKey(address keyId)
+        args:               (0x2b5ad5c4795c026514f8317c7a215e218dccd6cf)
+        sender:    0x7e5f4552091a69125d5dfcb7b8c2659029395bdf
+
+      Docs: https://viem.sh/docs/contract/writeContract
+      Details: execution reverted
+      Version: viem@0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26]
+    `)
+
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`
+      [
+        {
+          "access": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+          "address": "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+          "chainId": 1,
+          "keyType": "secp256k1",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: revokeAccessKey forwards default fee sponsorship', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address, feePayer: true },
+      {
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress: other, address, feePayer: true }],
+      },
+    )
+
+    expect({
+      clientOptions: client.clientOptions,
+      transactions: client.transactions,
+    }).toMatchInlineSnapshot(`
+      {
+        "clientOptions": [
+          {
+            "chainId": 1,
+            "feePayer": undefined,
+          },
+        ],
+        "transactions": [
+          {
+            "account": {
+              "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+              "sign": [Function],
+              "signTransaction": [Function],
+              "source": "privy",
+              "type": "local",
+            },
+            "data": "0x5ae7ab320000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf",
+            "feePayer": true,
+            "throwOnReceiptRevert": true,
+            "to": "0xaAAAaaAA00000000000000000000000000000000",
+          },
+        ],
+      }
+    `)
+  })
+
   test('behavior: signing silently restores wallet accounts via the Privy SDK', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -332,7 +701,7 @@ describe('privy', () => {
       { method: 'personal_sign', params: ['0x68656c6c6f', address] },
     )
 
-    expect(client.restoreCalls).toMatchInlineSnapshot(`1`)
+    expect(client.restoreCalls).toMatchInlineSnapshot(`4`)
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
   })
 
@@ -566,7 +935,9 @@ describe('privy', () => {
   })
 
   test('error: unsupported secp256k1_sign maps to UnsupportedMethodError', async () => {
-    const { adapter, store } = setup({ signError: { code: 4200, message: 'Method not supported' } })
+    const { adapter, store } = setup({
+      signError: { code: 4200, message: 'Method not supported' },
+    })
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
@@ -642,13 +1013,35 @@ function setup(options: setup.Options = {}) {
     getAccount: (() => {
       throw new Error('not implemented')
     }) as never,
-    getClient: (() => ({
-      chain: { id: 1 },
-      sendTransaction: async (parameters: unknown) => {
-        client.transactions.push(parameters)
-        return Hex.padLeft('0x1', 32)
-      },
-    })) as never,
+    getClient: ((clientOptions: unknown) => {
+      client.clientOptions.push(clientOptions)
+      return {
+        chain: { id: 1 },
+        sendTransactionSync: async (parameters: unknown) => {
+          client.transactions.push(parameters)
+          if (options.transactionError) throw options.transactionError
+          await options.confirmation
+          return {
+            status: options.receiptStatus ?? 'success',
+            logs: [
+              {
+                data: '0x',
+                topics: encodeEventTopics({
+                  abi: Abis.accountKeychain,
+                  eventName: 'KeyRevoked',
+                  args: { account: address, publicKey: other },
+                }),
+              },
+            ],
+          }
+        },
+        sendTransaction: async (parameters: unknown) => {
+          client.transactions.push(parameters)
+          if (options.transactionError) throw options.transactionError
+          return Hex.padLeft('0x1', 32)
+        },
+      }
+    }) as never,
     storage,
     store,
   })
@@ -675,6 +1068,10 @@ declare namespace setup {
     restoreError?: unknown
     token?: string | null | undefined
     signError?: unknown
+    /** Make the mock wallet client transaction fail. */
+    transactionError?: unknown
+    confirmation?: Promise<void> | undefined
+    receiptStatus?: 'success' | 'pending' | 'reverted' | undefined
     /** Override the value returned by the embedded provider's `secp256k1_sign`. */
     signResult?: unknown
     /** Force the test wallet to sign with this private key (for wrong-signer tests). */
@@ -683,12 +1080,14 @@ declare namespace setup {
 }
 
 type MockClient = privy.Client & {
+  clientOptions: unknown[]
   createCalls: number
   initCalls: number
   loadCalls: number
   logoutCalls: number
   logoutWith: (string | undefined)[]
   restoreCalls: number
+  userId: string
   signPayloads: Hex.Hex[]
   signWith: string[]
   transactions: unknown[]
@@ -699,12 +1098,14 @@ type MockClient = privy.Client & {
 
 function createClient(options: setup.Options = {}) {
   const client: MockClient = {
+    clientOptions: [] as unknown[],
     createCalls: 0,
     initCalls: 0,
     loadCalls: 0,
     logoutCalls: 0,
     logoutWith: [] as (string | undefined)[],
     restoreCalls: 0,
+    userId: 'user_1',
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
     transactions: [] as unknown[],
@@ -767,7 +1168,7 @@ function createClient(options: setup.Options = {}) {
         if (options.restoreError) throw options.restoreError
         return {
           user: {
-            id: 'user_1',
+            id: client.userId,
             linked_accounts: client.wallets.map((wallet, index) => ({
               address: wallet.address,
               chain_type: 'ethereum',

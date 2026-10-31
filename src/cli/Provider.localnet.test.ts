@@ -3,15 +3,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Address, Hex } from 'ox'
 import { Hex as ox_Hex } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { type Address as ViemAddress, hashMessage, parseUnits } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
+import { tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test, vi } from 'vp/test'
 import type * as z from 'zod/mini'
 
 import { accounts, chain, getClient } from '../../test/config.js'
 import { createDeviceCodeHost, submitVerify } from '../../test/deviceCode.js'
 import { createJsonStorage, createServer } from '../../test/utils.js'
+import * as Adapter from '../core/Adapter.js'
 import type * as Rpc from '../core/zod/rpc.js'
 import * as Handler from '../server/Handler.js'
 import * as Provider from './Provider.js'
@@ -121,7 +123,7 @@ describe('Provider.create', () => {
         ? {
             ...account.capabilities.keyAuthorization,
             signature: {
-              type: account.capabilities.keyAuthorization.signature.type,
+              type: SignatureEnvelope.fromRpc(account.capabilities.keyAuthorization.signature).type,
             },
           }
         : undefined
@@ -525,7 +527,7 @@ describe('Provider.create', () => {
       const keyAuthorization = {
         ...result.keyAuthorization,
         signature: {
-          type: result.keyAuthorization.signature.type,
+          type: SignatureEnvelope.fromRpc(result.keyAuthorization.signature).type,
         },
       }
 
@@ -578,6 +580,112 @@ describe('Provider.create', () => {
         'wallet_connect',
         'wallet_revokeAccessKey',
       ])
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test.each([
+    { case: 'defaults to the active chain', chainId: undefined, keys: [] },
+    { case: 'targets an explicit chainId', chainId: tempoModerato.id, keys: [chain.id] },
+  ])('behavior: wallet_revokeAccessKey $case', async ({ chainId, keys }) => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
+
+    try {
+      const provider = Provider.create({
+        chains: [chain, tempoModerato],
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
+        },
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { authorizeAccessKey: { expiry: expiry_2 } } }],
+      })
+      const account = result.accounts[0]!
+      const accessKeyAddress = account.capabilities.keyAuthorization!.keyId
+
+      // Record the chain the wallet is on when it revokes.
+      const revocations: { chainId: number; parameters: unknown }[] = []
+      host.setProviderOptions({
+        adapter: Adapter.define({}, ({ store }) => ({
+          actions: {
+            createAccount: async () => ({ accounts: [root] }),
+            loadAccounts: async () => ({ accounts: [root] }),
+            async revokeAccessKey(parameters) {
+              revocations.push({ chainId: store.getState().chainId, parameters })
+            },
+          },
+        })),
+      })
+
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [
+          {
+            accessKeyAddress,
+            address: account.address,
+            ...(chainId ? { chainId: ox_Hex.fromNumber(chainId) } : {}),
+          },
+        ],
+      })
+
+      expect(revocations).toEqual([
+        {
+          chainId: chainId ?? chain.id,
+          parameters: {
+            accessKeyAddress,
+            address: account.address,
+            ...(chainId ? { chainId: BigInt(chainId) } : {}),
+          },
+        },
+      ])
+      expect(provider.store.getState().accessKeys.map((key) => key.chainId)).toEqual(keys)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('error: wallet_revokeAccessKey rejects an unconfigured chainId before approval', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
+        },
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { authorizeAccessKey: { expiry: expiry_2 } } }],
+      })
+      const account = result.accounts[0]!
+
+      await expect(
+        provider.request({
+          method: 'wallet_revokeAccessKey',
+          params: [
+            {
+              accessKeyAddress: account.capabilities.keyAuthorization!.keyId,
+              address: account.address,
+              chainId: ox_Hex.fromNumber(tempoModerato.id),
+            },
+          ],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UnsupportedChainIdError: Chain 42431 not configured.]`,
+      )
+      expect(host.requests().map(({ method }) => method)).toEqual(['wallet_connect'])
+      expect(provider.store.getState().accessKeys).toHaveLength(1)
     } finally {
       await server.closeAsync()
     }
@@ -938,6 +1046,62 @@ describe('Provider.create', () => {
       await server.closeAsync()
     }
   })
+
+  test.each([{ chainId: 1 }, { chainId: tempoModerato.id }])(
+    'error: wallet_updateAccessKey rejects unconfigured chain $chainId before approval',
+    async ({ chainId }) => {
+      const host = createDeviceCodeHost()
+      const server = await createServer(host.listener)
+
+      try {
+        const provider = Provider.create({
+          chains: [chain],
+          open: async (_url, prompt) => {
+            await submitVerify(prompt)
+          },
+          host: `${server.url}/auth/device`,
+          storage: createJsonStorage(),
+        })
+
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [
+            {
+              capabilities: {
+                authorizeAccessKey: {
+                  expiry: expiry_2,
+                  limits: [{ limit: ox_Hex.fromNumber(1n), token: Addresses.pathUsd }],
+                },
+              },
+            },
+          ],
+        })
+        const account = result.accounts[0]!
+        const accessKeys = provider.store.getState().accessKeys
+
+        await expect(
+          provider.request({
+            method: 'wallet_updateAccessKey',
+            params: [
+              {
+                address: account.address,
+                accessKeyAddress: account.capabilities.keyAuthorization!.keyId,
+                chainId: ox_Hex.fromNumber(chainId),
+                limits: [{ limit: ox_Hex.fromNumber(9n), token: Addresses.pathUsd }],
+              },
+            ],
+          }),
+        ).rejects.toMatchObject({
+          message: `Chain ${chainId} not configured.`,
+          name: 'Provider.UnsupportedChainIdError',
+        })
+        expect(host.requests().map(({ method }) => method)).toEqual(['wallet_connect'])
+        expect(provider.store.getState().accessKeys).toEqual(accessKeys)
+      } finally {
+        await server.closeAsync()
+      }
+    },
+  )
 
   test('behavior: regenerates a managed key when the requested key type changes', async () => {
     const host = createDeviceCodeHost()

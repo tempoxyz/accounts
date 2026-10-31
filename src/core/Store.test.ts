@@ -31,6 +31,26 @@ async function getPersistedState(storage: Storage.Storage) {
   return persisted?.state
 }
 
+const stored = {
+  state: { accounts: [{ address: account }], activeAccount: 0, chainId: 456 },
+  version: 0,
+}
+
+/** Storage whose reads stay pending until the test settles them through `reads`. */
+function createPendingStorage() {
+  const reads: { reject: (error: unknown) => void; resolve: (value: unknown) => void }[] = []
+  const storage = {
+    getItem<value>() {
+      return new Promise<value | null>((resolve, reject) =>
+        reads.push({ reject, resolve: (value) => resolve(value as value | null) }),
+      )
+    },
+    removeItem() {},
+    setItem() {},
+  } satisfies Storage.Storage
+  return { reads, storage }
+}
+
 describe('create', () => {
   test('default', () => {
     const store = Store.create({ chainId: 123 })
@@ -506,5 +526,166 @@ describe('waitForHydration', () => {
     await Store.waitForHydration(store)
 
     expect(store.getState().chainId).toMatchInlineSnapshot(`123`)
+  })
+
+  test('behavior: waits for a slow storage read', async () => {
+    const { reads, storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+
+    let settled = false
+    const hydration = Store.waitForHydration(store).finally(() => (settled = true))
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(settled).toMatchInlineSnapshot(`false`)
+
+    reads[0]!.resolve(stored)
+    await hydration
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x0000000000000000000000000000000000000001",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: settles with a load that replaces a pending one', async () => {
+    const { reads, storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+
+    const hydration = Store.waitForHydration(store)
+    void store.persist.rehydrate()
+    reads[0]!.resolve(null)
+    reads[1]!.resolve(stored)
+    await hydration
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x0000000000000000000000000000000000000001",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: only the newest overlapping load settles hydration', async () => {
+    const { reads, storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+
+    let settled = false
+    const hydration = Store.waitForHydration(store).finally(() => (settled = true))
+    void store.persist.rehydrate()
+    reads[0]!.resolve(stored)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(settled).toMatchInlineSnapshot(`false`)
+
+    reads[1]!.reject(new Error('disk unavailable'))
+    await expect(hydration).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Failed to load persisted state from storage.]`,
+    )
+    expect(() => Store.assertHydrated(store)).toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Failed to load persisted state from storage.]`,
+    )
+  })
+
+  test('behavior: ignores a second report from a settled load', async () => {
+    const { reads, storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+    // zustand reports a throwing finish listener as a failed load after the success.
+    store.persist.onFinishHydration(() => {
+      throw new Error('listener failed')
+    })
+
+    reads[0]!.resolve(stored)
+    await Store.waitForHydration(store)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(Store.assertHydrated(store)).toMatchInlineSnapshot(`undefined`)
+    await Store.waitForHydration(store)
+  })
+
+  test('behavior: stays loaded while a later load refreshes it', async () => {
+    const { reads, storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+    reads[0]!.resolve(stored)
+    await Store.waitForHydration(store)
+
+    void store.persist.rehydrate()
+
+    expect(store.persist.hasHydrated()).toMatchInlineSnapshot(`false`)
+    expect(Store.assertHydrated(store)).toMatchInlineSnapshot(`undefined`)
+    await Store.waitForHydration(store)
+  })
+
+  test('behavior: retries a failed load', async () => {
+    const { reads, storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+    reads[0]!.reject(new Error('disk unavailable'))
+    await expect(Store.waitForHydration(store)).rejects.toThrow()
+
+    void store.persist.rehydrate()
+    const hydration = Store.waitForHydration(store)
+    reads[1]!.resolve(stored)
+    await hydration
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x0000000000000000000000000000000000000001",
+        },
+      ]
+    `)
+  })
+
+  test('error: rejects when the storage read fails', async () => {
+    const { reads, storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+    const error = new Error('disk unavailable')
+    reads[0]!.reject(error)
+
+    await expect(Store.waitForHydration(store)).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Failed to load persisted state from storage.]`,
+    )
+    await expect(Store.waitForHydration(store)).rejects.toHaveProperty('cause', error)
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('error: rejects when storage does not load within the timeout', async () => {
+    const { storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+
+    await expect(
+      Store.waitForHydration(store, { timeout: 10 }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Persisted state did not load from storage within 10ms.]`,
+    )
+  })
+})
+
+describe('assertHydrated', () => {
+  test('default: passes once persisted state has loaded', () => {
+    const store = Store.create({ chainId: 123, storage: Storage.memory() })
+
+    expect(Store.assertHydrated(store)).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test('error: throws while persisted state is loading', () => {
+    const { storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+
+    expect(() => Store.assertHydrated(store)).toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Persisted state is still loading from storage. Await \`provider.ready()\` first.]`,
+    )
+  })
+
+  test('error: throws the error a failed load rejected with', async () => {
+    const { reads, storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+    reads[0]!.reject(new Error('disk unavailable'))
+    await expect(Store.waitForHydration(store)).rejects.toThrow()
+
+    expect(() => Store.assertHydrated(store)).toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Failed to load persisted state from storage.]`,
+    )
   })
 })

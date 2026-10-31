@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      id-token: write
       pull-requests: write
 
     strategy:
@@ -33,32 +34,37 @@ jobs:
               VITE_PRIVY_CLIENT_ID=client-WY6TQmgzdwgp2ZkrEXJBDscCamyaXNyXrTYoVRkMYm2rk
           - name: Wagmi
             directory: playgrounds/wagmi
+          - name: Bench
+            directory: bench
 
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
       - name: Clone repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
       - name: Install dependencies
-        uses: ./.github/actions/install-dependencies
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
 
       - name: Build accounts
         run: pnpm build
 
-      - name: Build
-        working-directory: ${{ matrix.worker.directory }}
-        run: |
-          if [ -n "$BUILD_ENV" ]; then
-            export ${BUILD_ENV}
-          fi
-          pnpm build
+      - name: Configure build environment
+        if: matrix.worker.build-env != ''
+        run: printf '%s\n' "$BUILD_ENV" >> "$GITHUB_ENV"
         env:
           BUILD_ENV: ${{ matrix.worker.build-env }}
 
+      - name: Build
+        working-directory: ${{ matrix.worker.directory }}
+        run: pnpm build
+
       - name: Deploy
         if: github.event_name != 'pull_request'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -67,7 +73,7 @@ jobs:
       - name: Preview
         id: preview
         if: github.event_name == 'pull_request'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -76,7 +82,7 @@ jobs:
 
       - name: Preview URL
         if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        uses: tempoxyz/gh-actions/actions/pr-comment@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
         with:
           header: deploy-${{ matrix.worker.name }}
           message: |

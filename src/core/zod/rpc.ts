@@ -51,6 +51,7 @@ type KeyAuthorizationRpcDecoded = Omit<KeyAuthorization.Rpc, 'chainId' | 'expiry
   address?: KeyAuthorization.Rpc['keyId'] | undefined
   chainId: bigint
   expiry: number | null | undefined
+  keyType: z.output<typeof keyType>
   limits?:
     | readonly {
         token: KeyAuthorization.RpcTokenLimit['token']
@@ -133,7 +134,7 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
       chainId: keyAuthorization.chainId === '0x' ? 0n : Hex.toBigInt(keyAuthorization.chainId),
       expiry: keyAuthorization.expiry == null ? null : Hex.toNumber(keyAuthorization.expiry),
       keyId: keyAuthorization.keyId,
-      keyType: keyAuthorization.keyType,
+      keyType: z.parse(keyType, keyAuthorization.keyType),
       limits: keyAuthorization.limits?.map(({ limit, period, token }) => ({
         token,
         limit: Hex.toBigInt(limit),
@@ -448,6 +449,17 @@ export namespace wallet_getCapabilities {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
+/** Funding path shared by standalone deposits and post-authorization prompts. */
+const depositIntent = z.union([
+  // Legacy links remain valid; wallets route this alias to MACH checkout.
+  z.literal('credits'),
+  z.literal('crypto'),
+  z.literal('faucet'),
+  z.literal('mach'),
+  z.literal('referralCode'),
+  z.literal('x'),
+])
+
 export namespace wallet_authorizeAccessKey {
   /**
    * Shows an optional funding prompt after `wallet_authorizeAccessKey`
@@ -463,6 +475,8 @@ export namespace wallet_authorizeAccessKey {
         amount: z.optional(z.string()),
         /** Display name shown in the deposit UI (e.g. the app name). */
         displayName: z.optional(z.string()),
+        /** Preferred funding path. Use `mach` to open MACH checkout. */
+        intent: z.optional(depositIntent),
         /**
          * Token to pre-fill, accepted as either a contract address or a
          * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
@@ -540,11 +554,23 @@ export namespace wallet_authorizeAccessKey_strict {
 }
 
 export namespace wallet_revokeAccessKey {
+  /** Parameters for revoking an access key. */
+  export const parameters = z.object({
+    /** Root account address. */
+    address: u.address(),
+    /** Address of the access key to revoke. */
+    accessKeyAddress: u.address(),
+    /** Chain ID the access key is scoped to. Defaults to the active chain. */
+    chainId: z.optional(u.bigint()),
+    /** App-provided fee sponsorship for the revocation transaction. */
+    feePayer: z.optional(z.union([z.boolean(), z.string()])),
+    /** Signed authorization for an access key that has not been published on-chain. */
+    keyAuthorization: z.optional(keyAuthorization),
+  })
+
   export const schema = Schema.defineItem({
     method: z.literal('wallet_revokeAccessKey'),
-    params: z.readonly(
-      z.tuple([z.object({ address: u.address(), accessKeyAddress: u.address() })]),
-    ),
+    params: z.readonly(z.tuple([parameters])),
     returns: undefined,
   })
   export type Encoded = Schema.Encoded<typeof schema>
@@ -588,6 +614,8 @@ export namespace wallet_connect {
         amount: z.optional(z.string()),
         /** Display name shown in the deposit UI (e.g. the app name). */
         displayName: z.optional(z.string()),
+        /** Preferred funding path. Use `mach` to open MACH checkout. */
+        intent: z.optional(depositIntent),
         /** Auth event that should show the deposit prompt. Defaults to any event. */
         on: z.optional(z.union([z.literal('login'), z.literal('register')])),
         /**
@@ -1014,17 +1042,14 @@ export namespace wallet_deposit {
             amount: z.optional(z.string()),
             chainId: z.optional(u.number()),
             displayName: z.optional(z.string()),
+            /**
+             * Destination address or symbol for crypto deposits; independent of the source `token` hint.
+             * Omit for the wallet's default asset. Check the wallet host's `/api/bridge/destinations`
+             * endpoint before use: older wallets may discard unknown parameters.
+             */
+            destinationToken: z.optional(z.string()),
             /** Preferred funding path to show first. */
-            intent: z.optional(
-              z.union([
-                z.literal('applePay'),
-                z.literal('credits'),
-                z.literal('crypto'),
-                z.literal('faucet'),
-                z.literal('referralCode'),
-                z.literal('x'),
-              ]),
-            ),
+            intent: z.optional(depositIntent),
             /**
              * Token to pre-fill, accepted as either a contract address or a
              * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
@@ -1038,8 +1063,8 @@ export namespace wallet_deposit {
       z.object({
         /**
          * Receipts of any onchain operations performed during the
-         * deposit (e.g. testnet faucet drops). Absent for offchain
-         * paths like Apple Pay where funds arrive asynchronously.
+         * deposit (e.g. testnet faucet drops). Absent for paths
+         * where funds arrive asynchronously.
          */
         receipts: z.optional(z.readonly(z.array(receipt))),
       }),

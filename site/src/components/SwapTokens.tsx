@@ -1,14 +1,15 @@
 'use client'
 
 import { Button } from 'regen-ui'
+import { alphausd, pathusd } from 'viem/tokens'
 import { tempoModerato } from 'wagmi/chains'
 import { Hooks } from 'wagmi/tempo'
 import LucideCircleCheck from '~icons/lucide/circle-check'
 
 import * as Steps from './Steps.js'
 
-const pathUsd = '0x20c0000000000000000000000000000000000000'
-const alphaUsd = '0x20c0000000000000000000000000000000000001'
+const pathUsd = pathusd(42431).address
+const alphaUsd = alphausd(42431).address
 
 /**
  * Demo step for opening a pre-filled swap.

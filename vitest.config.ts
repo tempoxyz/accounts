@@ -3,6 +3,7 @@ import { defineConfig } from 'vp'
 
 export default defineConfig({
   resolve: {
+    dedupe: ['vp', 'vitest'],
     alias: {
       accounts: join(import.meta.dirname, './src'),
     },
@@ -18,6 +19,7 @@ export default defineConfig({
         test: {
           include: [
             './src/**/*.test.ts',
+            './scripts/**/*.test.ts',
             '!./src/**/*.browser.test.ts',
             '!./src/**/*.localnet.test.ts',
           ],

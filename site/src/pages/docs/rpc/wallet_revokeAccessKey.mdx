@@ -7,6 +7,8 @@ description: Revoke a previously authorized access key.
 
 Revokes a previously authorized access key.
 
+Access keys are scoped to a chain. Pass `chainId` to revoke a key on a specific chain; otherwise the provider's active chain is used. The chain must be one of the chains the provider was configured with — an unknown chain throws an `UnsupportedChainId` error. A custom adapter that can only reach its wallet on the active chain rejects any other `chainId` with the same error; switch chains with [`wallet_switchEthereumChain`](/docs/rpc/wallet_switchEthereumChain) first.
+
 ## Request
 
 ```ts
@@ -17,6 +19,17 @@ type Request = {
     address: Address
     /** Address of the access key to revoke. */
     accessKeyAddress: Address
+    /**
+     * Chain ID the access key is scoped to. Defaults to the active chain.
+     * Hex-encoded (`0x...`) on the wire, decoded to `bigint`.
+     */
+    chainId?: bigint
+    /**
+     * Fee sponsorship for the revocation transaction. `true` uses the
+     * provider or remote wallet's configured sponsor, `false` opts out,
+     * and a URL requests sponsorship from that endpoint.
+     */
+    feePayer?: boolean | string
   }]
 }
 ```
@@ -35,6 +48,8 @@ await provider.request({
   params: [{
     address: '0x...',
     accessKeyAddress: '0x...',
+    chainId: '0x1079',
+    feePayer: 'https://example.com/fee-payer',
   }],
 })
 ```

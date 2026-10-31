@@ -255,6 +255,21 @@ const provider = Provider.create({
 })
 ```
 
+### retryCount
+
+- **Type:** `number`
+- **Default:** `0`
+
+How many times a failed or timed-out wallet request (for example `eth_sendTransactionSync` or `wallet_revokeAccessKey`) is retried. Each attempt starts a new device-code approval, so requests are sent once by default. Chain reads keep their transport's retry behavior.
+
+```ts twoslash [cli.ts]
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  retryCount: 1, // [!code focus]
+})
+```
+
 ### storage
 
 - **Type:** `Storage`

@@ -1,15 +1,16 @@
 {
   "scripts": {
     "build": "zile",
-    "changeset:publish": "zile publish:prepare && changeset publish && zile publish:post",
+    "changeset:publish": "zile publish:prepare && node scripts/publish.mjs && changeset git-tag && zile publish:post",
     "changeset:version": "changeset version && pnpm check",
-    "check": "vp lint --fix --ignore-pattern package.json && vp fmt src examples playgrounds ref-impls scripts test",
+    "check": "vp lint --fix --ignore-pattern package.json && vp fmt bench src examples playgrounds ref-impls scripts test",
     "dev": "docker compose up -d",
+    "bench": "pnpm --filter ./bench bench",
     "dev:cli": "pnpm --filter './playgrounds/cli' dev",
     "docs:build": "pnpm --filter site build",
     "docs:dev": "pnpm --filter site dev",
     "docs:preview": "pnpm --filter site preview",
-    "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types && pnpm --filter './playgrounds/cli' check:types",
+    "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types && pnpm --filter './playgrounds/cli' check:types && pnpm --filter ./bench check:types",
     "dev:dialog": "pnpm --filter tempo-app dev",
     "dev:dialog-ref": "pnpm --filter dialog-ref dev",
     "dev:hosts": "./scripts/dev:hosts.sh",
@@ -26,13 +27,13 @@
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "^24.15.0",
+      "version": "^24.22.1",
       "onFail": "download"
     }
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.6.0",
-    "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^3.0.3",
     "@privy-io/react-auth": "3.25.0",
     "@remix-run/route-pattern": "^0.20.0",
     "@types/express": "^5.0.6",
@@ -43,11 +44,12 @@
     "@vitejs/devtools": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@wagmi/core": "^3.6.0",
-    "elysia": "^1.4.28",
+    "elysia": "^1.4.29",
     "expo-secure-store": "^55.0.13",
     "expo-web-browser": "^55.0.14",
     "express": "^5.2.1",
     "frog": "^1.0.15",
+    "pkg-pr-new": "0.0.70",
     "playwright-core": "^1.59.1",
     "prool": "catalog:",
     "react": "^19.2.5",
@@ -59,9 +61,12 @@
     "tsx": "^4.21.0",
     "typescript": "catalog:",
     "viem": "catalog:",
+    "vite": "catalog:",
+    "vitest": "5.0.5",
     "vp": "catalog:",
     "wagmi": "catalog:",
-    "zile": "^0.0.25"
+    "zile": "^0.0.25",
+    "zod-v3": "npm:zod@3.25.76"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm check"
@@ -73,17 +78,17 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.18.0",
+  "version": "0.21.1",
   "dependencies": {
     "hono": "catalog:",
     "idb-keyval": "^6.2.2",
     "jose": "^6.2.3",
     "mipd": "^0.0.7",
     "mppx": "catalog:",
-    "ox": "~0.14.34",
-    "wata": "0.4.0",
+    "ox": "~0.14.59",
+    "wata": "0.4.2",
     "webauthx": "~0.1.2",
-    "zod": "^4.4.3",
+    "zod": "^4.6.7",
     "zustand": "^5.0.12"
   },
   "peerDependencies": {
@@ -95,7 +100,7 @@
     "react": ">=18",
     "react-native-mmkv": "^4.3.1",
     "react-native-nitro-modules": "^0.35.9",
-    "viem": ">=2.56.0",
+    "viem": ">=2.57.12",
     "wagmi": ">=0.0.0"
   },
   "peerDependenciesMeta": {

@@ -1,7 +1,8 @@
 import { Handler } from 'accounts/server'
 import { privateKeyToAccount } from 'viem/accounts'
+import { pathusd } from 'viem/tokens'
 
-const pathUsd = '0x20c0000000000000000000000000000000000000'
+const pathUsd = pathusd(4217).address
 const transferSelector = '0xa9059cbb'
 const privateKey =
   process.env.RELAY_PRIVATE_KEY ??
