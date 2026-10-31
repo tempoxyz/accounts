@@ -7,6 +7,7 @@
 - Log papercuts and friction (tooling, docs, APIs, tests, conventions) as you hit them with `pnpx frog log`.
 - Do not add global, system, or internal friction.
 - Run `pnpx frog list` first to see what is already known.
+- The Friction Log workflow passes Frog a token from the `friction-log` STS policy; the org does not let the built-in Actions token open the `frog/sync` pull request.
 
 ## TypeScript Conventions
 
