@@ -3,15 +3,16 @@ auditConfig:
     # Zod 4 is upgraded; Zod 3 has no fixed release. Backport its size gate below.
     # scripts/zod-security.test.ts guards the patch and all installed Zod versions.
     - GHSA-mrhx-c7xc-m3w5
-    - GHSA-5p2g-fcmc-qvqq # transitive image-size build-tooling DoS; patched 2.0.3 is not published on npm.
-    - GHSA-w3rx-r6r6-pgpr # transitive image-size build-tooling DoS; patched 2.0.3 is not published on npm.
+    - GHSA-5p2g-fcmc-qvqq # metro's image-size v1 (1.2.1) build-tooling DoS; no patched v1, and metro passes file paths v2 rejects. vocs uses patched 2.0.4.
+    - GHSA-w3rx-r6r6-pgpr # metro's image-size v1 (1.2.1) build-tooling DoS; no patched v1, and metro passes file paths v2 rejects. vocs uses patched 2.0.4.
     - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
     - GHSA-w5hq-g745-h8pq # transitive Expo xcode uuid usage; no direct runtime exposure.
     - GHSA-qjx8-664m-686j # transitive Privy js-cookie usage in playground.
     - GHSA-h67p-54hq-rp68 # over-broad <=4.1.1 range flags terminal js-yaml@3.14.2 (v3 has no merge-key DoS, no later v3 to upgrade to); v4 deps already pinned to patched 4.2.0.
-    - GHSA-86w9-cpqp-85rv # transitive Expo CLI code-signing node-forge usage; patched 1.4.1 is not published on npm.
     - GHSA-vfj7-8cjw-p6xm # transitive glob/watch tooling DoS; patched braces 3.0.4 is not published on npm. Remove when available.
     - GHSA-gcqx-w48m-w2h4 # transitive Expo config deepmerge prototype poisoning; patched 4.3.2 is not published on npm. Remove when available.
+    - GHSA-g3hv-75wg-m249 # transitive minimatch 3/5/9/10 glob-pattern DoS in build tooling (Expo, glob, test-exclude, archiver); only minimatch 11 is patched. Remove when parents move to 11.
+    - GHSA-3g3m-2fjr-6pw4 # transitive glob 10/13 abort bypass in build tooling (Expo, archiver); only glob 14 is patched. Remove when parents move to 14.
 
 allowBuilds:
   '@reown/appkit': false
@@ -162,7 +163,7 @@ overrides:
   'fast-uri@>=3.0.0 <3.1.8': '3.1.9'
   viem: 0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26
   file-type: '22.0.1'
-  follow-redirects: '1.16.1'
+  follow-redirects: '1.16.2'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
   'form-data@>=4.0.0 <4.0.6': '4.0.6'
   # Patch Hono static-path middleware bypass, traversal, body-parser, and query parsing advisories.
