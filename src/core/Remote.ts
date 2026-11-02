@@ -91,7 +91,9 @@ export type Remote = {
   /**
    * Subscribes to incoming RPC requests from the parent context.
    * Updates the remote store with the received requests and syncs the
-   * host's active chain to the remote provider.
+   * host's active chain to the remote provider before invoking the callback.
+   * Failed syncs return RPC errors to pending requests without showing an approval.
+   * Settled queues skip chain switching so the UI can always close.
    *
    * @param cb - Callback receiving the full queued request list.
    * @returns Unsubscribe function.
@@ -176,6 +178,9 @@ export function create(options: create.Options): Remote {
     requests: [],
   }))
 
+  // Keep in-flight chain changes ordered even when a UI subscription is replaced.
+  let sync = Promise.resolve()
+
   return {
     messenger,
     provider,
@@ -184,8 +189,9 @@ export function create(options: create.Options): Remote {
 
     onUserRequest(cb) {
       return this.onRequests(async (requests, event, { account }) => {
-        // Sync the active account with the host.
-        if (account) {
+        const pending = requests.find((r) => r.status === 'pending')
+        // A closing queue needs no account authorization or selection.
+        if (pending && account) {
           const state = provider.store.getState()
           const index = state.accounts.findIndex(
             (a) => a.address.toLowerCase() === account.address.toLowerCase(),
@@ -198,7 +204,6 @@ export function create(options: create.Options): Remote {
           if (index !== state.activeAccount) provider.store.setState({ activeAccount: index })
         }
 
-        const pending = requests.find((r) => r.status === 'pending')
         store.setState({
           origin: event.origin,
           ready: false,
@@ -208,28 +213,54 @@ export function create(options: create.Options): Remote {
           origin: event.origin,
           request: pending?.request ?? null,
         })
-        if (pending) store.setState({ ready: true })
+        if (pending && store.getState().requests === requests) store.setState({ ready: true })
       })
     },
 
     onRequests(cb) {
-      return messenger.on('rpc-requests', async (payload, event) => {
+      let revision = 0
+      let active = true
+      const unsubscribe = messenger.on('rpc-requests', async (payload, event) => {
         const { account, chainId, requests } = payload
+        const version = ++revision
+        const current = () => active && version === revision
+        const pending = requests.filter((request) => request.status === 'pending')
+        store.setState({ requests, ready: false })
 
-        // Rehydrate persisted state so the iframe picks up accounts
-        // created in a popup (e.g. Safari WebAuthn fallback).
-        await provider.store.persist?.rehydrate()
-
-        store.setState({ requests })
-
-        if (provider.store.getState().chainId !== chainId)
-          provider.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: Hex.fromNumber(chainId) }],
-          })
-
-        cb(requests, event, { account })
+        try {
+          // A settled queue only closes the UI; its chain need not be supported.
+          if (pending.length) {
+            const previous = sync
+            const next = (async () => {
+              // Serialize switches so a superseded switch cannot change the chain
+              // underneath a newer approval. Discard stale syncs before starting work.
+              await previous
+              if (!current()) return
+              // Pick up accounts created in a popup (e.g. Safari WebAuthn fallback).
+              await provider.store.persist?.rehydrate()
+              if (!current()) return
+              if (provider.store.getState().chainId !== chainId)
+                await provider.request({
+                  method: 'wallet_switchEthereumChain',
+                  params: [{ chainId: Hex.fromNumber(chainId) }],
+                })
+            })()
+            // Recover only the sequencing tail; this message still reports its error below.
+            sync = next.catch(() => {})
+            await next
+          }
+          if (current()) await cb(requests, event, { account })
+        } catch (error) {
+          if (!current()) return
+          const cause = Provider.parseError(error)
+          for (const queued of pending) this.reject(queued.request, cause)
+        }
       })
+      return () => {
+        active = false
+        revision++
+        unsubscribe()
+      }
     },
 
     ready(options) {

@@ -926,13 +926,13 @@ describe('wallet_connect', () => {
       const provider = Provider.create({ adapter: authAdapter(), storage: Storage.memory() })
 
       await connect(provider, {
-        chainId: Hex.fromNumber(1),
+        chainId: Hex.fromNumber(tempo.id),
         resources,
       })
 
       expect(challengeBody).toMatchInlineSnapshot(`
         {
-          "chainId": 1,
+          "chainId": 4217,
           "resources": [
             "urn:tempo:api-signing-key:test",
             "https://api.example.com/signing-keys/1",
@@ -973,7 +973,7 @@ describe('wallet_connect', () => {
 
     test('error: rejects when forwarded auth message omits requested resources', async () => {
       const resources = ['https://api.example.com/signing-keys/1']
-      const signed = message({ chainId: 1 })
+      const signed = message({ chainId: tempo.id })
       let verifyCalled = false
       vi.stubGlobal('fetch', async (input: string | URL) => {
         const url = String(input)
@@ -1006,7 +1006,7 @@ describe('wallet_connect', () => {
 
       await expect(
         connect(provider, {
-          chainId: Hex.fromNumber(1),
+          chainId: Hex.fromNumber(tempo.id),
           resources,
         }),
       ).rejects.toThrowErrorMatchingInlineSnapshot(
