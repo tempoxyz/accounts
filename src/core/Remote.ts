@@ -181,14 +181,14 @@ export function create(options: create.Options): Remote {
   // Keep in-flight chain changes ordered even when a UI subscription is replaced.
   let sync = Promise.resolve()
 
-  return {
+  const remote: Remote = {
     messenger,
     provider,
     store,
     trustedHosts: trustedHosts ?? [],
 
     onUserRequest(cb) {
-      return this.onRequests(async (requests, event, { account }) => {
+      return remote.onRequests(async (requests, event, { account }) => {
         const pending = requests.find((r) => r.status === 'pending')
         // A closing queue needs no account authorization or selection.
         if (pending && account) {
@@ -198,7 +198,7 @@ export function create(options: create.Options): Remote {
           )
           if (index < 0) {
             messenger.send('sync', { valid: false })
-            for (const r of requests) if (r.status === 'pending') this.reject(r.request)
+            for (const r of requests) if (r.status === 'pending') remote.reject(r.request)
             return
           }
           if (index !== state.activeAccount) provider.store.setState({ activeAccount: index })
@@ -253,7 +253,7 @@ export function create(options: create.Options): Remote {
         } catch (error) {
           if (!current()) return
           const cause = Provider.parseError(error)
-          for (const queued of pending) this.reject(queued.request, cause)
+          for (const queued of pending) remote.reject(queued.request, cause)
         }
       })
       return () => {
@@ -303,7 +303,7 @@ export function create(options: create.Options): Remote {
     rejectAll(error) {
       store.setState({ ready: false })
       const requests = store.getState().requests
-      for (const queued of requests) this.reject(queued.request, error)
+      for (const queued of requests) remote.reject(queued.request, error)
     },
 
     async respond(request, options = {}) {
@@ -352,6 +352,7 @@ export function create(options: create.Options): Remote {
       }
     },
   }
+  return remote
 }
 
 export declare namespace create {

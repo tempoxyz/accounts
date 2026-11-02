@@ -196,6 +196,8 @@ test.each(['deny', 'timeout'] as const)(
         onPrompt: (prompt) => {
           if (action === 'deny') void submitVerify(prompt, { action })
         },
+        // The host's advertised interval rounds up to one second, beyond this fixture's timeout.
+        pollingInterval: 10,
         timeout: action === 'timeout' ? 100 : 1000,
         url: `${server.url}/auth/device`,
       }),

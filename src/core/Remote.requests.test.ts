@@ -349,3 +349,117 @@ test('an old approval callback cannot make a closed queue ready again', async ()
   await first
   expect(remote.store.getState().ready).toMatchInlineSnapshot('false')
 })
+
+test.each(['onRequests', 'onUserRequest'] as const)(
+  'unbound %s rejects failed switches and remains usable',
+  async (method) => {
+    const { provider, remote, send, sync } = await setup()
+    const subscribe = remote[method]
+    const cb = vi.fn()
+    const unsubscribe = subscribe(cb)
+    await sync(1)
+    expect({ callbacks: cb.mock.calls, replies: send.mock.calls }).toMatchInlineSnapshot(`
+      {
+        "callbacks": [],
+        "replies": [
+          [
+            "rpc-response",
+            {
+              "_request": {
+                "id": 1,
+                "jsonrpc": "2.0",
+                "method": "wallet_connect",
+              },
+              "error": {
+                "code": 5710,
+                "message": "Chain 1 not configured.",
+              },
+              "id": 1,
+              "jsonrpc": "2.0",
+            },
+          ],
+        ],
+      }
+    `)
+    await sync(tempoModerato.id, [pending(2)])
+    expect({
+      callbacks: cb.mock.calls.length,
+      chainId: provider.store.getState().chainId,
+    }).toMatchInlineSnapshot(`
+      {
+        "callbacks": 1,
+        "chainId": 42431,
+      }
+    `)
+    unsubscribe()
+  },
+)
+
+test('unbound onUserRequest rejects an unknown host account', async () => {
+  const { remote, send, sync } = await setup()
+  const { onUserRequest } = remote
+  const cb = vi.fn()
+  onUserRequest(cb)
+  await sync(tempo.id, [pending(1)], {
+    address: '0x0000000000000000000000000000000000000001',
+  })
+  expect({ callbacks: cb.mock.calls, replies: send.mock.calls }).toMatchInlineSnapshot(`
+    {
+      "callbacks": [],
+      "replies": [
+        [
+          "sync",
+          {
+            "valid": false,
+          },
+        ],
+        [
+          "rpc-response",
+          {
+            "_request": {
+              "id": 1,
+              "jsonrpc": "2.0",
+              "method": "wallet_connect",
+            },
+            "error": {
+              "code": 4001,
+              "message": "The user rejected the request.",
+            },
+            "id": 1,
+            "jsonrpc": "2.0",
+          },
+        ],
+      ],
+    }
+  `)
+})
+
+test('unbound rejectAll rejects the current queue', async () => {
+  const { remote, send } = await setup()
+  const { rejectAll } = remote
+  remote.store.setState({ ready: true, requests: [pending(1)] })
+  rejectAll()
+  expect({ ready: remote.store.getState().ready, replies: send.mock.calls }).toMatchInlineSnapshot(`
+      {
+        "ready": false,
+        "replies": [
+          [
+            "rpc-response",
+            {
+              "_request": {
+                "id": 1,
+                "jsonrpc": "2.0",
+                "method": "wallet_connect",
+              },
+              "error": {
+                "code": 4001,
+                "message": "The user rejected the request.",
+              },
+              "id": 1,
+              "jsonrpc": "2.0",
+            },
+          ],
+        ],
+      }
+    `)
+})

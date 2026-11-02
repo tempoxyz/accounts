@@ -153,6 +153,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
+    chainIds: chains.map((chain) => chain.id),
     keystores,
     maxAccounts,
     persistCredentials,

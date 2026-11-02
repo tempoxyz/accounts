@@ -122,3 +122,105 @@ describe('wallet_connect chain validation', () => {
     else expect(changed).not.toHaveBeenCalled()
   })
 })
+
+describe('persisted chain validation', () => {
+  test.each([
+    { name: 'unsupported mainnet selection', chainId: 1, testnet: false, expected: tempo.id },
+    {
+      name: 'unsupported testnet selection',
+      chainId: 1,
+      testnet: true,
+      expected: tempoModerato.id,
+    },
+    {
+      name: 'supported selection',
+      chainId: tempoModerato.id,
+      testnet: false,
+      expected: tempoModerato.id,
+    },
+    {
+      name: 'custom selection',
+      chainId: chain_custom.id,
+      testnet: false,
+      expected: chain_custom.id,
+    },
+    { name: 'missing selection', chainId: undefined, testnet: true, expected: tempoModerato.id },
+  ])('restores $name', async ({ chainId, expected, testnet }) => {
+    const storage = Storage.memory()
+    await storage.setItem('store', {
+      state: { accounts: [{ address }], activeAccount: 0, chainId },
+      version: 0,
+    })
+    const selected: number[] = []
+    const provider = Provider.create({
+      adapter: Adapter.define({ name: 'Test', rdns: 'test' }, ({ store }) => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address }] }
+          },
+          async loadAccounts() {
+            selected.push(store.getState().chainId)
+            return { accounts: [{ address }] }
+          },
+        },
+      })),
+      chains: [tempo, tempoModerato, chain_custom],
+      storage,
+      testnet,
+    })
+    await provider.ready()
+    expect(provider.store.getState()).toEqual({
+      accessKeys: [],
+      accounts: [{ address }],
+      activeAccount: 0,
+      chainId: expected,
+    })
+    // Connecting without an explicit chain must not forward the old unsupported value.
+    await provider.request({ method: 'wallet_connect' })
+    expect(selected).toEqual([expected])
+    expect((await storage.getItem<{ state: { chainId: number } }>('store'))?.state.chainId).toBe(
+      expected,
+    )
+  })
+
+  test('repairs repeated hydration using the configured default without clearing accounts', async () => {
+    const storage = Storage.memory()
+    const provider = Provider.create({
+      adapter: Adapter.define({ name: 'Test', rdns: 'test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [] }
+          },
+          async loadAccounts() {
+            return { accounts: [] }
+          },
+        },
+      })),
+      chains: [chain_custom, tempo, tempoModerato],
+      storage,
+    })
+    await provider.ready()
+    provider.store.setState({ accounts: [{ address }], chainId: tempoModerato.id })
+    // Another tab or an older SDK can write an unsupported selection after initial hydration.
+    await storage.setItem('store', {
+      state: { accounts: [{ address }, { address: address_other }], activeAccount: 1, chainId: 1 },
+      version: 0,
+    })
+    await provider.store.persist.rehydrate()
+    expect(provider.store.getState()).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [],
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+          {
+            "address": "0x0000000000000000000000000000000000000002",
+          },
+        ],
+        "activeAccount": 1,
+        "chainId": 12345,
+      }
+    `)
+  })
+})
