@@ -178,3 +178,70 @@ test('a superseded sync cannot reject the newer attempt for the same request ID'
       ]
     `)
 })
+
+test.each(['success', 'error'] as const)(
+  'cancellation keeps the executing %s and never rejects a later request',
+  async (outcome) => {
+    const { callbacks, handle } = setup()
+    const completed: unknown[] = []
+    const first = RemoteRequests.request(host, options).catch((error) => error.code)
+    void first.then((value) => completed.push(value))
+    const second = RemoteRequests.request(host, options).catch((error) => error.code)
+    const third = RemoteRequests.request(host, options).catch((error) => error.code)
+    const id = handle.syncRequests.mock.calls[0]![0].requests[0]!.request.id
+    callbacks().onCancel(id)
+    expect(await Promise.all([second, third])).toMatchInlineSnapshot(`
+      [
+        4001,
+        4001,
+      ]
+    `)
+    expect(completed).toMatchInlineSnapshot(`[]`)
+    // An idempotent cancel with only the executing head left has no other work to drain.
+    callbacks().onCancel(id)
+    const next = RemoteRequests.request(host, options)
+    if (outcome === 'success') callbacks().onResponse({ id, result: 'signed' })
+    else callbacks().onResponse({ id, error: { code: -32603, message: 'Broadcast failed' } })
+    if (outcome === 'success') expect(await first).toMatchInlineSnapshot(`"signed"`)
+    else expect(await first).toMatchInlineSnapshot(`-32603`)
+    const id_next = handle.syncRequests.mock.calls.at(-1)![0].requests[0]!.request.id
+    callbacks().onResponse({ id: id_next, result: 'fresh' })
+    expect(await next).toMatchInlineSnapshot(`"fresh"`)
+  },
+)
+
+test('cancel without a retained request drains only its snapshot, including reentrant arrivals', async () => {
+  const { callbacks, handle } = setup()
+  const first = RemoteRequests.request(host, options).catch((error) => error.code)
+  const second = RemoteRequests.request(host, options).catch((error) => error.code)
+  let next: Promise<unknown> | undefined
+  handle.close.mockImplementationOnce(() => {
+    next = RemoteRequests.request(host, options)
+  })
+  callbacks().onCancel()
+  expect(await Promise.all([first, second])).toMatchInlineSnapshot(`
+    [
+      4001,
+      4001,
+    ]
+  `)
+  const id = handle.syncRequests.mock.calls.at(-1)![0].requests[0]!.request.id
+  callbacks().onResponse({ id, result: 'new during close' })
+  expect(await next).toMatchInlineSnapshot(`"new during close"`)
+  callbacks().onCancel()
+  expect(handle.syncRequests.mock.calls.length).toMatchInlineSnapshot(`2`)
+})
+
+test.each(['replace', 'reset'] as const)(
+  '%s invalidates the old cancellation callback',
+  async (action) => {
+    const old = setup()
+    if (action === 'reset') RemoteRequests.reset(host)
+    const { callbacks, handle } = setup()
+    const result = RemoteRequests.request(host, options)
+    old.callbacks().onCancel()
+    const id = handle.syncRequests.mock.calls.at(-1)![0].requests[0]!.request.id
+    callbacks().onResponse({ id, result: 'new owner' })
+    expect(await result).toMatchInlineSnapshot(`"new owner"`)
+  },
+)

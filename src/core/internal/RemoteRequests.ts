@@ -70,6 +70,15 @@ export function attach(host: string, options: AttachOptions): () => void {
 
   const next: Dialog.Instance = options.dialog({
     host: options.host,
+    onCancel: (keep) => {
+      // A replaced transport must not cancel work belonging to its successor, even if a
+      // reset reused the same host and request IDs. Snapshot before callbacks can enqueue.
+      if (contexts.get(key(host)) !== context || context.dialog !== next) return
+      const ids = context.requestQueue
+        .filter((queued) => queued.request.id !== keep)
+        .map((queued) => queued.request.id)
+      reject(host, ids)
+    },
     onError: (error, ids) => fail(host, next, ids, error),
     onReject: (ids) => reject(host, ids),
     onResponse: (response) => respond(host, response),
