@@ -156,3 +156,5 @@
 - **Keep dialog browser fixtures local and rejection-aware** -- bind standalone Vite test servers to loopback, not all interfaces. Cancellation tests must handle and assert the startup rejection; a discarded `syncRequests` promise becomes an unhandled error after close or destroy. Keep the older browser suite aligned even while its default project is disabled.
 
 - **Cancel the queue at the cancellation boundary** -- custom dialogs use `onCancel(keep?)` to reject the current queue atomically, retaining only an already approved/executing request ID when needed. Never defer a blanket queue drain until that execution settles: it would reject fresh requests submitted after Back. The callback belongs to its dialog/context and cannot affect a replacement after reset.
+
+- **Queue cancellation is a custom-dialog contract** — built-in iframe/popup transports do not call `onCancel`. Removing successors must not force-sync an already-synced executing head: that can reopen a dismissed approval. Sync only a new unsynced head, and close an empty queue. The new required setup callback ships in a minor release.

@@ -190,6 +190,7 @@ test.each(['success', 'error'] as const)(
     const third = RemoteRequests.request(host, options).catch((error) => error.code)
     const id = handle.syncRequests.mock.calls[0]![0].requests[0]!.request.id
     callbacks().onCancel(id)
+    expect(handle.syncRequests.mock.calls.length).toMatchInlineSnapshot(`1`)
     expect(await Promise.all([second, third])).toMatchInlineSnapshot(`
       [
         4001,
@@ -245,3 +246,21 @@ test.each(['replace', 'reset'] as const)(
     expect(await result).toMatchInlineSnapshot(`"new owner"`)
   },
 )
+
+test('cancellation syncs a retained request when it becomes the new head', async () => {
+  const { callbacks, handle } = setup()
+  const first = RemoteRequests.request(host, options).catch((error) => error.code)
+  const next = RemoteRequests.request(host, options)
+  const id = handle.syncRequests.mock.calls[0]![0].requests[0]!.request.id + 1
+  callbacks().onCancel(id)
+  expect(await first).toMatchInlineSnapshot(`4001`)
+  expect(handle.syncRequests.mock.calls.map(([sync]) => sync.requests[0]!.request.id))
+    .toMatchInlineSnapshot(`
+      [
+        0,
+        1,
+      ]
+    `)
+  callbacks().onResponse({ id, result: 'retained' })
+  expect(await next).toMatchInlineSnapshot(`"retained"`)
+})
