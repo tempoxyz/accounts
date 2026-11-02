@@ -14,7 +14,7 @@ function setup() {
   })
   const onReject = vi.fn()
   const dialog = Dialog.iframe()
-  const handle = dialog({ host, onReject, onResponse() {}, store })
+  const handle = dialog({ host, onCancel() {}, onReject, onResponse() {}, store })
   lastHandle = handle
   return { handle, onReject, store }
 }
@@ -249,7 +249,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog({ host, onCancel() {}, onReject() {}, onResponse() {}, store })
     handle.open()
 
     expect(openSpy).toHaveBeenCalledOnce()
@@ -270,7 +270,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog({ host, onCancel() {}, onReject() {}, onResponse() {}, store })
     handle.open()
 
     const features = openSpy.mock.calls[0]![2] as string
@@ -295,7 +295,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog({ host, onCancel() {}, onReject() {}, onResponse() {}, store })
     handle.open()
     handle.close()
 
@@ -313,7 +313,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog({ host, onCancel() {}, onReject() {}, onResponse() {}, store })
 
     expect(() => handle.open()).toThrowErrorMatchingInlineSnapshot(
       `[Dialog.TransportError: Could not send the request to the wallet at https://wallet.tempo.xyz. Check the wallet connection before trying again.]`,
@@ -336,7 +336,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog({ host, onCancel() {}, onReject() {}, onResponse() {}, store })
     handle.open()
     handle.destroy()
 
@@ -353,7 +353,7 @@ describe('Dialog.noop', () => {
       storage: Storage.memory({ key: 'noop-test' }),
     })
     const dialog = Dialog.noop()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog({ host, onCancel() {}, onReject() {}, onResponse() {}, store })
     expect(() => handle.open()).not.toThrow()
     expect(() => handle.close()).not.toThrow()
     expect(() => handle.destroy()).not.toThrow()

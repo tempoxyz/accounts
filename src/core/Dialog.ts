@@ -55,6 +55,11 @@ export declare namespace SetupFn {
     host: string
     /** Reactive state store. */
     store: Store.Store
+    /**
+     * Rejects requests queued now, except an optional approved request still executing.
+     * Later requests are unaffected. Unlike onReject, this includes undisplayed successors.
+     */
+    onCancel: (keep?: number | undefined) => void
     /** Called when an asynchronous transport handoff fails. */
     onError?: ((error: TransportError, ids: readonly number[]) => void) | undefined
     /** Called when the user rejects the currently displayed requests. */

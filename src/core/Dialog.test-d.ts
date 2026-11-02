@@ -8,6 +8,7 @@ describe('Dialog', () => {
   test('has name and setup returning open, close, destroy, syncRequests', () => {
     expectTypeOf<Dialog.SetupFn.Parameters>().toEqualTypeOf<{
       host: string
+      onCancel: (keep?: number | undefined) => void
       onError?: ((error: Dialog.TransportError, ids: readonly number[]) => void) | undefined
       store: Store.Store
       onReject: (ids: readonly number[]) => void
