@@ -1,6 +1,7 @@
 ---
 title: 'Local test failures are silent without an explicit reporter'
 severity: 'minor'
+issue: 'tempoxyz/accounts#913'
 ---
 
 ## Expected Behavior
