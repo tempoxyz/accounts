@@ -1,34 +1,22 @@
+import { Expiry } from 'viem/tempo'
+
 /** Returns a unix timestamp (seconds) `n` days from now. */
-export function days(n: number) {
-  return Math.floor(Date.now() / 1000) + n * 24 * 60 * 60
-}
+export const days = Expiry.days
 
 /** Returns a unix timestamp (seconds) `n` hours from now. */
-export function hours(n: number) {
-  return Math.floor(Date.now() / 1000) + n * 60 * 60
-}
+export const hours = Expiry.hours
 
 /** Returns a unix timestamp (seconds) `n` minutes from now. */
-export function minutes(n: number) {
-  return Math.floor(Date.now() / 1000) + n * 60
-}
+export const minutes = Expiry.minutes
 
 /** Returns a unix timestamp (seconds) `n` months (30 days) from now. */
-export function months(n: number) {
-  return Math.floor(Date.now() / 1000) + n * 30 * 24 * 60 * 60
-}
+export const months = Expiry.months
 
 /** Returns a unix timestamp (seconds) `n` seconds from now. */
-export function seconds(n: number) {
-  return Math.floor(Date.now() / 1000) + n
-}
+export const seconds = Expiry.seconds
 
 /** Returns a unix timestamp (seconds) `n` weeks from now. */
-export function weeks(n: number) {
-  return Math.floor(Date.now() / 1000) + n * 7 * 24 * 60 * 60
-}
+export const weeks = Expiry.weeks
 
 /** Returns a unix timestamp (seconds) `n` years (365 days) from now. */
-export function years(n: number) {
-  return Math.floor(Date.now() / 1000) + n * 365 * 24 * 60 * 60
-}
+export const years = Expiry.years

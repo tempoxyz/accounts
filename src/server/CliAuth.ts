@@ -668,10 +668,7 @@ export function from(options: from.Options = {}): CliAuth {
         throw new Error('Expired device code.')
       }
       if (current.status !== 'pending') throw new Error('Device code already completed.')
-      if (
-        current.account &&
-        current.account.toLowerCase() !== options.request.accountAddress.toLowerCase()
-      )
+      if (current.account && !Address.isEqual(current.account, options.request.accountAddress))
         throw new Error('Account does not match requested account.')
 
       if (current.action === 'updateAccessKey') {
@@ -692,7 +689,7 @@ export function from(options: from.Options = {}): CliAuth {
               if (AccessKey.isUnavailableError(error)) return undefined
               throw error
             })
-          if (metadata?.address.toLowerCase() === current.accessKeyAddress.toLowerCase())
+          if (metadata && Address.isEqual(metadata.address, current.accessKeyAddress))
             throw new Error('Access key was published while the update was pending.')
           if (!options.request.keyAuthorization)
             throw new Error('Pending access key update requires a replacement key authorization.')
@@ -703,8 +700,8 @@ export function from(options: from.Options = {}): CliAuth {
             keyAuthorization: options.request.keyAuthorization,
           })
           if (
-            next.address.toLowerCase() !== current.accessKeyAddress.toLowerCase() ||
-            next.keyId.toLowerCase() !== current.accessKeyAddress.toLowerCase()
+            !Address.isEqual(next.address, current.accessKeyAddress) ||
+            !Address.isEqual(next.keyId, current.accessKeyAddress)
           )
             throw new Error('Replacement key authorization does not match the access key request.')
           if (next.chainId !== current.chainId)
@@ -747,9 +744,9 @@ export function from(options: from.Options = {}): CliAuth {
       const expected = expectedKeyAuthorization(current)
       const actual = normalizeKeyAuthorization(options.request.keyAuthorization)
 
-      if (actual.keyId.toLowerCase() !== expected.address.toLowerCase())
+      if (!Address.isEqual(actual.keyId, expected.address))
         throw new Error('Key authorization key does not match the device code request.')
-      if (actual.address.toLowerCase() !== expected.address.toLowerCase())
+      if (!Address.isEqual(actual.address, expected.address))
         throw new Error('Key authorization address does not match the device code request.')
       if (actual.keyType !== expected.type)
         throw new Error('Key authorization key type does not match the device code request.')
@@ -831,8 +828,8 @@ export function from(options: from.Options = {}): CliAuth {
             keyAuthorization: options.request.keyAuthorization,
           })
           if (
-            actual.address.toLowerCase() !== options.request.accessKeyAddress.toLowerCase() ||
-            actual.keyId.toLowerCase() !== options.request.accessKeyAddress.toLowerCase()
+            !Address.isEqual(actual.address, options.request.accessKeyAddress) ||
+            !Address.isEqual(actual.keyId, options.request.accessKeyAddress)
           )
             throw new Error('Pending key authorization does not match the access key request.')
           if (actual.chainId !== chainId_resolved)

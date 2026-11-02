@@ -1,3 +1,5 @@
+import { encodeErrorResult } from 'viem'
+import { Abis } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
 import * as ExecutionError from './ExecutionError.js'
@@ -137,6 +139,47 @@ describe('parse', () => {
     const result = ExecutionError.parse(error)
     expect(result.message).toBe('bad revert')
     expect(result.errorName).toBe('unknown')
+  })
+
+  test('decodes errors outside Abis.coreErrors', () => {
+    const error = Object.assign(new Error('reverted'), {
+      data: encodeErrorResult({ abi: Abis.all, errorName: 'SlippageExceeded', args: [1n, 2n] }),
+    })
+    const { abiItem: _, ...result } = ExecutionError.parse(error)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "args": [
+          1n,
+          2n,
+        ],
+        "data": "0x71c4efed00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002",
+        "errorName": "SlippageExceeded",
+        "message": "Amount 2 exceeds slippage limit 1.",
+      }
+    `)
+  })
+
+  test('decodes zero-argument errors from the node debug format', () => {
+    const error = new Error('execution reverted: KeyNotFound(KeyNotFound)')
+    const { abiItem: _, ...result } = ExecutionError.parse(error)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "args": undefined,
+        "data": "0x5f3f479c",
+        "errorName": "KeyNotFound",
+        "message": "Key not found.",
+      }
+    `)
+  })
+
+  test('fallback: extracts names outside Abis.coreErrors from human-readable revert message', () => {
+    const error = new Error('execution reverted: Paused(x)')
+    expect(ExecutionError.parse(error)).toMatchInlineSnapshot(`
+      {
+        "errorName": "unknown",
+        "message": "This contract is paused.",
+      }
+    `)
   })
 })
 

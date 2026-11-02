@@ -356,10 +356,24 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
     chainId: parameters.chainId ?? chainId,
     keystores: store.keystores,
   })
-  const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
-  const signature = await account.sign({ hash: digest })
-  const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
-    signature,
+  const {
+    address,
+    chainId: chainId_prepared,
+    expiry,
+    limits,
+    scopes,
+    type,
+    witness,
+  } = prepared.keyAuthorization
+  // Root accounts sign the payload directly; access-key and configurable
+  // accounts also bind `account` (TIP-1049).
+  const keyAuthorization = await TempoAccount.signKeyAuthorization(account as never, {
+    chainId: chainId_prepared,
+    expiry,
+    key: { address, type },
+    limits,
+    scopes,
+    witness,
   })
 
   add({
@@ -713,7 +727,7 @@ function scopesMatch(
       if (!call.data || call.data.length < 74) return false
       const recipient = `0x${call.data.slice(34, 74)}` as Address.Address
       if (!Address.validate(recipient)) return false
-      return scope.recipients.some((address) => address.toLowerCase() === recipient.toLowerCase())
+      return scope.recipients.some((address) => Address.isEqual(address, recipient))
     })
   })
 }
@@ -744,7 +758,7 @@ function scopeCovers(
   requested: NonNullable<ReusableAuthorization['scopes']>[number],
 ): boolean {
   if (!isScope(existing) || !isScope(requested)) return false
-  if (existing.address.toLowerCase() !== requested.address.toLowerCase()) return false
+  if (!Address.isEqual(existing.address, requested.address)) return false
   if (!selectorCovers(existing.selector, requested.selector)) return false
   return recipientsCover(existing.recipients, requested.recipients)
 }
@@ -774,7 +788,7 @@ function recipientsCover(
   if (!existing || existing.length === 0) return true
   if (!requested || requested.length === 0) return false
   return requested.every((address) =>
-    existing.some((candidate) => candidate.toLowerCase() === address.toLowerCase()),
+    existing.some((candidate) => Address.isEqual(candidate, address)),
   )
 }
 
@@ -787,7 +801,7 @@ function limitsCover(
   return requested.every((limit) =>
     existing.some(
       (candidate) =>
-        candidate.token.toLowerCase() === limit.token.toLowerCase() &&
+        Address.isEqual(candidate.token, limit.token) &&
         Number(candidate.period ?? 0) === Number(limit.period ?? 0) &&
         BigInt(candidate.limit) >= BigInt(limit.limit),
     ),
@@ -892,7 +906,7 @@ async function getPublishedStatus(
       account,
       accessKey,
     })
-    if (metadata.address.toLowerCase() !== accessKey.toLowerCase()) return status.missing
+    if (!Address.isEqual(metadata.address, accessKey)) return status.missing
     if (metadata.isRevoked) return status.missing
     if (metadata.expiry > 0n && metadata.expiry < BigInt(Math.floor(now))) return status.expired
     return status.published
@@ -931,8 +945,8 @@ function matches(
   },
 ): boolean {
   const { accessKey, account, chainId } = options
-  if (record.access.toLowerCase() !== account.toLowerCase()) return false
+  if (!Address.isEqual(record.access, account)) return false
   if (record.chainId !== chainId) return false
-  if (accessKey && record.address.toLowerCase() !== accessKey.toLowerCase()) return false
+  if (accessKey && !Address.isEqual(record.address, accessKey)) return false
   return true
 }

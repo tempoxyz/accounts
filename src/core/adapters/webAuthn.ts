@@ -1,4 +1,4 @@
-import { Hex, PublicKey, Signature } from 'ox'
+import { Address, Hex, PublicKey, Signature } from 'ox'
 import { SignatureEnvelope } from 'ox/tempo'
 import { Account } from 'viem/tempo'
 import { Authentication, Registration } from 'webauthx/client'
@@ -604,8 +604,8 @@ export declare namespace webAuthn {
 /** Whether two access keys are the same authorization: the same key, for the same account, on the same chain. */
 function same(a: Store.State['accessKeys'][number], b: Store.State['accessKeys'][number]): boolean {
   return (
-    a.access.toLowerCase() === b.access.toLowerCase() &&
-    a.address.toLowerCase() === b.address.toLowerCase() &&
+    Address.isEqual(a.access, b.access) &&
+    Address.isEqual(a.address, b.address) &&
     a.chainId === b.chainId
   )
 }
