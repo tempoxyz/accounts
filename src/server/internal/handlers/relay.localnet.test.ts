@@ -25,6 +25,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, addresses, chain, getClient, http } from '../../../../test/config.js'
 import { createServer, type Server } from '../../../../test/utils.js'
+import * as Kv from '../../Kv.js'
 import { relay } from './relay.js'
 
 const userAccount = accounts[9]!
@@ -1767,13 +1768,16 @@ describe('behavior: path C — no sponsorship', () => {
 
 describe('behavior: simulation', () => {
   /** Relays through a transport that records each upstream request's start and end. */
-  async function serve(options: { tempoSimulate?: boolean | undefined } = {}) {
+  async function serve(
+    options: { kv?: Kv.Kv | undefined; tempoSimulate?: boolean | undefined } = {},
+  ) {
     const upstream = http()({ chain, retryCount: 0 })
     const events: string[] = []
     const server = await createServer(
       relay({
         chains: [chain],
         features: 'all',
+        ...(options.kv ? { kv: options.kv } : {}),
         resolveTokens: () => localnetTokens,
         transports: {
           [chain.id]: custom({
@@ -1807,6 +1811,40 @@ describe('behavior: simulation', () => {
       expect(events.filter((event) => event === 'start eth_simulateV1')).toHaveLength(2)
       for (const result of results)
         expect(findDiffs(result.capabilities?.balanceDiffs, userAccount.address)).toBeDefined()
+    } finally {
+      server.close()
+    }
+  })
+
+  test('behavior: records tempo_simulateV1 support, so later lookups hit the store', async () => {
+    const store = Kv.memory()
+    const lookups: unknown[] = []
+    const { client, events, server } = await serve({
+      kv: {
+        ...store,
+        async get(key) {
+          const value = await store.get(key)
+          if (key.startsWith('simulate.')) lookups.push(value)
+          return value as never
+        },
+      },
+    })
+    try {
+      for (const _ of [1, 2])
+        await fillTransaction(client, { account: userAccount.address, calls: [transferCall()] })
+
+      expect({
+        lookups,
+        probes: events.filter((event) => event === 'start tempo_simulateV1').length,
+      }).toMatchInlineSnapshot(`
+        {
+          "lookups": [
+            undefined,
+            true,
+          ],
+          "probes": 2,
+        }
+      `)
     } finally {
       server.close()
     }
