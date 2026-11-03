@@ -6,10 +6,10 @@
   </picture>
 </p>
 
-<p align="center"><b>Sign-in, sessions, and access keys for Tempo apps.</b></p>
+<p align="center"><b>Accounts SDK for Apps building on Tempo</b></p>
 
 <p align="center">
-  <a href="docs/README.md">Docs</a> · <a href="#install">Install</a> · <a href="#usage">Usage</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a>
+  <a href="https://accounts.tempo.xyz">Website</a> · <a href="https://accounts.tempo.xyz/docs">Docs</a> · <a href="#install">Install</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a>
 </p>
 
 ---
@@ -17,35 +17,27 @@
 > [!WARNING]
 > `accounts@1` is in alpha, under the `alpha` dist-tag. Its API is not stable yet.
 
-## Overview
+## Quick Prompt
 
-`accounts` is the SDK of [Tempo ID](https://github.com/tempoxyz/id), Tempo's sign-in for every app. An app uses it to sign users in, keep their session, and get a scoped access key for each session. The access key signs Tempo transactions through Viem, with the limits the user approved.
+Prompt your agent:
 
-```mermaid
-flowchart LR
-  App[App] -->|Id.create| Instance[Instance: config, session]
-  Instance --> Plugins[Plugins: dialog, redirect, email, passkey, device, backend]
-  Plugins -->|sign-in| ID[Tempo ID]
-  ID -->|tokens and access key| Instance
-  Instance -->|tempoId.viem| Chain[Tempo]
+```
+Read accounts.tempo.xyz and integrate Tempo into my application
 ```
 
 ## Install
 
-```sh
+```bash
 npm i accounts@alpha viem
 ```
 
-| Entry                 | Holds                                                                                      |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| `accounts`            | `Id`, `Actions`, `Store`, `Session`, `AccessKey`, `Permissions`, and the types             |
-| `accounts/cloudflare` | `DurableObject.sessions`, for a backend's sessions on Cloudflare Workers                   |
-| `accounts/expo`       | The `expo` preset of an Expo app                                                           |
-| `accounts/internal`   | `Authorization`, `Funding`, `Pending`, and `User`, the types that the actions build        |
-| `accounts/mpp`        | `mpp`, the plugin that pays MPP endpoints with the access key                              |
-| `accounts/plugins`    | `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, and `viem`         |
-| `accounts/react`      | `react`, the plugin that adds `tempoId.useSession()`                                       |
-| `accounts/wagmi`      | `tempoId`, a wagmi connector, and `wagmi`, the plugin of a wagmi config                    |
+```bash
+pnpm i accounts@alpha viem
+```
+
+```bash
+bun i accounts@alpha viem
+```
 
 ## Usage
 
@@ -68,25 +60,46 @@ await tempoId.dialog.signIn()
 await tempoId.token.transferSync({ amount, to, token })
 ```
 
-The [docs](docs/README.md) cover each sign-in flow, with a [guide](docs/guides/README.md) per flow and a page per [API](docs/api/README.md).
+## Documentation
+
+Start at [accounts.tempo.xyz](https://accounts.tempo.xyz) for the product overview, live demos, and integration guides. The documentation lives at [accounts.tempo.xyz/docs](https://accounts.tempo.xyz/docs).
+
+## Getting Help
+
+Have questions or building something cool with the Tempo Accounts SDK?
+
+Join the Telegram group to chat with the team and other devs: [@mpp_devs](https://t.me/mpp_devs)
 
 ## Examples
 
-[`examples/`](examples/README.md) holds one small app for each platform: `backend`, `cli`, `mobile`, `wagmi`, and `web`. Each is a standalone project that installs `accounts` from npm.
-
-[`playgrounds/`](playgrounds/README.md) holds one configurable app per flow. Tempo ID's end-to-end suite drives them, and deploys them beside each Tempo ID deployment.
+| Example                         | Description                                                             |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| [web](./examples/web)           | Sign in through a dialog on the page, and send OUSD with the access key. |
+| [wagmi](./examples/wagmi)       | Sign in through wagmi's `connect`, with the `tempoId` connector.        |
+| [backend](./examples/backend)   | Sign in through a redirect, with the session on a Cloudflare Worker.    |
+| [cli](./examples/cli)           | Sign in through the device grant, with a code approved in a browser.    |
+| [mobile](./examples/mobile)     | Sign in through the system browser in an Expo app.                      |
 
 ## Development
 
 ```sh
-pnpm install
-pnpm check:types   # the package, the examples, and the playgrounds
-pnpm test          # the tests in src/ and scripts/
-pnpm check         # format and lint
+pnpm build            # build library
+pnpm check            # lint + format
+pnpm check:types      # type checks
+pnpm test             # run tests
 ```
-
-The playgrounds sign in through a running Tempo ID. `pnpm dev` in [`tempoxyz/id`](https://github.com/tempoxyz/id) starts one with every playground, as its [local development docs](https://github.com/tempoxyz/id/blob/main/docs/development/local.md) describe.
 
 ## License
 
-[MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE), at the option of the user.
+<sup>
+Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
+2.0</a> or <a href="LICENSE-MIT">MIT license</a> at your option.
+</sup>
+
+<br>
+
+<sub>
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in these packages by you, as defined in the Apache-2.0 license,
+shall be dual licensed as above, without any additional terms or conditions.
+</sub>
