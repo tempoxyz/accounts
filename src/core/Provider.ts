@@ -1,5 +1,5 @@
 import { announceProvider } from 'mipd'
-import { Mppx, tempo as mppx_tempo, type ResolveAccountInfo } from 'mppx/client'
+import type { tempo as mppx_tempo, ResolveAccountInfo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import {
@@ -33,6 +33,7 @@ import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import * as AddressUtil from './internal/address.js'
 import * as DialogError from './internal/DialogError.js'
+import * as MppxPolyfill from './internal/MppxPolyfill.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Keystore from './Keystore.js'
 import * as Schema from './Schema.js'
@@ -1975,17 +1976,16 @@ export function create(options: create.Options = {}): create.ReturnType {
     const { mode = 'push', polyfill: polyfill_option, ...methodOptions } = mpp
     // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
     // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
+    // Without the polyfill there is nothing for mppx to do here (apps pass
+    // `getMppxParameters()` to their own client), so it is never loaded.
     const polyfill = polyfill_option ?? isFetchWritable()
-    const parameters = provider.getMppxParameters()
-    const tempoOptions = {
-      ...methodOptions,
-      ...parameters,
-      mode,
+    if (polyfill) {
+      const parameters = provider.getMppxParameters()
+      MppxPolyfill.install(({ tempo }) => [
+        tempo({ ...methodOptions, ...parameters, mode }),
+        tempo.subscription(parameters),
+      ])
     }
-    Mppx.create({
-      methods: [mppx_tempo(tempoOptions), mppx_tempo.subscription(parameters)],
-      polyfill,
-    })
   }
 
   providerRef = provider
@@ -2090,6 +2090,12 @@ export declare namespace create {
      *
      * Pass an options object to configure, or `false` to disable.
      *
+     * With the fetch polyfill (see {@link mpp.Options.polyfill}), mppx loads
+     * on demand: `globalThis.fetch` is replaced right away, and requests sent
+     * before mppx finishes loading wait for it. Without the polyfill, mppx is
+     * not loaded; pass {@link Provider.getMppxParameters} to your own mppx
+     * client instead.
+     *
      * @default true
      */
     mpp?: boolean | mpp.Options | undefined
@@ -2184,7 +2190,7 @@ export declare namespace mpp {
      *
      * Defaults to `true` when `globalThis.fetch` is writable, and `false`
      * otherwise (e.g. Cloudflare Workers, where `globalThis.fetch` is
-     * read-only).
+     * read-only). When `false`, mppx is not loaded.
      */
     polyfill?: boolean | undefined
   }
