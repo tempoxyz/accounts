@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 @import 'regen-ui/tailwind.css';
-@import './_vocs.generated.css';
+@import 'vocs/styles/theme.css';
 @import '../landing/styles.css';
 
 @source "../";

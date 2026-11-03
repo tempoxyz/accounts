@@ -1,22 +1,25 @@
-import { AbiEvent, Hex, RpcRequest, RpcResponse } from 'ox'
+import { AbiEvent, AbiFunction, Hex, RpcRequest, RpcResponse } from 'ox'
 import { Transaction as core_Transaction } from 'ox/tempo'
 import {
   type Address,
+  BaseError,
   type Call,
   type Chain,
   type Client,
   createClient,
-  decodeFunctionData,
+  decodeAbiParameters,
   formatUnits,
   http,
+  HttpRequestError,
   isAddress,
   type Log,
   parseEventLogs,
+  TimeoutError,
   type Transport,
   zeroAddress,
 } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
-import { simulateCalls } from 'viem/actions'
+import { readContract, simulateCalls } from 'viem/actions'
 import { Abis, Actions, Addresses, Capabilities, Transaction, VirtualAddress } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 
@@ -32,6 +35,13 @@ import * as Utils from './utils.js'
 
 /** Default cache TTL in seconds (10 minutes) for the verified tokenlist. */
 const defaultCacheTtl = 10 * 60
+
+/**
+ * Calldata bytes per batched `eth_call`. A Worker opens at most six connections at once, so viem's
+ * 1 KB default split one fill's reads (e.g. a balance for each of 37 tokens) into calls that queued
+ * ahead of the fill.
+ */
+const batchSize = 16 * 1024
 
 /**
  * Instantiates a relay handler that proxies `eth_fillTransaction`
@@ -111,9 +121,16 @@ export function relay(options: relay.Options = {}): Handler {
   const clients = new Map<number, Client>()
   for (const chain of chains) {
     const transport = transports[chain.id] ?? http()
+    const chain_multicall = Utils.withMulticall3(chain)
     clients.set(
       chain.id,
-      createClient({ chain, batch: { multicall: { deployless: true } }, transport }),
+      createClient({
+        batch: {
+          multicall: { batchSize, deployless: !chain_multicall.contracts?.multicall3 },
+        },
+        chain: chain_multicall,
+        transport,
+      }),
     )
   }
 
@@ -146,6 +163,18 @@ export function relay(options: relay.Options = {}): Handler {
         const parameters = params[0] as Record<string, unknown>
         const capabilities = (parameters.capabilities ?? {}) as Record<string, unknown>
 
+        // Fee-token resolution and defaults need the token list, but a sponsored fill with a
+        // known fee token doesn't, so the list loads alongside it. Token metadata comes from the
+        // list once it has loaded.
+        const tokenlist = Tokenlist.fetch(chainId, kv, { cacheTtl, resolver: resolveTokens })
+        let tokens: readonly Tokenlist.Token[] | undefined
+        void tokenlist.then(
+          (value) => {
+            tokens = value
+          },
+          () => {},
+        )
+
         try {
           const from =
             typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
@@ -157,8 +186,13 @@ export function relay(options: relay.Options = {}): Handler {
                   allowUnsafe: internal_allowUnsafeUrls,
                 })
               : undefined
-          const requestsSponsorship =
-            (!!feePayerOptions || !!externalFeePayerUrl) && parameters.feePayer !== false
+          // A host's precheck can turn its own fee payer down before any sponsored fill. An app's
+          // own fee payer URL is the authority for its fills, so it isn't prechecked.
+          const precheck =
+            feePayerOptions?.precheck && !externalFeePayerUrl && parameters.feePayer !== false
+              ? Promise.resolve(feePayerOptions.precheck({ chainId, from }))
+              : undefined
+          void precheck?.catch(() => {})
           // Default to `true`. Dapps that don't render diffs can pass
           // `capabilities.balanceDiffs: false` to skip the post-fill
           // `tempo_simulateV1` round trip (~250-400ms).
@@ -166,6 +200,24 @@ export function relay(options: relay.Options = {}): Handler {
 
           const { feePayer: _feePayer, ...normalized } =
             Utils.normalizeFillTransactionRequest(parameters)
+
+          // Simulation needs only the calls, so start it alongside the fill. It is used when the
+          // fill keeps the requested calls (no swap prepended), and its failure only surfaces then.
+          const calls_requested = extractCalls(normalized)
+          const simulation_early =
+            features.simulate && requireBalanceDiffs && calls_requested.length > 0
+              ? simulate(client, {
+                  account: from === zeroAddress ? undefined : from,
+                  calls: calls_requested,
+                  kv,
+                })
+              : undefined
+          void simulation_early?.catch(() => {})
+
+          const requestsSponsorship =
+            (!!feePayerOptions || !!externalFeePayerUrl) &&
+            parameters.feePayer !== false &&
+            ((await precheck) ?? true)
 
           // When sponsoring, the sponsor's preferred fee token (if set)
           // overrides whatever the consumer asked for — the sponsor is
@@ -181,19 +233,6 @@ export function relay(options: relay.Options = {}): Handler {
             ...(sponsoredFeeToken ? { feeToken: sponsoredFeeToken } : {}),
           }
 
-          // Simulation needs only the calls, so start it alongside the fill. It is used when the
-          // fill keeps the requested calls (no swap prepended), and its failure only surfaces then.
-          const calls_requested = extractCalls(baseTx)
-          const simulation_early =
-            features.simulate && requireBalanceDiffs && calls_requested.length > 0
-              ? simulate(client, {
-                  account: from === zeroAddress ? undefined : from,
-                  calls: calls_requested,
-                  kv,
-                })
-              : undefined
-          void simulation_early?.catch(() => {})
-
           let filled: Awaited<ReturnType<typeof fill>>
           let sponsored = false
           let feeToken = sponsoredFeeToken
@@ -205,26 +244,31 @@ export function relay(options: relay.Options = {}): Handler {
                   account: from,
                   feeToken: undefined,
                   kv,
-                  tokens: (await getTokens(chainId)).filter(
-                    (t) => t.toLowerCase() !== insufficientToken.toLowerCase(),
-                  ),
+                  tokens: (await tokenlist)
+                    .map((t) => t.address)
+                    .filter((t) => t.toLowerCase() !== insufficientToken.toLowerCase()),
                 })
             : undefined
 
-          // When no sponsor will pay, prefer fee tokens the user actually
-          // holds. Extend the configured token list with any TIP20 token
-          // the transaction is calling — typically the token being
-          // transferred — so a user transferring USDC.e can pay gas in
-          // USDC.e even when the configured list defaults to pathUSD.
-          const configuredTokens = await getTokens(chainId)
-          const unsponsoredTokens = [
-            ...configuredTokens,
-            ...callTargetTokens(baseTx).filter(
-              (t) => !configuredTokens.some((rt) => rt.toLowerCase() === t.toLowerCase()),
-            ),
-          ]
+          // An unsponsored fill checks its automatic fee token's liquidity.
+          const checksLiquidity = features.feeTokenResolution && !requestFeeToken
 
           async function fillUnsponsored() {
+            // The liquidity check needs the recent producers' fee tokens: load them alongside the
+            // token list.
+            if (checksLiquidity) FeeLiquidity.prefetch(client, { kv })
+            // When no sponsor will pay, prefer fee tokens the user actually
+            // holds. Extend the configured token list with any TIP20 token
+            // the transaction is calling — typically the token being
+            // transferred — so a user transferring USDC.e can pay gas in
+            // USDC.e even when the configured list defaults to pathUSD.
+            const configuredTokens = (await tokenlist).map((t) => t.address)
+            const unsponsoredTokens = [
+              ...configuredTokens,
+              ...callTargetTokens(baseTx).filter(
+                (t) => !configuredTokens.some((rt) => rt.toLowerCase() === t.toLowerCase()),
+              ),
+            ]
             const excluded = new Set<string>()
             const balances = new Map<string, Promise<bigint>>()
             const liquidity = new Map<string, ReturnType<typeof FeeLiquidity.prepare>>()
@@ -259,12 +303,24 @@ export function relay(options: relay.Options = {}): Handler {
                   // Fee-token resolution already read these balances.
                   getBalance: (token) => balances.get(token.toLowerCase()),
                   kv,
-                  resolveFeeToken: resolveFeeTokenForSwap,
+                  tokens,
+                  // So does a swap's source token.
+                  resolveFeeToken: from
+                    ? (insufficientToken) =>
+                        resolveFeeToken(client, {
+                          account: from,
+                          balances,
+                          kv,
+                          tokens: configuredTokens.filter(
+                            (t) => t.toLowerCase() !== insufficientToken.toLowerCase(),
+                          ),
+                        })
+                    : undefined,
                   transaction: { ...normalized, chainId, ...(token ? { feeToken: token } : {}) },
                 })
                 // Estimation can succeed even when the fee AMM cannot settle
                 // the fee. Check the filled maximum fee before asking for a signature.
-                if (token && !requestFeeToken && features.feeTokenResolution) {
+                if (token && checksLiquidity) {
                   const { gas, maxFeePerGas } = result.transaction
                   if (
                     gas &&
@@ -296,8 +352,8 @@ export function relay(options: relay.Options = {}): Handler {
           // through that service so it can sign the transaction.
           const fillClient = externalFeePayerUrl
             ? createClient({
+                batch: client.batch,
                 chain: client.chain,
-                batch: { multicall: { deployless: true } },
                 transport: http(externalFeePayerUrl),
               })
             : client
@@ -311,7 +367,7 @@ export function relay(options: relay.Options = {}): Handler {
             //     `validate` only governs the wallet's own fee payer).
             // Default to the chain's first token so the broadcast envelope
             // always carries a feeToken the chain can charge.
-            if (!feeToken) feeToken = (await getTokens(chainId))[0]
+            if (!feeToken) feeToken = (await tokenlist)[0]?.address
             const transaction = {
               ...baseTx,
               feePayer: true,
@@ -348,8 +404,12 @@ export function relay(options: relay.Options = {}): Handler {
             // case (common) avoids the upfront `resolveFeeToken` round
             // trips and the second `eth_fillTransaction`.
             const sponsoredTx = { ...baseTx, feePayer: true }
+            // Without a fee token the response defaults to the token list's first, so a
+            // failure to load the list surfaces before `validate`, which may meter the fill.
+            const ready = feeToken ? undefined : tokenlist
 
             if (Sponsorship.isPreparedTransaction(sponsoredTx)) {
+              await ready
               // Already prepared — skip fills, just validate sponsorship.
               const prepared = {
                 transaction: Utils.normalizeTempoTransaction(sponsoredTx),
@@ -372,6 +432,7 @@ export function relay(options: relay.Options = {}): Handler {
                 feeToken,
                 transaction: sponsoredTx,
               })
+              await ready
               sponsored = await Sponsorship.shouldSponsor({
                 sender: from,
                 transaction: fill_sponsored.transaction,
@@ -397,7 +458,7 @@ export function relay(options: relay.Options = {}): Handler {
           const swap = 'swap' in filled ? filled.swap : undefined
           if (!feeToken)
             feeToken =
-              (transaction_filled.feeToken as Address | undefined) ?? (await getTokens(chainId))[0]
+              (transaction_filled.feeToken as Address | undefined) ?? (await tokenlist)[0]?.address
 
           // Parallelize: simulate, fee payer signing, and autoSwap metadata.
           const alreadySigned =
@@ -421,6 +482,7 @@ export function relay(options: relay.Options = {}): Handler {
                   kv,
                   maxFeePerGas: transaction_filled.maxFeePerGas,
                   simulation: sameCalls(calls, calls_requested) ? simulation_early : undefined,
+                  tokens,
                 })
               const fee = await computeFee(client, {
                 feeToken,
@@ -432,6 +494,12 @@ export function relay(options: relay.Options = {}): Handler {
             })(),
             // Sign as fee payer (if sponsored and not already signed).
             (async () => {
+              // An app's own fee payer URL is the sponsorship authority, so its fill must come
+              // back signed. Signing it here would spend this relay's fee payer without `validate`.
+              if (externalFeePayerUrl && !alreadySigned)
+                throw new RpcResponse.InvalidParamsError({
+                  message: 'The app fee payer did not sign the transaction.',
+                })
               if (!(sponsored && feePayerOptions && !alreadySigned)) return transaction_filled
               return Sponsorship.sign({
                 account: feePayerOptions.account,
@@ -495,18 +563,22 @@ export function relay(options: relay.Options = {}): Handler {
 
             const normalized = Utils.normalizeFillTransactionRequest(parameters)
 
-            // Simulate from zero address for optimistic balance diffs.
+            // Simulate from zero address for optimistic balance diffs, alongside
+            // the metadata of the missing token.
             const optimisticCalls = normalized ? extractCalls(normalized) : undefined
-            const [{ balanceDiffs }, virtualAddresses] = optimisticCalls
-              ? await Promise.all([
-                  simulateAndParseDiffs(client, {
+            const [{ balanceDiffs }, virtualAddresses, metadata] = await Promise.all([
+              optimisticCalls
+                ? simulateAndParseDiffs(client, {
                     account: zeroAddress,
                     calls: optimisticCalls,
                     kv,
-                  }),
-                  resolveVirtualAddresses(client, { calls: optimisticCalls }),
-                ])
-              : [{ balanceDiffs: undefined }, undefined]
+                  })
+                : { balanceDiffs: undefined },
+              optimisticCalls
+                ? resolveVirtualAddresses(client, { calls: optimisticCalls })
+                : undefined,
+              resolveTokenMetadata(client, { token, kv }).catch(() => undefined),
+            ])
 
             // Re-key balance diffs from zero address to the real sender.
             const senderDiffs =
@@ -514,9 +586,6 @@ export function relay(options: relay.Options = {}): Handler {
                 ? { [parameters.from]: balanceDiffs[zeroAddress] ?? [] }
                 : balanceDiffs
 
-            const metadata = await resolveTokenMetadata(client, { token, kv }).catch(
-              () => undefined,
-            )
             const deficit = required - available
             return RpcResponse.from(
               {
@@ -689,6 +758,20 @@ export namespace relay {
           /** Preferred fee token the sponsor wants to pay fees in. */
           feeToken?: Address | undefined
           /**
+           * Checks a fill's sender and chain before the relay fills it for sponsorship. Return
+           * `false` to fill it unsponsored right away, skipping the sponsored fill that
+           * `validate` would reject. Keep it cheap: the fill waits for it. `validate` still
+           * approves each filled transaction, and raw transactions are not prechecked.
+           */
+          precheck?:
+            | ((request: {
+                /** Chain the transaction is filled for. */
+                chainId: number
+                /** Sender, when the request names one. */
+                from?: Address | undefined
+              }) => boolean | Promise<boolean>)
+            | undefined
+          /**
            * Validates whether to sponsor the transaction. When omitted, all
            * transactions are sponsored. Return `false` to reject sponsorship.
            */
@@ -742,7 +825,7 @@ export namespace relay {
 
 // TODO: cleanup
 async function fill(client: Client, options: fill.Options) {
-  const { autoSwap, feeToken, kv, transaction: request } = options
+  const { autoSwap, feeToken, kv, tokens, transaction: request } = options
 
   // Skip re-formatting if already in RPC format (e.g. from viem's fillTransaction).
   const format = (value: Record<string, unknown>) =>
@@ -793,6 +876,33 @@ async function fill(client: Client, options: fill.Options) {
     }
   }
 
+  // The node's `eth_fillTransaction` may pick a fee token the user
+  // doesn't yet hold (e.g. one this transaction will mint via a
+  // swap). Tempo's gas check runs before the calls execute, so the
+  // tx would revert at broadcast with `have 0 want N`. Check the sender's
+  // pre-tx balance against the computed gas cost. A sponsored fill's fee
+  // comes from the fee payer, so its sender's balance doesn't matter:
+  // the relay only returns one once the fee payer signs, and refills
+  // without `feePayer` when it won't.
+  const sender = autoSwap && !request.feePayer ? (request.from as Address | undefined) : undefined
+  function getBalance(token: Address) {
+    return options.getBalance?.(token) ?? readBalance(client, { account: sender!, token })
+  }
+  /** A fee token's decimals, from the token list when it lists the token. */
+  function getDecimals(token: Address) {
+    const listed = getListed(tokens, token)
+    if (listed) return Promise.resolve(listed.decimals)
+    return resolveTokenMetadata(client, { token, kv }).then(
+      ({ decimals }) => decimals,
+      () => undefined,
+    )
+  }
+  // A fee token known before the fill is read alongside it.
+  const balance_early =
+    sender && feeToken
+      ? { balance: getBalance(feeToken), decimals: getDecimals(feeToken), token: feeToken }
+      : undefined
+
   try {
     const formatted = format(request)
     const result = await client.request({
@@ -836,14 +946,8 @@ async function fill(client: Client, options: fill.Options) {
     // typed envelope built for sponsorship signing throws CallsEmptyError.
     const mergedTx = mergeCallsFromRequest(result.tx as Record<string, unknown>, request)
 
-    // The node's `eth_fillTransaction` may pick a fee token the user
-    // doesn't yet hold (e.g. one this transaction will mint via a
-    // swap). Tempo's gas check runs before the calls execute, so the
-    // tx would revert at broadcast with `have 0 want N`. Validate the
-    // sender's pre-tx balance against the computed gas cost and, if
-    // short, autoSwap a token they do hold into the fee token.
-    if (autoSwap && !swap) {
-      const fromAddress = request.from as Address | undefined
+    // If the sender is short, autoSwap a token they do hold into the fee token.
+    if (sender && !swap) {
       const resolvedFeeToken = ((mergedTx.feeToken as Address | undefined) ?? feeToken) as
         | Address
         | undefined
@@ -851,18 +955,17 @@ async function fill(client: Client, options: fill.Options) {
       const maxFeePerGas = mergedTx.maxFeePerGas
         ? BigInt(mergedTx.maxFeePerGas as `0x${string}`)
         : 0n
-      if (fromAddress && resolvedFeeToken && gas > 0n && maxFeePerGas > 0n) {
-        const [balance, metadata] = await Promise.all([
-          options.getBalance?.(resolvedFeeToken) ??
-            Actions.token
-              .getBalance(client, { account: fromAddress, token: resolvedFeeToken })
-              .then(({ amount }) => amount)
-              .catch(() => 0n),
-          resolveTokenMetadata(client, { token: resolvedFeeToken, kv }).catch(() => undefined),
+      if (resolvedFeeToken && gas > 0n && maxFeePerGas > 0n) {
+        const early =
+          balance_early?.token.toLowerCase() === resolvedFeeToken.toLowerCase()
+            ? balance_early
+            : undefined
+        const [balance, decimals] = await Promise.all([
+          early?.balance ?? getBalance(resolvedFeeToken),
+          early?.decimals ?? getDecimals(resolvedFeeToken),
         ])
-        if (metadata) {
-          const requiredFee =
-            (gas * maxFeePerGas) / 10n ** BigInt(Math.max(0, 18 - metadata.decimals))
+        if (decimals !== undefined) {
+          const requiredFee = (gas * maxFeePerGas) / 10n ** BigInt(Math.max(0, 18 - decimals))
           if (balance < requiredFee) {
             // Best-effort: if the swap itself can't be filled (e.g. the
             // source token also has insufficient balance), fall through
@@ -902,13 +1005,35 @@ declare namespace fill {
   type Options = {
     autoSwap?: { slippage: number } | undefined
     feeToken?: Address | undefined
-    /** The sender's balance of a token, when already read (e.g. during fee-token resolution). */
+    /**
+     * The sender's balance of a token, when already read (e.g. during fee-token resolution).
+     * Only unsponsored fills read it.
+     */
     getBalance?: ((token: Address) => Promise<bigint> | undefined) | undefined
     kv?: Kv.Kv | undefined
     resolveFeeToken?: ((insufficientToken: Address) => Promise<Address | undefined>) | undefined
+    /** The token list, whose decimals spare a metadata read. */
+    tokens?: readonly Tokenlist.Token[] | undefined
     transaction: Record<string, unknown>
   }
 }
+
+/**
+ * Reads `account`'s balance of `token`, or `0n` when the read fails. `Actions.token.getBalance`
+ * would also read the token's decimals, which the relay doesn't use.
+ */
+function readBalance(client: Client, options: { account: Address; token: Address }) {
+  const { account, token } = options
+  return readContract(client, {
+    abi: [balanceOf],
+    address: token,
+    args: [account],
+    functionName: 'balanceOf',
+  }).catch(() => 0n)
+}
+
+/** TIP-20 `balanceOf`, resolved once rather than looked up in the TIP-20 ABI on every read. */
+const balanceOf = AbiFunction.fromAbi(Abis.tip20, 'balanceOf')
 
 async function resolveFeeToken(
   client: Client,
@@ -920,15 +1045,15 @@ async function resolveFeeToken(
   const sender = account
 
   function getBalance(token: Address) {
-    options.prepareFeeToken?.(token)
     const key = token.toLowerCase()
     const pending = options.balances?.get(key)
     if (pending) return pending
-    const balance = Actions.token
-      .getBalance(client, { account: sender, token })
-      .then(({ amount }) => amount)
-      .catch(() => 0n)
+    const balance = readBalance(client, { account: sender, token })
     options.balances?.set(key, balance)
+    // Only a token the sender holds can pay the fee, so only its reserves are worth reading.
+    void balance.then((amount) => {
+      if (amount > 0n) options.prepareFeeToken?.(token)
+    })
     return balance
   }
 
@@ -996,6 +1121,7 @@ declare namespace resolveFeeToken {
     tokens?: readonly Address[] | undefined
     excluded?: Set<string> | undefined
     balances?: Map<string, Promise<bigint>> | undefined
+    /** Starts reading the fee reserves of a token the sender holds. */
     prepareFeeToken?: ((token: Address) => void) | undefined
     /** TTL in seconds for the cached `userTokens` lookup. @default 60 */
     userTokenCacheTtl?: number | undefined
@@ -1065,28 +1191,41 @@ function getVirtualAddressTargets(calls: readonly Call[]): readonly Address[] {
 
 function decodeTransferRecipient(data?: string | undefined): Address | undefined {
   if (!data) return undefined
-  const selector = data.slice(0, 10).toLowerCase()
-  if (!transferSelectors.has(selector)) return undefined
+  // Matched case-sensitively, like viem's `decodeFunctionData`.
+  const transfer = transferFunctions.get(data.slice(0, 10) as Hex.Hex)
+  if (!transfer) return undefined
   try {
-    const { args, functionName } = decodeFunctionData({
-      abi: Abis.tip20,
-      data: data as Hex.Hex,
-    })
-    if (
-      (functionName === 'transfer' || functionName === 'transferWithMemo') &&
-      typeof args[0] === 'string'
-    )
-      return args[0]
-    if (
-      (functionName === 'transferFrom' || functionName === 'transferFromWithMemo') &&
-      typeof args[1] === 'string'
-    )
-      return args[1]
+    const args = decodeAbiParameters(
+      transfer.inputs,
+      `0x${data.slice(10)}` as Hex.Hex,
+    ) as readonly unknown[]
+    const recipient = args[transfer.recipient]
+    if (typeof recipient === 'string') return recipient as Address
   } catch {}
   return undefined
 }
 
-const transferSelectors = new Set(['0xa9059cbb', '0x95777d59', '0x23b872dd', '0x929c2539'])
+/**
+ * TIP-20 transfers by selector, with the index of their recipient argument.
+ * `decodeFunctionData` would hash the selector of every TIP-20 function
+ * before the match on each call.
+ */
+const transferFunctions = new Map(
+  (
+    [
+      ['transfer', 0],
+      ['transferWithMemo', 0],
+      ['transferFrom', 1],
+      ['transferFromWithMemo', 1],
+    ] as const
+  ).map(([name, recipient]) => {
+    const abiFunction = AbiFunction.fromAbi(Abis.tip20, name)
+    return [
+      AbiFunction.getSelector(abiFunction),
+      { inputs: abiFunction.inputs, recipient },
+    ] as const
+  }),
+)
 
 // TODO: cleanup/remove
 function extractCalls(transaction: Record<string, unknown>): readonly Call[] {
@@ -1124,9 +1263,11 @@ function sameCalls(a: readonly Call[], b: readonly Call[]) {
 // TODO: cleanup/remove
 async function simulate(client: Client, options: simulate.Options) {
   const { account, calls, kv } = options
-  // Nodes without `tempo_simulateV1` answer every fill with "method not found", so skip it for a
-  // while once seen rather than spend a round trip on it each time.
-  const unsupported = `simulate.tempoUnsupported:${client.chain?.id ?? 0}`
+  // Whether the node serves `tempo_simulateV1`, as last seen. Nodes without it answer every fill
+  // with "method not found", so skip it for a while once seen rather than spend a round trip on
+  // it each time. Support is recorded too: a store answers a key it holds from memory, where a
+  // missing key costs a shared store a remote read before every simulation.
+  const support = `simulate.tempoV1:${client.chain?.id ?? 0}`
   async function fallback() {
     const { results } = await simulateCalls(client, {
       ...(account ? { account } : {}),
@@ -1134,13 +1275,24 @@ async function simulate(client: Client, options: simulate.Options) {
     })
     return { results, tokenMetadata: undefined }
   }
-  if (kv && (await kv.get(unsupported).catch(() => undefined))) return fallback()
+  const supported = kv ? await kv.get<boolean>(support).catch(() => undefined) : undefined
+  if (supported === false) return fallback()
   try {
-    return await Actions.simulate.simulateCalls(client, {
-      ...(account ? { account } : {}),
-      calls: calls as Call[],
-      traceTransfers: true,
-    })
+    // Probe without retries: a node behind a method filter refuses with HTTP 403, which viem
+    // retries with backoff (~1 s) before the fallback below can run.
+    const result = await Actions.simulate.simulateCalls(
+      {
+        ...client,
+        request: (args, options) => client.request(args as never, { ...options, retryCount: 0 }),
+      } as typeof client,
+      {
+        ...(account ? { account } : {}),
+        calls: calls as Call[],
+        traceTransfers: true,
+      },
+    )
+    if (supported !== true) void kv?.set(support, true, { ttl: 10 * 60 }).catch(() => {})
+    return result
   } catch (error) {
     // TODO: Remove fallback once all nodes support tempo_simulateV1.
     // Fall back to viem's simulateCalls (eth_simulateV1) if the Tempo
@@ -1148,9 +1300,18 @@ async function simulate(client: Client, options: simulate.Options) {
     const code =
       (error as { code?: number | undefined }).code ??
       (error as { cause?: { code?: number | undefined } | undefined }).cause?.code
-    if (code !== -32601) throw error
-    await kv?.set(unsupported, true, { ttl: 10 * 60 }).catch(() => {})
-    return fallback()
+    if (code === -32601) {
+      await kv?.set(support, false, { ttl: 10 * 60 }).catch(() => {})
+      return fallback()
+    }
+    // A transient transport failure (the probe got no retries) falls back to
+    // `eth_simulateV1`, which keeps viem's retries. Execution errors still throw.
+    if (
+      error instanceof BaseError &&
+      error.walk((e) => e instanceof HttpRequestError || e instanceof TimeoutError)
+    )
+      return fallback()
+    throw error
   }
 }
 
@@ -1163,7 +1324,7 @@ declare namespace simulate {
 }
 
 async function simulateAndParseDiffs(client: Client, options: simulateAndParseDiffs.Options) {
-  const { account, calls, swap, feeToken, gas, kv, maxFeePerGas } = options
+  const { account, calls, swap, feeToken, gas, kv, maxFeePerGas, tokens } = options
 
   try {
     const { results, tokenMetadata } = await (options.simulation ??
@@ -1178,6 +1339,16 @@ async function simulateAndParseDiffs(client: Client, options: simulateAndParseDi
     for (const result of results as { logs?: (typeof logs)[number][] | undefined }[])
       if (result.logs) logs.push(...result.logs)
 
+    // Compute fee breakdown alongside the balance diffs.
+    const fee = computeFee(client, {
+      feeToken,
+      gas,
+      kv,
+      maxFeePerGas,
+      tokenMetadata: tokenMetadata as never,
+      tokens,
+    }).catch(() => undefined)
+
     // Build per-token balance diffs relative to the sender.
     const balanceDiffs = account
       ? await buildBalanceDiffs(client, {
@@ -1186,19 +1357,11 @@ async function simulateAndParseDiffs(client: Client, options: simulateAndParseDi
           logs,
           swap,
           tokenMetadata: tokenMetadata as never,
+          tokens,
         })
       : {}
 
-    // Compute fee breakdown.
-    const fee = await computeFee(client, {
-      feeToken,
-      gas,
-      kv,
-      maxFeePerGas,
-      tokenMetadata: tokenMetadata as never,
-    }).catch(() => undefined)
-
-    return { balanceDiffs, fee }
+    return { balanceDiffs, fee: await fee }
   } catch {
     // Simulation failures should not block the fill response —
     // return empty diffs with fee computed from transaction fields.
@@ -1218,23 +1381,25 @@ declare namespace simulateAndParseDiffs {
     maxFeePerGas?: bigint | undefined
     /** A simulation of `calls` already in flight, started before the fill. */
     simulation?: ReturnType<typeof simulate> | undefined
+    /** The token list, whose decimals spare a metadata read. */
+    tokens?: readonly Tokenlist.Token[] | undefined
   }
 }
 
 async function buildBalanceDiffs(client: Client, options: buildBalanceDiffs.Options) {
-  const { account, kv, logs, swap, tokenMetadata } = options
+  const { account, kv, logs, swap, tokenMetadata, tokens } = options
   const accountLower = account.toLowerCase()
   const dexLower = Addresses.stablecoinDex.toLowerCase()
   const swapTokenIn = swap?.tokenIn.toLowerCase()
   const swapTokenOut = swap?.tokenOut.toLowerCase()
 
   const transferLogs = parseEventLogs({
-    abi: [AbiEvent.fromAbi(Abis.tip20, 'Transfer')],
+    abi: [transferEvent],
     eventName: 'Transfer',
     logs,
   })
   const approvalLogs = parseEventLogs({
-    abi: [AbiEvent.fromAbi(Abis.tip20, 'Approval')],
+    abi: [approvalEvent],
     eventName: 'Approval',
     logs,
   })
@@ -1314,6 +1479,7 @@ async function buildBalanceDiffs(client: Client, options: buildBalanceDiffs.Opti
           token: entry.token,
           tokenMetadata,
           kv,
+          tokens,
         })
         metadataMap.set(entry.token.toLowerCase(), metadata)
       } catch {}
@@ -1346,6 +1512,10 @@ async function buildBalanceDiffs(client: Client, options: buildBalanceDiffs.Opti
   return { [account]: diffs }
 }
 
+// Resolving an event hashes its signature, so resolve these once.
+const transferEvent = AbiEvent.fromAbi(Abis.tip20, 'Transfer')
+const approvalEvent = AbiEvent.fromAbi(Abis.tip20, 'Approval')
+
 declare namespace buildBalanceDiffs {
   type Options = {
     account: Address
@@ -1353,12 +1523,18 @@ declare namespace buildBalanceDiffs {
     logs: Log[]
     swap?: { tokenIn: Address; tokenOut: Address } | undefined
     tokenMetadata: Record<Address, { name: string; symbol: string; currency: string }>
+    /** The token list, whose decimals spare a metadata read. */
+    tokens?: readonly Tokenlist.Token[] | undefined
   }
 }
 
 async function resolveTokenMetadata(client: Client, options: resolveTokenMetadata.Options) {
   const { token, tokenMetadata, kv } = options
   const meta = tokenMetadata?.[token] ?? tokenMetadata?.[token.toLowerCase() as Address]
+  // A simulation names the token and the token list knows its decimals, so there's nothing to read.
+  const listed = getListed(options.tokens, token)
+  if (listed && meta?.symbol && meta.name)
+    return { decimals: listed.decimals, symbol: meta.symbol, name: meta.name }
   // TIP-20 metadata (decimals/symbol/name) is immutable per token, so cache
   // long-term in KV. Skips the multicall RPC on cache hits.
   const fetcher = () => Actions.token.getMetadata(client, { token })
@@ -1379,7 +1555,14 @@ declare namespace resolveTokenMetadata {
     token: Address
     tokenMetadata?: Record<Address, { name: string; symbol: string; currency: string }> | undefined
     kv?: Kv.Kv | undefined
+    /** The token list, whose decimals spare a read for a token the simulation named. */
+    tokens?: readonly Tokenlist.Token[] | undefined
   }
+}
+
+/** Returns `token`'s entry in the token list, if it has one. */
+function getListed(tokens: readonly Tokenlist.Token[] | undefined, token: Address) {
+  return tokens?.find((listed) => listed.address.toLowerCase() === token.toLowerCase())
 }
 
 async function resolveAutoSwapMetadata(client: Client, options: resolveAutoSwapMetadata.Options) {
@@ -1429,11 +1612,16 @@ declare namespace resolveAutoSwapMetadata {
 }
 
 async function computeFee(client: Client, options: computeFee.Options) {
-  const { feeToken, gas, kv, maxFeePerGas, tokenMetadata } = options
+  const { feeToken, gas, kv, maxFeePerGas, tokenMetadata, tokens } = options
   if (!feeToken || !gas || !maxFeePerGas) return undefined
 
   try {
-    const metadata = await resolveTokenMetadata(client, { token: feeToken, tokenMetadata, kv })
+    const metadata = await resolveTokenMetadata(client, {
+      token: feeToken,
+      tokenMetadata,
+      kv,
+      tokens,
+    })
     const raw = gas * maxFeePerGas
     const amount = raw / 10n ** BigInt(18 - metadata.decimals)
     return {
@@ -1454,6 +1642,8 @@ declare namespace computeFee {
     kv?: Kv.Kv | undefined
     maxFeePerGas?: bigint | undefined
     tokenMetadata?: Record<Address, { name: string; symbol: string; currency: string }> | undefined
+    /** The token list, whose decimals spare a metadata read. */
+    tokens?: readonly Tokenlist.Token[] | undefined
   }
 }
 

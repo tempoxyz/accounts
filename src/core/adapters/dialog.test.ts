@@ -291,6 +291,31 @@ describe('dialog', () => {
     await expect(second).resolves.toMatchInlineSnapshot(`"0x2"`)
   })
 
+  test('behavior: opens the wallet at /remote by default', async () => {
+    const hosts: string[] = []
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: tempoLocalnet.id, storage })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+    const adapter = dialog({
+      dialog: Dialog.define({ name: 'test' }, (parameters) => {
+        hosts.push(parameters.host)
+        return { close() {}, destroy() {}, open() {}, async syncRequests() {}, syncTheme() {} }
+      }),
+    })({
+      getAccount: () => ({ address, type: 'json-rpc' }) as never,
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+
+    expect(hosts).toMatchInlineSnapshot(`
+      [
+        "https://wallet.tempo.xyz/remote",
+      ]
+    `)
+    adapter.cleanup?.()
+  })
+
   test('behavior: dialog transport resolves chain ID locally', async () => {
     const { adapter, dialog } = setup()
     const client = await getDialogClient(adapter)
@@ -384,6 +409,31 @@ describe('dialog', () => {
     dialog_.success(request, receipt)
 
     await expect(promise.then((x) => x.status)).resolves.toMatchInlineSnapshot(`"0x1"`)
+  })
+
+  test('behavior: provider sends a failed eth_sendTransactionSync to the dialog once', async () => {
+    const dialog_ = createDialog()
+    const provider = Provider.create({
+      adapter: dialog({ dialog: dialog_.dialog, host }),
+      chains: [tempoLocalnet],
+      mpp: false,
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    const promise = provider.request({
+      method: 'eth_sendTransactionSync',
+      params: [{ calls: [{ to: address, value: '0x1' }] }],
+    })
+    const request = await dialog_.takeRequest()
+    dialog_.failure(request, { code: -32603, message: 'Transaction failed' })
+
+    await expect(promise).rejects.toThrow('Transaction failed')
+    expect(dialog_.synced.flat().map((x) => x.request.id)).toMatchInlineSnapshot(`
+      [
+        0,
+      ]
+    `)
   })
 
   test('behavior: provider forwards JSON-RPC access-key authorization with encoded params', async () => {

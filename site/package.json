@@ -3,10 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --import tsx scripts/copy-vocs-theme.ts && NODE_OPTIONS='--import tsx' vp dev",
-    "build": "pnpm check:markdown && node --import tsx scripts/copy-vocs-theme.ts && vp build",
+    "dev": "NODE_OPTIONS='--import tsx' vp dev",
+    "build": "pnpm check:markdown && vp build",
     "preview": "vp preview",
-    "sync:vocs": "node --import tsx scripts/copy-vocs-theme.ts",
     "check:markdown": "node --import tsx scripts/check-markdown.ts"
   },
   "dependencies": {
@@ -29,9 +28,9 @@
     "tsx": "catalog:",
     "viem": "catalog:",
     "vite": "catalog:",
-    "vocs": "2.0.0",
+    "vocs": "2.12.0",
     "wagmi": "catalog:",
-    "waku": "1.0.0-beta.1"
+    "waku": "1.0.0-rc.3"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.93",

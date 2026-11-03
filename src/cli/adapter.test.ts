@@ -63,7 +63,7 @@ describe('cli', () => {
         [RpcResponse.InternalError: An internal error was received.
 
         Details: revocation rejected
-        Version: viem@2.57.1]
+        Version: viem@0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf]
       `)
       expect(host.requests().map(({ method }) => method)).toMatchInlineSnapshot(`
         [
@@ -87,7 +87,7 @@ describe('cli', () => {
         [RpcResponse.InternalError: An internal error was received.
 
         Details: revocation rejected
-        Version: viem@2.57.1]
+        Version: viem@0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf]
       `)
       expect(host.requests().map(({ method }) => method)).toMatchInlineSnapshot(`
         [
@@ -146,7 +146,7 @@ describe('cli', () => {
           "message": "An internal error was received.
 
         Details: Timed out waiting for device code <code>. Continue at <server>/auth/device/verify?user_code=<code>.
-        Version: viem@2.57.1",
+        Version: viem@0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf",
           "name": "RpcResponse.InternalError",
         }
       `)

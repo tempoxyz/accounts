@@ -27,7 +27,7 @@
 - **Return directly** — don't declare a variable just to return it. Use `return { ... }` unless the variable is needed (e.g. self-reference for chaining).
 - **Skip braces for single-statement blocks** — omit `{}` for single-statement `if`, `for`, etc.
 - **No section separator comments** — don't use `// ---` or `// ===` divider comments. Let JSDoc and whitespace provide structure.
-- **No dynamic imports** — use static `import` declarations. No `await import(...)` or `import(...)` expressions.
+- **No dynamic imports** — use static `import` declarations. No `await import(...)` or `import(...)` expressions. The exceptions are optional dependencies most consumers never run: mppx behind the fetch polyfill (`src/core/internal/MppxPolyfill.ts`) and React Native storage modules.
 - **`as never` over `as any`** — when a type assertion is unavoidable, use `as never` instead of `as any`.
 - **Destructure when accessing multiple properties** — prefer `const { a, b } = options` over repeated `options.a`, `options.b`.
 - **Keep hook results grouped** — when consuming a hook that returns a related bundle (e.g. `useMutation`, Wagmi/React Query hooks, `Steps.use()`), assign the whole result to a single noun and access fields via `.`. Prefer `const send = Hooks.wallet.useSend(); send.mutate(...); send.isPending` over `const { mutate: send, isPending } = Hooks.wallet.useSend()`. The grouping keeps the call site self-documenting and avoids inventing per-hook aliases.
@@ -54,7 +54,7 @@
 ## Site Styling Conventions
 
 - **Use Tailwind utilities, not arbitrary `var()` values** — never write `bg-[var(--background-color-surface)]` or `border-[var(--vocs-border-color-primary)]`. Use the corresponding Tailwind utility class. Both vocs and regen-ui register their tokens via `@theme`, so every token has a generated utility.
-- **No `vocs:` prefix in our app code** — vocs uses a `vocs:` prefix internally for its own components, but our `_root.css` re-imports vocs's theme tokens at the **root** `@theme` layer (via `_vocs.generated.css`), so vocs tokens are available as plain unprefixed utilities in our code: `bg-primary`, `bg-surface`, `border-primary`, `text-primary`/`text-secondary`/`text-muted`, `bg-info-tint`, `text-info`, `border-info-tint`, etc. Writing `vocs:bg-info-tint` will silently no-op because Tailwind has no `vocs:` prefix registered for our own source files.
+- **No `vocs:` prefix in our app code** — vocs uses a `vocs:` prefix internally for its own components, but our `_root.css` imports vocs's theme tokens at the **root** `@theme` layer (via `@import 'vocs/styles/theme.css'`, which leaves Tailwind's palette intact), so vocs tokens are available as plain unprefixed utilities in our code: `bg-primary`, `bg-surface`, `border-primary`, `text-primary`/`text-secondary`/`text-muted`, `bg-info-tint`, `text-info`, `border-info-tint`, etc. Writing `vocs:bg-info-tint` will silently no-op because Tailwind has no `vocs:` prefix registered for our own source files.
 - **Regen-ui tokens are also unprefixed** — regen tokens are imported into the root `@theme` and are available as plain Tailwind utilities: `bg-pane`, `bg-secondary`, `border-border`, `text-foreground`, `text-foreground-secondary`, etc. Where regen and vocs both define a token of the same name (e.g. `--background-color-primary`), vocs wins because it is imported last.
 - **Arbitrary values only when no token exists** — if a value isn't covered by a token (e.g. a custom `color-mix(...)` blend, a one-off pixel size), inline it with `[...]` syntax, but prefer utility classes wherever possible.
 
@@ -102,10 +102,31 @@
 
 ## Learned Workspace Facts
 
+- **Provider error codes survive viem action wrappers** -- viem's `sendTransaction` wraps a wallet's error in `TransactionExecutionError`, which has no code, so Ox reparses a `4001` rejection as `-32603`. `ProviderError.parse` runs at the Provider boundary and returns the first coded cause only when Ox recognizes it as an EIP-1193 provider error. Leave other wrapped errors, and uncoded errors that are not viem's, unchanged.
+
+- **Wallet-forwarding transports send each request once** -- viem's `custom` transport retries `-32603` and uncoded errors three times with backoff. viem's wallet actions pass `retryCount: 0` per request, but the provider's raw `client.request` calls (`eth_sendTransactionSync`, `wallet_authorizeAccessKey`, access-key revocation and updates) use the transport's setting, so an adapter transport that reaches a person must default `retryCount` to `0`. Keep explicit opt-ins such as the CLI's `retryCount`.
+
+- **Default wallet hosts must be final URLs** -- a redirecting default (such as `/embed`, which answers `301` to `/remote`) costs every iframe and popup boot a round trip before the wallet page loads. Point defaults at the page that serves the dialog, and leave the wallet's redirect in place for older SDKs.
+
+- **Chain-bound clients answer `eth_chainId` locally** -- `Client.fromChainId` returns a configured chain's ID without a request, since viem asks for it before every send from a JSON-RPC account. Tests that prove a client's transport routing must use another method, such as `eth_blockNumber`.
+
+- **Resolve large ABIs once in request paths** -- viem's `decodeFunctionData` hashes each function selector until one matches, and ox's `AbiItem.fromAbi` hashes the signature on every call; against `Abis.tip20` that costs about 0.1-2 ms per call. Resolve items at module level and decode arguments with `decodeAbiParameters`.
+
+- **Popups close when their request queue drains** -- holding a popup open for a chained request would skip a wallet cold boot (about 0.9 s), but the wallet's idle `/post-message` page renders nothing, so the held window is blank. Don't add a grace period unless the wallet first renders a held state in popup mode. Point apps at `wallet_connect` capabilities (`personalSign`, `authorizeAccessKey`) to combine sign-in with a signature or key in one approval.
+
+- **Node request-body cancellation must detach listeners** -- remove `IncomingMessage` data/end callbacks when the Web stream is canceled, and close unfinished uploads after the response finishes so later events cannot touch a closed controller or leave an upload open.
+
+- **Keep mppx out of the provider's static graph** -- `Provider.ts` may import only types from `mppx/client`; a value import ships about 34 kB (brotli) to every dialog and app, including those that pass `mpp: false`. The polyfill installs a synchronous placeholder and hands the global to mppx's own polyfill once loaded so `Fetch.restore()` keeps working. Check with an esbuild split bundle that no eager chunk contains mppx.
+
 - **CI registry policy also applies to frozen installs** -- lockfile refreshes can select recently published transitive DevTools packages even when the direct tool is older. Retain compatible established dependency versions when updating the security-patched Vite toolchain.
 
+- **Precheck sponsorship by sender before filling** — Path B (`feePayer.validate`) fills a sponsored variant first and refills unsponsored when `validate` rejects it. Hosts that can decide from the sender and chain alone (no session, unknown key) pass `feePayer.precheck`, which skips that sponsored fill. Keep it cheap, since the fill waits for it, and keep `validate` for decisions that need the filled transaction (budgets).
 - **Fee-token balances do not prove FeeAMM eligibility** — transaction filling can succeed for tokens that pool admission rejects. For automatic selection, check reserves against the maximum fee, including quote-token routing, and exclude failed candidates even when they are the user's funded on-chain preference. Keep explicit fee-token choices and swap funding-source selection separate.
-- **Prefetch fee reserves with balance discovery** — overlap reserve reads with automatic unsponsored token discovery and reuse request-scoped balance/reserve promises across retries. Evaluate reserves against the filled maximum fee, and consume speculative errors only when the corresponding candidate or route is needed.
+- **Use Tempo's genesis Multicall3, not deployless calls** — mainnet, Moderato, devnet and localnet deploy Multicall3 at `0xcA11bde05977b3631167028862bE2a173976CA11` from block 0, but viem's Tempo chains don't declare it. Server clients add it with `Utils.withMulticall3` (localnet's generic chain ID keeps deployless calls). Some viem Tempo actions force deployless multicalls regardless of the client (`Actions.amm.getPool`); read their `.calls()` with `readContract` so they batch through the client.
+- **Cache both outcomes of per-request probes** — a key written only on failure misses on every request when things work, and a shared `Kv` (Cache API, KV) answers a miss with a remote read. Store the success too (for example `simulate.tempoV1:<chain>` as `true`/`false`) so the lookup hits memory.
+- **Sponsored fills skip the sender's fee-token check** — the fee payer pays a sponsored fee, so the post-fill balance check (and its autoSwap into the fee token) applies only to fills without `feePayer`, including the refill after `validate` rejects. Read a fee token known before the fill alongside `eth_fillTransaction`. `InsufficientBalance` recovery for the calls' own tokens still applies to sponsored fills.
+- **Serve slow request-path caches stale while they reload** — `cached(kv, key, fn, { ttl, stale })` returns an entry up to `stale` seconds past its TTL and reloads it in the background (storage keeps it for `ttl + stale`). Use it for loads that take several sequential rounds and tolerate staleness, such as the producers' fee tokens. A host that wraps its store per request (a new `Kv` object each time) gets no in-flight dedupe across requests, so each request in the stale window may start its own reload.
+- **Read fee reserves only for held tokens** — start loading the recent producers' fee tokens when unsponsored resolution starts (alongside the token list when no sponsor is asked), then read reserves for each token whose balance is positive, alongside the fill. Reading every listed candidate's reserves cost ~370 `getPool` reads on mainnet, which queued ahead of the fill behind a Worker's six connections. Reuse request-scoped balance/reserve promises across retries and for the autoSwap source, evaluate reserves against the filled maximum fee, and consume speculative errors only when the corresponding candidate or route is needed.
 
 - **Fill-transaction capabilities must survive request decoding** — `Provider` forwards decoded `eth_fillTransaction` parameters, so the transaction request schema must retain capabilities such as `errors` for relay recovery.
 - **Expo/Metro should get built entrypoints via `react-native` export conditions** — React Native consumers may resolve package `exports` before `default`, and loading `src/*.ts` directly can fail on `.js`-suffixed relative imports. For mobile consumers, add a `react-native` condition that points at `dist/*` entrypoints.
@@ -133,6 +154,10 @@
 - **Normalize no-expiry authorization metadata** -- `expiry: 0` is the request compatibility value for non-expiring access keys. Canonical signed metadata uses absent expiry (RPC `null`); stored zero from older SDK versions must remain selectable. Do not confuse this with on-chain metadata expiry zero for missing/revoked keys, and preserve omitted permissions versus explicit empty lists.
 - **Remove sprintf-js through its YAML parent** -- `@istanbuljs/load-nyc-config@1.1.0` calls `js-yaml.load()`, so its dependency can be scoped to js-yaml v4 to remove argparse v1 and unpatched sprintf-js. Keep the override scoped to this caller and verify YAML configuration loading; other v3 callers may rely on removed APIs or schemas.
 
+- **Keep the Zod audit exception coupled to the backport** -- Zod 3 consumers require v3 APIs and have no patched upstream release for GHSA-mrhx-c7xc-m3w5. Keep them on patched `3.25.76`, keep Zod 4 on `4.6.7` or later, and retain the collection-bound regression tests when updating either version or the patch.
+
+- **Retain Vite+ peers during lockfile refreshes** -- pnpm can resolve bare Vite peers despite the npm-alias override. Preserve the existing Vite+ peer graph and keep the lockfile regression check rejecting real `vite@` versions.
+
 ## Access-key lifecycle invariants
 
 - Validate the adapter's current account selection before using locally retained access keys; persisted account history is not session authorization.
@@ -141,3 +166,15 @@
 
 - Retained-key authority checks must cover MPP resolution and fill signing, including action-based adapters such as Privy. Unsigned root fills must remain available when no usable key matches.
 - Memory KV capacity is opt-in: shared authentication stores also hold durable credentials and sessions, so a default hard cap can deny login. Cache TTLs must reach backing storage for reclamation.
+
+- Bind cached Privy wallets to the authenticated user ID, not token presence; recheck identity after asynchronous wallet loading and before cached signing.
+
+- **Bound dialog startup, never approval** -- iframe and popup readiness waits expire after 15 seconds and propagate `Dialog.TransportError` (`code: -32000`, `data: { origin, stage }`) to the pending request. `dialog_ready` means startup, `dispatch` means sending failed, and `closed` means cancellation/teardown. Keep origins free of paths/queries and never attach request data or raw causes. Cancellation and teardown invalidate waiting sends; retry only on a fresh request, reloading an unready document then rather than replaying signing. Disconnect the iframe remount observer before removing its root. Run the isolated Chromium regressions with `pnpm test --config vitest.dialog.config.ts` after `pnpm exec playwright-core install chromium`.
+
+- **Preserve transport diagnostics across viem and Ox** -- viem wraps RPC errors in a cause chain; Ox reparses known codes and can drop that cause. Recover only the safe dialog origin/stage at the Provider boundary before Ox parses it. Guard asynchronous queue errors by sync revision so a superseded startup attempt cannot fail a newer sync of the same request ID.
+
+- **Keep dialog browser fixtures local and rejection-aware** -- bind standalone Vite test servers to loopback, not all interfaces. Cancellation tests must handle and assert the startup rejection; a discarded `syncRequests` promise becomes an unhandled error after close or destroy. Keep the older browser suite aligned even while its default project is disabled.
+
+- **Cancel the queue at the cancellation boundary** -- custom dialogs use `onCancel(keep?)` to reject the current queue atomically, retaining only an already approved/executing request ID when needed. Never defer a blanket queue drain until that execution settles: it would reject fresh requests submitted after Back. The callback belongs to its dialog/context and cannot affect a replacement after reset.
+
+- **Queue cancellation is a custom-dialog contract** — built-in iframe/popup transports do not call `onCancel`. Removing successors must not force-sync an already-synced executing head: that can reopen a dismissed approval. Sync only a new unsynced head, and close an empty queue. The new required setup callback ships in a minor release.

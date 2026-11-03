@@ -27,7 +27,9 @@ import * as Rpc from '../zod/rpc.js'
 export function dialog(options: dialog.Options = {}): Adapter.Adapter {
   const {
     dialog = Dialog.isInsecureContext() ? Dialog.popup() : Dialog.iframe(),
-    host = 'https://wallet.tempo.xyz/embed',
+    // `/embed` redirects to `/remote`, which cost every iframe and popup a
+    // round trip before the wallet page loaded.
+    host = 'https://wallet.tempo.xyz/remote',
     icon = 'data:image/svg+xml,<svg width="269" height="269" viewBox="0 0 269 269" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="269" height="269" fill="black"/><path d="M123.273 190.794H93.445L121.09 105.318H85.7334L93.445 80.2642H191.95L184.238 105.318H150.773L123.273 190.794Z" fill="white"/></svg>',
     name = 'Tempo Wallet',
     rdns = 'xyz.tempo',
@@ -180,7 +182,9 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         const account = getAccount({ address: options.address, signable: false })
         return {
           account: { address: account.address, type: 'json-rpc' as const },
-          transport: custom(provider),
+          // Every request reaches a person in the dialog, and a retry after an
+          // uncertain failure could send a second transaction.
+          transport: custom(provider, { retryCount: 0 }),
         }
       },
     }
@@ -191,7 +195,7 @@ export declare namespace dialog {
   type Options = {
     /** Dialog to use for the embed app. @default `Dialog.iframe()` (or `Dialog.popup()` in Safari/insecure contexts) */
     dialog?: Dialog.Dialog | undefined
-    /** URL of the embed app. @default `'https://wallet.tempo.xyz/embed'` */
+    /** URL of the embed app. @default `'https://wallet.tempo.xyz/remote'` */
     host?: string | undefined
     /** Data URI of the provider icon. */
     icon?: `data:image/${string}` | undefined

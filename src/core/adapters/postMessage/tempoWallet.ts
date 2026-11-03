@@ -7,7 +7,7 @@ const icon =
 
 /** Creates the Tempo Wallet adapter using Wata postMessage. */
 export function tempoWallet(options: tempoWallet.Options = {}): Adapter.Adapter {
-  const { theme, ...rest } = options
+  const { handoff, theme, ...rest } = options
   // Theme is a wallet-presentation concern, so it rides the page URL as the
   // wallet's `accent`/`radius`/`scheme` params — the generic `postMessage`
   // adapter stays theme-agnostic.
@@ -15,6 +15,16 @@ export function tempoWallet(options: tempoWallet.Options = {}): Adapter.Adapter 
   if (theme?.accent) host.searchParams.set('accent', theme.accent)
   if (theme?.radius) host.searchParams.set('radius', theme.radius)
   if (theme?.scheme) host.searchParams.set('scheme', theme.scheme)
+  // Where a phone that approves a request lands also rides the page URL; the wallet only honors
+  // a landing page on the origin it pinned for this app.
+  if (handoff === false) host.searchParams.set('handoff', 'off')
+  else if (handoff?.url)
+    host.searchParams.set(
+      'handoff_url',
+      typeof window === 'undefined'
+        ? handoff.url
+        : new URL(handoff.url, window.location.href).toString(),
+    )
   return postMessage({
     icon,
     ...rest,
@@ -27,6 +37,25 @@ export function tempoWallet(options: tempoWallet.Options = {}): Adapter.Adapter 
 export declare namespace tempoWallet {
   /** Options for {@link tempoWallet}. */
   export type Options = Omit<postMessage.Options, 'host' | 'name' | 'rdns'> & {
+    /**
+     * Continue requests on a phone. When this computer's browser has no passkey for the account,
+     * the wallet shows a QR code; the phone that scans it approves the request with its passkey.
+     * Where the person lands is where the result goes:
+     * - default: the phone shows the result and this tab receives it (accounts, access key,
+     *   signature), as if approved here.
+     * - `url`: the phone's browser opens that page on this app's origin, which receives the result
+     *   and an access key the phone generated for it; read them with `Handoff.read()`. This
+     *   tab's request fails with code `4001` and `data.reason: 'handoff'`.
+     * - `false`: no QR code.
+     * @default {}
+     */
+    handoff?:
+      | false
+      | {
+          /** Page on this app's origin (absolute or relative) that the phone opens, and that gets the result. */
+          url?: string | undefined
+        }
+      | undefined
     /** Visual theme overrides for the wallet page (accent, radius, scheme). */
     theme?: Dialog.Theme | undefined
   }

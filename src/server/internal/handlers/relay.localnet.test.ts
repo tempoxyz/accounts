@@ -1,13 +1,33 @@
 import type { RpcRequest } from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
-import { custom, MethodNotFoundRpcError, parseUnits, type Address, type BaseError } from 'viem'
+import {
+  custom,
+  http as viem_http,
+  MethodNotFoundRpcError,
+  parseUnits,
+  toFunctionSelector,
+  type Address,
+  type BaseError,
+  type Chain,
+} from 'viem'
+import { generatePrivateKey } from 'viem/accounts'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
-import { Actions, Addresses, Capabilities, Tick, Transaction, VirtualAddress } from 'viem/tempo'
+import {
+  Account,
+  Actions,
+  Addresses,
+  Capabilities,
+  Tick,
+  Transaction,
+  VirtualAddress,
+} from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, addresses, chain, getClient, http } from '../../../../test/config.js'
 import { createServer, type Server } from '../../../../test/utils.js'
+import * as Kv from '../../Kv.js'
+import type * as Tokenlist from '../tokenlist.js'
 import { relay } from './relay.js'
 
 const userAccount = accounts[9]!
@@ -692,7 +712,7 @@ describe('behavior: app-provided feePayer URL bypasses wallet validate', () => {
         internal_allowUnsafeUrls: true,
         transports: { [chain.id]: http() },
         feePayer: {
-          account: feePayerAccount,
+          account: accounts[1]!,
           name: 'Wallet Sponsor',
           validate: () => false,
         },
@@ -719,6 +739,66 @@ describe('behavior: app-provided feePayer URL bypasses wallet validate', () => {
     expect(result.transaction.maxFeePerGas).not.toBe(0n)
     expect(result.capabilities?.sponsored).toBe(true)
     expect(result.capabilities?.sponsor?.name).toBe('App Sponsor')
+
+    // The app's fee payer pays, not the wallet's.
+    const signed = await userAccount.signTransaction(result.transaction as never)
+    const receipt = (await getClient().request({
+      method: 'eth_sendRawTransactionSync' as never,
+      params: [signed],
+    })) as { feePayer?: string | undefined }
+    expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+  })
+})
+
+describe('behavior: app-provided feePayer URL that does not sign', () => {
+  let appServer: Server
+  let walletServer: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+
+  beforeAll(async () => {
+    // App relay without a fee payer: it fills but never signs as fee payer.
+    appServer = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+      }).listener,
+    )
+
+    // The wallet's own fee payer rejects every request, so it must not sign the app's fill either.
+    walletServer = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        internal_allowUnsafeUrls: true,
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: accounts[1]!,
+          name: 'Wallet Sponsor',
+          validate: () => false,
+        },
+      }).listener,
+    )
+
+    client = getClient({ transport: http(walletServer.url) })
+  })
+
+  afterAll(() => {
+    appServer.close()
+    walletServer.close()
+  })
+
+  test('behavior: refuses instead of signing with the wallet fee payer', async () => {
+    // Before the fix the wallet relay signed the app's unsigned fill with its own fee payer.
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: appServer.url as never,
+    }).then(
+      ({ transaction }) => ({ feePayerSignature: transaction.feePayerSignature !== undefined }),
+      (error: BaseError) => error.name,
+    )
+
+    expect(result).toMatchInlineSnapshot(`"TransactionExecutionError"`)
   })
 })
 
@@ -1634,6 +1714,118 @@ describe('behavior: path B — conditional sponsorship (validate)', () => {
   })
 })
 
+describe('behavior: feePayer.precheck', () => {
+  /** Relays with a fee payer whose precheck answers `accept`, recording each fill upstream. */
+  async function serve(accept: boolean) {
+    const upstream = http()({ chain, retryCount: 0 })
+    const fills: string[] = []
+    const prechecks: unknown[] = []
+    let validated = 0
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        feePayer: {
+          account: feePayerAccount,
+          precheck: (request) => {
+            prechecks.push(request)
+            return accept
+          },
+          validate: () => {
+            validated++
+            return true
+          },
+        },
+        resolveTokens: () => localnetTokens,
+        transports: {
+          [chain.id]: custom({
+            async request({ method, params }) {
+              if (method === 'eth_fillTransaction')
+                fills.push(
+                  (params as { feePayer?: boolean }[])[0]?.feePayer === true
+                    ? 'sponsored fill'
+                    : 'fill',
+                )
+              return await upstream.request({ method, params } as never)
+            },
+          }),
+        },
+      }).listener,
+    )
+    return {
+      client: getClient({ transport: http(server.url) }),
+      server,
+      get state() {
+        return { fills, prechecks, validated }
+      },
+    }
+  }
+
+  test('behavior: a rejecting precheck fills unsponsored without a sponsored attempt', async () => {
+    const handler = await serve(false)
+    try {
+      const { capabilities, transaction } = await fillTransaction(handler.client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+      expect({
+        ...handler.state,
+        signed: !!transaction.feePayerSignature,
+        sponsored: capabilities?.sponsored,
+      }).toMatchInlineSnapshot(`
+        {
+          "fills": [
+            "fill",
+          ],
+          "prechecks": [
+            {
+              "chainId": 1337,
+              "from": "0x9ac4fDC8e5D72AaADE30F9Ff52D392D60c68A64a",
+            },
+          ],
+          "signed": false,
+          "sponsored": false,
+          "validated": 0,
+        }
+      `)
+    } finally {
+      handler.server.close()
+    }
+  })
+
+  test('behavior: an accepting precheck still leaves the decision to validate', async () => {
+    const handler = await serve(true)
+    try {
+      const { capabilities, transaction } = await fillTransaction(handler.client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+      expect({
+        ...handler.state,
+        signed: !!transaction.feePayerSignature,
+        sponsored: capabilities?.sponsored,
+      }).toMatchInlineSnapshot(`
+        {
+          "fills": [
+            "sponsored fill",
+          ],
+          "prechecks": [
+            {
+              "chainId": 1337,
+              "from": "0x9ac4fDC8e5D72AaADE30F9Ff52D392D60c68A64a",
+            },
+          ],
+          "signed": true,
+          "sponsored": true,
+          "validated": 1,
+        }
+      `)
+    } finally {
+      handler.server.close()
+    }
+  })
+})
+
 describe('behavior: path C — no sponsorship', () => {
   let server: Server
   let client: ReturnType<typeof getClient<typeof chain>>
@@ -1690,13 +1882,16 @@ describe('behavior: path C — no sponsorship', () => {
 
 describe('behavior: simulation', () => {
   /** Relays through a transport that records each upstream request's start and end. */
-  async function serve(options: { tempoSimulate?: boolean | undefined } = {}) {
+  async function serve(
+    options: { kv?: Kv.Kv | undefined; tempoSimulate?: boolean | undefined } = {},
+  ) {
     const upstream = http()({ chain, retryCount: 0 })
     const events: string[] = []
     const server = await createServer(
       relay({
         chains: [chain],
         features: 'all',
+        ...(options.kv ? { kv: options.kv } : {}),
         resolveTokens: () => localnetTokens,
         transports: {
           [chain.id]: custom({
@@ -1735,6 +1930,87 @@ describe('behavior: simulation', () => {
     }
   })
 
+  test('behavior: records tempo_simulateV1 support, so later lookups hit the store', async () => {
+    const store = Kv.memory()
+    const lookups: unknown[] = []
+    const { client, events, server } = await serve({
+      kv: {
+        ...store,
+        async get(key) {
+          const value = await store.get(key)
+          if (key.startsWith('simulate.')) lookups.push(value)
+          return value as never
+        },
+      },
+    })
+    try {
+      for (const _ of [1, 2])
+        await fillTransaction(client, { account: userAccount.address, calls: [transferCall()] })
+
+      expect({
+        lookups,
+        probes: events.filter((event) => event === 'start tempo_simulateV1').length,
+      }).toMatchInlineSnapshot(`
+        {
+          "lookups": [
+            undefined,
+            true,
+          ],
+          "probes": 2,
+        }
+      `)
+    } finally {
+      server.close()
+    }
+  })
+
+  test('behavior: falls back at once when a method filter refuses tempo_simulateV1', async () => {
+    // Public RPCs answer methods outside their allowlist with HTTP 403, which viem retries.
+    const methods: string[] = []
+    const upstream = http()({ chain, retryCount: 0 })
+    const filter = await createServer(async (req, res) => {
+      let body = ''
+      for await (const chunk of req) body += chunk
+      const { id, method, params } = JSON.parse(body)
+      methods.push(method)
+      res.setHeader('content-type', 'application/json')
+      if (method === 'tempo_simulateV1') {
+        res.statusCode = 403
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32601, message: `method not allowed: ${method}` },
+          }),
+        )
+        return
+      }
+      const result = await upstream.request({ method, params } as never)
+      res.end(JSON.stringify({ jsonrpc: '2.0', id, result }))
+    })
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        resolveTokens: () => localnetTokens,
+        transports: { [chain.id]: viem_http(filter.url) },
+      }).listener,
+    )
+    try {
+      const result = await fillTransaction(getClient({ transport: http(server.url) }), {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+
+      expect(methods.filter((method) => method === 'tempo_simulateV1')).toHaveLength(1)
+      expect(methods.filter((method) => method === 'eth_simulateV1')).toHaveLength(1)
+      expect(findDiffs(result.capabilities?.balanceDiffs, userAccount.address)).toBeDefined()
+    } finally {
+      server.close()
+      filter.close()
+    }
+  })
+
   test('behavior: simulates the requested calls alongside the fill', async () => {
     const { client, events, server } = await serve()
     try {
@@ -1748,6 +2024,180 @@ describe('behavior: simulation', () => {
       )
       expect(events.filter((event) => event === 'start tempo_simulateV1')).toHaveLength(1)
       expect(findDiffs(result.capabilities?.balanceDiffs, userAccount.address)).toBeDefined()
+    } finally {
+      server.close()
+    }
+  })
+})
+
+describe('behavior: multicall', () => {
+  const multicall3 = '0xcA11bde05977b3631167028862bE2a173976CA11'
+  const balanceSelector = toFunctionSelector('balanceOf(address)').slice(2)
+
+  /** Relays over `chain_`, recording each `eth_call`'s target and calldata. */
+  async function serve(chain_: Chain, tokens: readonly Tokenlist.Token[]) {
+    const upstream = http()({ chain, retryCount: 0 })
+    const calls: { data: string; to?: string | undefined }[] = []
+    const server = await createServer(
+      relay({
+        chains: [chain_],
+        features: 'all',
+        resolveTokens: () => tokens,
+        transports: {
+          [chain.id]: custom({
+            async request({ method, params }) {
+              if (method === 'eth_call') calls.push((params as { data: string; to?: string }[])[0]!)
+              return await upstream.request({ method, params } as never)
+            },
+          }),
+        },
+      }).listener,
+    )
+    return { calls, client: getClient({ transport: http(server.url) }), server }
+  }
+
+  test("behavior: batches through the chain's Multicall3 instead of deployless calls", async () => {
+    const { calls, client, server } = await serve(
+      { ...chain, contracts: { ...chain.contracts, multicall3: { address: multicall3 } } },
+      localnetTokens,
+    )
+    try {
+      const { transaction } = await fillTransaction(client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+      expect({
+        deployless: calls.filter((call) => !call.to).length,
+        feeToken: transaction.feeToken,
+        targets: [...new Set(calls.map((call) => call.to))],
+      }).toMatchInlineSnapshot(`
+        {
+          "deployless": 0,
+          "feeToken": "0x20c0000000000000000000000000000000000001",
+          "targets": [
+            "0xcA11bde05977b3631167028862bE2a173976CA11",
+          ],
+        }
+      `)
+    } finally {
+      server.close()
+    }
+  })
+
+  test('behavior: reads the balances of a 37-token list in one call', async () => {
+    const tokens = [
+      ...localnetTokens,
+      ...Array.from({ length: 33 }, (_, index) => ({
+        address: `0x20c0${(1_000 + index).toString(16).padStart(36, '0')}` as const,
+        decimals: 6,
+        name: `Token ${index}`,
+        symbol: `T${index}`,
+      })),
+    ]
+    const { calls, client, server } = await serve(chain, tokens)
+    try {
+      await fillTransaction(client, { account: userAccount.address, calls: [transferCall()] })
+      expect(
+        calls
+          .filter((call) => call.data.includes(balanceSelector))
+          .map((call) => call.data.split(balanceSelector).length - 1),
+      ).toMatchInlineSnapshot(`
+        [
+          37,
+        ]
+      `)
+    } finally {
+      server.close()
+    }
+  })
+})
+
+describe('behavior: cold caches', () => {
+  test('behavior: a sponsored fill with a known fee token does not wait for the token list', async () => {
+    const list = Promise.withResolvers<void>()
+    let loaded = false
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        feePayer: { account: feePayerAccount, feeToken: Addresses.pathUsd, validate: () => true },
+        resolveTokens: async () => {
+          await list.promise
+          loaded = true
+          return localnetTokens
+        },
+        transports: { [chain.id]: http() },
+      }).listener,
+    )
+    try {
+      const result = await Promise.race([
+        fillTransaction(getClient({ transport: http(server.url) }), {
+          account: userAccount.address,
+          calls: [transferCall()],
+        }),
+        new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 10_000)),
+      ])
+      expect({
+        loaded,
+        sponsored: result === 'timeout' ? result : result.capabilities?.sponsored,
+      }).toMatchInlineSnapshot(`
+        {
+          "loaded": false,
+          "sponsored": true,
+        }
+      `)
+    } finally {
+      list.resolve()
+      server.close()
+    }
+  })
+
+  test('behavior: listed tokens the simulation names need no metadata read', async () => {
+    const decimalsSelector = toFunctionSelector('decimals()').slice(2)
+    const upstream = http()({ chain, retryCount: 0 })
+    let reads = 0
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        resolveTokens: () => localnetTokens,
+        transports: {
+          [chain.id]: custom({
+            async request({ method, params }) {
+              const data = (params as { data?: string }[] | undefined)?.[0]?.data ?? ''
+              if (method === 'eth_call' && data.includes(decimalsSelector)) reads++
+              return await upstream.request({ method, params } as never)
+            },
+          }),
+        },
+      }).listener,
+    )
+    try {
+      const { capabilities } = await fillTransaction(getClient({ transport: http(server.url) }), {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+      expect({
+        diffs: findDiffs(capabilities?.balanceDiffs, userAccount.address)?.map(
+          ({ decimals, symbol }) => ({ decimals, symbol }),
+        ),
+        fee: { decimals: capabilities?.fee?.decimals, symbol: capabilities?.fee?.symbol },
+        reads,
+      }).toMatchInlineSnapshot(`
+        {
+          "diffs": [
+            {
+              "decimals": 6,
+              "symbol": "AlphaUSD",
+            },
+          ],
+          "fee": {
+            "decimals": 6,
+            "symbol": "AlphaUSD",
+          },
+          "reads": 0,
+        }
+      `)
     } finally {
       server.close()
     }
@@ -2156,5 +2606,165 @@ describe('behavior: mainnet autoSwap with USDC.e → PathUSD', () => {
 
     // Should NOT have requireFunds — autoSwap should handle it.
     expect((capabilities as Record<string, unknown>)?.requireFunds).toBeUndefined()
+  })
+})
+
+describe('behavior: sponsored fills and the fee-token balance', () => {
+  const sponsorToken = Addresses.pathUsd
+  // Holds AlphaUSD only, so a fee in pathUSD looks unaffordable to it.
+  const sender = Account.fromSecp256k1(generatePrivateKey())
+  const balanceSelector = toFunctionSelector('balanceOf(address)').slice(2)
+
+  beforeAll(async () => {
+    const rpc = getClient({ account: accounts[0]! })
+    await sendTransactionSync(rpc, {
+      feeToken: sponsorToken,
+      calls: [
+        Actions.token.mint.call({
+          token: addresses.alphaUsd,
+          amount: parseUnits('100', 6),
+          to: sender.address,
+        }),
+        Actions.token.approve.call({
+          token: sponsorToken,
+          spender: Addresses.stablecoinDex,
+          amount: parseUnits('100', 6),
+        }),
+      ],
+      throwOnReceiptRevert: true,
+    })
+    // A bid for AlphaUSD would let autoSwap buy the sender pathUSD.
+    await Actions.dex.createPairSync(rpc, { base: addresses.alphaUsd }).catch(() => {})
+    await Actions.dex.placeSync(rpc, {
+      token: addresses.alphaUsd,
+      amount: parseUnits('100', 6),
+      type: 'buy',
+      tick: Tick.fromPrice('0.999'),
+    })
+  })
+
+  /**
+   * Relays through a transport that records when each fill answers and when a `balanceOf` is
+   * read. `holdFill` keeps an unsponsored fill's answer back until a balance read starts, or 1 s
+   * passes.
+   */
+  async function serve(options: {
+    holdFill?: boolean | undefined
+    validate?: boolean | undefined
+  }) {
+    const upstream = http()({ chain, retryCount: 0 })
+    const events: string[] = []
+    const balance = Promise.withResolvers<void>()
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        feePayer: {
+          account: feePayerAccount,
+          feeToken: sponsorToken,
+          ...(options.validate === undefined ? {} : { validate: () => options.validate! }),
+        },
+        resolveTokens: () => localnetTokens,
+        transports: {
+          [chain.id]: custom({
+            async request({ method, params }) {
+              const data = (params as { data?: string }[] | undefined)?.[0]?.data ?? ''
+              if (method === 'eth_call' && data.includes(balanceSelector)) {
+                events.push('balance')
+                balance.resolve()
+              }
+              const result = await upstream.request({ method, params } as never)
+              if (method === 'eth_fillTransaction') {
+                const sponsored = (params as { feePayer?: boolean }[])[0]?.feePayer === true
+                if (options.holdFill && !sponsored)
+                  await Promise.race([
+                    balance.promise,
+                    new Promise((resolve) => setTimeout(resolve, 1_000)),
+                  ])
+                events.push(sponsored ? 'sponsored fill' : 'fill')
+              }
+              return result
+            },
+          }),
+        },
+      }).listener,
+    )
+    return { client: getClient({ transport: http(server.url) }), events, server }
+  }
+
+  for (const [name, validate] of [
+    ['no validate', undefined],
+    ['validate', true],
+  ] as const)
+    test(`behavior: keeps the calls and reads no balance after the fill (${name})`, async () => {
+      const { client, events, server } = await serve({ validate })
+      try {
+        const { capabilities, transaction } = await fillTransaction(client, {
+          account: sender.address,
+          calls: [transferCall()],
+        })
+        expect({
+          autoSwap: capabilities?.autoSwap,
+          balancesAfterFill: events
+            .slice(events.indexOf('sponsored fill'))
+            .filter((event) => event === 'balance').length,
+          calls: transaction.calls?.length,
+          feeToken: transaction.feeToken,
+          fills: events.filter((event) => event.endsWith('fill')),
+          signed: !!transaction.feePayerSignature,
+          sponsored: capabilities?.sponsored,
+        }).toMatchInlineSnapshot(`
+          {
+            "autoSwap": undefined,
+            "balancesAfterFill": 0,
+            "calls": 1,
+            "feeToken": "0x20c0000000000000000000000000000000000000",
+            "fills": [
+              "sponsored fill",
+            ],
+            "signed": true,
+            "sponsored": true,
+          }
+        `)
+      } finally {
+        server.close()
+      }
+    })
+
+  test('behavior: a rejected sponsorship still swaps for the fee token', async () => {
+    const { client, events, server } = await serve({ holdFill: true, validate: false })
+    try {
+      const { capabilities, transaction } = await fillTransaction(client, {
+        account: sender.address,
+        calls: [transferCall()],
+        feeToken: sponsorToken,
+      })
+      expect({
+        // The fee token was known before the fill, so its balance was read alongside it.
+        balanceBeforeFill: events.indexOf('balance') < events.indexOf('fill'),
+        calls: transaction.calls?.length,
+        fills: events.filter((event) => event.endsWith('fill')),
+        maxIn: capabilities?.autoSwap?.maxIn.token,
+        minOut: capabilities?.autoSwap?.minOut.token,
+        signed: !!transaction.feePayerSignature,
+        sponsored: capabilities?.sponsored,
+      }).toMatchInlineSnapshot(`
+        {
+          "balanceBeforeFill": true,
+          "calls": 3,
+          "fills": [
+            "sponsored fill",
+            "fill",
+            "fill",
+          ],
+          "maxIn": "0x20c0000000000000000000000000000000000001",
+          "minOut": "0x20c0000000000000000000000000000000000000",
+          "signed": false,
+          "sponsored": false,
+        }
+      `)
+    } finally {
+      server.close()
+    }
   })
 })

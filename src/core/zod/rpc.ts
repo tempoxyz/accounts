@@ -451,7 +451,6 @@ export namespace wallet_getCapabilities {
 
 /** Funding path shared by standalone deposits and post-authorization prompts. */
 const depositIntent = z.union([
-  z.literal('applePay'),
   // Legacy links remain valid; wallets route this alias to MACH checkout.
   z.literal('credits'),
   z.literal('crypto'),
@@ -1064,8 +1063,8 @@ export namespace wallet_deposit {
       z.object({
         /**
          * Receipts of any onchain operations performed during the
-         * deposit (e.g. testnet faucet drops). Absent for offchain
-         * paths like Apple Pay where funds arrive asynchronously.
+         * deposit (e.g. testnet faucet drops). Absent for paths
+         * where funds arrive asynchronously.
          */
         receipts: z.optional(z.readonly(z.array(receipt))),
       }),

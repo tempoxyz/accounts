@@ -7,7 +7,7 @@ description: Open the wallet deposit flow with optional pre-filled fields.
 
 Opens the wallet's deposit flow so the user can fund an account. The wallet renders the deposit UI (for example onramp, faucet, or transfer-from-an-external-wallet flows) using any pre-filled hints supplied in the request.
 
-The wallet picks the deposit path it supports for the requested token and chain. For paths that move funds onchain (such as a testnet faucet drop), the wallet returns the resulting receipts. For offchain paths like Apple Pay, funds arrive asynchronously and `receipts` is omitted.
+The wallet picks the deposit path it supports for the requested token and chain. For paths that move funds onchain (such as a testnet faucet drop), the wallet returns the resulting receipts. For paths where funds arrive asynchronously, such as MACH checkout, `receipts` is omitted.
 
 This method is supported by Tempo Wallet's browser, mobile web authentication, and CLI device-code adapters. Local signing adapters without a deposit UI reject the request as unsupported.
 
@@ -24,7 +24,7 @@ type Request = {
     /** Display name shown in the deposit UI (e.g. the app name). */
     displayName?: string
     /** Preferred funding path to show first. */
-    intent?: 'applePay' | 'credits' | 'crypto' | 'faucet' | 'mach' | 'referralCode' | 'x'
+    intent?: 'credits' | 'crypto' | 'faucet' | 'mach' | 'referralCode' | 'x'
     /** Token symbol or contract address to pre-fill. */
     token?: string
     /** Human-readable amount to pre-fill (e.g. `"1.5"`). */

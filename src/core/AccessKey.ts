@@ -511,36 +511,36 @@ export declare namespace get {
   type ReturnType = TempoAccount.AccessKeyAccount | undefined
 }
 
-function createKeyAuthorizationManager(store: ManagerOptions) {
-  return TempoKeyAuthorizationManager.from({
-    source: {
-      get(key) {
-        return list({
-          account: key.address,
-          accessKey: key.accessKey,
-          chainId: key.chainId,
-          store,
-        })[0]?.keyAuthorization
-      },
-      remove(key) {
-        clearAuthorization({
-          account: key.address,
-          accessKey: key.accessKey,
-          chainId: key.chainId,
-          store,
-        })
-      },
-      set(key, keyAuthorization) {
-        updateAuthorization({
-          account: key.address,
-          accessKey: key.accessKey,
-          authorization: keyAuthorization,
-          chainId: key.chainId,
-          store,
-        })
-      },
+function createKeyAuthorizationManager(
+  store: ManagerOptions,
+): TempoKeyAuthorizationManager.KeyAuthorizationManager {
+  return {
+    get(key) {
+      return list({
+        account: key.address,
+        accessKey: key.accessKey,
+        chainId: key.chainId,
+        store,
+      })[0]?.keyAuthorization
     },
-  })
+    remove(key) {
+      clearAuthorization({
+        account: key.address,
+        accessKey: key.accessKey,
+        chainId: key.chainId,
+        store,
+      })
+    },
+    set(key, keyAuthorization) {
+      updateAuthorization({
+        account: key.address,
+        accessKey: key.accessKey,
+        authorization: keyAuthorization,
+        chainId: key.chainId,
+        store,
+      })
+    },
+  }
 }
 
 /** Adds a signed access key authorization. */

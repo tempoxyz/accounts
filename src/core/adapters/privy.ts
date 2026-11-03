@@ -61,6 +61,7 @@ export function privy<const client extends privy.Client>(
   return Adapter.define({ icon, name, rdns }, ({ getClient, store }) => {
     let privyClient_promise: Promise<client> | undefined
     let restore_promise: Promise<void> | undefined
+    let owner: string | undefined
     let walletAccounts: readonly privy.EmbeddedWallet[] | undefined
 
     async function getPrivyClient(): Promise<client> {
@@ -82,10 +83,11 @@ export function privy<const client extends privy.Client>(
     // Without that key, we cannot construct a proper viem/tempo `TempoAccount`
     // directly from the connected Privy account. Instead, this account routes
     // Tempo signing through Privy's raw `secp256k1_sign` provider method.
-    function toSigningAccount(account: privy.EmbeddedWallet) {
+    function toSigningAccount(account: privy.EmbeddedWallet, owner_: string | undefined) {
       const address = core_Address.from(account.address)
 
       async function sign(parameters: { hash: Hex.Hex }) {
+        await requireSession(owner_)
         return await signPayload({
           payload: parameters.hash,
           walletAccount: account,
@@ -111,6 +113,7 @@ export function privy<const client extends privy.Client>(
     async function clear() {
       restore_promise = undefined
       walletAccounts = undefined
+      owner = undefined
       store.disconnect()
     }
 
@@ -130,10 +133,8 @@ export function privy<const client extends privy.Client>(
      * shared across all wallets of the same user, and `entropyIdVerifier` is
      * hardcoded to `'ethereum-address-verifier'` for Ethereum wallets.
      */
-    async function loadEthereumWallets(
-      privyClient: privy.Client,
-    ): Promise<readonly privy.EmbeddedWallet[]> {
-      const { user } = await privyClient.user.get()
+    async function loadEthereumWallets(privyClient: privy.Client) {
+      const user = await getUser()
       const wallets = (user?.linked_accounts ?? [])
         .filter(
           (account) =>
@@ -155,10 +156,10 @@ export function privy<const client extends privy.Client>(
       // Primary is the wallet with `wallet_index === 0`. Fall back to the
       // lowest-indexed wallet only when no wallet declares index 0.
       const primary = wallets.find((wallet) => wallet.wallet_index === 0) ?? wallets[0]
-      if (!primary) return []
+      if (!primary) return { accounts: [], owner: user.id }
       const entropyId = primary.address as string
 
-      return await Promise.all(
+      const accounts = await Promise.all(
         wallets.map(async (wallet) => ({
           address: core_Address.from(wallet.address as string),
           provider: await privyClient.embeddedWallet.getEthereumProvider({
@@ -168,6 +169,8 @@ export function privy<const client extends privy.Client>(
           }),
         })),
       )
+      await requireSession(user.id)
+      return { accounts, owner: user.id }
     }
 
     function selectWalletAccounts(
@@ -204,19 +207,19 @@ export function privy<const client extends privy.Client>(
           throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
         }
 
-        const restored = await loadEthereumWallets(await getPrivyClient()).catch(async (error) => {
+        const loaded = await loadEthereumWallets(await getPrivyClient()).catch(async (error) => {
           if (!isSessionError(error)) throw error
           await clear()
           throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
         })
-        walletAccounts = restored
+        const restored = loaded.accounts
         const accounts = persisted
           .map((account) =>
             restored.find((walletAccount) =>
               isAddressEqual(core_Address.from(walletAccount.address), account.address),
             ),
           )
-          .filter((account): account is privy.EmbeddedWallet => !!account)
+          .filter((account) => account !== undefined)
 
         // If the persisted accounts no longer exist in Privy (different user
         // signed in, wallets removed), wipe the stale state so callers see a
@@ -228,6 +231,8 @@ export function privy<const client extends privy.Client>(
           })
         }
 
+        owner = loaded.owner
+        walletAccounts = restored
         store.setState({
           accounts: accounts.map((account) => toStoreAccount(account)),
           activeAccount: Math.min(state.activeAccount, accounts.length - 1),
@@ -241,15 +246,33 @@ export function privy<const client extends privy.Client>(
       }
     }
 
-    async function requireSession() {
-      if (await hasValidSession()) return
-      await clear()
-      throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
+    async function getUser() {
+      if (!(await hasValidSession())) {
+        await clear()
+        throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
+      }
+      const { user } = await (await getPrivyClient()).user.get().catch(async (error) => {
+        if (!isSessionError(error)) throw error
+        await clear()
+        throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
+      })
+      if (!user?.id) {
+        await clear()
+        throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
+      }
+      return user
+    }
+
+    async function requireSession(expected: string | undefined) {
+      const user = await getUser()
+      if (!expected || expected !== user.id) {
+        await clear()
+        throw new ox_Provider.DisconnectedError({ message: 'Privy session changed. Reconnect.' })
+      }
     }
 
     async function getSigningAccount(address: Address | undefined) {
       await restore()
-      await requireSession()
 
       const state = store.getState()
       const address_ = address ?? state.accounts[state.activeAccount]?.address
@@ -260,6 +283,7 @@ export function privy<const client extends privy.Client>(
           message: 'No Privy account connected.',
         })
 
+      await requireSession(owner)
       const connected = state.accounts.some((account) => isAddressEqual(account.address, address_))
       if (!connected)
         throw new ox_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
@@ -267,7 +291,7 @@ export function privy<const client extends privy.Client>(
       const account = (walletAccounts ?? []).find((account) =>
         isAddressEqual(core_Address.from(account.address), address_),
       )
-      if (account) return toSigningAccount(account)
+      if (account) return toSigningAccount(account, owner)
 
       throw new ox_Provider.DisconnectedError({
         message: 'Privy session no longer matches persisted accounts.',
@@ -373,11 +397,11 @@ export function privy<const client extends privy.Client>(
       privyClient: privy.Client
     }) {
       const { authorizeAccessKey, label, personalSign, privyClient, selection } = parameters
-      await requireSession()
-      const wallets = await loadEthereumWallets(privyClient)
-      const selected = selectWalletAccounts(wallets, selection)
+      const loaded = await loadEthereumWallets(privyClient)
+      if (owner !== undefined && owner !== loaded.owner) await clear()
+      const selected = selectWalletAccounts(loaded.accounts, selection)
 
-      const account = selected[0] ? toSigningAccount(selected[0]) : undefined
+      const account = selected[0] ? toSigningAccount(selected[0], loaded.owner) : undefined
       if (!account && parameters.noAccountsMessage)
         throw new ox_Provider.DisconnectedError({
           message: parameters.noAccountsMessage,
@@ -394,6 +418,8 @@ export function privy<const client extends privy.Client>(
           : undefined
 
       const signature = digest && account ? await account.sign({ hash: digest }) : undefined
+      await requireSession(loaded.owner)
+      owner = loaded.owner
       walletAccounts = selected
       restore_promise = undefined
 

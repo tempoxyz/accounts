@@ -68,7 +68,11 @@ Reverse-DNS provider identifier.
 
 ## Mounts
 
-The mount decides where the wallet page lives and how it surfaces for requests. By default the adapter picks for you: an overlay iframe, falling back to a popup in insecure contexts or when the browser lacks IntersectionObserver v2 (the wallet can't run its occlusion defense). On Safari, account requests use a temporary popup because Safari rejects WebAuthn creation inside cross-origin iframes. If the wallet detects its iframe is occluded mid-session, it asks to continue in a popup and the adapter remounts there, replaying the request. Pass a mount to pin one explicitly:
+The mount decides where the wallet page lives and how it surfaces for requests. By default the adapter picks for you: an overlay iframe, falling back to a popup in insecure contexts or when the browser lacks IntersectionObserver v2 (the wallet can't run its occlusion defense). On Safari, account requests use a temporary popup because Safari rejects WebAuthn creation inside cross-origin iframes. If the wallet detects its iframe is occluded mid-session, it asks to continue in a popup and the adapter remounts there, replaying the request.
+
+A popup opens for each burst of requests and closes once the last one settles, so a request sent after that opens and loads the wallet again. To sign in and sign a message or authorize an access key with one approval, pass `personalSign` or `authorizeAccessKey` in the [`wallet_connect`](/docs/rpc/wallet_connect) capabilities instead of sending a second request.
+
+Pass a mount to pin one explicitly:
 
 ```ts twoslash
 import { popup, postMessage } from 'accounts/postMessage'

@@ -1,4 +1,4 @@
-import { Hash, type Hex, type Provider as ox_Provider } from 'ox'
+import { Hash, Hex, type Provider as ox_Provider } from 'ox'
 import { TxEnvelopeTempo } from 'ox/tempo'
 import {
   type Chain,
@@ -48,7 +48,11 @@ export function fromChainId(
   let client = cache.get(key)
   if (!client) {
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
-    const base = rawTransactionTransport(transports?.[id] ?? http())
+    const rpc = rawTransactionTransport(transports?.[id] ?? http())
+    // A chain ID missing from `chains` falls back to the first chain (and,
+    // without a transport, to its RPC URL), so only a configured chain's ID
+    // is known to match the node.
+    const base = chain.id === id ? chainIdTransport(rpc, id) : rpc
     const transport_base = provider
       ? providerTransport(provider, base, chainId === undefined ? undefined : chain.id)
       : base
@@ -130,6 +134,25 @@ function usesProvider(method: string) {
       'personal_sign',
     ].includes(method)
   )
+}
+
+/**
+ * Answers `eth_chainId` locally for a transport that serves a known chain.
+ * viem asks for the chain ID before every send from a JSON-RPC account, which
+ * would otherwise cost a round trip to the node before the request reaches
+ * the provider.
+ */
+function chainIdTransport(base: Transport, chainId: number): Transport {
+  return (params) => {
+    const transport = base(params)
+    return {
+      ...transport,
+      async request(args: { method: string; params?: unknown }, options?: unknown) {
+        if (args.method === 'eth_chainId') return Hex.fromNumber(chainId)
+        return await transport.request(args as never, options as never)
+      },
+    } as ReturnType<Transport>
+  }
 }
 
 /**

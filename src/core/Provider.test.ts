@@ -1,3 +1,4 @@
+import { Fetch } from 'mppx/client'
 import { Hex } from 'ox'
 import { custom } from 'viem'
 import { createSiweMessage } from 'viem/siwe'
@@ -219,13 +220,13 @@ describe('getMppxParameters', () => {
       chains: [tempo, tempoModerato],
       storage: Storage.memory(),
       transports: {
-        [tempoModerato.id]: custom({ request: async () => '0xa5bf' }),
+        [tempoModerato.id]: custom({ request: async () => '0x2a' }),
       },
     })
     provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     const client = await provider.getMppxParameters().getClient({ chainId: tempoModerato.id })
-    expect(await client.request({ method: 'eth_chainId' })).toBe('0xa5bf')
+    expect(await client.request({ method: 'eth_blockNumber' })).toBe('0x2a')
   })
 
   test('behavior: resolves existing access key for connected account', async () => {
@@ -430,6 +431,30 @@ describe('getMppxParameters', () => {
       }),
     ).rejects.toThrowError(`Account "${payer.address}" not found.`)
   })
+})
+
+describe('mpp', () => {
+  const fetch_original = globalThis.fetch
+
+  afterEach(() => {
+    Fetch.restore()
+    globalThis.fetch = fetch_original
+  })
+
+  test('behavior: polyfills fetch before mppx loads', () => {
+    const fetch_raw = globalThis.fetch
+    Provider.create({ storage: Storage.memory() })
+    expect(globalThis.fetch === fetch_raw).toMatchInlineSnapshot(`false`)
+  })
+
+  test.each([{ mpp: false }, { mpp: { polyfill: false } }] as const)(
+    'behavior: leaves fetch alone with $mpp',
+    ({ mpp }) => {
+      const fetch_raw = globalThis.fetch
+      Provider.create({ mpp, storage: Storage.memory() })
+      expect(globalThis.fetch === fetch_raw).toMatchInlineSnapshot(`true`)
+    },
+  )
 })
 
 describe('ready', () => {

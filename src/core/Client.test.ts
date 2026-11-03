@@ -2,6 +2,7 @@ import { Hash, Secp256k1 } from 'ox'
 import { TxEnvelopeTempo } from 'ox/tempo'
 import { custom, http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
+import { sendTransaction } from 'viem/actions'
 import { Transaction } from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
@@ -255,6 +256,121 @@ describe('providerTransport', () => {
   })
 })
 
+describe('chainIdTransport', () => {
+  /** Transport that records each method it receives. */
+  function recording(requests: string[], result: unknown = null) {
+    return custom({
+      async request({ method }) {
+        requests.push(`rpc:${method}`)
+        return result
+      },
+    })
+  }
+
+  test('behavior: answers eth_chainId for a chain-bound provider client', async () => {
+    const requests: string[] = []
+    const provider = {
+      async request({ method }: { method: string }) {
+        requests.push(`provider:${method}`)
+        return null
+      },
+    } as never
+    const client = Client.fromChainId(tempoModerato.id, {
+      chains: [tempo, tempoModerato],
+      provider,
+      store: setup(),
+      transports: { [tempoModerato.id]: recording(requests) },
+    })
+
+    expect(await client.request({ method: 'eth_chainId' })).toMatchInlineSnapshot(`"0xa5bf"`)
+    expect(requests).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: answers eth_chainId for a client without a provider', async () => {
+    const requests: string[] = []
+    const client = Client.fromChainId(undefined, {
+      chains: [tempo, tempoModerato],
+      feePayer: 'https://relay.example.com',
+      store: setup(tempoModerato.id),
+      transports: { [tempoModerato.id]: recording(requests) },
+    })
+
+    expect(await client.request({ method: 'eth_chainId' })).toMatchInlineSnapshot(`"0xa5bf"`)
+    expect(requests).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: sends from a JSON-RPC account without asking the node for its chain', async () => {
+    const hash = `0x${'11'.repeat(32)}` as const
+    const requests: string[] = []
+    const provider = {
+      async request({ method }: { method: string }) {
+        requests.push(`provider:${method}`)
+        return hash
+      },
+    } as never
+    const client = Client.fromChainId(tempo.id, {
+      chains: [tempo],
+      provider,
+      store: setup(),
+      transports: { [tempo.id]: recording(requests) },
+    })
+
+    const result = await sendTransaction(client, {
+      account: { address: '0x0000000000000000000000000000000000000002', type: 'json-rpc' },
+      to: '0x0000000000000000000000000000000000000001',
+    } as never)
+
+    expect(result).toMatchInlineSnapshot(
+      `"0x1111111111111111111111111111111111111111111111111111111111111111"`,
+    )
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        "provider:eth_sendTransaction",
+      ]
+    `)
+  })
+
+  test('behavior: forwards eth_chainId for an unconfigured chain', async () => {
+    // The client falls back to the first chain, so the node answers.
+    const requests: string[] = []
+    const client = Client.fromChainId(999_999, {
+      chains: [tempo],
+      store: setup(),
+      transports: { 999_999: recording(requests, '0xf423f') },
+    })
+
+    expect(await client.request({ method: 'eth_chainId' })).toMatchInlineSnapshot(`"0xf423f"`)
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        "rpc:eth_chainId",
+      ]
+    `)
+  })
+
+  test('behavior: routes eth_chainId to the provider for an unbound provider client', async () => {
+    const requests: string[] = []
+    const provider = {
+      async request({ method }: { method: string }) {
+        requests.push(`provider:${method}`)
+        return '0x1079'
+      },
+    } as never
+    const client = Client.fromChainId(undefined, {
+      chains: [tempo],
+      provider,
+      store: setup(),
+      transports: { [tempo.id]: recording(requests) },
+    })
+
+    expect(await client.request({ method: 'eth_chainId' })).toMatchInlineSnapshot(`"0x1079"`)
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        "provider:eth_chainId",
+      ]
+    `)
+  })
+})
+
 describe('feePayerTransport', () => {
   afterEach(() => vi.unstubAllGlobals())
 
@@ -294,7 +410,7 @@ describe('feePayerTransport', () => {
       [tempo.id]: custom({
         async request({ method, params }) {
           baseRequests.push({ method, params })
-          if (method === 'eth_chainId') return '0x1079'
+          if (method === 'eth_blockNumber') return '0x1'
           return null
         },
       }),
@@ -305,12 +421,12 @@ describe('feePayerTransport', () => {
       store,
       transports,
     })
-    const result = await client.request({ method: 'eth_chainId' })
-    expect(result).toMatchInlineSnapshot(`"0x1079"`)
+    const result = await client.request({ method: 'eth_blockNumber' })
+    expect(result).toMatchInlineSnapshot(`"0x1"`)
     expect(baseRequests).toMatchInlineSnapshot(`
       [
         {
-          "method": "eth_chainId",
+          "method": "eth_blockNumber",
           "params": undefined,
         },
       ]
@@ -598,7 +714,7 @@ describe('rawTransactionTransport', () => {
       Double check you have provided the correct parameters.
 
       Details: nonce too low: next nonce 1, tx nonce 0
-      Version: viem@2.57.1]
+      Version: viem@0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf]
     `)
   })
 })
