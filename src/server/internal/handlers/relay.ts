@@ -2,6 +2,7 @@ import { AbiEvent, Hex, RpcRequest, RpcResponse } from 'ox'
 import { Transaction as core_Transaction } from 'ox/tempo'
 import {
   type Address,
+  BaseError,
   type Call,
   type Chain,
   type Client,
@@ -9,9 +10,11 @@ import {
   decodeFunctionData,
   formatUnits,
   http,
+  HttpRequestError,
   isAddress,
   type Log,
   parseEventLogs,
+  TimeoutError,
   type Transport,
   zeroAddress,
 } from 'viem'
@@ -1142,11 +1145,19 @@ async function simulate(client: Client, options: simulate.Options) {
   }
   if (kv && (await kv.get(unsupported).catch(() => undefined))) return fallback()
   try {
-    return await Actions.simulate.simulateCalls(client, {
-      ...(account ? { account } : {}),
-      calls: calls as Call[],
-      traceTransfers: true,
-    })
+    // Probe without retries: a node behind a method filter refuses with HTTP 403, which viem
+    // retries with backoff (~1 s) before the fallback below can run.
+    return await Actions.simulate.simulateCalls(
+      {
+        ...client,
+        request: (args, options) => client.request(args as never, { ...options, retryCount: 0 }),
+      } as typeof client,
+      {
+        ...(account ? { account } : {}),
+        calls: calls as Call[],
+        traceTransfers: true,
+      },
+    )
   } catch (error) {
     // TODO: Remove fallback once all nodes support tempo_simulateV1.
     // Fall back to viem's simulateCalls (eth_simulateV1) if the Tempo
@@ -1154,9 +1165,18 @@ async function simulate(client: Client, options: simulate.Options) {
     const code =
       (error as { code?: number | undefined }).code ??
       (error as { cause?: { code?: number | undefined } | undefined }).cause?.code
-    if (code !== -32601) throw error
-    await kv?.set(unsupported, true, { ttl: 10 * 60 }).catch(() => {})
-    return fallback()
+    if (code === -32601) {
+      await kv?.set(unsupported, true, { ttl: 10 * 60 }).catch(() => {})
+      return fallback()
+    }
+    // A transient transport failure (the probe got no retries) falls back to
+    // `eth_simulateV1`, which keeps viem's retries. Execution errors still throw.
+    if (
+      error instanceof BaseError &&
+      error.walk((e) => e instanceof HttpRequestError || e instanceof TimeoutError)
+    )
+      return fallback()
+    throw error
   }
 }
 
