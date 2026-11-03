@@ -18,6 +18,20 @@ export async function has(client: Client, options: has.Options): Promise<boolean
   return check(options.amount)
 }
 
+/**
+ * Starts loading the recent producers' fee tokens, which {@link prepare} waits for before it reads
+ * any reserves. Pass the same `kv` to both so `prepare` joins this load.
+ */
+export function prefetch(client: Client, options: prefetch.Options) {
+  void getValidatorTokens(client, options).catch(() => {})
+}
+
+/** Parameters for prefetching the producers' fee tokens. */
+export declare namespace prefetch {
+  /** Producer-preference cache, shared with {@link prepare}. */
+  type Options = Pick<has.Options, 'kv'>
+}
+
 /** Reads fee reserves ahead of filling and returns a reusable maximum-fee check. */
 export async function prepare(client: Client, options: prepare.Options) {
   const { kv, token } = options
@@ -31,7 +45,7 @@ export async function prepare(client: Client, options: prepare.Options) {
   const [direct, quote] = await Promise.all([
     Promise.all(
       validatorTokens.map((validatorToken) =>
-        Actions.amm.getPool(client, { userToken: token, validatorToken }),
+        getPool(client, { userToken: token, validatorToken }),
       ),
     ),
     twoHop
@@ -44,10 +58,8 @@ export async function prepare(client: Client, options: prepare.Options) {
   const route =
     quote && quote !== zeroAddress && targets.length > 0
       ? Promise.all([
-          Actions.amm.getPool(client, { userToken: token, validatorToken: quote }),
-          ...targets.map((validatorToken) =>
-            Actions.amm.getPool(client, { userToken: quote, validatorToken }),
-          ),
+          getPool(client, { userToken: token, validatorToken: quote }),
+          ...targets.map((validatorToken) => getPool(client, { userToken: quote, validatorToken })),
         ])
       : undefined
   void route?.catch(() => {})
@@ -108,6 +120,15 @@ async function getValidatorTokens(
   const { kv } = options
   if (!kv) return load()
   return cached(kv, `fee.validatorTokens:${client.chain?.id ?? 0}`, load, { ttl: 60 })
+}
+
+/**
+ * Reads a pool's reserves. Batched with the client's other reads, unlike `Actions.amm.getPool`,
+ * which always sends deployless calls and also reads the pool's LP supply.
+ */
+function getPool(client: Client, args: { userToken: Address; validatorToken: Address }) {
+  const [pool] = Actions.amm.getPool.calls(args)
+  return readContract(client, pool)
 }
 
 function unique(addresses: readonly Address[]): Address[] {

@@ -1,4 +1,5 @@
 import {
+  type Address,
   encodeFunctionData,
   http as viem_http,
   isAddressEqual,
@@ -191,40 +192,46 @@ test('fee liquidity: producer discovery overlaps real pending balance RPCs', asy
   `)
 })
 
-test('fee liquidity: pool reads overlap real pending balances and are reused across retries', async () => {
+test('fee liquidity: reads reserves only for held tokens and reuses them across retries', async () => {
   const state = await fixture()
-  const pool = Promise.withResolvers<void>()
-  const observed = observe({ beforeBalance: () => pool.promise, onPool: () => pool.resolve() })
+  // Listed, but the sender holds none of it.
+  const unheld = '0x20c0000000000000000000000000000000000002'
+  const observed = observe()
   const client = await serve({
     chains: [chain],
     features: 'all',
-    resolveTokens: () => state.tokens,
+    resolveTokens: () => [
+      ...state.tokens,
+      { address: unheld, decimals: 6, name: 'BetaUSD', symbol: 'BetaUSD' },
+    ],
     transports: { [chain.id]: observed.transport },
   })
   const { transaction } = await fillTransaction(client, {
     account: state.sender.address,
     calls: state.calls,
   })
-  const direct = encodeFunctionData({
-    abi: Abis.feeAmm,
-    functionName: 'getPool',
-    args: [state.token, Addresses.pathUsd],
-  })
-    .slice(2)
-    .toLowerCase()
+  function pool(userToken: Address) {
+    return encodeFunctionData({
+      abi: Abis.feeAmm,
+      functionName: 'getPool',
+      args: [userToken, Addresses.pathUsd],
+    })
+      .slice(2)
+      .toLowerCase()
+  }
   expect({
-    overlaps: observed.events.indexOf('pool') < observed.events.indexOf('balance-complete'),
-    balanceStarted: observed.events.indexOf('balance') < observed.events.indexOf('pool'),
-    directReads: observed.pools.filter((call) => call === direct).length,
+    afterBalances: observed.events.indexOf('balance-complete') < observed.events.indexOf('pool'),
     balances: observed.balances,
+    directReads: observed.pools.filter((call) => call === pool(state.token)).length,
     skippedMach: isAddressEqual(transaction.feeToken!, addresses.alphaUsd),
+    unheldReads: observed.pools.filter((call) => call === pool(unheld)).length,
   }).toMatchInlineSnapshot(`
     {
-      "balanceStarted": true,
-      "balances": 2,
+      "afterBalances": true,
+      "balances": 3,
       "directReads": 1,
-      "overlaps": true,
       "skippedMach": true,
+      "unheldReads": 0,
     }
   `)
 })

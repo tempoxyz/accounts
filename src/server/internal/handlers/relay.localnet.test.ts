@@ -8,6 +8,7 @@ import {
   toFunctionSelector,
   type Address,
   type BaseError,
+  type Chain,
 } from 'viem'
 import { generatePrivateKey } from 'viem/accounts'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
@@ -26,6 +27,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 import { accounts, addresses, chain, getClient, http } from '../../../../test/config.js'
 import { createServer, type Server } from '../../../../test/utils.js'
 import * as Kv from '../../Kv.js'
+import type * as Tokenlist from '../tokenlist.js'
 import { relay } from './relay.js'
 
 const userAccount = accounts[9]!
@@ -2022,6 +2024,88 @@ describe('behavior: simulation', () => {
       )
       expect(events.filter((event) => event === 'start tempo_simulateV1')).toHaveLength(1)
       expect(findDiffs(result.capabilities?.balanceDiffs, userAccount.address)).toBeDefined()
+    } finally {
+      server.close()
+    }
+  })
+})
+
+describe('behavior: multicall', () => {
+  const multicall3 = '0xcA11bde05977b3631167028862bE2a173976CA11'
+  const balanceSelector = toFunctionSelector('balanceOf(address)').slice(2)
+
+  /** Relays over `chain_`, recording each `eth_call`'s target and calldata. */
+  async function serve(chain_: Chain, tokens: readonly Tokenlist.Token[]) {
+    const upstream = http()({ chain, retryCount: 0 })
+    const calls: { data: string; to?: string | undefined }[] = []
+    const server = await createServer(
+      relay({
+        chains: [chain_],
+        features: 'all',
+        resolveTokens: () => tokens,
+        transports: {
+          [chain.id]: custom({
+            async request({ method, params }) {
+              if (method === 'eth_call') calls.push((params as { data: string; to?: string }[])[0]!)
+              return await upstream.request({ method, params } as never)
+            },
+          }),
+        },
+      }).listener,
+    )
+    return { calls, client: getClient({ transport: http(server.url) }), server }
+  }
+
+  test("behavior: batches through the chain's Multicall3 instead of deployless calls", async () => {
+    const { calls, client, server } = await serve(
+      { ...chain, contracts: { ...chain.contracts, multicall3: { address: multicall3 } } },
+      localnetTokens,
+    )
+    try {
+      const { transaction } = await fillTransaction(client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+      expect({
+        deployless: calls.filter((call) => !call.to).length,
+        feeToken: transaction.feeToken,
+        targets: [...new Set(calls.map((call) => call.to))],
+      }).toMatchInlineSnapshot(`
+        {
+          "deployless": 0,
+          "feeToken": "0x20c0000000000000000000000000000000000001",
+          "targets": [
+            "0xcA11bde05977b3631167028862bE2a173976CA11",
+          ],
+        }
+      `)
+    } finally {
+      server.close()
+    }
+  })
+
+  test('behavior: reads the balances of a 37-token list in one call', async () => {
+    const tokens = [
+      ...localnetTokens,
+      ...Array.from({ length: 33 }, (_, index) => ({
+        address: `0x20c0${(1_000 + index).toString(16).padStart(36, '0')}` as const,
+        decimals: 6,
+        name: `Token ${index}`,
+        symbol: `T${index}`,
+      })),
+    ]
+    const { calls, client, server } = await serve(chain, tokens)
+    try {
+      await fillTransaction(client, { account: userAccount.address, calls: [transferCall()] })
+      expect(
+        calls
+          .filter((call) => call.data.includes(balanceSelector))
+          .map((call) => call.data.split(balanceSelector).length - 1),
+      ).toMatchInlineSnapshot(`
+        [
+          37,
+        ]
+      `)
     } finally {
       server.close()
     }
