@@ -1,4 +1,4 @@
-import { AbiEvent, Hex, RpcRequest, RpcResponse } from 'ox'
+import { AbiEvent, AbiFunction, Hex, RpcRequest, RpcResponse } from 'ox'
 import { Transaction as core_Transaction } from 'ox/tempo'
 import {
   type Address,
@@ -7,7 +7,7 @@ import {
   type Chain,
   type Client,
   createClient,
-  decodeFunctionData,
+  decodeAbiParameters,
   formatUnits,
   http,
   HttpRequestError,
@@ -504,18 +504,22 @@ export function relay(options: relay.Options = {}): Handler {
 
             const normalized = Utils.normalizeFillTransactionRequest(parameters)
 
-            // Simulate from zero address for optimistic balance diffs.
+            // Simulate from zero address for optimistic balance diffs, alongside
+            // the metadata of the missing token.
             const optimisticCalls = normalized ? extractCalls(normalized) : undefined
-            const [{ balanceDiffs }, virtualAddresses] = optimisticCalls
-              ? await Promise.all([
-                  simulateAndParseDiffs(client, {
+            const [{ balanceDiffs }, virtualAddresses, metadata] = await Promise.all([
+              optimisticCalls
+                ? simulateAndParseDiffs(client, {
                     account: zeroAddress,
                     calls: optimisticCalls,
                     kv,
-                  }),
-                  resolveVirtualAddresses(client, { calls: optimisticCalls }),
-                ])
-              : [{ balanceDiffs: undefined }, undefined]
+                  })
+                : { balanceDiffs: undefined },
+              optimisticCalls
+                ? resolveVirtualAddresses(client, { calls: optimisticCalls })
+                : undefined,
+              resolveTokenMetadata(client, { token, kv }).catch(() => undefined),
+            ])
 
             // Re-key balance diffs from zero address to the real sender.
             const senderDiffs =
@@ -523,9 +527,6 @@ export function relay(options: relay.Options = {}): Handler {
                 ? { [parameters.from]: balanceDiffs[zeroAddress] ?? [] }
                 : balanceDiffs
 
-            const metadata = await resolveTokenMetadata(client, { token, kv }).catch(
-              () => undefined,
-            )
             const deficit = required - available
             return RpcResponse.from(
               {
@@ -1074,28 +1075,41 @@ function getVirtualAddressTargets(calls: readonly Call[]): readonly Address[] {
 
 function decodeTransferRecipient(data?: string | undefined): Address | undefined {
   if (!data) return undefined
-  const selector = data.slice(0, 10).toLowerCase()
-  if (!transferSelectors.has(selector)) return undefined
+  // Matched case-sensitively, like viem's `decodeFunctionData`.
+  const transfer = transferFunctions.get(data.slice(0, 10) as Hex.Hex)
+  if (!transfer) return undefined
   try {
-    const { args, functionName } = decodeFunctionData({
-      abi: Abis.tip20,
-      data: data as Hex.Hex,
-    })
-    if (
-      (functionName === 'transfer' || functionName === 'transferWithMemo') &&
-      typeof args[0] === 'string'
-    )
-      return args[0]
-    if (
-      (functionName === 'transferFrom' || functionName === 'transferFromWithMemo') &&
-      typeof args[1] === 'string'
-    )
-      return args[1]
+    const args = decodeAbiParameters(
+      transfer.inputs,
+      `0x${data.slice(10)}` as Hex.Hex,
+    ) as readonly unknown[]
+    const recipient = args[transfer.recipient]
+    if (typeof recipient === 'string') return recipient as Address
   } catch {}
   return undefined
 }
 
-const transferSelectors = new Set(['0xa9059cbb', '0x95777d59', '0x23b872dd', '0x929c2539'])
+/**
+ * TIP-20 transfers by selector, with the index of their recipient argument.
+ * `decodeFunctionData` would hash the selector of every TIP-20 function
+ * before the match on each call.
+ */
+const transferFunctions = new Map(
+  (
+    [
+      ['transfer', 0],
+      ['transferWithMemo', 0],
+      ['transferFrom', 1],
+      ['transferFromWithMemo', 1],
+    ] as const
+  ).map(([name, recipient]) => {
+    const abiFunction = AbiFunction.fromAbi(Abis.tip20, name)
+    return [
+      AbiFunction.getSelector(abiFunction),
+      { inputs: abiFunction.inputs, recipient },
+    ] as const
+  }),
+)
 
 // TODO: cleanup/remove
 function extractCalls(transaction: Record<string, unknown>): readonly Call[] {
@@ -1204,6 +1218,15 @@ async function simulateAndParseDiffs(client: Client, options: simulateAndParseDi
     for (const result of results as { logs?: (typeof logs)[number][] | undefined }[])
       if (result.logs) logs.push(...result.logs)
 
+    // Compute fee breakdown alongside the balance diffs.
+    const fee = computeFee(client, {
+      feeToken,
+      gas,
+      kv,
+      maxFeePerGas,
+      tokenMetadata: tokenMetadata as never,
+    }).catch(() => undefined)
+
     // Build per-token balance diffs relative to the sender.
     const balanceDiffs = account
       ? await buildBalanceDiffs(client, {
@@ -1215,16 +1238,7 @@ async function simulateAndParseDiffs(client: Client, options: simulateAndParseDi
         })
       : {}
 
-    // Compute fee breakdown.
-    const fee = await computeFee(client, {
-      feeToken,
-      gas,
-      kv,
-      maxFeePerGas,
-      tokenMetadata: tokenMetadata as never,
-    }).catch(() => undefined)
-
-    return { balanceDiffs, fee }
+    return { balanceDiffs, fee: await fee }
   } catch {
     // Simulation failures should not block the fill response —
     // return empty diffs with fee computed from transaction fields.
@@ -1255,12 +1269,12 @@ async function buildBalanceDiffs(client: Client, options: buildBalanceDiffs.Opti
   const swapTokenOut = swap?.tokenOut.toLowerCase()
 
   const transferLogs = parseEventLogs({
-    abi: [AbiEvent.fromAbi(Abis.tip20, 'Transfer')],
+    abi: [transferEvent],
     eventName: 'Transfer',
     logs,
   })
   const approvalLogs = parseEventLogs({
-    abi: [AbiEvent.fromAbi(Abis.tip20, 'Approval')],
+    abi: [approvalEvent],
     eventName: 'Approval',
     logs,
   })
@@ -1371,6 +1385,10 @@ async function buildBalanceDiffs(client: Client, options: buildBalanceDiffs.Opti
 
   return { [account]: diffs }
 }
+
+// Resolving an event hashes its signature, so resolve these once.
+const transferEvent = AbiEvent.fromAbi(Abis.tip20, 'Transfer')
+const approvalEvent = AbiEvent.fromAbi(Abis.tip20, 'Approval')
 
 declare namespace buildBalanceDiffs {
   type Options = {
