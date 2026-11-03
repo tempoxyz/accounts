@@ -1,6 +1,12 @@
 name: Verify
 on:
   workflow_call:
+    # The test Privy app's values. Without them, the Privy tests skip.
+    secrets:
+      PRIVY_APP_SECRET:
+        required: false
+      PRIVY_JWT_PRIVATE_KEY:
+        required: false
   workflow_dispatch:
 
 permissions:
@@ -60,3 +66,127 @@ jobs:
 
       - name: Run tests
         run: pnpm test
+
+  test-integration:
+    name: Test (integration)
+    # The integration tests pull the Tempo API's private dev image from GHCR, and read tempoxyz/id.
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      - name: Clone repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
+
+      - name: Fetch GitHub token via STS
+        id: sts
+        uses: tempoxyz/gh-actions/actions/github-sts@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+        with:
+          policy: tempo-id
+
+      # `test/id.ts` clones tempoxyz/id at `.tempo-id`, links its `accounts` to this repository, and
+      # installs it. Git reads the token from this step's environment only, so the clone keeps no
+      # credential.
+      - name: Check out Tempo ID
+        env:
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: url.https://x-access-token:${{ steps.sts.outputs.token }}@github.com/.insteadOf
+          GIT_CONFIG_VALUE_0: https://github.com/
+        run: node test/id.ts
+
+      # Global setup runs the Tempo API from `ghcr.io/tempoxyz/api-dev`, which is private.
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      # The tests import the checkout's harness, so their types need it.
+      - name: Check types
+        run: pnpm check:types:test
+
+      # Global setup starts Postgres in a container, builds Tempo ID, and migrates. The Privy tests
+      # run against the test Privy app, which trusts the key in `PRIVY_JWT_PRIVATE_KEY`.
+      - name: Run tests
+        env:
+          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+          PRIVY_JWT_PRIVATE_KEY: ${{ secrets.PRIVY_JWT_PRIVATE_KEY }}
+        run: pnpm test:integration
+
+  test-e2e:
+    name: Test (e2e ${{ matrix.shard }}/4)
+    # Global setup pulls the Tempo API's private dev image from GHCR, and reads tempoxyz/id.
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    # Each test signs in its own user, so the suite splits by test across runners.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    timeout-minutes: 20
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      - name: Clone repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
+        with:
+          playwright: 'true'
+
+      - name: Fetch GitHub token via STS
+        id: sts
+        uses: tempoxyz/gh-actions/actions/github-sts@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+        with:
+          policy: tempo-id
+
+      # `test/id.ts` clones tempoxyz/id at `.tempo-id`, links its `accounts` to this repository, and
+      # installs it. Git reads the token from this step's environment only, so the clone keeps no
+      # credential.
+      - name: Check out Tempo ID
+        env:
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: url.https://x-access-token:${{ steps.sts.outputs.token }}@github.com/.insteadOf
+          GIT_CONFIG_VALUE_0: https://github.com/
+        run: node test/id.ts
+
+      # Global setup runs the Tempo API from `ghcr.io/tempoxyz/api-dev`, which is private.
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      # Global setup starts Postgres in a container, builds Tempo ID, migrates, and starts the local
+      # Tempo node and the Tempo API.
+      - name: Run tests
+        env:
+          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+          PRIVY_JWT_PRIVATE_KEY: ${{ secrets.PRIVY_JWT_PRIVATE_KEY }}
+          SHARD: ${{ matrix.shard }}
+        run: pnpm test:e2e --shard="$SHARD/4"
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-traces-${{ matrix.shard }}
+          path: test-results
+          retention-days: 7
