@@ -26,14 +26,21 @@ const execute = (command, args, options) =>
     child.on('close', (code) => {
       if (code === 0) fulfill({ stderr, stdout })
       else
-        reject(Object.assign(new Error(`${command} exited with code ${code}`), { stderr, stdout }))
+        reject(
+          Object.assign(new Error(`${command} exited with code ${code}`), {
+            stderr,
+            stdout,
+          }),
+        )
     })
   })
 
 function output_error(error) {
   if (typeof error !== 'object' || error === null) return ''
-  const stderr = 'stderr' in error && typeof error.stderr === 'string' ? error.stderr : ''
-  const stdout = 'stdout' in error && typeof error.stdout === 'string' ? error.stdout : ''
+  const stderr =
+    'stderr' in error && typeof error.stderr === 'string' ? error.stderr : ''
+  const stdout =
+    'stdout' in error && typeof error.stdout === 'string' ? error.stdout : ''
   return `${stderr}\n${stdout}`
 }
 
@@ -64,8 +71,12 @@ export async function publishPackage(parameters) {
       silent: true,
     })
     if (JSON.parse(stdout) !== version)
-      throw new Error(`npm returned an unexpected version for ${spec}: ${stdout.trim()}`)
-    console.log(`${spec} is already published; continuing release finalization.`)
+      throw new Error(
+        `npm returned an unexpected version for ${spec}: ${stdout.trim()}`,
+      )
+    console.log(
+      `${spec} is already published; continuing release finalization.`,
+    )
     return 'already-published'
   } catch (error) {
     if (!/\bE404\b/.test(output_error(error))) throw error
@@ -81,10 +92,14 @@ export async function publishPackage(parameters) {
       silent: true,
     })
 
-    const { stdout } = await run('tar', ['-xOf', archive, 'package/package.json'], {
-      cwd,
-      silent: true,
-    })
+    const { stdout } = await run(
+      'tar',
+      ['-xOf', archive, 'package/package.json'],
+      {
+        cwd,
+        silent: true,
+      },
+    )
     const package_packed = JSON.parse(stdout)
     if (package_packed.name !== name || package_packed.version !== version)
       throw new Error(
@@ -99,7 +114,10 @@ export async function publishPackage(parameters) {
     ]
     const catalogs_unresolved = fields_dependency.flatMap((field) =>
       Object.entries(package_packed[field] ?? {})
-        .filter(([, range]) => typeof range === 'string' && range.startsWith('catalog:'))
+        .filter(
+          ([, range]) =>
+            typeof range === 'string' && range.startsWith('catalog:'),
+        )
         .map(([dependency]) => `${field}.${dependency}`),
     )
     if (catalogs_unresolved.length > 0)
@@ -130,11 +148,23 @@ export async function publishPackage(parameters) {
 
 async function main() {
   const cwd = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-  const package_json = JSON.parse(await readFile(resolve(cwd, 'package.json'), 'utf8'))
-  if (typeof package_json.name !== 'string' || typeof package_json.version !== 'string')
+  const package_json = JSON.parse(
+    await readFile(resolve(cwd, 'package.json'), 'utf8'),
+  )
+  if (
+    typeof package_json.name !== 'string' ||
+    typeof package_json.version !== 'string'
+  )
     throw new Error('package.json must contain string name and version fields')
-  await publishPackage({ cwd, name: package_json.name, version: package_json.version })
+  await publishPackage({
+    cwd,
+    name: package_json.name,
+    version: package_json.version,
+  })
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+)
   await main()

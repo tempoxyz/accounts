@@ -17,16 +17,16 @@ flowchart LR
 npm i accounts viem
 ```
 
-| Entry                     | Holds                                                                     |
-| ------------------------- | ------------------------------------------------------------------------- |
-| `accounts`            | `Id`, `Actions`, `Store`, `Session`, `AccessKey`, `Permissions`, and the types  |
-| `accounts/internal`   | `Authorization`, `Funding`, `Pending`, and `User`, the types that the actions build and return |
+| Entry                 | Holds                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| `accounts`            | `Id`, `Actions`, `Store`, `Session`, `AccessKey`, `Permissions`, and the types                  |
+| `accounts/internal`   | `Authorization`, `Funding`, `Pending`, and `User`, the types that the actions build and return  |
 | `accounts/plugins`    | The plugins: `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, and `viem` |
-| `accounts/react`      | `react`, the plugin that adds `tempoId.useSession()` |
-| `accounts/expo`       | The `expo` preset of an Expo app |
-| `accounts/mpp`        | `mpp`, the plugin that pays MPP endpoints with the access key |
-| `accounts/cloudflare` | `DurableObject.sessions`, for a backend's sessions on Cloudflare Workers  |
-| `accounts/wagmi`      | `tempoId`, a wagmi connector, and `wagmi`, the plugin of a wagmi config    |
+| `accounts/react`      | `react`, the plugin that adds `tempoId.useSession()`                                            |
+| `accounts/expo`       | The `expo` preset of an Expo app                                                                |
+| `accounts/mpp`        | `mpp`, the plugin that pays MPP endpoints with the access key                                   |
+| `accounts/cloudflare` | `DurableObject.sessions`, for a backend's sessions on Cloudflare Workers                        |
+| `accounts/wagmi`      | `tempoId`, a wagmi connector, and `wagmi`, the plugin of a wagmi config                         |
 
 ## Quick start
 

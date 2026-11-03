@@ -6,9 +6,9 @@ on:
     branches:
       - main
     paths:
-      - ".github/**"
+      - '.github/**'
   schedule:
-    - cron: "17 9 * * 1"
+    - cron: '17 9 * * 1'
   workflow_dispatch:
 
 permissions: {}

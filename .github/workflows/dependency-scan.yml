@@ -1,6 +1,6 @@
 name: Dependency Scan
 
-"on":
+'on':
   pull_request:
 
 permissions: {}

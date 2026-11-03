@@ -18,7 +18,9 @@ describe('publishPackage', () => {
   test('publishes an unpublished version with the npm CLI', async () => {
     const run = vi
       .fn()
-      .mockRejectedValueOnce(Object.assign(new Error('not found'), { stderr: 'npm error E404' }))
+      .mockRejectedValueOnce(
+        Object.assign(new Error('not found'), { stderr: 'npm error E404' }),
+      )
       .mockResolvedValueOnce({ stderr: '', stdout: '{}' })
       .mockResolvedValueOnce({ stderr: '', stdout: package_packed })
       .mockResolvedValueOnce({ stderr: '', stdout: '' })
@@ -26,7 +28,9 @@ describe('publishPackage', () => {
     const result = await publishPackage({ ...parameters, run })
     const calls = run.mock.calls.map(([command, args, options]) => ({
       args: args.map((arg) =>
-        typeof arg === 'string' && arg.endsWith('/package.tgz') ? '<archive>' : arg,
+        typeof arg === 'string' && arg.endsWith('/package.tgz')
+          ? '<archive>'
+          : arg,
       ),
       command,
       cwd: options.cwd === parameters.cwd ? '<repo>' : '<temp>',
@@ -98,7 +102,9 @@ describe('publishPackage', () => {
     const version = '1.0.0-alpha.0'
     const run = vi
       .fn()
-      .mockRejectedValueOnce(Object.assign(new Error('not found'), { stderr: 'npm error E404' }))
+      .mockRejectedValueOnce(
+        Object.assign(new Error('not found'), { stderr: 'npm error E404' }),
+      )
       .mockResolvedValueOnce({ stderr: '', stdout: '{}' })
       .mockResolvedValueOnce({
         stderr: '',
@@ -132,7 +138,9 @@ describe('publishPackage', () => {
   test('does not publish a tarball with unresolved catalog dependencies', async () => {
     const run = vi
       .fn()
-      .mockRejectedValueOnce(Object.assign(new Error('not found'), { stderr: 'npm error E404' }))
+      .mockRejectedValueOnce(
+        Object.assign(new Error('not found'), { stderr: 'npm error E404' }),
+      )
       .mockResolvedValueOnce({ stderr: '', stdout: '{}' })
       .mockResolvedValueOnce({
         stderr: '',
@@ -143,7 +151,9 @@ describe('publishPackage', () => {
         }),
       })
 
-    await expect(publishPackage({ ...parameters, run })).rejects.toThrowErrorMatchingInlineSnapshot(
+    await expect(
+      publishPackage({ ...parameters, run }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: packed package contains unresolved catalogs: dependencies.hono]`,
     )
     expect(run.mock.calls.map(([command]) => command)).toMatchInlineSnapshot(`
@@ -158,14 +168,21 @@ describe('publishPackage', () => {
   test('does not publish a tarball with an unexpected identity', async () => {
     const run = vi
       .fn()
-      .mockRejectedValueOnce(Object.assign(new Error('not found'), { stderr: 'npm error E404' }))
+      .mockRejectedValueOnce(
+        Object.assign(new Error('not found'), { stderr: 'npm error E404' }),
+      )
       .mockResolvedValueOnce({ stderr: '', stdout: '{}' })
       .mockResolvedValueOnce({
         stderr: '',
-        stdout: JSON.stringify({ name: 'other-package', version: parameters.version }),
+        stdout: JSON.stringify({
+          name: 'other-package',
+          version: parameters.version,
+        }),
       })
 
-    await expect(publishPackage({ ...parameters, run })).rejects.toThrowErrorMatchingInlineSnapshot(
+    await expect(
+      publishPackage({ ...parameters, run }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: packed package identity does not match accounts@1.2.3: other-package@1.2.3]`,
     )
     expect(run.mock.calls.map(([command]) => command)).toMatchInlineSnapshot(`
@@ -182,7 +199,8 @@ describe('publishPackage', () => {
 
     const result = await publishPackage({ ...parameters, run })
 
-    expect({ commands: run.mock.calls.map(([command]) => command), result }).toMatchInlineSnapshot(`
+    expect({ commands: run.mock.calls.map(([command]) => command), result })
+      .toMatchInlineSnapshot(`
         {
           "commands": [
             "npm",
@@ -193,10 +211,14 @@ describe('publishPackage', () => {
   })
 
   test('does not publish when the registry lookup fails unexpectedly', async () => {
-    const error = Object.assign(new Error('registry unavailable'), { stderr: 'npm error E500' })
+    const error = Object.assign(new Error('registry unavailable'), {
+      stderr: 'npm error E500',
+    })
     const run = vi.fn().mockRejectedValue(error)
 
-    await expect(publishPackage({ ...parameters, run })).rejects.toThrowErrorMatchingInlineSnapshot(
+    await expect(
+      publishPackage({ ...parameters, run }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: registry unavailable]`,
     )
     expect(run.mock.calls.map(([command]) => command)).toMatchInlineSnapshot(`
@@ -209,7 +231,9 @@ describe('publishPackage', () => {
   test('does not publish when npm returns a different version', async () => {
     const run = vi.fn().mockResolvedValue({ stderr: '', stdout: '"0.18.5"\n' })
 
-    await expect(publishPackage({ ...parameters, run })).rejects.toThrowErrorMatchingInlineSnapshot(
+    await expect(
+      publishPackage({ ...parameters, run }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: npm returned an unexpected version for accounts@1.2.3: "0.18.5"]`,
     )
     expect(run.mock.calls.map(([command]) => command)).toMatchInlineSnapshot(`

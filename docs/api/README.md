@@ -2,16 +2,16 @@
 
 Each page documents one export of `accounts` or one of its entries. An app creates an instance with [`Id.create`](Id.create.md), and each plugin adds a namespace of actions to it. The low-level [`Actions`](Actions.md) take the instance's configuration, for an app that keeps its state itself. The errors leave out `body_too_large`, `cross_site_request`, and `malformed_body`, which the package's own requests do not cause.
 
-| Entry                     | Exports                                                                                                                                  |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Entry                 | Exports                                                                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `accounts`            | `AccessKey`, `AccessToken`, `Actions`, `ClientAssertion`, `Dpop`, `Id`, `LogoutToken`, `Permissions`, `Plugin`, `Session`, `Store`, `TempoAccount`, `Tokens` |
-| `accounts/internal`   | `Authorization`, `Funding`, `Pending`, `User`, the types that the actions build and return             |
-| `accounts/plugins`    | `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, `viem`                                                                    |
-| `accounts/react`      | `react`                                                                                                                                  |
-| `accounts/expo`       | `expo`                                                                                                                                   |
-| `accounts/mpp`        | `mpp` and `mpp.MaxAmountError`                                                                                                           |
-| `accounts/cloudflare` | `DurableObject`, `Id`, `Plugin`, `Store`                                                                                                 |
-| `accounts/wagmi`      | `tempoId`, `wagmi`, and their error classes                                                                                              |
+| `accounts/internal`   | `Authorization`, `Funding`, `Pending`, `User`, the types that the actions build and return                                                                   |
+| `accounts/plugins`    | `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, `viem`                                                                               |
+| `accounts/react`      | `react`                                                                                                                                                      |
+| `accounts/expo`       | `expo`                                                                                                                                                       |
+| `accounts/mpp`        | `mpp` and `mpp.MaxAmountError`                                                                                                                               |
+| `accounts/cloudflare` | `DurableObject`, `Id`, `Plugin`, `Store`                                                                                                                     |
+| `accounts/wagmi`      | `tempoId`, `wagmi`, and their error classes                                                                                                                  |
 
 ## Id
 
@@ -34,7 +34,6 @@ Each plugin comes from `accounts/plugins`, and adds the namespace of its name.
 - [`relay`](plugins.relay.md): The handler of the app's relay route, whose fee payer pays the fees of its pages' transactions.
 - [`viem`](plugins.viem.md): A Viem client whose account follows the session.
 - [`Plugin.from`](Plugin.from.md): Defines a plugin of the app's own.
-
 
 ## React
 

@@ -98,12 +98,12 @@
 
 Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustand, Redux, and `let`-flag stores are banned. `src/internal/session.machine.ts` is the reference.
 
-| State                                                      | Model                                 |
-| ---------------------------------------------------------- | ------------------------------------- |
-| One value with two or three cases                          | A union `let`                         |
-| Several values that change together, with no states        | An `@xstate/store` store              |
-| A lifecycle with async events, timers, overlaps, or guards | An XState machine                     |
-| Server data in an app                                      | TanStack Query, in the app, not here  |
+| State                                                      | Model                                |
+| ---------------------------------------------------------- | ------------------------------------ |
+| One value with two or three cases                          | A union `let`                        |
+| Several values that change together, with no states        | An `@xstate/store` store             |
+| A lifecycle with async events, timers, overlaps, or guards | An XState machine                    |
+| Server data in an app                                      | TanStack Query, in the app, not here |
 
 - Do not write a machine for a linear async function, such as a retry loop.
 - Replace `let` flags with one machine. The snapshot is the only source of state.
@@ -294,12 +294,12 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 
 ## Commands
 
-| Command            | Description                                                     |
-| ------------------ | --------------------------------------------------------------- |
-| `pnpm build`       | Builds the package. Run `pnpm exec zile dev` after.             |
-| `pnpm check`       | Formats and lints with fixes.                                   |
-| `pnpm check:types` | Runs `tsc` on the package, the examples, and the playgrounds.   |
-| `pnpm test`        | Runs the tests in `src/` and `scripts/`.                        |
+| Command            | Description                                                   |
+| ------------------ | ------------------------------------------------------------- |
+| `pnpm build`       | Builds the package. Run `pnpm exec zile dev` after.           |
+| `pnpm check`       | Formats and lints with fixes.                                 |
+| `pnpm check:types` | Runs `tsc` on the package, the examples, and the playgrounds. |
+| `pnpm test`        | Runs the tests in `src/` and `scripts/`.                      |
 
 ## Friction Logging
 

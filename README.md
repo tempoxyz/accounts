@@ -72,13 +72,13 @@ Join the Telegram group to chat with the team and other devs: [@mpp_devs](https:
 
 ## Examples
 
-| Example                         | Description                                                             |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| [web](./examples/web)           | Sign in through a dialog on the page, and send OUSD with the access key. |
-| [wagmi](./examples/wagmi)       | Sign in through wagmi's `connect`, with the `tempoId` connector.        |
-| [backend](./examples/backend)   | Sign in through a redirect, with the session on a Cloudflare Worker.    |
-| [cli](./examples/cli)           | Sign in through the device grant, with a code approved in a browser.    |
-| [mobile](./examples/mobile)     | Sign in through the system browser in an Expo app.                      |
+| Example                       | Description                                                              |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| [web](./examples/web)         | Sign in through a dialog on the page, and send OUSD with the access key. |
+| [wagmi](./examples/wagmi)     | Sign in through wagmi's `connect`, with the `tempoId` connector.         |
+| [backend](./examples/backend) | Sign in through a redirect, with the session on a Cloudflare Worker.     |
+| [cli](./examples/cli)         | Sign in through the device grant, with a code approved in a browser.     |
+| [mobile](./examples/mobile)   | Sign in through the system browser in an Expo app.                       |
 
 ## Development
 

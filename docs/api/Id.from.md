@@ -59,11 +59,11 @@ const config = Id.from({
 
 The app's client ID. It is one of these:
 
-| Client ID                                            | For                                                                                             |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| The ID of the app's registration                     | A registered OAuth app, such as `client_…`                                                      |
-| The URL of the app's metadata document               | An app that publishes its metadata                                                              |
-| The page's origin, such as `https://app.example`     | A web app without a registration, or a localhost origin in development                          |
+| Client ID                                            | For                                                                                                                                     |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| The ID of the app's registration                     | A registered OAuth app, such as `client_…`                                                                                              |
+| The URL of the app's metadata document               | An app that publishes its metadata                                                                                                      |
+| The page's origin, such as `https://app.example`     | A web app without a registration, or a localhost origin in development                                                                  |
 | `cli:` and the CLI's name, such as `cli:acme-deploy` | A CLI without a registration, as [Unregistered CLIs](https://github.com/tempoxyz/id/blob/main/docs/apps.md#unregistered-clis) describes |
 
 Outside a browser, the call needs it.
