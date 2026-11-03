@@ -16,8 +16,12 @@ type Fetch = typeof globalThis.fetch
  */
 export function install(getMethods: (client: typeof mppx) => mppx.Mppx.Methods): void {
   const fetch_raw = unwrap(globalThis.fetch)
-  const client = import('mppx/client').then(
-    (client) => {
+  const client = import('mppx/client')
+    .then((client) => {
+      // Another mppx polyfill (e.g. the app's, or a later provider's) replaced this one, as a
+      // second `Mppx.create` would have; it handles payments, and requests that still reach this
+      // placeholder (e.g. after `Fetch.restore()`) go out unpaid.
+      if (isWrapper(globalThis.fetch) && globalThis.fetch !== fetch_lazy) return fetch_raw
       const handoff = globalThis.fetch === fetch_lazy
       if (handoff) globalThis.fetch = fetch_raw
       return client.Mppx.create({
@@ -27,17 +31,44 @@ export function install(getMethods: (client: typeof mppx) => mppx.Mppx.Methods):
         methods: getMethods(client),
         polyfill: handoff,
       }).fetch as Fetch
-    },
-    () => {
+    })
+    .catch(() => {
       if (globalThis.fetch === fetch_lazy) globalThis.fetch = fetch_raw
       return fetch_raw
-    },
-  )
+    })
   const fetch_lazy: Fetch = Object.assign(
-    async (input: RequestInfo | URL, init?: RequestInit) => (await client)(input, init),
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      // Native fetch rejects as soon as its signal aborts, even while mppx is still loading.
+      const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
+      const fetch = signal ? await abortable(client, signal) : await client
+      return fetch(input, init)
+    },
     { [wrapper]: fetch_raw },
   )
   globalThis.fetch = fetch_lazy
+}
+
+/** Resolves with `promise`, or rejects like fetch once the signal aborts. */
+async function abortable<value>(promise: Promise<value>, signal: AbortSignal): Promise<value> {
+  const reason = () =>
+    signal.reason ?? Object.assign(new Error('This operation was aborted'), { name: 'AbortError' })
+  if (signal.aborted) throw reason()
+  let abort: (() => void) | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        abort = () => reject(reason())
+        signal.addEventListener('abort', abort, { once: true })
+      }),
+    ])
+  } finally {
+    if (abort) signal.removeEventListener('abort', abort)
+  }
+}
+
+function isWrapper(fetch: Fetch): boolean {
+  return Boolean((fetch as Fetch & { [wrapper]?: Fetch | undefined })[wrapper])
 }
 
 /** Returns the fetch underneath mppx polyfills (including this one). */
