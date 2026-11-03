@@ -13,6 +13,21 @@
     "noUncheckedSideEffectImports": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    // The tests and `test/` import the package by its entries, which `package.json` links to their
+    // source. The Tempo ID checkout's modules name its server's modules by its private package's name,
+    // as its own `tsconfig.json` maps them.
+    "paths": {
+      "@tempoxyz/id-internal/app/*": ["./.tempo-id/src/app/*"],
+      "@tempoxyz/id-internal/internal/*": ["./.tempo-id/src/internal/*"],
+      "accounts": ["./src/index.ts"],
+      "accounts/cloudflare": ["./src/cloudflare/index.ts"],
+      "accounts/expo": ["./src/expo/index.ts"],
+      "accounts/internal": ["./src/internal.ts"],
+      "accounts/mpp": ["./src/mpp/index.ts"],
+      "accounts/plugins": ["./src/plugins/index.ts"],
+      "accounts/react": ["./src/react/index.ts"],
+      "accounts/wagmi": ["./src/wagmi/index.ts"]
+    },
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
@@ -23,16 +38,15 @@
     "verbatimModuleSyntax": true
   },
   // The examples and playgrounds check their own types. `scripts/publish.mjs` is the release script.
-  // `tsconfig.test.json` checks the tests and `test/`, which import the Tempo ID checkout at `.tempo-id`.
+  // The tests and `test/` import the Tempo ID checkout at `.tempo-id`, which `test/id.ts` prepares.
+  // `tsconfig.build.json` checks the package without it.
   "exclude": [
-    "**/*.test.ts",
     "**/dist",
     "**/node_modules",
     ".claude",
     ".tempo-id",
     "examples",
     "playgrounds",
-    "scripts",
-    "test"
+    "scripts"
   ]
 }
