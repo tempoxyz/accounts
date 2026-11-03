@@ -1712,6 +1712,118 @@ describe('behavior: path B — conditional sponsorship (validate)', () => {
   })
 })
 
+describe('behavior: feePayer.precheck', () => {
+  /** Relays with a fee payer whose precheck answers `accept`, recording each fill upstream. */
+  async function serve(accept: boolean) {
+    const upstream = http()({ chain, retryCount: 0 })
+    const fills: string[] = []
+    const prechecks: unknown[] = []
+    let validated = 0
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        feePayer: {
+          account: feePayerAccount,
+          precheck: (request) => {
+            prechecks.push(request)
+            return accept
+          },
+          validate: () => {
+            validated++
+            return true
+          },
+        },
+        resolveTokens: () => localnetTokens,
+        transports: {
+          [chain.id]: custom({
+            async request({ method, params }) {
+              if (method === 'eth_fillTransaction')
+                fills.push(
+                  (params as { feePayer?: boolean }[])[0]?.feePayer === true
+                    ? 'sponsored fill'
+                    : 'fill',
+                )
+              return await upstream.request({ method, params } as never)
+            },
+          }),
+        },
+      }).listener,
+    )
+    return {
+      client: getClient({ transport: http(server.url) }),
+      server,
+      get state() {
+        return { fills, prechecks, validated }
+      },
+    }
+  }
+
+  test('behavior: a rejecting precheck fills unsponsored without a sponsored attempt', async () => {
+    const handler = await serve(false)
+    try {
+      const { capabilities, transaction } = await fillTransaction(handler.client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+      expect({
+        ...handler.state,
+        signed: !!transaction.feePayerSignature,
+        sponsored: capabilities?.sponsored,
+      }).toMatchInlineSnapshot(`
+        {
+          "fills": [
+            "fill",
+          ],
+          "prechecks": [
+            {
+              "chainId": 1337,
+              "from": "0x9ac4fDC8e5D72AaADE30F9Ff52D392D60c68A64a",
+            },
+          ],
+          "signed": false,
+          "sponsored": false,
+          "validated": 0,
+        }
+      `)
+    } finally {
+      handler.server.close()
+    }
+  })
+
+  test('behavior: an accepting precheck still leaves the decision to validate', async () => {
+    const handler = await serve(true)
+    try {
+      const { capabilities, transaction } = await fillTransaction(handler.client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+      expect({
+        ...handler.state,
+        signed: !!transaction.feePayerSignature,
+        sponsored: capabilities?.sponsored,
+      }).toMatchInlineSnapshot(`
+        {
+          "fills": [
+            "sponsored fill",
+          ],
+          "prechecks": [
+            {
+              "chainId": 1337,
+              "from": "0x9ac4fDC8e5D72AaADE30F9Ff52D392D60c68A64a",
+            },
+          ],
+          "signed": true,
+          "sponsored": true,
+          "validated": 1,
+        }
+      `)
+    } finally {
+      handler.server.close()
+    }
+  })
+})
+
 describe('behavior: path C — no sponsorship', () => {
   let server: Server
   let client: ReturnType<typeof getClient<typeof chain>>

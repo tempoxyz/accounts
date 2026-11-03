@@ -160,8 +160,13 @@ export function relay(options: relay.Options = {}): Handler {
                   allowUnsafe: internal_allowUnsafeUrls,
                 })
               : undefined
-          const requestsSponsorship =
-            (!!feePayerOptions || !!externalFeePayerUrl) && parameters.feePayer !== false
+          // A host's precheck can turn its own fee payer down before any sponsored fill. An app's
+          // own fee payer URL is the authority for its fills, so it isn't prechecked.
+          const precheck =
+            feePayerOptions?.precheck && !externalFeePayerUrl && parameters.feePayer !== false
+              ? Promise.resolve(feePayerOptions.precheck({ chainId, from }))
+              : undefined
+          void precheck?.catch(() => {})
           // Default to `true`. Dapps that don't render diffs can pass
           // `capabilities.balanceDiffs: false` to skip the post-fill
           // `tempo_simulateV1` round trip (~250-400ms).
@@ -169,6 +174,24 @@ export function relay(options: relay.Options = {}): Handler {
 
           const { feePayer: _feePayer, ...normalized } =
             Utils.normalizeFillTransactionRequest(parameters)
+
+          // Simulation needs only the calls, so start it alongside the fill. It is used when the
+          // fill keeps the requested calls (no swap prepended), and its failure only surfaces then.
+          const calls_requested = extractCalls(normalized)
+          const simulation_early =
+            features.simulate && requireBalanceDiffs && calls_requested.length > 0
+              ? simulate(client, {
+                  account: from === zeroAddress ? undefined : from,
+                  calls: calls_requested,
+                  kv,
+                })
+              : undefined
+          void simulation_early?.catch(() => {})
+
+          const requestsSponsorship =
+            (!!feePayerOptions || !!externalFeePayerUrl) &&
+            parameters.feePayer !== false &&
+            ((await precheck) ?? true)
 
           // When sponsoring, the sponsor's preferred fee token (if set)
           // overrides whatever the consumer asked for — the sponsor is
@@ -183,19 +206,6 @@ export function relay(options: relay.Options = {}): Handler {
             ...(typeof chainId !== 'undefined' ? { chainId } : {}),
             ...(sponsoredFeeToken ? { feeToken: sponsoredFeeToken } : {}),
           }
-
-          // Simulation needs only the calls, so start it alongside the fill. It is used when the
-          // fill keeps the requested calls (no swap prepended), and its failure only surfaces then.
-          const calls_requested = extractCalls(baseTx)
-          const simulation_early =
-            features.simulate && requireBalanceDiffs && calls_requested.length > 0
-              ? simulate(client, {
-                  account: from === zeroAddress ? undefined : from,
-                  calls: calls_requested,
-                  kv,
-                })
-              : undefined
-          void simulation_early?.catch(() => {})
 
           let filled: Awaited<ReturnType<typeof fill>>
           let sponsored = false
@@ -698,6 +708,20 @@ export namespace relay {
           account: LocalAccount
           /** Preferred fee token the sponsor wants to pay fees in. */
           feeToken?: Address | undefined
+          /**
+           * Checks a fill's sender and chain before the relay fills it for sponsorship. Return
+           * `false` to fill it unsponsored right away, skipping the sponsored fill that
+           * `validate` would reject. Keep it cheap: the fill waits for it. `validate` still
+           * approves each filled transaction, and raw transactions are not prechecked.
+           */
+          precheck?:
+            | ((request: {
+                /** Chain the transaction is filled for. */
+                chainId: number
+                /** Sender, when the request names one. */
+                from?: Address | undefined
+              }) => boolean | Promise<boolean>)
+            | undefined
           /**
            * Validates whether to sponsor the transaction. When omitted, all
            * transactions are sponsored. Return `false` to reject sponsorship.
