@@ -1,33 +1,29 @@
 {
-  "name": "wagmi-playground",
+  "name": "playground-wagmi",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "check:types": "tsc -b",
-    "dev": "vp dev",
-    "build": "tsc -b && vp build",
-    "postinstall": "wrangler types",
-    "preview": "vp preview"
+    "build": "vp build",
+    "check:types": "tsc",
+    "dev": "vp dev --port 5182 --strictPort"
   },
   "dependencies": {
-    "@tanstack/react-query": "latest",
+    "@tanstack/react-query": "catalog:",
+    "@wagmi/core": "catalog:",
     "accounts": "workspace:*",
     "mppx": "catalog:",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
+    "ox": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "viem": "catalog:",
     "wagmi": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "catalog:",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
-    "typescript": "~5.9.3",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plus": "catalog:",
-    "wrangler": "catalog:"
+    "vite-plus": "catalog:"
   }
 }

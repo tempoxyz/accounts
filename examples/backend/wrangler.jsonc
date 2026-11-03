@@ -1,0 +1,13 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2026-10-01",
+  // One object for each session ID holds the session, so its refreshes share one instance.
+  "durable_objects": {
+    "bindings": [{ "class_name": "SESSIONS", "name": "SESSIONS" }],
+  },
+  "main": "./worker.ts",
+  "migrations": [{ "new_sqlite_classes": ["SESSIONS"], "tag": "v1" }],
+  "name": "tempo-id-example-backend",
+  "secrets": { "required": ["CLIENT_ID", "CLIENT_SECRET"] },
+  "vars": { "TEMPO_ID_URL": "http://localhost:5173" },
+}

@@ -1,0 +1,5 @@
+# Cloudflare's asset layer serves the build. Each name under /assets/ carries a hash of its content,
+# so browsers keep the file until a build changes the name, and a callback's page load sends no
+# revalidation for it.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

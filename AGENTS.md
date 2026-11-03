@@ -1,164 +1,308 @@
-# accounts — Agent Guidelines
+# Agent Guidelines
 
-> **Update after learnings or mistakes** — when a correction, new convention, or hard-won lesson emerges during development, append it to the relevant section of this file immediately. AGENTS.md is the source of truth for project conventions and should grow as the project does.
+## Project Principles
 
-## Friction Logging
-
-- Log papercuts and friction (tooling, docs, APIs, tests, conventions) as you hit them with `pnpx frog log`.
-- Do not add global, system, or internal friction.
-- Run `pnpx frog list` first to see what is already known.
+- `accounts` is the SDK of Tempo ID (`id.tempo.xyz`). Apps use it to sign users in, keep their session and access key, and act on Tempo with it.
+- `tempoxyz/id` holds the server, its HTTP API, and its docs. This repository holds the package, its docs, `examples/`, and `playgrounds/`.
+- The package runs in browsers, React Native, Node, and Workers. Entries stay free of platform imports, except `accounts/cloudflare`, `accounts/expo`, and `index.native.ts`.
+- Tempo ID issues every token. The package holds tokens and access keys only in the instance's `store`.
+- Tokens, refresh tokens, client secrets, private keys, and DPoP keys never appear in errors, events, or logs.
+- Redirect or post only to a configured `redirectUri` or Tempo ID's own origin.
+- Loopback redirects are banned. CLIs use device grants. Web apps use popups, redirects, or the dialog.
+- Use Viem's TIP-1130 APIs (`Oidc`, `Actions.oidc.prove`, `Relay.oidc`, `Relay.feePayer`) and ox. Do not reimplement protocol logic from Viem, ox, or wata.
+- Call precompiles through `viem/tempo` actions (`Actions.token.transferSync`) and `wagmi/tempo` hooks (`Hooks.token.useTransferSync`). Never encode a precompile call with `erc20Abi`, `parseAbi`, or `encodeFunctionData`, anywhere.
 
 ## TypeScript Conventions
 
-- **Exact optional properties** — `exactOptionalPropertyTypes` is enabled in tsconfig. Optional properties must include `| undefined` in their type if they can be assigned `undefined` (e.g. `foo?: string | undefined`, not `foo?: string`).
-- **No `readonly` on properties** — skip `readonly` on type properties.
-- **`readonly` arrays** — use `readonly T[]` for array types in type definitions.
-- **`type` over `interface`** — always use `type` for type definitions.
-- **`.js` extensions** — all imports include `.js` for ESM compatibility.
-- **Classes for errors only** — all other APIs use factory functions.
-- **No enums** — use `as const` objects for fixed sets.
-- **`const` generic modifier** — use to preserve literal types for full inference.
-- **camelCase generics** — `<const args extends z.ZodObject<any>>` not `<T>`.
-- **Options default `= {}`** — use `options: Options = {}` not `options?: Options`.
-- **Namespace params and return types** — place function parameter and return types in a `declare namespace` matching the function name (e.g. `local.Options`, `createAccount.ReturnType`).
-- **Minimal variable names** — prefer short, obvious names. Use `options` not `serveOptions`, `fn` not `callbackFunction`, etc. Context makes meaning clear.
-- **No camelCase / conjunctive variable names** — when a name needs disambiguation, prefer a snake-case suffix or a suffix-style separator over CamelCase concatenation. Use `options` (or `options_fill`) not `fillOptions`, `client` (or `client_fill`) not `fillClient`. The base noun stays the same so reading flows; the suffix only kicks in when the same name is reused in scope.
-- **No redundant type annotations** — if the return type of a function already covers it, don't annotate intermediate variables. Let the return type do the work (e.g. `const cli = { ... }` not `const cli: ReturnType = { ... }`).
-- **Return directly** — don't declare a variable just to return it. Use `return { ... }` unless the variable is needed (e.g. self-reference for chaining).
-- **Skip braces for single-statement blocks** — omit `{}` for single-statement `if`, `for`, etc.
-- **No section separator comments** — don't use `// ---` or `// ===` divider comments. Let JSDoc and whitespace provide structure.
-- **No dynamic imports** — use static `import` declarations. No `await import(...)` or `import(...)` expressions.
-- **`as never` over `as any`** — when a type assertion is unavoidable, use `as never` instead of `as any`.
-- **Destructure when accessing multiple properties** — prefer `const { a, b } = options` over repeated `options.a`, `options.b`.
-- **Keep hook results grouped** — when consuming a hook that returns a related bundle (e.g. `useMutation`, Wagmi/React Query hooks, `Steps.use()`), assign the whole result to a single noun and access fields via `.`. Prefer `const send = Hooks.wallet.useSend(); send.mutate(...); send.isPending` over `const { mutate: send, isPending } = Hooks.wallet.useSend()`. The grouping keeps the call site self-documenting and avoids inventing per-hook aliases.
-- **Read from `options.x` when normalizing a single field** — when transforming exactly one option into a local of the same name, read it directly from `options` instead of destructuring + renaming. Avoids `_resolved` / `_normalized` / `_x` suffixes for what's really just a normalized version of the same field. For example: `const mpp = (() => { if (!options.mpp) return undefined; ... })()` instead of pulling `mpp` out of `options` and inventing a second name for the result.
-- **`core_` prefix for import aliases** — when aliasing an import to avoid conflicts, use `core_<name>` (e.g. `import { local as core_local }`), not arbitrary camelCase.
-- **`Hex.fromNumber` over `toString(16)`** — use `Hex.fromNumber(n)` from `ox` instead of `` `0x${n.toString(16)}` `` for number-to-hex conversion.
-- **`Hex.Hex` over `` `0x${string}` ``** — use `Hex.Hex` from `ox` instead of the raw template literal type.
+- Treat `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` as constraints. Add `| undefined` where an optional property can receive `undefined`. Narrow indexed reads.
+- Use `readonly T[]`, unless mutation is part of the contract.
+- Use `type`. Use `interface` only for declaration merging, such as `cloudflare:workers` in `src/cloudflare/workers.d.ts`.
+- Use `.js` extensions on relative imports.
+- Write everything in TypeScript. `.js` files are banned. Run scripts with `node script.ts`. `scripts/publish.mjs` is the one exception.
+- Import internal modules as namespaces (`import * as Session from './Session.js'`). Named imports are fine for types, leaf helpers, and third-party APIs.
+- Import Node built-ins as namespaces, unless a named import is clearer.
+- Use static imports. Use dynamic imports only at a real runtime or bundle boundary, such as `Store.file`'s Node modules.
+- Use `import type` and `export type` for type-only imports and exports.
+- Use functions and plain data. Classes are only for errors and framework entrypoints such as Durable Objects.
+- Put error classes at the top of the module, after imports, in alphabetical order. Name them in namespaced form, such as `Id.RequestError`.
+- Use unions or `as const` objects, not enums.
+- Use `camelCase` constants, unless the name mirrors an external protocol.
+- Use `const` generics when callers keep literal or tuple types.
+- Default option bags in the signature: `options: fn.Options = {}`.
+- Name option bags `options`.
+- Take at most two positional parameters: an optional receiver (`tempoId`, `client`, `store`) or the inspected value (`error`, `session`), then one options object.
+
+  ```ts
+  Actions.authorize(tempoId, { permissions }) // not authorize(tempoId, permissions)
+  Store.file({ path }) // not file(path)
+  ```
+
+  Exempt: framework-dictated signatures, such as callbacks and Durable Object methods.
+
+- Put a function's types in a matching `declare namespace` (`create.Options`, `create.ReturnType`, `create.ErrorType`).
+- Do not annotate locals with inline object types. Name the type above the use instead.
+- Give each module that owns a public data type a `from` instantiator (`Permissions.from({ ... })`). Do not annotate, `as`, or `satisfies` the binding.
+- Extract a named type only when it is reused or clarifies a hard shape.
+- Keep shared domain types beside the module that owns the concept.
+- Group Zod schemas in a `schema` namespace, with derived types beside them. Export it only when another module validates the same shape.
+- Let declared return types constrain expressions. Avoid redundant annotations.
+- Return values directly unless a binding is reused or names a complex expression.
+- Use an IIFE with early returns instead of nested ternaries, or a mutable variable across `try`/`catch`.
+- Never destructure parameters in definitions. Destructure in the body.
+- Declare props as `Component.Props` in the component's namespace.
+- Prefer short names clear from context: `options`, `client`, `entry`, `fn`.
+- On a name conflict, keep the existing name and suffix the new one, such as `revoke_remote`. No synonyms or past tenses.
+- Keep order-sensitive shapes (wire formats, tuples, protocol fields) in their order.
+- Avoid new `any`.
+- Separate logical steps with one blank line: setup, guards, derivation, mutation, return.
+- Keep a lookup with its guard, and consecutive assertions together. Avoid both dense blocks and a blank line after every statement.
+- Separate test setup, execution, and assertions.
+- No section-divider comments.
+- Comment invariants and non-obvious reasons only. Never reference plans, task IDs, or prior versions.
+
+## Alphabetical Ordering
+
+- Alphabetize imports, specifiers, exports, type and object properties, union members, unordered lists, config maps, scripts, and dependencies. Case-insensitive.
+- Keep docs with their declaration, and overloads with their namespace. Never reorder execution or cause use-before-initialization.
+- Preserve meaningful order: plugin arrays, Vite plugins, CSS declarations, tuples, workflow steps. Comment intentional exceptions.
+- In GitHub workflows, keep `name` and `on` first, then alphabetize.
+
+## Module and Instance Conventions
+
+- One module is one namespace of types, constants, functions, and errors, read as `Module.operation(...)`.
+- Exported modules sit at the top of `src/`. Everything else goes in `src/internal/`.
+- Prefer stateless functions. Create an instance only for dependencies or lifecycle state, through `Module.create(options)` returning a plain object.
+- `Id.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons.
+- Inject platform capabilities (fetch, storage, clock, `open`) through options. Keep them out of pure modules.
+- Type dependencies by the smallest capability used.
+- Factory operations close over state. Never depend on `this`.
+- Keep caches and registries private to the instance.
+- No side-effect registration. `sideEffects` in `package.json` lists the only exceptions, the React Native polyfills.
+- Framework classes, such as Durable Objects, stay thin and delegate to module functions.
 
 ## Type Inference Conventions
 
-- **`z.output<>` over `z.infer<>`** — use `z.output<schema>` for types after transforms/defaults are applied (what `schema.parse()` returns at runtime). Use `z.input<schema>` only when representing pre-validation types.
-- **`const` generics on definitions** — any function that accepts Zod schemas and passes them to callbacks must use `const` generic parameters to preserve literal types (e.g. `<const args extends z.ZodObject<any>>`).
-- **Flow schemas through generics** — when a factory function accepts Zod schemas, use generics to flow `z.output<>` through to callbacks (`run`, `next`), return types, and constraint types (`alias`). Never fall back to `any` in callback signatures.
-- **Type tests in `.test-d.ts`** — use vitest's `expectTypeOf` in colocated `.test-d.ts` files to assert generic inference works. Type tests are first-class — write them alongside implementation, not as an afterthought.
-- **No `any` leakage** — Zod schemas may use `z.ZodObject<any>` as a generic bound, but inferred types flowing to user-facing callbacks must be narrowed via `z.output<typeof schema>`. The user should never see `any` in their IDE.
-- **Type inference after every feature** — after implementing any feature, check if new types can be narrowed. If a new property, callback, or return type touches a Zod schema, add generics to flow the inferred type through. Add or update `.test-d.ts` type tests alongside.
-
-## Documentation Conventions
-
-- **JSDoc on all exports** — every exported function, type, and constant gets a JSDoc comment. Type properties get JSDoc too. Namespace types (e.g. `declare namespace create { type Options }`) get JSDoc too. Doc-driven development: write the JSDoc before or alongside the implementation, not after.
-- **No `--` in site docs** — site docs (`site/src/pages/**`) must not use `--` (two ASCII hyphens) as punctuation. Use an em dash (`—`) instead. The global `--`-over-em-dash rule still applies to PR titles/bodies, changesets, commit messages, and code comments — site documentation is the only exception.
-- **No crypto jargon in site docs** — site docs (`site/src/pages/**`) must not use crypto/blockchain jargon when a plainer word exists. Examples: prefer "feeless" over "gasless", "transaction fee" over "gas fee", "account" over "wallet" when referring to user identity, "sign in" over "connect wallet" in user-facing copy, "app" over "dapp". Reach for the term a non-crypto reader would already understand.
-
-## Site Styling Conventions
-
-- **Use Tailwind utilities, not arbitrary `var()` values** — never write `bg-[var(--background-color-surface)]` or `border-[var(--vocs-border-color-primary)]`. Use the corresponding Tailwind utility class. Both vocs and regen-ui register their tokens via `@theme`, so every token has a generated utility.
-- **No `vocs:` prefix in our app code** — vocs uses a `vocs:` prefix internally for its own components, but our `_root.css` imports vocs's theme tokens at the **root** `@theme` layer (via `@import 'vocs/styles/theme.css'`, which leaves Tailwind's palette intact), so vocs tokens are available as plain unprefixed utilities in our code: `bg-primary`, `bg-surface`, `border-primary`, `text-primary`/`text-secondary`/`text-muted`, `bg-info-tint`, `text-info`, `border-info-tint`, etc. Writing `vocs:bg-info-tint` will silently no-op because Tailwind has no `vocs:` prefix registered for our own source files.
-- **Regen-ui tokens are also unprefixed** — regen tokens are imported into the root `@theme` and are available as plain Tailwind utilities: `bg-pane`, `bg-secondary`, `border-border`, `text-foreground`, `text-foreground-secondary`, etc. Where regen and vocs both define a token of the same name (e.g. `--background-color-primary`), vocs wins because it is imported last.
-- **Arbitrary values only when no token exists** — if a value isn't covered by a token (e.g. a custom `color-mix(...)` blend, a one-off pixel size), inline it with `[...]` syntax, but prefer utility classes wherever possible.
-
-## Protocol Conventions
-
-- **CLI auth device codes are raw in protocol** — store, return, and query device codes as raw 8-character values (for example `ABCDEFGH`). Only apply hyphen formatting (`ABCD-EFGH`) when rendering for humans.
-- **Keep CLI protocol looseness scoped** — if the CLI bootstrap/device-code flow needs a more permissive request shape than the shared SDK RPC contract, keep that looseness in the CLI/server-specific surface (for example `src/server/CliAuth.ts` and CLI adapter handling). Do not widen `src/core/zod/rpc.ts` or shared `wallet_authorizeAccessKey` semantics unless the change is explicitly intended SDK-wide.
-- **Preserve WebAuthn signature-envelope magic when verifying RPC payloads** — `SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(signature))` must pass `{ magic: true }` for `webAuthn` signatures, but not for secp256k1/p256 signatures. `viem/tempo` uses the magic suffix to route stateless verification through `SignatureEnvelope.verify(...)`.
-- **Access keys are chain-scoped** — store and select locally managed access keys by the `chainId` from their signed key authorization. Do not use an access key authorized on one chain for another chain; fall back to root signing or reauthorization instead.
-
-## Type Conventions
-
-- **No eager type definitions** — don't extract a named type until it's used in more than one place. Inline the shape (e.g. `{ address: Address }[]`) until a shared type is clearly needed.
+- Preserve literal inputs through helpers when they affect the output type.
+- Keep generics flowing through callbacks and returns. Never erase them to `any`.
+- Plugins extend the instance's type. Keep each plugin's additions inferred from `Plugin.from`.
 
 ## Abstraction Conventions
 
-- **Prefer duplication over the wrong abstraction** — duplicated code with a clear bug-fix burden is better than a bad abstraction that is scary to change.
-- **Don't abstract until the commonalities scream** — wait for 3+ concrete use cases where the right abstraction becomes obvious. Don't abstract for 1–2 instances.
-- **Optimize for change** — code that is easy to change beats code that is cleverly DRY. We don't know future requirements.
-- **No flags or mode parameters** — if an abstraction needs `if` branches or boolean params to handle different call sites, it's the wrong abstraction. Inline it.
-- **Start concrete, extract later** — begin inline. Extract only when a clear pattern emerges across multiple real usages.
-- **Keep server schemas out of `src/core/zod/rpc.ts`** — server-only modules must not import `src/core/zod/rpc.ts`. That file depends on `src/core/Schema.ts`, so reusing it from `src/server/*` can create runtime import cycles through provider schema initialization.
+- Start concrete. Extract after three uses reveal a stable contract.
+- Prefer small duplication over an abstraction with flags or modes.
+- Optimize for change, not DRYness.
+- Keep state, config, schemas, and constants in one place, and derive the rest.
+- No wrappers that only rename a function or mirror an SDK.
+
+## State Machines
+
+Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustand, Redux, and `let`-flag stores are banned. `src/internal/session.machine.ts` is the reference.
+
+| State                                                      | Model                                 |
+| ---------------------------------------------------------- | ------------------------------------- |
+| One value with two or three cases                          | A union `let`                         |
+| Several values that change together, with no states        | An `@xstate/store` store              |
+| A lifecycle with async events, timers, overlaps, or guards | An XState machine                     |
+| Server data in an app                                      | TanStack Query, in the app, not here  |
+
+- Do not write a machine for a linear async function, such as a retry loop.
+- Replace `let` flags with one machine. The snapshot is the only source of state.
+- Never hold one value in both a store and a machine.
+
+**Persistence**
+
+- Persist a store with `persist` from `@xstate/store/persist`, with `skipHydration: true`. Call `rehydrateStore` in the owning lifecycle.
+- Persist a machine through a provided action, such as `save`. Never use `getPersistedSnapshot`.
+- The session's write queue lives in `src/internal/session.ts`. Its non-extractable `CryptoKey` needs IndexedDB. A failed save rejects its change.
+
+**Structure**
+
+- Put each machine in `<module>.machine.ts` beside its runner. Import it as a namespace (`SessionMachine`).
+- Keep machines pure: no I/O, clock, or bindings. The runner provides effects with `machine.provide({ actions })`.
+- Define with `setup({ actions, guards, types }).createMachine({...})`. Name every action and guard, including `assign`s.
+- Callbacks take one parameter, `args`, and narrow with `assertEvent(args.event, type)`.
+- Declare provided actions as no-ops in `setup`, with TSDoc naming the provider.
+- Type with `types: { context: {} as Context, events: {} as Event }`. Export `Context` and `Event` with TSDoc on every member.
+- Export `type Actor`, `type Snapshot`, and snapshot readers such as `status(snapshot)`. Never compare `snapshot.value` across modules.
+- Export pure decisions that transitions do not express, such as which session a sign-out revokes.
+
+**States, events, and context**
+
+- Name states for what is true, in camelCase: `pending`, `signedIn`. App-read states are public API.
+- Name events for what happened, in dot notation: `authorize.start`, `signOut.join`. Events carry only what the transition needs.
+- `context` holds only what states cannot express. Never a promise, stub, or client.
+- Change `context` only with `assign`.
+- Derive a multi-value status in one exported `select(context)`, with its priority table in TSDoc. Route changes through a transient state, such as `settling`, with one parameterized guard.
+- Prefer per-state transitions. Use root `on` only for events every state handles the same way.
+- Use `after` for timers, and `invoke` with `fromPromise` or `fromCallback` for state-owned work. No timer IDs or `AbortController`s beside a machine.
+
+**Running a machine**
+
+- Create actors with `createActor(machine).start()` in the owning lifecycle, never at module scope.
+- `send` is synchronous.
+- Wait with `waitFor(actor, predicate)`.
+- Expose actors read-only. For common reads, expose a stable `{ get, subscribe }` pair, such as `tempoId.session.status`.
+- `accounts` does not depend on `@xstate/react`. It reads `{ get, subscribe }` with `useSyncExternalStore`.
+
+**Testing**
+
+- Test each `<module>.machine.ts` in `<module>.machine.test.ts`, without I/O or a harness.
+- Arrange, act, assert: start the actor, send a flow's events, assert `snapshot.value` and changed `context`.
+- Assert effects by recording provided actions' arguments in an array. No `vi.fn`. Never replace a guard.
+- Provide invoked actors with scripted `fromPromise` results, and assert their inputs.
+- Cover the graph with `getShortestPaths` from `xstate/graph`:
+  - Build `events` from a `Record` keyed by every `Event` type, offering only events the runner sends from each state.
+  - Assert with `snapshot.can(event)` that every type is handled somewhere.
+  - Give `serializeState` the status values, not growing counters.
+- At each path's end, assert the state is `select(context)`, and the raw context agrees with the state.
+- Never use `getSimplePaths`.
+- Assert that no path ends in a transient state.
+- Test pure decision functions with a table, one `test` per row.
+
+## Runtime Conventions
+
+- Module scope holds only constants and immutable data. Never cache a `Request`, `Response`, stream, or session there.
+- Read `Date.now()` inside the call, never at module scope.
+- Use `crypto.getRandomValues()` and `crypto.randomUUID()`. `Math.random()` is banned.
+- Compare secrets in constant time with `crypto.subtle.timingSafeEqual`, after SHA-256 for variable lengths.
+- Await or return every promise. Mark `void` only with a reason.
+- Run independent calls in `Promise.all`.
+- Never add a round trip to a flow. Return the next step's data from the step that has it.
+- `console` is banned in `src/`. Report failures through errors.
+
+## Errors
+
+- Each refusal from Tempo ID surfaces as `Id.RequestError`, with its `reason`.
+- Mirror each `reason` of Tempo ID's OpenAPI document in `RequestError.Reason`.
+- List each action's `reason` values in its API page.
+- Write messages as the fault, then the fix. No product or library names.
+
+## Code Documentation
+
+- Start every module with a `@module` TSDoc comment, before imports, including tests and scripts.
+- Add TSDoc to every export and every property of an exported type.
+- A function's `Options`, `ReturnType`, `ErrorType`, `Parameters`, and `Props` share its TSDoc. Each property has its own. Overloads share the first signature's TSDoc.
+- A property comment states meaning, units, default, or absence. Never repeat the name or type.
+- Document purpose, inputs, output, defaults, errors, and side effects.
+- Each export's TSDoc holds one `ts` example that imports from the package entry, such as `accounts/plugins`.
+
+## Prose Conventions
+
+Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
+
+- Write about the code, not the reader. No second person outside interface copy.
+- Write formally and technically. Use precise verbs ("returns", "rejects", "issues"), not conversational ones ("gets", "gives", "tells").
+- State invariants and reasons the code cannot show.
+- Follow ASD-STE100 writing rules, not its dictionary.
+- Use short words: "use", "start", "before", not "utilize", "commence", "prior to".
+- Use one word per concept. No synonyms for variety.
+- Write "access key", never "key" alone. Identifiers keep their names.
+- Keep instructions to 20 words, descriptions to 25.
+- Keep paragraphs to one topic and six sentences.
+- Put conditions first: "If the code expires, request a new one."
+- Use active voice and simple tenses. No progressive or perfect main verbs.
+- Stack at most three nouns.
+- Keep articles ("the", "a").
+- Use diagrams for flows: Mermaid `sequenceDiagram`, `flowchart`, or `stateDiagram-v2`. Keep each to about 12 nodes or 15 arrows.
+- Use tables for comparisons and mappings.
+- Write "Viem" in prose, `viem` in code.
+- No semicolons or em dashes in prose.
+
+## Documentation
+
+`docs/` documents the package for app developers. Tempo ID's own docs, in `tempoxyz/id`, describe the service over HTTP. Link to them by absolute URL.
+
+**Structure**
+
+- `docs/README.md`: overview, install, entries, quick start, and links to every guide and API page.
+- `docs/guides/`: one guide per flow or task, with **Overview**, **Recipes**, and **Learn more**. The Overview opens with one complete numbered example from `Id.create`. Import plugins from `accounts/plugins`.
+- `docs/api/`: one page per function, plugin, or hook, such as `Id.create.md`, `plugins.email.md`, `Actions.email.signIn.md`.
+  - Sections: **Overview**, **Usage**, **Return type**, **Parameters**, **Errors**.
+  - Each item is a subsection with a **Type** bullet and an optional **Default** bullet. No tables.
+  - Parameters use bare names, mark `(optional)`, and end with a `ts` example. Omit `config`.
+  - `Actions.md` maps actions to members. `errors.md` covers error classes. `types.md` covers types and their `from`.
+
+**Writing**
+
+- Third person, imperative for instructions.
+- Sentence-case noun-phrase headings. No questions or gerunds.
+- Define terms once. Use "app", "API", "Tempo Account", "access token", "access key", "OAuth app".
+- No future work outside Limitations.
+- Use GitHub alerts only for security caveats and environment pitfalls.
+- Link at the point of use, with deep anchors.
+- Check facts against the code. Update guides and API pages in the same change as the behavior.
 
 ## Testing Conventions
 
-- **Use `pnpm test` for tests** -- run tests through `pnpm test`, not `vp test` directly.
-- **Inline snapshots over direct assertions** — prefer `toMatchInlineSnapshot()` over `.toBe()`, `.toEqual()`, etc. for return values. Use `toThrowErrorMatchingInlineSnapshot()` for error assertions. Never use try/catch + `expect.unreachable()` for error tests.
-- **Snapshot whole objects, omit nondeterministic properties** — destructure out nondeterministic fields (e.g. `blockHash`, `gasUsed`, timestamps) and snapshot the rest, rather than cherry-picking individual fields to assert.
-- **Unit and type tests as you go** — write unit tests and `.test-d.ts` type tests alongside implementation for each module. Save high-level integration tests (with and without browser) for the end.
-- **Validate `.test-d.ts` with TypeScript** — `pnpm test <file>.test-d.ts` does not match the Vitest project includes; use `pnpm exec tsc -b --noEmit` for type-test coverage.
-- **Mark localnet tests explicitly** — tests that touch RPC/localnet should use the `*.localnet.test.ts` suffix so only those files inherit `test/setup.ts`; pure `*.test.ts` files run in the no-setup `lib/pure` project.
-- **Exercise fee selection on real localnet** — use real TIP-20 balances, funded FeeAMM pools, and signed broadcasts instead of mocked RPC responses. Transport gates can prove overlapping requests while forwarding every response unchanged. Select the matching hardfork for two-hop routing; viem's localnet chain defaults to T3.
-- **Confirm fee preferences before testing selection** — `Actions.fee.setUserToken` returns a transaction hash before inclusion. Send `Actions.fee.setUserToken.call` with `sendTransactionSync` in dependent fixtures so the relay cannot cache a missing preference while its setup transaction is pending. This also avoids requiring a `UserTokenSet` event when an unchanged preference emits none.
+- Test behavior: API contracts, flows, security boundaries, errors.
+- `src/` holds `<module>.machine.test.ts` files and other tests that need no server.
+- Integration tests run the package against a real Tempo ID. They live in `tempoxyz/id` until a Tempo ID test image exists.
+- No mocks, stubs, fakes, fake timers, stubbed globals, or MSW in `src/`.
+- Keep a module's tests in one `Module.test.ts` beside it. Never split into variant files.
+- Group tests in a `describe` named for the entrypoint.
+- Use inline snapshots, one value each. Use property matchers only for nondeterministic fields. Never derive expectations from the implementation.
+- Add a regression test for every bug fix.
+- Use bounded waits (`expect.poll`). No sleeps or retries.
+
+## Workflow Conventions
+
+- Run focused tests while iterating.
+- Run `pnpm check:types` after TypeScript changes.
+- Run `pnpm check`, and keep only task-related fixes.
+- Run `git diff --check` and review the diff before finishing.
+- Add a changeset for every change to the published package.
 
 ## Git Conventions
 
-- **Conventional commits** — use `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:` prefixes. Scope is optional (e.g. `feat(parser): add array coercion`).
+- Conventional commits, lowercase, no trailing period: `feat:`, `fix:`, `perf:`, `refactor:`, `docs:`, `test:`, `chore:`.
+- Name what changed, with codebase identifiers. State the change, not the reason.
+- Each message stands alone.
+- Keep the PR title accurate, since it becomes the squash commit.
+- Keep PR bodies short: the problem, the behavior, one example, one validation line.
+- Never force push or amend a pushed commit.
 
-## Learned User Preferences
+**State machine**
 
-- **Dev-only UIs use semantic HTML only** — approval surfaces and debug pages should use plain HTML with no inline styles or CSS. Zero styling.
-- **Short spinner messages** — keep `@clack/prompts` spinner text short to avoid terminal line wrapping; show URLs and long content as static `Clack.log.info()` lines, not inside spinner text.
-- **Understand full request flow before changing CLI UX** — trace the complete path (CLI → server → browser → server → CLI polling) before modifying feedback or error handling in CLI scripts.
+- If a PR adds or alters a `*.machine.ts`, add a **State machine** section before **API changes**, one subsection per file.
+- Show a `stateDiagram-v2` with event names on arrows and guards in brackets (`set [renewing]`).
+- For a changed machine, add a table of changed states, events, and transitions, and of new or changed context properties.
 
-## Learned Workspace Facts
+**API changes**
 
-- **Chain-bound clients answer `eth_chainId` locally** -- `Client.fromChainId` returns a configured chain's ID without a request, since viem asks for it before every send from a JSON-RPC account. Tests that prove a client's transport routing must use another method, such as `eth_blockNumber`.
+- If a PR changes the public API, add an **API changes** section before **How to test**. The public API is the exports of `accounts` and its entries.
+- Show each change in its own `ts` fence, as used, not as a `diff`. Follow with one sentence.
+- Mark breaking changes with **Breaking**, with the old shape and migration.
+- End with one `ts` fence that uses the change from `Id.create`.
 
-- **Resolve large ABIs once in request paths** -- viem's `decodeFunctionData` hashes each function selector until one matches, and ox's `AbiItem.fromAbi` hashes the signature on every call; against `Abis.tip20` that costs about 0.1-2 ms per call. Resolve items at module level and decode arguments with `decodeAbiParameters`.
+## Repository Layout
 
-- **Node request-body cancellation must detach listeners** -- remove `IncomingMessage` data/end callbacks when the Web stream is canceled, and close unfinished uploads after the response finishes so later events cannot touch a closed controller or leave an upload open.
+- `src/` is the published package `accounts`. Its entries are in `package.json` `exports`: `.`, `./cloudflare`, `./expo`, `./internal`, `./mpp`, `./plugins`, `./react`, and `./wagmi`.
+- `src/actions/` holds the actions that `Actions` exports. `src/plugins/` holds the plugins.
+- `docs/` documents the package.
+- `examples/` holds one small app per platform (`backend`, `cli`, `mobile`, `wagmi`, `web`). Each names a published range, so a copy installs as it is. CI type-checks them.
+- `playgrounds/` holds one app per flow (`api`, `backend`, `cli`, `mobile`, `third-party`, `wagmi`, `web`). They use client IDs that `tempoxyz/id` registers in its seed. Its end-to-end suite drives them.
+- Keep the playgrounds' names, client IDs, environment variables, ports, and page labels stable. `tempoxyz/id`'s end-to-end suite depends on them.
+- `scripts/` holds the release script.
 
-- **CI registry policy also applies to frozen installs** -- lockfile refreshes can select recently published transitive DevTools packages even when the direct tool is older. Retain compatible established dependency versions when updating the security-patched Vite toolchain.
+## Tooling
 
-- **Fee-token balances do not prove FeeAMM eligibility** — transaction filling can succeed for tokens that pool admission rejects. For automatic selection, check reserves against the maximum fee, including quote-token routing, and exclude failed candidates even when they are the user's funded on-chain preference. Keep explicit fee-token choices and swap funding-source selection separate.
-- **Prefetch fee reserves with balance discovery** — overlap reserve reads with automatic unsponsored token discovery and reuse request-scoped balance/reserve promises across retries. Evaluate reserves against the filled maximum fee, and consume speculative errors only when the corresponding candidate or route is needed.
+- Pin every dependency in the `pnpm-workspace.yaml` catalog, and reference it as `catalog:`.
+- Optional platform libraries (React, wagmi, Expo, mppx) are optional peers.
+- zile builds the package. Changesets versions and publishes it. `postinstall` runs `zile dev`.
+- Changesets is in prerelease mode (`.changeset/pre.json`), so each release publishes under the `alpha` dist-tag.
+- Prettier is banned. Vite+ runs oxfmt, oxlint, and Vitest from `vite.config.ts`.
 
-- **Fill-transaction capabilities must survive request decoding** — `Provider` forwards decoded `eth_fillTransaction` parameters, so the transaction request schema must retain capabilities such as `errors` for relay recovery.
-- **Expo/Metro should get built entrypoints via `react-native` export conditions** — React Native consumers may resolve package `exports` before `default`, and loading `src/*.ts` directly can fail on `.js`-suffixed relative imports. For mobile consumers, add a `react-native` condition that points at `dist/*` entrypoints.
-- **Expo playgrounds under `pnpm` need a local app entry** — relying on Expo's default `expo/AppEntry` can resolve `../../App` from the symlinked package-store path instead of the playground directory. Set a local `main` (for example `./index.js`) and register the root component there.
-- **`zile dev` symlinked `dist/*` is not Metro-safe** — when local `dist/*.js` entrypoints symlink back to `src/*.ts`, Metro will follow them and choke on `.js`-suffixed relative imports inside source. For React Native playgrounds in this workspace, use a local Metro resolver shim (or real built files) instead of assuming symlinked `dist` is consumable.
-- **React Native may expose `window` without browser event constructors** — in Expo/React Native, `window` can exist while `CustomEvent` does not. Browser-only provider announcement logic must guard on both `window` and `CustomEvent` before calling EIP-6963-style event helpers.
-- **React Native may expose `window` without IndexedDB** — storage defaults that mean “browser” should guard on `indexedDB`, not `window`, or Expo/React Native can try to use IndexedDB-backed storage and throw at startup.
-- **Playground `run_worker_first`** — `playgrounds/web/wrangler.jsonc` `assets.run_worker_first` must list all API route patterns (e.g. `/cli-auth/**`). POST requests to unlisted paths fall through to the static assets / SPA layer and return 405.
-- **Shared UI/API base paths need exact matches** — when an SPA page and API share a base path like `/cli-auth`, `assets.run_worker_first` must include both the exact base path (`/cli-auth`) and the wildcard children (`/cli-auth/*`) so the worker can handle `POST /cli-auth` while still delegating `GET /cli-auth` back to assets.
-- **Avoid `React.use()` for local API fetches in Cloudflare/Vite approval pages** — in the `ref-impls/cli-auth` setup, using `use()` on a promise that fetches `/cli-auth/pending/:code` pulled the request into the Cloudflare/Vite server-render path and triggered `fetch failed` loops in dev. Keep the pending-request load client-side with a normal effect or equivalent.
-- **CLI scripts tooling** — playground CLI scripts (`playgrounds/web/scripts/`) use `@clack/prompts` (interactive UI), `@bomb.sh/args` (flag parsing), and `@bomb.sh/tab` (shell completions).
-- **Workspace examples may need source imports** — when an example must reflect unpublished local SDK changes immediately, import the local `src/*` modules instead of the package entrypoint so it does not silently use stale `dist/*` output.
-- **`dialog` is a git submodule** — points to `git@github.com:tempoxyz/app.git`. Initialize with `git submodule update --init --recursive`.
-- **`VITE_NODE_TAG`** — accepts a Docker image tag (e.g. `latest`, `sha-abc123`) or an HTTP RPC URL (e.g. `https://rpc.moderato.tempo.xyz`) that resolves to a `sha-<hash>` tag via `web3_clientVersion`.
-- **Deduplicate `vp` in Vitest config** — in this workspace, mixed peer resolution (for example different `@types/node` versions across packages) can load two `vp` instances and break suite initialization; set `resolve.dedupe` to include `vp`.
-- **Vite+ 1.x re-exports Vitest** -- keep Vitest as a direct dev dependency for bare `vi.mock` imports. Ambient `declare module 'vitest'` shims mask the real exports and break `vp/test` types.
-- **CLI auth example URL inputs** — the example CLI flow is expected to support both `--url` and `AUTH_URL`-based defaults, and should avoid hardcoded personal hostnames in source.
-- **Test RPC port selection should auto-fallback** — localnet test setup should start from `VITE_RPC_PORT` (or `8545`) and select the next available port to avoid `EADDRINUSE` collisions.
-- **Force localnet env when running localnet tests from a testnet shell** — if `VITE_NODE_ENV=testnet` is exported, `*.localnet.test.ts` files will still target testnet RPCs; prefix targeted localnet runs with `VITE_NODE_ENV=localnet VITE_NODE_TAG=sha-...` to exercise the pinned Docker node.
-- **Turnkey adapter stays structurally typed** — avoid importing `@turnkey/core` directly from the root SDK adapter so non-Turnkey consumers do not inherit a hard dependency; accept an app-provided client with the minimal client shape instead.
-- **Privy React embedded wallets can precede hook readiness** — `useWallets()` may expose a usable embedded wallet while `ready` is still false. Select it with both `walletClientType === 'privy'` and `connectorType === 'embedded'`, and treat its presence as wallet readiness.
-- **Standalone access-key deposit prompts have no event filter** -- `wallet_authorizeAccessKey.showDeposit` supports boolean or deposit hints and intentionally omits `on`; use `wallet_connect.capabilities.showDeposit.on` for login/register filtering.
-- **Connect access-key params do not carry deposit prompts** -- `wallet_connect.capabilities.authorizeAccessKey` omits `showDeposit`; connect deposit prompts belong on `wallet_connect.capabilities.showDeposit` only.
-- **PostMessage iframe color schemes must match the wallet page** — read the explicit `scheme` URL parameter when mounting the iframe. A mismatched scheme can make its transparent canvas opaque black on light macOS.
-- **Normalize no-expiry authorization metadata** -- `expiry: 0` is the request compatibility value for non-expiring access keys. Canonical signed metadata uses absent expiry (RPC `null`); stored zero from older SDK versions must remain selectable. Do not confuse this with on-chain metadata expiry zero for missing/revoked keys, and preserve omitted permissions versus explicit empty lists.
-- **Remove sprintf-js through its YAML parent** -- `@istanbuljs/load-nyc-config@1.1.0` calls `js-yaml.load()`, so its dependency can be scoped to js-yaml v4 to remove argparse v1 and unpatched sprintf-js. Keep the override scoped to this caller and verify YAML configuration loading; other v3 callers may rely on removed APIs or schemas.
+## Commands
 
-- **Keep the Zod audit exception coupled to the backport** -- Zod 3 consumers require v3 APIs and have no patched upstream release for GHSA-mrhx-c7xc-m3w5. Keep them on patched `3.25.76`, keep Zod 4 on `4.6.7` or later, and retain the collection-bound regression tests when updating either version or the patch.
+| Command            | Description                                                     |
+| ------------------ | --------------------------------------------------------------- |
+| `pnpm build`       | Builds the package. Run `pnpm exec zile dev` after.             |
+| `pnpm check`       | Formats and lints with fixes.                                   |
+| `pnpm check:types` | Runs `tsc` on the package, the examples, and the playgrounds.   |
+| `pnpm test`        | Runs the tests in `src/` and `scripts/`.                        |
 
-- **Retain Vite+ peers during lockfile refreshes** -- pnpm can resolve bare Vite peers despite the npm-alias override. Preserve the existing Vite+ peer graph and keep the lockfile regression check rejecting real `vite@` versions.
+## Friction Logging
 
-## Access-key lifecycle invariants
-
-- Validate the adapter's current account selection before using locally retained access keys; persisted account history is not session authorization.
-- A synchronous revocation API can still return a pending receipt. Remove local key state only after successful execution, or an explicit already-unavailable-key error.
-- Multi-account integration fixtures must reauthorize a payer key after replacing the connected wallet; restoring account history alone must not restore pruned signing authority.
-
-- Retained-key authority checks must cover MPP resolution and fill signing, including action-based adapters such as Privy. Unsigned root fills must remain available when no usable key matches.
-- Memory KV capacity is opt-in: shared authentication stores also hold durable credentials and sessions, so a default hard cap can deny login. Cache TTLs must reach backing storage for reclamation.
-
-- Bind cached Privy wallets to the authenticated user ID, not token presence; recheck identity after asynchronous wallet loading and before cached signing.
-
-- **Bound dialog startup, never approval** -- iframe and popup readiness waits expire after 15 seconds and propagate `Dialog.TransportError` (`code: -32000`, `data: { origin, stage }`) to the pending request. `dialog_ready` means startup, `dispatch` means sending failed, and `closed` means cancellation/teardown. Keep origins free of paths/queries and never attach request data or raw causes. Cancellation and teardown invalidate waiting sends; retry only on a fresh request, reloading an unready document then rather than replaying signing. Disconnect the iframe remount observer before removing its root. Run the isolated Chromium regressions with `pnpm test --config vitest.dialog.config.ts` after `pnpm exec playwright-core install chromium`.
-
-- **Preserve transport diagnostics across viem and Ox** -- viem wraps RPC errors in a cause chain; Ox reparses known codes and can drop that cause. Recover only the safe dialog origin/stage at the Provider boundary before Ox parses it. Guard asynchronous queue errors by sync revision so a superseded startup attempt cannot fail a newer sync of the same request ID.
-
-- **Keep dialog browser fixtures local and rejection-aware** -- bind standalone Vite test servers to loopback, not all interfaces. Cancellation tests must handle and assert the startup rejection; a discarded `syncRequests` promise becomes an unhandled error after close or destroy. Keep the older browser suite aligned even while its default project is disabled.
-
-- **Cancel the queue at the cancellation boundary** -- custom dialogs use `onCancel(keep?)` to reject the current queue atomically, retaining only an already approved/executing request ID when needed. Never defer a blanket queue drain until that execution settles: it would reject fresh requests submitted after Back. The callback belongs to its dialog/context and cannot affect a replacement after reset.
-
-- **Queue cancellation is a custom-dialog contract** — built-in iframe/popup transports do not call `onCancel`. Removing successors must not force-sync an already-synced executing head: that can reopen a dismissed approval. Sync only a new unsynced head, and close an empty queue. The new required setup callback ships in a minor release.
+- Log papercuts and friction (tooling, docs, APIs, tests, conventions) as they occur with `pnpx frog log`.
+- Do not add global, system, or internal friction.
+- Run `pnpx frog list` first to see what is already known.

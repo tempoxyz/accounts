@@ -1,19 +1,12 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "include": ["**/*.ts"],
   "compilerOptions": {
-    "target": "ES2024",
-    "module": "ESNext",
-    "lib": ["ES2024", "DOM", "DOM.Iterable"],
-    "moduleResolution": "bundler",
-    "strict": true,
-    "noEmit": false,
-    "esModuleInterop": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
     "skipLibCheck": true,
-    "isolatedModules": true,
-    "noUncheckedIndexedAccess": true,
-    "noUncheckedSideEffectImports": true,
+    "strict": true,
+    "target": "ES2022",
     "types": ["node"]
   },
-  "exclude": ["node_modules", "dist"]
+  "include": ["*.ts"]
 }

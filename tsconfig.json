@@ -1,5 +1,27 @@
 {
-  "extends": "./tsconfig.base.json",
-  "files": [],
-  "references": [{ "path": "./src/tsconfig.json" }, { "path": "./test/tsconfig.json" }]
+  "compilerOptions": {
+    "exactOptionalPropertyTypes": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "lib": ["DOM", "DOM.Iterable", "ES2024"],
+    "module": "nodenext",
+    "moduleDetection": "force",
+    "moduleResolution": "nodenext",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noUncheckedSideEffectImports": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true,
+    "target": "ES2024",
+    // The package runs in browsers, React Native, Node, and Workers. `Store.file` imports Node's modules
+    // on first use, so only their types are global.
+    "types": ["node"],
+    "verbatimModuleSyntax": true
+  },
+  // The examples and playgrounds check their own types. `scripts/publish.mjs` is the release script.
+  "exclude": ["**/dist", "**/node_modules", ".claude", "examples", "playgrounds", "scripts"]
 }

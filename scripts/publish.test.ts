@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vp/test'
+import { describe, expect, test, vi } from 'vite-plus/test'
 
 import { publishPackage } from './publish.mjs'
 
@@ -88,6 +88,41 @@ describe('publishPackage', () => {
             "env": undefined,
             "silent": undefined,
           },
+        ],
+        "result": "published",
+      }
+    `)
+  })
+
+  test('publishes a prerelease under its identifier as the dist-tag', async () => {
+    const version = '1.0.0-alpha.0'
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error('not found'), { stderr: 'npm error E404' }))
+      .mockResolvedValueOnce({ stderr: '', stdout: '{}' })
+      .mockResolvedValueOnce({
+        stderr: '',
+        stdout: JSON.stringify({ name: parameters.name, version }),
+      })
+      .mockResolvedValueOnce({ stderr: '', stdout: '' })
+
+    const result = await publishPackage({ ...parameters, run, version })
+
+    const args = (run.mock.calls.at(-1)?.[1] as readonly string[]).map((arg) =>
+      arg.endsWith('/package.tgz') ? '<archive>' : arg,
+    )
+
+    expect({ args, result }).toMatchInlineSnapshot(`
+      {
+        "args": [
+          "publish",
+          "<archive>",
+          "--access",
+          "public",
+          "--tag",
+          "alpha",
+          "--ignore-scripts",
+          "--loglevel=verbose",
         ],
         "result": "published",
       }

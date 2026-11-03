@@ -1,17 +1,5 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "types": ["vp/client", "node"],
-    "paths": {
-      "accounts": ["../src/index.ts"],
-      "accounts/*": ["../src/*"]
-    }
-  },
-  "include": ["src", "worker", "env.d.ts", "worker-configuration.d.ts"]
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "jsx": "react-jsx", "types": ["vite/client"] },
+  "include": ["*.ts", "*.tsx"]
 }

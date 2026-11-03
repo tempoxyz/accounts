@@ -107,9 +107,19 @@ export async function publishPackage(parameters) {
         `packed package contains unresolved catalogs: ${catalogs_unresolved.join(', ')}`,
       )
 
+    // npm requires a dist-tag for a prerelease, so `1.0.0-alpha.0` publishes under `alpha`.
+    const tag = /^\d+\.\d+\.\d+-([0-9A-Za-z-]+)/.exec(version)?.[1]
     await run(
       'npm',
-      ['publish', archive, '--access', 'public', '--ignore-scripts', '--loglevel=verbose'],
+      [
+        'publish',
+        archive,
+        '--access',
+        'public',
+        ...(tag ? ['--tag', tag] : []),
+        '--ignore-scripts',
+        '--loglevel=verbose',
+      ],
       { cwd },
     )
     return 'published'

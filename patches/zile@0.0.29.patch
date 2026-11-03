@@ -1,0 +1,231 @@
+diff --git a/dist/Examples.js b/dist/Examples.js
+index f775b631b810ca87145591dfefb160c57cef82a8..99fa21ae9db129a0ecfdd2c4c7eb530e2515a111 100644
+--- a/dist/Examples.js
++++ b/dist/Examples.js
+@@ -3,7 +3,7 @@ import * as fsSync from 'node:fs';
+ import * as fs from 'node:fs/promises';
+ import * as path from 'node:path';
+ import * as oxfmt from 'oxfmt';
+-import * as ts from 'typescript';
++import { skipTrivia } from 'typescript/unstable/ast';
+ /**
+  * Default formatter options for example snippets.
+  * Tightens `printWidth` so wrapped lines fit comfortably inside JSDoc.
+@@ -30,9 +30,7 @@ const closeFence = /^([ \t]*)\*[ \t]?```[ \t]*$/;
+  */
+ export function extract(options) {
+     const { file, source } = options;
+-    const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, 
+-    /*setParentNodes*/ false, ts.ScriptKind.TS);
+-    const ranges = collectJsDocRanges(source, sf);
++    const ranges = collectJsDocRanges(source);
+     const starts = lineStarts(source);
+     const blocks = [];
+     for (const range of ranges) {
+@@ -198,24 +196,31 @@ function computeLineNumber(starts, offset) {
+     }
+     return lo + 1;
+ }
+-function collectJsDocRanges(source, sf) {
++function collectJsDocRanges(source) {
+     const ranges = [];
+-    const seen = new Set();
+-    const visit = (node) => {
+-        const leading = ts.getLeadingCommentRanges(source, node.pos) ?? [];
+-        for (const range of leading) {
+-            if (range.kind !== ts.SyntaxKind.MultiLineCommentTrivia)
+-                continue;
+-            if (source[range.pos + 2] !== '*')
+-                continue;
+-            if (seen.has(range.pos))
+-                continue;
+-            seen.add(range.pos);
+-            ranges.push(range);
++    for (let i = 0; i < source.length; i++) {
++        const char = source[i];
++        const next = source[i + 1];
++        if (char === '/' && next === '/') {
++            i = skipLineComment(source, i + 2);
++            continue;
++        }
++        if (char === '/' && next === '*') {
++            const end = skipBlockComment(source, i + 2);
++            if (source[i + 2] === '*')
++                ranges.push({ pos: i, end });
++            i = end - 1;
++            continue;
+         }
+-        ts.forEachChild(node, visit);
+-    };
+-    ts.forEachChild(sf, visit);
++        if (char === '"' || char === "'") {
++            i = skipString(source, i, char);
++            continue;
++        }
++        if (char === '`') {
++            i = skipTemplate(source, i);
++            continue;
++        }
++    }
+     return ranges;
+ }
+ /**
+@@ -267,16 +272,40 @@ function writeExamples(options) {
+     return index;
+ }
+ function partitionImports(code) {
+-    const sf = ts.createSourceFile('__example.ts', code, ts.ScriptTarget.Latest, 
+-    /*setParentNodes*/ true, ts.ScriptKind.TS);
+     const ranges = [];
+-    for (const statement of sf.statements) {
+-        if (!ts.isImportDeclaration(statement) && !ts.isImportEqualsDeclaration(statement))
++    let depth = 0;
++    for (let i = 0; i < code.length; i++) {
++        const char = code[i];
++        const next = code[i + 1];
++        if (char === '/' && next === '/') {
++            i = skipLineComment(code, i + 2);
+             continue;
+-        ranges.push({
+-            start: statement.getStart(sf),
+-            end: trailingImportEnd(code, statement.end),
+-        });
++        }
++        if (char === '/' && next === '*') {
++            i = skipBlockComment(code, i + 2) - 1;
++            continue;
++        }
++        if (char === '"' || char === "'") {
++            i = skipString(code, i, char);
++            continue;
++        }
++        if (char === '`') {
++            i = skipTemplate(code, i);
++            continue;
++        }
++        if (char === '{' || char === '(' || char === '[') {
++            depth++;
++            continue;
++        }
++        if (char === '}' || char === ')' || char === ']') {
++            depth = Math.max(0, depth - 1);
++            continue;
++        }
++        if (depth !== 0 || !isImportStart(code, i) || isImportExpression(code, i + 'import'.length))
++            continue;
++        const end = findImportEnd(code, i);
++        ranges.push({ start: i, end });
++        i = end - 1;
+     }
+     if (ranges.length === 0)
+         return { imports: [], body: code };
+@@ -298,6 +327,87 @@ function trailingImportEnd(code, end) {
+         return nextLine;
+     return end;
+ }
++function isImportStart(code, index) {
++    if (!code.startsWith('import', index))
++        return false;
++    const before = code[index - 1];
++    const after = code[index + 'import'.length];
++    if (before && /[$_\p{ID_Continue}]/u.test(before))
++        return false;
++    return after === undefined || /\s|['"]/.test(after);
++}
++function isImportExpression(code, end) {
++    const next = skipTrivia(code, end, false, false);
++    return code[next] === '(' || code[next] === '.';
++}
++function findImportEnd(code, start) {
++    let depth = 0;
++    let moduleSpecifierEnd = -1;
++    for (let i = start; i < code.length; i++) {
++        const char = code[i];
++        const next = code[i + 1];
++        if (char === '/' && next === '/') {
++            i = skipLineComment(code, i + 2);
++            if (moduleSpecifierEnd !== -1)
++                return trailingImportEnd(code, moduleSpecifierEnd);
++            continue;
++        }
++        if (char === '/' && next === '*') {
++            i = skipBlockComment(code, i + 2) - 1;
++            continue;
++        }
++        if (char === '"' || char === "'") {
++            const end = skipString(code, i, char);
++            if (depth === 0)
++                moduleSpecifierEnd = end + 1;
++            i = end;
++            continue;
++        }
++        if (char === '{' || char === '(' || char === '[') {
++            depth++;
++            continue;
++        }
++        if (char === '}' || char === ')' || char === ']') {
++            depth = Math.max(0, depth - 1);
++            continue;
++        }
++        if (char === ';')
++            return trailingImportEnd(code, i + 1);
++        if (moduleSpecifierEnd !== -1 && char === '\n')
++            return trailingImportEnd(code, moduleSpecifierEnd);
++    }
++    return code.length;
++}
++function skipLineComment(source, start) {
++    const end = source.indexOf('\n', start);
++    return end === -1 ? source.length : end;
++}
++function skipBlockComment(source, start) {
++    const end = source.indexOf('*/', start);
++    return end === -1 ? source.length : end + 2;
++}
++function skipString(source, start, quote) {
++    for (let i = start + 1; i < source.length; i++) {
++        if (source[i] === '\\') {
++            i++;
++            continue;
++        }
++        if (source[i] === quote)
++            return i;
++    }
++    return source.length - 1;
++}
++function skipTemplate(source, start) {
++    for (let i = start + 1; i < source.length; i++) {
++        if (source[i] === '\\') {
++            i++;
++            continue;
++        }
++        if (source[i] === '`')
++            return i;
++    }
++    return source.length - 1;
++}
+ function runTsc(options) {
+     const { cwd, checkDir, index } = options;
+     // Nothing to check (e.g. every block was skipped via `@noErrors`).
+diff --git a/dist/internal/cli/commands.js b/dist/internal/cli/commands.js
+index 5cfb55d42852dff0638ed91100664033175e4742..bc53268cc24d358c9117192052c33acfdcaedc6e 100644
+--- a/dist/internal/cli/commands.js
++++ b/dist/internal/cli/commands.js
+@@ -92,14 +92,15 @@ export async function examplesCheck(command) {
+ export async function preparePublish(command) {
+     return command
+         .option('--cwd <directory>', 'Working directory to publish from')
++        .option('--project <path>', 'Path to tsconfig.json, relative to cwd. @default ./tsconfig.json')
+         .action(async (options) => {
+-        const { cwd = process.cwd() } = options;
++        const { cwd = process.cwd(), project = './tsconfig.json' } = options;
+         console.log(`→ Preparing package at ${cwd}`);
+         // Copy package.json to a temporary file (before build transforms it)
+         const packageJsonPath = path.join(cwd, './package.json');
+         fs.copyFileSync(packageJsonPath, packageJsonPath.replace('.json', '.tmp.json'));
+         // Build the package (readPackageJson strips pre-marker keys automatically)
+-        await Package.build({ cwd });
++        await Package.build({ cwd, project });
+         // Strip pre-marker keys from the written package.json so the published
+         // package only contains the publishable fields.
+         const builtContent = fs.readFileSync(packageJsonPath, 'utf-8');

@@ -6,120 +6,87 @@
   </picture>
 </p>
 
-<p align="center"><b>Tempo Accounts SDK for apps and wallets building stablecoin experiences on Tempo.</b></p>
+<p align="center"><b>Sign-in, sessions, and access keys for Tempo apps.</b></p>
 
 <p align="center">
-  <a href="https://accounts.tempo.xyz">Website</a> · <a href="https://accounts.tempo.xyz/docs">Docs</a> · <a href="#install">Install</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a>
+  <a href="docs/README.md">Docs</a> · <a href="#install">Install</a> · <a href="#usage">Usage</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a>
 </p>
 
 ---
 
-## Quick Prompt
+> [!WARNING]
+> `accounts@1` is in alpha, under the `alpha` dist-tag. Its API is not stable yet.
 
-Prompt your agent:
+## Overview
 
-```
-Read accounts.tempo.xyz/docs and integrate Tempo Wallet into my application
+`accounts` is the SDK of [Tempo ID](https://github.com/tempoxyz/id), Tempo's sign-in for every app. An app uses it to sign users in, keep their session, and get a scoped access key for each session. The access key signs Tempo transactions through Viem, with the limits the user approved.
+
+```mermaid
+flowchart LR
+  App[App] -->|Id.create| Instance[Instance: config, session]
+  Instance --> Plugins[Plugins: dialog, redirect, email, passkey, device, backend]
+  Plugins -->|sign-in| ID[Tempo ID]
+  ID -->|tokens and access key| Instance
+  Instance -->|tempoId.viem| Chain[Tempo]
 ```
 
 ## Install
 
-```bash
-npm i accounts
+```sh
+npm i accounts@alpha viem
 ```
 
-```bash
-pnpm i accounts
+| Entry                 | Holds                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| `accounts`            | `Id`, `Actions`, `Store`, `Session`, `AccessKey`, `Permissions`, and the types             |
+| `accounts/cloudflare` | `DurableObject.sessions`, for a backend's sessions on Cloudflare Workers                   |
+| `accounts/expo`       | The `expo` preset of an Expo app                                                           |
+| `accounts/internal`   | `Authorization`, `Funding`, `Pending`, and `User`, the types that the actions build        |
+| `accounts/mpp`        | `mpp`, the plugin that pays MPP endpoints with the access key                              |
+| `accounts/plugins`    | `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, and `viem`         |
+| `accounts/react`      | `react`, the plugin that adds `tempoId.useSession()`                                       |
+| `accounts/wagmi`      | `tempoId`, a wagmi connector, and `wagmi`, the plugin of a wagmi config                    |
+
+## Usage
+
+Create an instance with `Id.create`, and add a plugin from `accounts/plugins` for each sign-in method. Without a sign-in plugin, users sign in through Tempo ID in a dialog on the page:
+
+```ts
+import { Id } from 'accounts'
+import { viem } from 'accounts/plugins'
+
+const tempoId = Id.create({
+  // Each sign-in requests an access key that may spend up to 10 OUSD for a day.
+  accessKey: {
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  },
+  plugins: [viem()],
+})
+
+await tempoId.dialog.signIn()
+await tempoId.token.transferSync({ amount, to, token })
 ```
 
-```bash
-bun i accounts
-```
-
-## Documentation
-
-Start at [accounts.tempo.xyz](https://accounts.tempo.xyz) for the product overview, live demos, and integration guides. The documentation lives at [accounts.tempo.xyz/docs](https://accounts.tempo.xyz/docs).
-
-## Getting Help
-
-Have questions or building something cool with the Tempo Accounts SDK?
-
-Join the Telegram group to chat with the team and other devs: [@mpp_devs](https://t.me/mpp_devs)
+The [docs](docs/README.md) cover each sign-in flow, with a [guide](docs/guides/README.md) per flow and a page per [API](docs/api/README.md).
 
 ## Examples
 
-| Example                                                       | Description                                                                      |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| [basic](./examples/basic)                                     | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallet.  |
-| [deposits](./examples/deposits)                               | Open the deposit UI with optional pre-filled fields.                             |
-| [cli](./examples/cli)                                         | Minimal CLI setup to connect and authorize local keys using Tempo Wallet.        |
-| [webauthn](./examples/webauthn)                               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.           |
-| [access-key](./examples/access-key)                           | Authorize access keys using Tempo Wallet to submit transactions without prompts. |
-| [access-key-and-webauthn](./examples/access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                               |
-| [fee-payer](./examples/fee-payer)                             | Sponsor transactions via Tempo Wallet.                                           |
-| [fee-payer-and-webauthn](./examples/fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.       |
-| [mpp](./examples/mpp)                                         | Auto-pay HTTP `402` responses served by a Hono server using `mppx/hono`.         |
+[`examples/`](examples/README.md) holds one small app for each platform: `backend`, `cli`, `mobile`, `wagmi`, and `web`. Each is a standalone project that installs `accounts` from npm.
+
+[`playgrounds/`](playgrounds/README.md) holds one configurable app per flow. Tempo ID's end-to-end suite drives them, and deploys them beside each Tempo ID deployment.
 
 ## Development
 
-Requires [Docker](https://docs.docker.com/get-docker/) and [OrbStack](https://orbstack.dev/) (recommended on macOS for automatic HTTPS `.accounts.local` domains).
-
 ```sh
-pnpm dev              # start all dev services via docker compose
-pnpm build            # build library
-pnpm check            # lint + format
-pnpm check:types      # type checks
-pnpm test             # run tests
+pnpm install
+pnpm check:types   # the package, the examples, and the playgrounds
+pnpm test          # the tests in src/ and scripts/
+pnpm check         # format and lint
 ```
 
-### Services
-
-| Service          | OrbStack URL                        |
-| ---------------- | ----------------------------------- |
-| Playground       | `https://playground.accounts.local` |
-| Dialog Reference | `https://dialog-ref.accounts.local` |
-| Docs             | `https://docs.accounts.local`       |
-| Wagmi Playground | `https://wagmi.accounts.local`      |
-
-## Deployment
-
-The docs site is configured for Vercel as a monorepo project.
-
-| Setting        | Value        |
-| -------------- | ------------ |
-| Root Directory | `site`       |
-| Build Command  | `pnpm build` |
-| Dev Command    | `pnpm dev`   |
-
-Set `VITE_BASE_URL` to the production docs origin when using a custom domain.
-
-### Playgrounds
-
-| Playground                   | Command          | Description                                  |
-| ---------------------------- | ---------------- | -------------------------------------------- |
-| [web](./playgrounds/web)     | `pnpm dev`       | Web playground for dialog + adapter testing. |
-| [wagmi](./playgrounds/wagmi) | `pnpm dev:wagmi` | Wagmi-based playground with connectors.      |
-| [cli](./playgrounds/cli)     | `pnpm dev:cli`   | CLI playground for device-code auth flow.    |
-
-### Reference Implementations
-
-The `ref-impls/` directory contains reference implementations for building with Tempo Accounts SDK:
-
-| Directory           | Description                                                                                                                                                                              |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ref-impls/dialog/` | Minimal, unstyled embed dialog app demonstrating how to build a custom embed using the `Remote` API. Select `dialogRefImpl` in the web playground's adapter dropdown to test against it. |
+The playgrounds sign in through a running Tempo ID. `pnpm dev` in [`tempoxyz/id`](https://github.com/tempoxyz/id) starts one with every playground, as its [local development docs](https://github.com/tempoxyz/id/blob/main/docs/development/local.md) describe.
 
 ## License
 
-<sup>
-Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
-2.0</a> or <a href="LICENSE-MIT">MIT license</a> at your option.
-</sup>
-
-<br>
-
-<sub>
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in these packages by you, as defined in the Apache-2.0 license,
-shall be dual licensed as above, without any additional terms or conditions.
-</sub>
+[MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE), at the option of the user.

@@ -16,8 +16,6 @@ jobs:
       contents: read # to clone repository contents in the reusable workflow
       id-token: write # to initialize secure-runner in the reusable workflow
     uses: ./.github/workflows/verify.yml # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
-    secrets:
-      VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
 
   version:
     name: Version

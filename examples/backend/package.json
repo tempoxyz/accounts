@@ -1,0 +1,20 @@
+{
+  "name": "example-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check:types": "tsc",
+    "dev": "wrangler dev --port 5191"
+  },
+  "dependencies": {
+    "accounts": "^1.0.0-alpha.0",
+    "hono": "^4.13.13",
+    "viem": "^2.57.12"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261014.1",
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.151.0"
+  }
+}

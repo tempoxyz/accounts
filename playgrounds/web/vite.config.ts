@@ -1,76 +1,47 @@
-import { cloudflare } from '@cloudflare/vite-plugin'
+/** Serves and builds the web playground with React. @module */
 import react from '@vitejs/plugin-react'
-import { fileURLToPath } from 'node:url'
-import regen from 'regen-ui/vite'
-import icons from 'unplugin-icons/vite'
-import { defineConfig } from 'vp'
+import { defineConfig, loadEnv } from 'vite'
+import * as ApiUrls from './ApiUrls.ts'
 
-const privyReactAuth = fileURLToPath(
-  new URL('./node_modules/@privy-io/react-auth/dist/esm/index.mjs', import.meta.url),
-)
-
-export default defineConfig({
-  resolve: {
-    alias: {
-      '@privy-io/react-auth': privyReactAuth,
+export default defineConfig((options) => {
+  const env = loadEnv(options.mode, process.cwd(), '')
+  // `CSP` sets the page's Content-Security-Policy, such as a strict `style-src` that the dialog must
+  // work under.
+  const headers = env.CSP ? { 'content-security-policy': env.CSP } : {}
+  return {
+    // The parsed entries only, so a key in `TEMPO_API_URLS` never reaches the bundle.
+    define: {
+      'import.meta.env.TEMPO_API_URLS': JSON.stringify(
+        ApiUrls.parse(env.TEMPO_API_URLS),
+      ),
     },
-    dedupe: ['@privy-io/react-auth', 'react', 'react-dom'],
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('/node_modules/@privy-io/react-auth/')) return 'privy-react'
-        },
-      },
-    },
-  },
-  server: {
-    host: process.env.VITE_HOST ?? 'localhost',
-    port: Number(process.env.PORT ?? 5173),
-    strictPort: true,
-    cors: true,
-    allowedHosts: true,
-  },
-  // The `regen-ui` plugin source-aliases `regen-ui` to its `src/` folder, so
-  // Vite's dep scanner doesn't crawl through it and misses these transitive
-  // deps. Pre-bundle them explicitly so their CJS-style `react/jsx-runtime`
-  // imports are rewritten to the optimized output, and so Vite's ESM interop
-  // can synthesize the named `useSyncExternalStore(WithSelector)` exports
-  // from `use-sync-external-store`.
-  optimizeDeps: {
-    include: [
-      '@base-ui/react/otp-field',
-      '@base-ui/react/select',
-      'use-sync-external-store/shim',
-      'use-sync-external-store/shim/with-selector',
+    // Every playground reads the same URL variables, which deploys and tests set once.
+    envPrefix: [
+      'API_URL',
+      'PERMISSIONS',
+      'TEMPO_ID_URL',
+      'TEMPO_RPC_URL',
+      'VITE_',
     ],
-  },
-  plugins: [
-    react(),
-    icons({
-      compiler: {
-        compiler: reactIconCompiler,
-        extension: 'jsx',
-      },
-    }),
-    regen(),
-    cloudflare(),
-  ],
+    // Prebundled at startup, so a first-visit dependency scan never reloads the page mid-test.
+    optimizeDeps: {
+      include: [
+        '@tanstack/react-query',
+        'accounts > ox',
+        'accounts > ox/tempo',
+        'accounts > xstate',
+        'mppx',
+        'mppx/client',
+        'react',
+        'react-dom/client',
+        'react/jsx-dev-runtime',
+        'viem/tempo',
+        'viem/tempo/chains',
+      ],
+      noDiscovery: true,
+    },
+    plugins: [react()],
+    preview: { headers },
+    server: { headers },
+  }
 })
-
-function reactIconCompiler(svg: string) {
-  const jsx = svg
-    .replace(/\s([\w:-]*[-:][\w:-]*)=/g, (_, name: string) => ` ${toJsxAttribute(name)}=`)
-    .replace(/\sclass=/g, ' className=')
-    .replace(/\sfor=/g, ' htmlFor=')
-    .replace(/<svg([^>]*)>/, '<svg$1 {...props}>')
-
-  return `export default function Icon(props) {
-  return ${jsx}
-}`
-}
-
-function toJsxAttribute(name: string) {
-  return name.replace(/[-:]([a-z])/g, (_, char: string) => char.toUpperCase())
-}

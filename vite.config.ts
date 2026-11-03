@@ -1,38 +1,41 @@
-import { defineConfig } from 'vp'
+/** Configures formatting, lint, and tests for the `accounts` package through Vite+. @module */
+import { defineConfig } from 'vite-plus'
+
+const ignorePatterns = ['**/dist/**', '**/node_modules/**', '.changeset/**']
 
 export default defineConfig({
-  devtools: {
-    enabled: true,
-  },
-  lint: {
-    ignorePatterns: ['package.json', 'dialog'],
-  },
   fmt: {
+    ignorePatterns: [...ignorePatterns, 'CHANGELOG.md', 'pnpm-lock.yaml'],
+    printWidth: 80,
     semi: false,
     singleQuote: true,
-    trailingComma: 'all',
-    tabWidth: 2,
-    printWidth: 100,
-    ignorePatterns: ['package.json', 'dialog'],
-    experimentalSortImports: {
-      groups: [
-        ['value-builtin', 'value-external', 'type-import', 'value-internal', 'type-internal'],
-        [
-          'value-parent',
-          'value-sibling',
-          'value-index',
-          'type-parent',
-          'type-sibling',
-          'type-index',
-        ],
-        'unknown',
+    sortPackageJson: false,
+  },
+  lint: {
+    categories: { correctness: 'error' },
+    ignorePatterns,
+    // Type-aware rules read each file's `tsconfig.json`. `pnpm check:types` still checks types.
+    options: { typeAware: true, typeCheck: false },
+    rules: {
+      // `Math.random()` is not cryptographically secure.
+      'no-restricted-properties': [
+        'error',
+        {
+          message: 'Use `crypto.getRandomValues()` or `crypto.randomUUID()`.',
+          object: 'Math',
+          property: 'random',
+        },
       ],
+      'no-unused-vars': 'error',
+      'typescript/await-thenable': 'error',
+      'typescript/no-base-to-string': 'off',
+      'typescript/no-floating-promises': 'error',
+      'typescript/no-misused-promises': 'error',
+      'typescript/no-misused-spread': 'off',
+      'typescript/require-await': 'error',
     },
-    overrides: [
-      {
-        files: ['**/*.md', '**/*.mdx'],
-        options: { embeddedLanguageFormatting: 'off' },
-      },
-    ],
+  },
+  test: {
+    include: ['scripts/**/*.test.ts', 'src/**/*.test.ts'],
   },
 })

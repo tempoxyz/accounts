@@ -1,0 +1,377 @@
+/* The stylesheet that the browser playgrounds share. The React playgrounds import it, and backend serves it at /style.css. */
+:root {
+  color-scheme: light dark;
+  --background: #f5f5f5;
+  --border: #e5e5e5;
+  --muted: #737373;
+  --primary: #000000;
+  --primary-text: #ffffff;
+  --success: #000000;
+  --surface: #ffffff;
+  --surface-muted: #f5f5f5;
+  --text: #000000;
+  --warning: #000000;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #000000;
+    --border: #262626;
+    --muted: #8a8a8a;
+    --primary: #ffffff;
+    --primary-text: #000000;
+    --success: #ffffff;
+    --surface: #0a0a0a;
+    --surface-muted: #171717;
+    --text: #ffffff;
+    --warning: #ffffff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--text);
+  font:
+    15px/1.5 system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  margin: 0;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0 auto;
+  max-width: 720px;
+  padding: 32px 16px 64px;
+}
+
+h1 {
+  font-size: 24px;
+  margin: 0;
+}
+
+/* The page's title, with the network's toggle at the end of its line. */
+.title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+}
+
+.chain {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+h2 {
+  font-size: 17px;
+  margin: 0;
+}
+h3 {
+  font-size: 14px;
+  margin: 0;
+}
+p {
+  margin: 0;
+}
+a {
+  color: inherit;
+}
+
+header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+form,
+fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+fieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+fieldset fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+legend {
+  font-weight: 600;
+  padding: 0 4px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  gap: 4px;
+}
+.row > label {
+  flex: 1 1 160px;
+}
+
+input,
+select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+button,
+.button {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 7px 12px;
+  text-decoration: none;
+}
+
+button.primary,
+.button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-text);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+button:focus-visible,
+.button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+details {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 12px;
+}
+details[open] {
+  padding-bottom: 12px;
+}
+details > :not(summary) {
+  margin-top: 8px;
+}
+summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 10px 0;
+}
+section > details {
+  background: var(--surface);
+}
+main > details {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 0 16px;
+}
+main > details[open] {
+  padding-bottom: 16px;
+}
+
+dl {
+  display: grid;
+  gap: 4px 16px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin: 0;
+}
+dt {
+  color: var(--muted);
+  font-size: 14px;
+}
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+pre,
+code {
+  font:
+    12px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+pre {
+  background: var(--surface-muted);
+  border-radius: 8px;
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+pre:empty,
+[role='status']:empty {
+  display: none;
+}
+[role='status'] {
+  font-size: 14px;
+}
+
+.stream {
+  background: var(--surface-muted);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+.stream-text {
+  font-size: 16px;
+  min-height: 24px;
+}
+.stream-chunk {
+  animation: chunk-in 240ms ease-out;
+  display: inline-block;
+  margin-right: 4px;
+}
+.stream-cursor {
+  animation: blink 1s steps(2, start) infinite;
+  background: var(--text);
+  display: inline-block;
+  height: 1em;
+  vertical-align: text-bottom;
+  width: 2px;
+}
+.stream-meter {
+  background: var(--border);
+  border-radius: 999px;
+  height: 4px;
+  overflow: hidden;
+}
+.stream-meter > div {
+  background: var(--success);
+  height: 100%;
+  transition: width 160ms ease-out;
+}
+.badge {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 1px 8px;
+}
+.badge.live {
+  border-color: var(--success);
+  color: var(--success);
+}
+.warning {
+  color: var(--warning);
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+@keyframes chunk-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-chunk,
+  .stream-cursor {
+    animation: none;
+  }
+  .stream-meter > div {
+    transition: none;
+  }
+}
+
+.row > .grow {
+  flex: 1 1 200px;
+}
+
+/* Separates two sign-in methods of one section. */
+.divider {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 13px;
+  gap: 12px;
+}
+
+.divider::before,
+.divider::after {
+  background: var(--border);
+  content: '';
+  flex: 1;
+  height: 1px;
+}

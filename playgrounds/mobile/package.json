@@ -1,0 +1,28 @@
+{
+  "name": "playground-mobile",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "check:types": "tsc",
+    "ios": "expo run:ios",
+    "start": "expo start"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "catalog:",
+    "accounts": "workspace:*",
+    "expo": "catalog:",
+    "expo-secure-store": "catalog:",
+    "expo-web-browser": "catalog:",
+    "mppx": "catalog:",
+    "ox": "catalog:",
+    "react": "catalog:mobile",
+    "react-native": "catalog:",
+    "react-native-get-random-values": "catalog:",
+    "viem": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:mobile",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2026-10-01",
+  // Fetches to Tempo ID and the other playgrounds, Workers on this account's workers.dev, need the
+  // public path: same-account fetches otherwise fail with error 1042.
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  // One object for each app's session ID serves every request of that session, so its refreshes
+  // share one instance.
+  "durable_objects": {
+    "bindings": [{ "class_name": "SESSIONS", "name": "SESSIONS" }],
+  },
+  "main": "./worker.ts",
+  // `v2` renames the class, so the deployed objects keep their sessions.
+  "migrations": [
+    { "new_sqlite_classes": ["Sessions"], "tag": "v1" },
+    {
+      "renamed_classes": [{ "from": "Sessions", "to": "SESSIONS" }],
+      "tag": "v2",
+    },
+  ],
+  "name": "id-playground-backend",
+  // Each request calls Tempo ID, which runs in the database's region.
+  "placement": { "region": "aws:us-east-1" },
+  // The pages link the playgrounds' stylesheet, which the Worker imports as text.
+  "rules": [{ "globs": ["**/*.css"], "type": "Text" }],
+  "secrets": { "required": ["CLIENT_SECRET"] },
+}

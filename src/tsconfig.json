@@ -1,9 +1,0 @@
-{
-  "extends": "../tsconfig.base.json",
-  "exclude": ["./**/*.test.ts"],
-  "compilerOptions": {
-    "customConditions": ["src"],
-    "moduleResolution": "nodenext",
-    "noEmit": true
-  }
-}

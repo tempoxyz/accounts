@@ -1,31 +1,18 @@
-export * as Adapter from './core/Adapter.js'
-export * as IntersectionObserver from './core/IntersectionObserver.js'
-export * as Dialog from './core/Dialog.js'
-export * as ExecutionError from './core/ExecutionError.js'
-export * as Keystore from './core/Keystore.js'
-export * as Messenger from './core/Messenger.js'
-export * as Mach from './core/Mach.js'
-export * as Schema from './core/Schema.js'
-export * as Provider from './core/Provider.js'
-export * as ProviderRequest from './core/ProviderRequest.js'
-export * as Expiry from './core/Expiry.js'
-export * as Handoff from './core/Handoff.js'
-export * as Remote from './core/Remote.js'
-export * as Rpc from './core/zod/rpc.js'
-export * as Store from './core/Store.js'
-export * as Storage from './core/Storage.js'
-export * as TrustedHosts from './core/TrustedHosts.js'
-export * as WebAuthnCeremony from './core/WebAuthnCeremony.js'
-export { dialog } from './core/adapters/dialog.js'
-export { local } from './core/adapters/local.js'
-export { mobileWebAuth } from './core/adapters/mobileWebAuth/mobileWebAuth.js'
-export { postMessage } from './core/adapters/postMessage/postMessage.js'
-export { tempoWallet } from './core/adapters/postMessage/tempoWallet.js'
-export * as Mount from './core/adapters/postMessage/mount.js'
-export { turnkey } from './core/adapters/turnkey.js'
-export { webAuthn } from './core/adapters/webAuthn.js'
-export {
-  secp256k1,
-  /** @deprecated Use `secp256k1` instead. */
-  secp256k1 as dangerous_secp256k1,
-} from './core/adapters/secp256k1.js'
+/**
+ * Signs users in to Tempo with Tempo ID, and keeps their session, access keys, and Viem client.
+ * The types that only the package's own modules build are in `accounts/internal`.
+ * @module
+ */
+export * as AccessKey from './AccessKey.js'
+export * as AccessToken from './AccessToken.js'
+export * as Actions from './Actions.js'
+export * as ClientAssertion from './ClientAssertion.js'
+export * as Dpop from './Dpop.js'
+export * as Id from './Id.js'
+export * as LogoutToken from './LogoutToken.js'
+export * as Permissions from './Permissions.js'
+export * as Plugin from './Plugin.js'
+export * as Session from './Session.js'
+export * as Store from './Store.js'
+export * as TempoAccount from './TempoAccount.js'
+export * as Tokens from './Tokens.js'

@@ -1,0 +1,5 @@
+{
+  "icons": [{ "sizes": "any", "src": "/icon.svg", "type": "image/svg+xml" }],
+  "name": "Third-party playground",
+  "short_name": "Third party"
+}

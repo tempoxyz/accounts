@@ -1,11 +1,13 @@
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "accounts-wagmi",
-  "compatibility_date": "2026-03-09",
-  "compatibility_flags": ["nodejs_compat"],
-  "main": "./worker/index.ts",
+  "$schema": "../../node_modules/wrangler/config-schema.json",
   "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/relay", "/relay/*", "/fortune", "/zero-dollar-auth"],
+    // The Worker relays JSON-RPC calls. Every other path is a file of the page.
+    "run_worker_first": ["/rpc/*"],
   },
+  "compatibility_date": "2026-10-01",
+  "main": "./worker.ts",
+  "name": "id-playground-wagmi",
 }

@@ -1,0 +1,19 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // mppx's server imports this optional peer only for MCP transports, which the API does not serve.
+  "alias": { "@modelcontextprotocol/sdk/types.js": "./Mcp.ts" },
+  "compatibility_date": "2026-10-01",
+  // Fetches to Tempo ID and the other playgrounds, Workers on this account's workers.dev, need the
+  // public path: same-account fetches otherwise fail with error 1042.
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  // One object serves every MPP request, so a channel or a spent transaction outlives the isolate
+  // that saw it.
+  "durable_objects": {
+    "bindings": [{ "class_name": "MPP_SESSIONS", "name": "MPP_SESSIONS" }],
+  },
+  "main": "./worker.ts",
+  "migrations": [{ "new_sqlite_classes": ["MPP_SESSIONS"], "tag": "v1" }],
+  "name": "id-playground-api",
+  // Each request calls Tempo ID, which runs in the database's region.
+  "placement": { "region": "aws:us-east-1" },
+}

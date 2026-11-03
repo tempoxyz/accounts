@@ -1,0 +1,9 @@
+{
+  "mode": "pre",
+  "tag": "alpha",
+  "initialVersions": {
+    "@tempoxyz/example-id-cli": "0.0.2",
+    "accounts": "0.21.1"
+  },
+  "changesets": []
+}

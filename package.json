@@ -1,226 +1,152 @@
 {
   "scripts": {
-    "build": "zile",
-    "changeset:publish": "zile publish:prepare && node scripts/publish.mjs && changeset git-tag && zile publish:post",
+    "build": "zile --project tsconfig.build.json",
+    "changeset:publish": "zile publish:prepare --project tsconfig.build.json && node scripts/publish.mjs && changeset git-tag && zile publish:post",
     "changeset:version": "changeset version && pnpm check",
-    "check": "vp lint --fix --ignore-pattern package.json && vp fmt bench src examples playgrounds ref-impls scripts test",
-    "dev": "docker compose up -d",
-    "bench": "pnpm --filter ./bench bench",
-    "dev:cli": "pnpm --filter './playgrounds/cli' dev",
-    "docs:build": "pnpm --filter site build",
-    "docs:dev": "pnpm --filter site dev",
-    "docs:preview": "pnpm --filter site preview",
-    "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types && pnpm --filter './playgrounds/cli' check:types && pnpm --filter ./bench check:types",
-    "dev:dialog": "pnpm --filter tempo-app dev",
-    "dev:dialog-ref": "pnpm --filter dialog-ref dev",
-    "dev:hosts": "./scripts/dev:hosts.sh",
-    "dev:playground": "pnpm --filter './playgrounds/web' dev",
-    "dev:react-native": "pnpm --filter react-native-playground start",
-    "dev:wagmi": "pnpm --filter './playgrounds/wagmi' dev & pnpm dev:dialog",
-    "examples": "node --import tsx scripts/examples.ts",
-    "postinstall": "pnpm preconstruct",
-    "preconstruct": "zile dev",
-    "test": "vp test",
-    "vp": "vp"
-  },
-  "packageManager": "pnpm@11.0.8",
-  "devEngines": {
-    "runtime": {
-      "name": "node",
-      "version": "^24.22.1",
-      "onFail": "download"
-    }
+    "check": "vp check --fix",
+    "check:types": "tsc && pnpm --filter './examples/*' --filter './playgrounds/*' check:types",
+    "postinstall": "zile dev",
+    "test": "vp test"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^0.6.0",
-    "@changesets/cli": "^3.0.3",
-    "@privy-io/react-auth": "3.25.0",
-    "@remix-run/route-pattern": "^0.20.0",
-    "@types/express": "^5.0.6",
-    "@types/http-proxy": "^1.17.17",
+    "@changesets/cli": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "@vitejs/devtools": "catalog:",
-    "@vitejs/plugin-react": "catalog:",
-    "@wagmi/core": "^3.6.0",
-    "elysia": "^1.4.29",
-    "expo-secure-store": "^55.0.13",
-    "expo-web-browser": "^55.0.14",
-    "express": "^5.2.1",
-    "frog": "^1.0.15",
-    "pkg-pr-new": "0.0.70",
-    "playwright-core": "^1.59.1",
-    "prool": "catalog:",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "react-native-mmkv": "^4.3.1",
-    "react-native-nitro-modules": "^0.35.9",
-    "simple-git-hooks": "^2.13.1",
-    "testcontainers": "^11.14.0",
-    "tsx": "^4.21.0",
+    "@wagmi/core": "catalog:",
+    "expo-secure-store": "catalog:",
+    "expo-web-browser": "catalog:",
+    "mppx": "catalog:",
+    "react": "catalog:",
+    "react-native-get-random-values": "catalog:",
     "typescript": "catalog:",
     "viem": "catalog:",
     "vite": "catalog:",
-    "vitest": "5.0.5",
-    "vp": "catalog:",
-    "wagmi": "catalog:",
-    "zile": "^0.0.25",
-    "zod-v3": "npm:zod@3.25.76"
+    "vite-plus": "catalog:",
+    "zile": "catalog:"
   },
-  "simple-git-hooks": {
-    "pre-commit": "pnpm check"
+  "engines": {
+    "node": ">=24.21"
   },
-  "imports": {
-    "#*": "./src/*"
-  },
+  "packageManager": "pnpm@11.19.0",
   "[!start-pkg]": "",
   "name": "accounts",
-  "description": "Tempo Accounts SDK",
-  "type": "module",
   "version": "0.21.1",
+  "description": "Sign-in, sessions, and access keys for Tempo apps.",
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "sideEffects": [
+    "./dist/*.native.js",
+    "./dist/expo/index.js",
+    "./dist/plugins/index.native.js",
+    "./src/*.native.ts",
+    "./src/expo/index.ts",
+    "./src/plugins/index.native.ts"
+  ],
+  "exports": {
+    ".": {
+      "src": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "react-native": {
+        "types": "./dist/index.native.d.ts",
+        "default": "./dist/index.native.js"
+      },
+      "default": "./dist/index.js"
+    },
+    "./index.native": {
+      "src": "./src/index.native.ts",
+      "types": "./dist/index.native.d.ts",
+      "default": "./dist/index.native.js"
+    },
+    "./cloudflare": {
+      "src": "./src/cloudflare/index.ts",
+      "types": "./dist/cloudflare/index.d.ts",
+      "default": "./dist/cloudflare/index.js"
+    },
+    "./expo": {
+      "src": "./src/expo/index.ts",
+      "types": "./dist/expo/index.d.ts",
+      "default": "./dist/expo/index.js"
+    },
+    "./internal": {
+      "src": "./src/internal.ts",
+      "types": "./dist/internal.d.ts",
+      "default": "./dist/internal.js"
+    },
+    "./mpp": {
+      "src": "./src/mpp/index.ts",
+      "types": "./dist/mpp/index.d.ts",
+      "default": "./dist/mpp/index.js"
+    },
+    "./plugins": {
+      "src": "./src/plugins/index.ts",
+      "types": "./dist/plugins/index.d.ts",
+      "react-native": {
+        "types": "./dist/plugins/index.native.d.ts",
+        "default": "./dist/plugins/index.native.js"
+      },
+      "default": "./dist/plugins/index.js"
+    },
+    "./plugins.native": {
+      "src": "./src/plugins/index.native.ts",
+      "types": "./dist/plugins/index.native.d.ts",
+      "default": "./dist/plugins/index.native.js"
+    },
+    "./react": {
+      "src": "./src/react/index.ts",
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
+    "./wagmi": {
+      "src": "./src/wagmi/index.ts",
+      "types": "./dist/wagmi/index.d.ts",
+      "default": "./dist/wagmi/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!**/*.test.ts",
+    "CHANGELOG.md"
+  ],
   "dependencies": {
-    "hono": "catalog:",
-    "idb-keyval": "^6.2.2",
-    "jose": "^6.2.3",
-    "mipd": "^0.0.7",
-    "mppx": "catalog:",
-    "ox": "~0.14.59",
-    "wata": "0.4.2",
-    "webauthx": "~0.1.2",
-    "zod": "^4.6.7",
-    "zustand": "^5.0.12"
+    "jose": "catalog:",
+    "ox": "catalog:",
+    "xstate": "catalog:"
   },
   "peerDependencies": {
-    "@privy-io/react-auth": ">=3.25.0",
-    "@react-native-async-storage/async-storage": "^3.0.2",
-    "@wagmi/core": ">=3.4.3",
-    "expo-secure-store": "^55.0.12",
-    "expo-web-browser": "^55.0.13",
+    "@wagmi/core": "^3.6.7",
+    "expo-secure-store": ">=14",
+    "expo-web-browser": ">=14",
+    "mppx": ">=0.12",
     "react": ">=18",
-    "react-native-mmkv": "^4.3.1",
-    "react-native-nitro-modules": "^0.35.9",
-    "viem": ">=2.57.12",
-    "wagmi": ">=0.0.0"
+    "react-native-get-random-values": ">=1",
+    "viem": "^2.57.12"
   },
   "peerDependenciesMeta": {
-    "@privy-io/react-auth": {
-      "optional": true
-    },
     "@wagmi/core": {
-      "optional": true
-    },
-    "react": {
-      "optional": true
-    },
-    "viem": {
-      "optional": true
-    },
-    "expo-web-browser": {
       "optional": true
     },
     "expo-secure-store": {
       "optional": true
     },
-    "react-native-mmkv": {
+    "expo-web-browser": {
       "optional": true
     },
-    "react-native-nitro-modules": {
+    "mppx": {
       "optional": true
     },
-    "@react-native-async-storage/async-storage": {
+    "react": {
       "optional": true
     },
-    "wagmi": {
+    "react-native-get-random-values": {
       "optional": true
     }
   },
   "repository": {
-    "url": "https://github.com/tempoxyz/accounts"
+    "type": "git",
+    "url": "git+https://github.com/tempoxyz/accounts.git"
   },
-  "license": "MIT OR Apache-2.0",
-  "files": [
-    "dist",
-    "src",
-    "CHANGELOG.md"
-  ],
-  "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "src": "./src/index.ts",
-      "react-native": "./dist/index.js",
-      "default": "./dist/index.js"
-    },
-    "./server": {
-      "types": "./dist/server/index.d.ts",
-      "src": "./src/server/index.ts",
-      "default": "./dist/server/index.js"
-    },
-    "./cli": {
-      "types": "./dist/cli/index.d.ts",
-      "src": "./src/cli/index.ts",
-      "default": "./dist/cli/index.js"
-    },
-    "./react": {
-      "types": "./dist/react/index.d.ts",
-      "src": "./src/react/index.ts",
-      "default": "./dist/react/index.js"
-    },
-    "./react/privy": {
-      "types": "./dist/react/privy.d.ts",
-      "src": "./src/react/privy.ts",
-      "default": "./dist/react/privy.js"
-    },
-    "./wagmi": {
-      "types": "./dist/wagmi/index.d.ts",
-      "src": "./src/wagmi/index.ts",
-      "default": "./dist/wagmi/index.js"
-    },
-    "./deviceCode": {
-      "types": "./dist/core/adapters/deviceCode/index.d.ts",
-      "src": "./src/core/adapters/deviceCode/index.ts",
-      "react-native": "./dist/core/adapters/deviceCode/index.js",
-      "default": "./dist/core/adapters/deviceCode/index.js"
-    },
-    "./mobileWebAuth": {
-      "types": "./dist/core/adapters/mobileWebAuth/index.d.ts",
-      "src": "./src/core/adapters/mobileWebAuth/index.ts",
-      "react-native": "./dist/core/adapters/mobileWebAuth/index.js",
-      "default": "./dist/core/adapters/mobileWebAuth/index.js"
-    },
-    "./postMessage": {
-      "types": "./dist/core/adapters/postMessage/index.d.ts",
-      "src": "./src/core/adapters/postMessage/index.ts",
-      "react-native": "./dist/core/adapters/postMessage/index.js",
-      "default": "./dist/core/adapters/postMessage/index.js"
-    },
-    "./react-native/async-storage": {
-      "types": "./dist/react-native/asyncStorage.d.ts",
-      "src": "./src/react-native/asyncStorage.ts",
-      "react-native": "./dist/react-native/asyncStorage.js",
-      "default": "./dist/react-native/asyncStorage.js"
-    },
-    "./react-native/expo-web-browser": {
-      "types": "./dist/react-native/expoWebBrowser.d.ts",
-      "src": "./src/react-native/expoWebBrowser.ts",
-      "react-native": "./dist/react-native/expoWebBrowser.js",
-      "default": "./dist/react-native/expoWebBrowser.js"
-    },
-    "./react-native/expo-secure-store": {
-      "types": "./dist/react-native/expoSecureStore.d.ts",
-      "src": "./src/react-native/expoSecureStore.ts",
-      "react-native": "./dist/react-native/expoSecureStore.js",
-      "default": "./dist/react-native/expoSecureStore.js"
-    },
-    "./react-native/secure-mmkv": {
-      "types": "./dist/react-native/secureMmkv.d.ts",
-      "src": "./src/react-native/secureMmkv.ts",
-      "react-native": "./dist/react-native/secureMmkv.js",
-      "default": "./dist/react-native/secureMmkv.js"
-    }
-  }
+  "types": "./dist/index.d.ts"
 }

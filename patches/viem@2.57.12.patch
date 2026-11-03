@@ -1,0 +1,45 @@
+diff --git a/_esm/tempo/Abis.js b/_esm/tempo/Abis.js
+index 9e9a9354b6263217e0dd2949ec1181bad0e5c31d..e3a82ec94c37abe42c499ecaa7b35d77ee23fe02 100644
+--- a/_esm/tempo/Abis.js
++++ b/_esm/tempo/Abis.js
+@@ -9875,7 +9875,7 @@ export const directPropAmm = [
+         inputs: [{ name: 'token', type: 'address', internalType: 'address' }],
+     },
+ ];
+-export const core = [
++export const core = /* @__PURE__ */ (() => [
+     ...accountKeychain,
+     ...addressRegistry,
+     ...configurableAccount,
+@@ -9896,8 +9896,8 @@ export const core = [
+     ...zoneFactory,
+     ...zonePortal,
+     ...zoneVerifier,
+-];
+-export const earn = [
++])();
++export const earn = /* @__PURE__ */ (() => [
+     ...earnContributionController,
+     ...earnEngine,
+     ...earnEngineAsyncRedeem,
+@@ -9911,15 +9911,15 @@ export const earn = [
+     ...erc4626Engine,
+     ...erc4626EngineFactory,
+     ...vedaEngine,
+-];
+-export const zone = [
++])();
++export const zone = /* @__PURE__ */ (() => [
+     ...zoneInbox,
+     ...zoneMessenger,
+     ...zoneOutbox,
+     ...zonePortalPreT13Retired,
+-];
+-export const propAmm = [...directPropAmm];
+-export const all = [...core, ...earn, ...zone, ...propAmm];
++])();
++export const propAmm = /* @__PURE__ */ (() => [...directPropAmm])();
++export const all = /* @__PURE__ */ (() => [...core, ...earn, ...zone, ...propAmm])();
+ /** Deduplicated errors of `core`, for decoding reverts that bubble up across precompiles. */
+ export const coreErrors = [
+     { name: 'UnauthorizedCaller', type: 'error', inputs: [] },

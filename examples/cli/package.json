@@ -1,21 +1,18 @@
 {
-  "name": "cli-example",
+  "name": "example-cli",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "start": "node --import tsx cli.ts",
-    "check:types": "tsc -b --noEmit"
+    "check:types": "tsc",
+    "start": "tsx index.ts"
   },
   "dependencies": {
-    "accounts": "latest",
-    "incur": "latest",
-    "ox": "~0.14.18",
-    "viem": "latest"
+    "accounts": "^1.0.0-alpha.0",
+    "viem": "^2.57.12"
   },
   "devDependencies": {
-    "@types/node": "latest",
-    "tsx": "latest",
-    "typescript": "~5.9.3"
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

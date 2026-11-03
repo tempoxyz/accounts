@@ -1,16 +1,33 @@
 {
-  "name": "cli-playground",
+  "name": "@tempoxyz/example-id-cli",
+  "version": "0.0.2",
+  "description": "Signs in to Tempo through Tempo ID's device grant.",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "bin": {
+    "tempo": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tempoxyz/accounts.git",
+    "directory": "playgrounds/cli"
+  },
   "scripts": {
-    "dev": "node --import tsx index.ts",
-    "playground": "node --import tsx playground.ts",
-    "check:types": "tsc --noEmit"
+    "build": "tsc -p tsconfig.build.json",
+    "check:types": "tsc",
+    "prepack": "tsc -p tsconfig.build.json",
+    "start": "node --import tsx --env-file-if-exists=.env index.ts"
   },
   "dependencies": {
     "accounts": "workspace:*",
-    "incur": "latest",
+    "incur": "catalog:",
+    "mppx": "catalog:",
     "ox": "catalog:",
     "viem": "catalog:"
   },

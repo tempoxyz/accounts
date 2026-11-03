@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Tempo ID Mobile Example",
+    "slug": "tempo-id-example-mobile",
+    "scheme": "xyz.tempo.example.mobile",
+    "ios": { "bundleIdentifier": "xyz.tempo.example.mobile" },
+    "android": { "package": "xyz.tempo.example.mobile" }
+  }
+}
