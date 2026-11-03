@@ -5,11 +5,21 @@ import {
   http as viem_http,
   MethodNotFoundRpcError,
   parseUnits,
+  toFunctionSelector,
   type Address,
   type BaseError,
 } from 'viem'
+import { generatePrivateKey } from 'viem/accounts'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
-import { Actions, Addresses, Capabilities, Tick, Transaction, VirtualAddress } from 'viem/tempo'
+import {
+  Account,
+  Actions,
+  Addresses,
+  Capabilities,
+  Tick,
+  Transaction,
+  VirtualAddress,
+} from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
@@ -2270,5 +2280,165 @@ describe('behavior: mainnet autoSwap with USDC.e → PathUSD', () => {
 
     // Should NOT have requireFunds — autoSwap should handle it.
     expect((capabilities as Record<string, unknown>)?.requireFunds).toBeUndefined()
+  })
+})
+
+describe('behavior: sponsored fills and the fee-token balance', () => {
+  const sponsorToken = Addresses.pathUsd
+  // Holds AlphaUSD only, so a fee in pathUSD looks unaffordable to it.
+  const sender = Account.fromSecp256k1(generatePrivateKey())
+  const balanceSelector = toFunctionSelector('balanceOf(address)').slice(2)
+
+  beforeAll(async () => {
+    const rpc = getClient({ account: accounts[0]! })
+    await sendTransactionSync(rpc, {
+      feeToken: sponsorToken,
+      calls: [
+        Actions.token.mint.call({
+          token: addresses.alphaUsd,
+          amount: parseUnits('100', 6),
+          to: sender.address,
+        }),
+        Actions.token.approve.call({
+          token: sponsorToken,
+          spender: Addresses.stablecoinDex,
+          amount: parseUnits('100', 6),
+        }),
+      ],
+      throwOnReceiptRevert: true,
+    })
+    // A bid for AlphaUSD would let autoSwap buy the sender pathUSD.
+    await Actions.dex.createPairSync(rpc, { base: addresses.alphaUsd }).catch(() => {})
+    await Actions.dex.placeSync(rpc, {
+      token: addresses.alphaUsd,
+      amount: parseUnits('100', 6),
+      type: 'buy',
+      tick: Tick.fromPrice('0.999'),
+    })
+  })
+
+  /**
+   * Relays through a transport that records when each fill answers and when a `balanceOf` is
+   * read. `holdFill` keeps an unsponsored fill's answer back until a balance read starts, or 1 s
+   * passes.
+   */
+  async function serve(options: {
+    holdFill?: boolean | undefined
+    validate?: boolean | undefined
+  }) {
+    const upstream = http()({ chain, retryCount: 0 })
+    const events: string[] = []
+    const balance = Promise.withResolvers<void>()
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        feePayer: {
+          account: feePayerAccount,
+          feeToken: sponsorToken,
+          ...(options.validate === undefined ? {} : { validate: () => options.validate! }),
+        },
+        resolveTokens: () => localnetTokens,
+        transports: {
+          [chain.id]: custom({
+            async request({ method, params }) {
+              const data = (params as { data?: string }[] | undefined)?.[0]?.data ?? ''
+              if (method === 'eth_call' && data.includes(balanceSelector)) {
+                events.push('balance')
+                balance.resolve()
+              }
+              const result = await upstream.request({ method, params } as never)
+              if (method === 'eth_fillTransaction') {
+                const sponsored = (params as { feePayer?: boolean }[])[0]?.feePayer === true
+                if (options.holdFill && !sponsored)
+                  await Promise.race([
+                    balance.promise,
+                    new Promise((resolve) => setTimeout(resolve, 1_000)),
+                  ])
+                events.push(sponsored ? 'sponsored fill' : 'fill')
+              }
+              return result
+            },
+          }),
+        },
+      }).listener,
+    )
+    return { client: getClient({ transport: http(server.url) }), events, server }
+  }
+
+  for (const [name, validate] of [
+    ['no validate', undefined],
+    ['validate', true],
+  ] as const)
+    test(`behavior: keeps the calls and reads no balance after the fill (${name})`, async () => {
+      const { client, events, server } = await serve({ validate })
+      try {
+        const { capabilities, transaction } = await fillTransaction(client, {
+          account: sender.address,
+          calls: [transferCall()],
+        })
+        expect({
+          autoSwap: capabilities?.autoSwap,
+          balancesAfterFill: events
+            .slice(events.indexOf('sponsored fill'))
+            .filter((event) => event === 'balance').length,
+          calls: transaction.calls?.length,
+          feeToken: transaction.feeToken,
+          fills: events.filter((event) => event.endsWith('fill')),
+          signed: !!transaction.feePayerSignature,
+          sponsored: capabilities?.sponsored,
+        }).toMatchInlineSnapshot(`
+          {
+            "autoSwap": undefined,
+            "balancesAfterFill": 0,
+            "calls": 1,
+            "feeToken": "0x20c0000000000000000000000000000000000000",
+            "fills": [
+              "sponsored fill",
+            ],
+            "signed": true,
+            "sponsored": true,
+          }
+        `)
+      } finally {
+        server.close()
+      }
+    })
+
+  test('behavior: a rejected sponsorship still swaps for the fee token', async () => {
+    const { client, events, server } = await serve({ holdFill: true, validate: false })
+    try {
+      const { capabilities, transaction } = await fillTransaction(client, {
+        account: sender.address,
+        calls: [transferCall()],
+        feeToken: sponsorToken,
+      })
+      expect({
+        // The fee token was known before the fill, so its balance was read alongside it.
+        balanceBeforeFill: events.indexOf('balance') < events.indexOf('fill'),
+        calls: transaction.calls?.length,
+        fills: events.filter((event) => event.endsWith('fill')),
+        maxIn: capabilities?.autoSwap?.maxIn.token,
+        minOut: capabilities?.autoSwap?.minOut.token,
+        signed: !!transaction.feePayerSignature,
+        sponsored: capabilities?.sponsored,
+      }).toMatchInlineSnapshot(`
+        {
+          "balanceBeforeFill": true,
+          "calls": 3,
+          "fills": [
+            "sponsored fill",
+            "fill",
+            "fill",
+          ],
+          "maxIn": "0x20c0000000000000000000000000000000000001",
+          "minOut": "0x20c0000000000000000000000000000000000000",
+          "signed": false,
+          "sponsored": false,
+        }
+      `)
+    } finally {
+      server.close()
+    }
   })
 })
