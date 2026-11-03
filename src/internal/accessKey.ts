@@ -11,9 +11,7 @@ import type { WithAccount } from '../Permissions.js'
  * Returns the app's own access key: its Viem account, or an account of its `publicKey` that signs
  * nothing. Returns `undefined` for neither.
  */
-export function own(
-  accessKey: own.Options | undefined,
-): Account.Account | undefined {
+export function own(accessKey: own.Options | undefined): own.ReturnType {
   if (accessKey?.account) return accessKey.account
   if (!accessKey?.publicKey) return undefined
   return Account.from({
@@ -25,6 +23,8 @@ export function own(
 
 export declare namespace own {
   type Options = Pick<WithAccount, 'account' | 'publicKey' | 'type'>
+
+  type ReturnType = Account.Account | undefined
 }
 
 /**
