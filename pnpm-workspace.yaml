@@ -53,7 +53,7 @@ catalog:
   tsx: ^4.23.15
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: 0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26
+  viem: 0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf
   vite: npm:@voidzero-dev/vite-plus-core@~1.3.0
   vite-plus: ~1.3.0
   vp: npm:vite-plus@~1.3.0
@@ -160,7 +160,7 @@ overrides:
   esbuild: '0.28.1'
   # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname, scheme, and authority confusion.
   'fast-uri@>=3.0.0 <3.1.8': '3.1.9'
-  viem: 0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26
+  viem: 0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf
   file-type: '22.0.1'
   follow-redirects: '1.16.2'
   # GHSA-3g3m-2fjr-6pw4: glob abort bypass; only glob 14 is patched. glob 7 is outside the range.
