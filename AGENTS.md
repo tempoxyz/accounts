@@ -103,6 +103,8 @@
 
 - **Provider error codes survive viem action wrappers** -- viem's `sendTransaction` wraps a wallet's error in `TransactionExecutionError`, which has no code, so Ox reparses a `4001` rejection as `-32603`. `ProviderError.parse` runs at the Provider boundary and returns the first coded cause only when Ox recognizes it as an EIP-1193 provider error. Leave other wrapped errors, and uncoded errors that are not viem's, unchanged.
 
+- **Wallet-forwarding transports send each request once** -- viem's `custom` transport retries `-32603` and uncoded errors three times with backoff. viem's wallet actions pass `retryCount: 0` per request, but the provider's raw `client.request` calls (`eth_sendTransactionSync`, `wallet_authorizeAccessKey`, access-key revocation and updates) use the transport's setting, so an adapter transport that reaches a person must default `retryCount` to `0`. Keep explicit opt-ins such as the CLI's `retryCount`.
+
 - **Chain-bound clients answer `eth_chainId` locally** -- `Client.fromChainId` returns a configured chain's ID without a request, since viem asks for it before every send from a JSON-RPC account. Tests that prove a client's transport routing must use another method, such as `eth_blockNumber`.
 
 - **Resolve large ABIs once in request paths** -- viem's `decodeFunctionData` hashes each function selector until one matches, and ox's `AbiItem.fromAbi` hashes the signature on every call; against `Abis.tip20` that costs about 0.1-2 ms per call. Resolve items at module level and decode arguments with `decodeAbiParameters`.
@@ -112,6 +114,7 @@
 - **CI registry policy also applies to frozen installs** -- lockfile refreshes can select recently published transitive DevTools packages even when the direct tool is older. Retain compatible established dependency versions when updating the security-patched Vite toolchain.
 
 - **Fee-token balances do not prove FeeAMM eligibility** — transaction filling can succeed for tokens that pool admission rejects. For automatic selection, check reserves against the maximum fee, including quote-token routing, and exclude failed candidates even when they are the user's funded on-chain preference. Keep explicit fee-token choices and swap funding-source selection separate.
+- **Sponsored fills skip the sender's fee-token check** — the fee payer pays a sponsored fee, so the post-fill balance check (and its autoSwap into the fee token) applies only to fills without `feePayer`, including the refill after `validate` rejects. Read a fee token known before the fill alongside `eth_fillTransaction`. `InsufficientBalance` recovery for the calls' own tokens still applies to sponsored fills.
 - **Prefetch fee reserves with balance discovery** — overlap reserve reads with automatic unsponsored token discovery and reuse request-scoped balance/reserve promises across retries. Evaluate reserves against the filled maximum fee, and consume speculative errors only when the corresponding candidate or route is needed.
 
 - **Fill-transaction capabilities must survive request decoding** — `Provider` forwards decoded `eth_fillTransaction` parameters, so the transaction request schema must retain capabilities such as `errors` for relay recovery.
