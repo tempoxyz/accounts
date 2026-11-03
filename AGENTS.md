@@ -111,6 +111,8 @@
 
 - **Resolve large ABIs once in request paths** -- viem's `decodeFunctionData` hashes each function selector until one matches, and ox's `AbiItem.fromAbi` hashes the signature on every call; against `Abis.tip20` that costs about 0.1-2 ms per call. Resolve items at module level and decode arguments with `decodeAbiParameters`.
 
+- **Popups close when their request queue drains** -- holding a popup open for a chained request would skip a wallet cold boot (about 0.9 s), but the wallet's idle `/post-message` page renders nothing, so the held window is blank. Don't add a grace period unless the wallet first renders a held state in popup mode. Point apps at `wallet_connect` capabilities (`personalSign`, `authorizeAccessKey`) to combine sign-in with a signature or key in one approval.
+
 - **Node request-body cancellation must detach listeners** -- remove `IncomingMessage` data/end callbacks when the Web stream is canceled, and close unfinished uploads after the response finishes so later events cannot touch a closed controller or leave an upload open.
 
 - **CI registry policy also applies to frozen installs** -- lockfile refreshes can select recently published transitive DevTools packages even when the direct tool is older. Retain compatible established dependency versions when updating the security-patched Vite toolchain.
