@@ -1,0 +1,9 @@
+{
+  "compatibility_date": "2026-10-01",
+  "durable_objects": {
+    "bindings": [{ "class_name": "Values", "name": "VALUES" }]
+  },
+  "main": "worker.ts",
+  "migrations": [{ "new_sqlite_classes": ["Values"], "tag": "v1" }],
+  "name": "store"
+}
