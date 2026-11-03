@@ -96,14 +96,20 @@ jobs:
           policy: tempo-id
 
       # `test/id.ts` clones tempoxyz/id at `.tempo-id`, links its `accounts` to this repository, and
-      # installs it. Git reads the token from this step's environment only, so the clone keeps no
-      # credential.
+      # installs it. A branch of tempoxyz/id with this branch's name holds the paired change, so the
+      # clone takes it. Otherwise it takes the default ref of `test/id.ts`. Git reads the token from
+      # this step's environment only, so the clone keeps no credential.
       - name: Check out Tempo ID
         env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
           GIT_CONFIG_COUNT: 1
           GIT_CONFIG_KEY_0: url.https://x-access-token:${{ steps.sts.outputs.token }}@github.com/.insteadOf
           GIT_CONFIG_VALUE_0: https://github.com/
-        run: node test/id.ts
+        run: |
+          if git ls-remote --exit-code --heads https://github.com/tempoxyz/id "refs/heads/$BRANCH" > /dev/null; then
+            export TEMPO_ID_REF="$BRANCH"
+          fi
+          node test/id.ts
 
       # Global setup runs the Tempo API from `ghcr.io/tempoxyz/api-dev`, which is private.
       - name: Log in to GHCR
@@ -159,14 +165,20 @@ jobs:
           policy: tempo-id
 
       # `test/id.ts` clones tempoxyz/id at `.tempo-id`, links its `accounts` to this repository, and
-      # installs it. Git reads the token from this step's environment only, so the clone keeps no
-      # credential.
+      # installs it. A branch of tempoxyz/id with this branch's name holds the paired change, so the
+      # clone takes it. Otherwise it takes the default ref of `test/id.ts`. Git reads the token from
+      # this step's environment only, so the clone keeps no credential.
       - name: Check out Tempo ID
         env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
           GIT_CONFIG_COUNT: 1
           GIT_CONFIG_KEY_0: url.https://x-access-token:${{ steps.sts.outputs.token }}@github.com/.insteadOf
           GIT_CONFIG_VALUE_0: https://github.com/
-        run: node test/id.ts
+        run: |
+          if git ls-remote --exit-code --heads https://github.com/tempoxyz/id "refs/heads/$BRANCH" > /dev/null; then
+            export TEMPO_ID_REF="$BRANCH"
+          fi
+          node test/id.ts
 
       # Global setup runs the Tempo API from `ghcr.io/tempoxyz/api-dev`, which is private.
       - name: Log in to GHCR

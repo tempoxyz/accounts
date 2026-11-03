@@ -289,7 +289,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - Keep the playgrounds' names, client IDs, environment variables, ports, and page labels stable. `tempoxyz/id`'s seed and `test/Playgrounds.ts` depend on them.
 - `scripts/` holds the release script.
 - `test/` holds the fixtures of the integration and end-to-end suites, and `test/e2e/` the end-to-end specs. `test/fixtures/` holds the Workers that the integration tests run.
-- `.tempo-id` is the checkout of `tempoxyz/id`. Git ignores it. `TEMPO_ID_REF` selects its ref, and `TEMPO_ID_DIR` a local checkout.
+- `.tempo-id` is the checkout of `tempoxyz/id`. Git ignores it. `TEMPO_ID_REF` selects its ref, and `TEMPO_ID_DIR` a local checkout, such as `TEMPO_ID_DIR=../id pnpm test:integration`. In CI, a `tempoxyz/id` branch with the same name as this branch holds a paired change, and the suites run against it.
 
 ## Tooling
 
