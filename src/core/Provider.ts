@@ -34,6 +34,7 @@ import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import * as AddressUtil from './internal/address.js'
 import * as DialogError from './internal/DialogError.js'
 import * as MppxPolyfill from './internal/MppxPolyfill.js'
+import * as ProviderError from './internal/ProviderError.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Keystore from './Keystore.js'
 import * as Schema from './Schema.js'
@@ -1902,7 +1903,7 @@ export function create(options: create.Options = {}): create.ReturnType {
               id: Json.stringify({ method, params }),
             },
           ).catch((error) => {
-            throw DialogError.parse(error)
+            throw ProviderError.parse(DialogError.parse(error))
           })
         },
       },

@@ -27,7 +27,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
     name,
     rdns,
     request: requestRemote,
-    retryCount,
+    retryCount = 0,
   } = options
 
   return Adapter.define(
@@ -226,8 +226,11 @@ export declare namespace fromRequest {
     }) => Promise<unknown>
     /**
      * Max retries for a failed wallet request sent through viem's transport
-     * (e.g. signing, sending a transaction, or revoking an access key).
-     * Defaults to viem's transport default.
+     * (e.g. signing, sending a transaction, or revoking an access key). Each
+     * attempt asks the person to approve again, and a retry after an
+     * uncertain failure could send a second transaction, so requests are
+     * sent once by default.
+     * @default 0
      */
     retryCount?: number | undefined
   }

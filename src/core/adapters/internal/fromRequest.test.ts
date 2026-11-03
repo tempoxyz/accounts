@@ -1,4 +1,4 @@
-import { Hex } from 'ox'
+import { Hex, Provider as ox_Provider } from 'ox'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
@@ -10,8 +10,8 @@ import { fromRequest } from './fromRequest.js'
 const root = accounts[0]!
 const accessKey = accounts[1]!
 
-/** Connects a request-based adapter whose wallet rejects every access-key request. */
-async function connect(retryCount: number) {
+/** Connects a request-based adapter whose wallet rejects every request after connecting. */
+async function connect(retryCount?: number | undefined) {
   const requests: { context: unknown; method: string }[] = []
   const provider = Provider.create({
     adapter: fromRequest({
@@ -23,9 +23,10 @@ async function connect(retryCount: number) {
         requests.push({ context, method })
         throw new Error('request rejected')
       },
-      retryCount,
+      ...(retryCount !== undefined ? { retryCount } : {}),
     }),
     chains: [tempo, tempoModerato],
+    mpp: false,
     storage: Storage.memory(),
   })
   await provider.request({ method: 'wallet_connect' })
@@ -63,6 +64,13 @@ describe.each([
         },
       ]
     `)
+  })
+
+  test('behavior: sends a failed request once by default', async () => {
+    const { provider, requests } = await connect()
+
+    await expect(provider.request(request)).rejects.toThrow('request rejected')
+    expect(requests.map(({ method }) => method)).toEqual([request.method])
   })
 
   test('behavior: sends a failed request twice on the target chain with retryCount 1', async () => {
@@ -105,6 +113,22 @@ describe.each([
 })
 
 test.each([
+  {
+    method: 'eth_sendTransactionSync',
+    params: [{ calls: [{ to: accessKey.address }] }],
+  },
+  {
+    method: 'wallet_authorizeAccessKey',
+    params: [{ expiry: 9999999999, keyType: 'secp256k1' }],
+  },
+] as const)('$method: sends a failed wallet request once by default', async (request) => {
+  const { provider, requests } = await connect()
+
+  await expect(provider.request(request as never)).rejects.toThrow('request rejected')
+  expect(requests.map(({ method }) => method)).toEqual([request.method])
+})
+
+test.each([
   'eth_signTransaction',
   'eth_sendTransaction',
   'eth_sendTransactionSync',
@@ -126,4 +150,46 @@ test.each([
     }),
   ).rejects.toThrow('not found')
   expect(requests).toMatchInlineSnapshot(`[]`)
+})
+
+test.each([
+  { method: 'eth_sendTransaction', sync: undefined },
+  { method: 'eth_sendTransactionSync', sync: undefined },
+  { method: 'wallet_sendCalls', sync: false },
+  { method: 'wallet_sendCalls', sync: true },
+] as const)("$method (sync: $sync) preserves the wallet's user rejection", async (request) => {
+  const { method, sync } = request
+  const provider = Provider.create({
+    adapter: fromRequest({
+      name: 'Test',
+      rdns: 'xyz.tempo.test',
+      async request({ method }) {
+        if (method === 'wallet_connect')
+          return { accounts: [{ address: root.address, capabilities: {} }] }
+        throw new ox_Provider.UserRejectedRequestError()
+      },
+    }),
+    chains: [tempo, tempoModerato],
+    mpp: false,
+    storage: Storage.memory(),
+  })
+  await provider.request({ method: 'wallet_connect' })
+
+  const error = (await provider
+    .request({
+      method,
+      params: [
+        {
+          calls: [{ to: accessKey.address }],
+          ...(sync !== undefined ? { capabilities: { sync } } : {}),
+        },
+      ],
+    } as never)
+    .catch((error) => error)) as ox_Provider.ProviderRpcError
+  expect({ code: error.code, name: error.name }).toMatchInlineSnapshot(`
+    {
+      "code": 4001,
+      "name": "Provider.UserRejectedRequestError",
+    }
+  `)
 })
