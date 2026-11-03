@@ -19,7 +19,7 @@ import {
   zeroAddress,
 } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
-import { simulateCalls } from 'viem/actions'
+import { readContract, simulateCalls } from 'viem/actions'
 import { Abis, Actions, Addresses, Capabilities, Transaction, VirtualAddress } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 
@@ -233,6 +233,10 @@ export function relay(options: relay.Options = {}): Handler {
           // the transaction is calling — typically the token being
           // transferred — so a user transferring USDC.e can pay gas in
           // USDC.e even when the configured list defaults to pathUSD.
+          // An unsponsored fill checks its automatic fee token's liquidity, which needs the recent
+          // producers' fee tokens. When no sponsor is asked, load them alongside the token list.
+          const checksLiquidity = features.feeTokenResolution && !requestFeeToken
+          if (checksLiquidity && !requestsSponsorship) FeeLiquidity.prefetch(client, { kv })
           const configuredTokens = await getTokens(chainId)
           const unsponsoredTokens = [
             ...configuredTokens,
@@ -242,6 +246,8 @@ export function relay(options: relay.Options = {}): Handler {
           ]
 
           async function fillUnsponsored() {
+            // A rejected sponsorship starts here.
+            if (checksLiquidity) FeeLiquidity.prefetch(client, { kv })
             const excluded = new Set<string>()
             const balances = new Map<string, Promise<bigint>>()
             const liquidity = new Map<string, ReturnType<typeof FeeLiquidity.prepare>>()
@@ -276,12 +282,23 @@ export function relay(options: relay.Options = {}): Handler {
                   // Fee-token resolution already read these balances.
                   getBalance: (token) => balances.get(token.toLowerCase()),
                   kv,
-                  resolveFeeToken: resolveFeeTokenForSwap,
+                  // So does a swap's source token.
+                  resolveFeeToken: from
+                    ? (insufficientToken) =>
+                        resolveFeeToken(client, {
+                          account: from,
+                          balances,
+                          kv,
+                          tokens: configuredTokens.filter(
+                            (t) => t.toLowerCase() !== insufficientToken.toLowerCase(),
+                          ),
+                        })
+                    : undefined,
                   transaction: { ...normalized, chainId, ...(token ? { feeToken: token } : {}) },
                 })
                 // Estimation can succeed even when the fee AMM cannot settle
                 // the fee. Check the filled maximum fee before asking for a signature.
-                if (token && !requestFeeToken && features.feeTokenResolution) {
+                if (token && checksLiquidity) {
                   const { gas, maxFeePerGas } = result.transaction
                   if (
                     gas &&
@@ -827,13 +844,7 @@ async function fill(client: Client, options: fill.Options) {
   // without `feePayer` when it won't.
   const sender = autoSwap && !request.feePayer ? (request.from as Address | undefined) : undefined
   function getBalance(token: Address) {
-    return (
-      options.getBalance?.(token) ??
-      Actions.token
-        .getBalance(client, { account: sender!, token })
-        .then(({ amount }) => amount)
-        .catch(() => 0n)
-    )
+    return options.getBalance?.(token) ?? readBalance(client, { account: sender!, token })
   }
   // A fee token known before the fill is read alongside it.
   const balance_early =
@@ -960,6 +971,23 @@ declare namespace fill {
   }
 }
 
+/**
+ * Reads `account`'s balance of `token`, or `0n` when the read fails. `Actions.token.getBalance`
+ * would also read the token's decimals, which the relay doesn't use.
+ */
+function readBalance(client: Client, options: { account: Address; token: Address }) {
+  const { account, token } = options
+  return readContract(client, {
+    abi: [balanceOf],
+    address: token,
+    args: [account],
+    functionName: 'balanceOf',
+  }).catch(() => 0n)
+}
+
+/** TIP-20 `balanceOf`, resolved once rather than looked up in the TIP-20 ABI on every read. */
+const balanceOf = AbiFunction.fromAbi(Abis.tip20, 'balanceOf')
+
 async function resolveFeeToken(
   client: Client,
   options: resolveFeeToken.Options,
@@ -970,15 +998,15 @@ async function resolveFeeToken(
   const sender = account
 
   function getBalance(token: Address) {
-    options.prepareFeeToken?.(token)
     const key = token.toLowerCase()
     const pending = options.balances?.get(key)
     if (pending) return pending
-    const balance = Actions.token
-      .getBalance(client, { account: sender, token })
-      .then(({ amount }) => amount)
-      .catch(() => 0n)
+    const balance = readBalance(client, { account: sender, token })
     options.balances?.set(key, balance)
+    // Only a token the sender holds can pay the fee, so only its reserves are worth reading.
+    void balance.then((amount) => {
+      if (amount > 0n) options.prepareFeeToken?.(token)
+    })
     return balance
   }
 
@@ -1046,6 +1074,7 @@ declare namespace resolveFeeToken {
     tokens?: readonly Address[] | undefined
     excluded?: Set<string> | undefined
     balances?: Map<string, Promise<bigint>> | undefined
+    /** Starts reading the fee reserves of a token the sender holds. */
     prepareFeeToken?: ((token: Address) => void) | undefined
     /** TTL in seconds for the cached `userTokens` lookup. @default 60 */
     userTokenCacheTtl?: number | undefined
