@@ -26,5 +26,3 @@ worker-configuration.d.ts
 _TODO
 .pnpm-store
 .tempo-id
-playwright-report
-test-results

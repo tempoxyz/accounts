@@ -1,8 +1,0 @@
-# Allow the Verify workflow, on pull requests and on main, to mint a short-lived token that reads
-# tempoxyz/id. The integration and end-to-end jobs check it out at `.tempo-id`, and run the package
-# against its harness. The token only reads contents.
-subject_pattern: repo:tempoxyz@211589300/accounts@1178309114:(pull_request|ref:refs/heads/main)
-claim_pattern:
-  job_workflow_ref: tempoxyz/accounts/\.github/workflows/verify\.yml@.*
-permissions:
-  contents: read

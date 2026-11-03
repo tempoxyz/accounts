@@ -15,11 +15,7 @@ jobs:
     permissions:
       contents: read # to clone repository contents in the reusable workflow
       id-token: write # to initialize secure-runner in the reusable workflow
-      packages: read # to pull the Tempo API's private dev image in the reusable workflow
     uses: ./.github/workflows/verify.yml # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
-    secrets:
-      PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
-      PRIVY_JWT_PRIVATE_KEY: ${{ secrets.PRIVY_JWT_PRIVATE_KEY }}
 
   version:
     name: Version
