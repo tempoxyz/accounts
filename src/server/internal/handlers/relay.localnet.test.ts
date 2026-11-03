@@ -2000,6 +2000,98 @@ describe('behavior: multicall', () => {
   })
 })
 
+describe('behavior: cold caches', () => {
+  test('behavior: a sponsored fill with a known fee token does not wait for the token list', async () => {
+    const list = Promise.withResolvers<void>()
+    let loaded = false
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        feePayer: { account: feePayerAccount, feeToken: Addresses.pathUsd, validate: () => true },
+        resolveTokens: async () => {
+          await list.promise
+          loaded = true
+          return localnetTokens
+        },
+        transports: { [chain.id]: http() },
+      }).listener,
+    )
+    try {
+      const result = await Promise.race([
+        fillTransaction(getClient({ transport: http(server.url) }), {
+          account: userAccount.address,
+          calls: [transferCall()],
+        }),
+        new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 10_000)),
+      ])
+      expect({
+        loaded,
+        sponsored: result === 'timeout' ? result : result.capabilities?.sponsored,
+      }).toMatchInlineSnapshot(`
+        {
+          "loaded": false,
+          "sponsored": true,
+        }
+      `)
+    } finally {
+      list.resolve()
+      server.close()
+    }
+  })
+
+  test('behavior: listed tokens the simulation names need no metadata read', async () => {
+    const decimalsSelector = toFunctionSelector('decimals()').slice(2)
+    const upstream = http()({ chain, retryCount: 0 })
+    let reads = 0
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        resolveTokens: () => localnetTokens,
+        transports: {
+          [chain.id]: custom({
+            async request({ method, params }) {
+              const data = (params as { data?: string }[] | undefined)?.[0]?.data ?? ''
+              if (method === 'eth_call' && data.includes(decimalsSelector)) reads++
+              return await upstream.request({ method, params } as never)
+            },
+          }),
+        },
+      }).listener,
+    )
+    try {
+      const { capabilities } = await fillTransaction(getClient({ transport: http(server.url) }), {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+      expect({
+        diffs: findDiffs(capabilities?.balanceDiffs, userAccount.address)?.map(
+          ({ decimals, symbol }) => ({ decimals, symbol }),
+        ),
+        fee: { decimals: capabilities?.fee?.decimals, symbol: capabilities?.fee?.symbol },
+        reads,
+      }).toMatchInlineSnapshot(`
+        {
+          "diffs": [
+            {
+              "decimals": 6,
+              "symbol": "AlphaUSD",
+            },
+          ],
+          "fee": {
+            "decimals": 6,
+            "symbol": "AlphaUSD",
+          },
+          "reads": 0,
+        }
+      `)
+    } finally {
+      server.close()
+    }
+  })
+})
+
 describe('behavior: fee token resolution', () => {
   const feeTokenAccount = accounts[0]!
   const preferredToken = addresses.alphaUsd
