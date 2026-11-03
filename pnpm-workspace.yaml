@@ -144,9 +144,13 @@ strictDepBuilds: true
 trustPolicy: no-downgrade
 
 trustPolicyExclude:
+  # Expo 57 packages publish without the trusted-publisher evidence of earlier Expo releases.
+  - '@expo/*'
   - '@noble/curves@1.8.0'
   - '@noble/hashes@1.7.0'
+  - babel-preset-expo
   - chokidar@4.0.3
+  - 'expo-*'
   - jose@4.15.9
   - react-device-detect@2.2.3
   - semver@6.3.1
