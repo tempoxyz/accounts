@@ -105,11 +105,11 @@
 
 - **Wallet-forwarding transports send each request once** -- viem's `custom` transport retries `-32603` and uncoded errors three times with backoff. viem's wallet actions pass `retryCount: 0` per request, but the provider's raw `client.request` calls (`eth_sendTransactionSync`, `wallet_authorizeAccessKey`, access-key revocation and updates) use the transport's setting, so an adapter transport that reaches a person must default `retryCount` to `0`. Keep explicit opt-ins such as the CLI's `retryCount`.
 
-- **Popups close when their request queue drains** -- holding a popup open for a chained request would skip a wallet cold boot (about 0.9 s), but the wallet's idle `/post-message` page renders nothing, so the held window is blank. Don't add a grace period unless the wallet first renders a held state in popup mode. Point apps at `wallet_connect` capabilities (`personalSign`, `authorizeAccessKey`) to combine sign-in with a signature or key in one approval.
-
 - **Chain-bound clients answer `eth_chainId` locally** -- `Client.fromChainId` returns a configured chain's ID without a request, since viem asks for it before every send from a JSON-RPC account. Tests that prove a client's transport routing must use another method, such as `eth_blockNumber`.
 
 - **Resolve large ABIs once in request paths** -- viem's `decodeFunctionData` hashes each function selector until one matches, and ox's `AbiItem.fromAbi` hashes the signature on every call; against `Abis.tip20` that costs about 0.1-2 ms per call. Resolve items at module level and decode arguments with `decodeAbiParameters`.
+
+- **Popups close when their request queue drains** -- holding a popup open for a chained request would skip a wallet cold boot (about 0.9 s), but the wallet's idle `/post-message` page renders nothing, so the held window is blank. Don't add a grace period unless the wallet first renders a held state in popup mode. Point apps at `wallet_connect` capabilities (`personalSign`, `authorizeAccessKey`) to combine sign-in with a signature or key in one approval.
 
 - **Node request-body cancellation must detach listeners** -- remove `IncomingMessage` data/end callbacks when the Web stream is canceled, and close unfinished uploads after the response finishes so later events cannot touch a closed controller or leave an upload open.
 
