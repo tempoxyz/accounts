@@ -46,7 +46,7 @@ catalog:
   react-native-get-random-values: 1.11.0
   tsx: 4.23.15
   typescript: 7.0.2
-  viem: 2.57.12
+  viem: 2.57.16
   # Vite+ plugins and `vp dev` need Vite+'s core in place of Vite, as Void's Vite+ template sets.
   vite: npm:@voidzero-dev/vite-plus-core@1.3.0
   vite-plus: 1.3.0
@@ -66,9 +66,9 @@ catalogs:
     react: 19.2.3
 
 minimumReleaseAgeExclude:
-  # Viem 2.57.12 derives configurable account addresses from the initial config hash, and pins ox 0.14.59.
+  # Viem 2.57.16 derives configurable account addresses from the initial config hash, and pins ox 0.14.59.
   - ox@0.14.59
-  - viem@2.57.12
+  - viem@2.57.16
 
 overrides:
   # The examples name published ranges, so a copy installs as it is. In the workspace, each resolves to the
@@ -163,7 +163,7 @@ patchedDependencies:
   # viem builds its aggregate Tempo ABIs, such as `Abis.all`, with array spreads at module scope, which a
   # bundler keeps as possible side effects, so every ABI ships with any import of `Abis.js`. The patch
   # marks each aggregate pure, so a bundle keeps only the ABIs it reads.
-  viem@2.57.12: patches/viem@2.57.12.patch
+  viem@2.57.16: patches/viem@2.57.16.patch
   # zile's `Examples` module imports the classic `typescript` API, which TypeScript 7 does not ship. The
   # patch reads JSDoc ranges without it. It also adds `--project` to `publish:prepare`, which otherwise
   # compiles with `tsconfig.json`.
