@@ -101,6 +101,10 @@
 
 ## Learned Workspace Facts
 
+- **Chain-bound clients answer `eth_chainId` locally** -- `Client.fromChainId` returns a configured chain's ID without a request, since viem asks for it before every send from a JSON-RPC account. Tests that prove a client's transport routing must use another method, such as `eth_blockNumber`.
+
+- **Resolve large ABIs once in request paths** -- viem's `decodeFunctionData` hashes each function selector until one matches, and ox's `AbiItem.fromAbi` hashes the signature on every call; against `Abis.tip20` that costs about 0.1-2 ms per call. Resolve items at module level and decode arguments with `decodeAbiParameters`.
+
 - **Node request-body cancellation must detach listeners** -- remove `IncomingMessage` data/end callbacks when the Web stream is canceled, and close unfinished uploads after the response finishes so later events cannot touch a closed controller or leave an upload open.
 
 - **CI registry policy also applies to frozen installs** -- lockfile refreshes can select recently published transitive DevTools packages even when the direct tool is older. Retain compatible established dependency versions when updating the security-patched Vite toolchain.

@@ -219,13 +219,13 @@ describe('getMppxParameters', () => {
       chains: [tempo, tempoModerato],
       storage: Storage.memory(),
       transports: {
-        [tempoModerato.id]: custom({ request: async () => '0xa5bf' }),
+        [tempoModerato.id]: custom({ request: async () => '0x2a' }),
       },
     })
     provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     const client = await provider.getMppxParameters().getClient({ chainId: tempoModerato.id })
-    expect(await client.request({ method: 'eth_chainId' })).toBe('0xa5bf')
+    expect(await client.request({ method: 'eth_blockNumber' })).toBe('0x2a')
   })
 
   test('behavior: resolves existing access key for connected account', async () => {
