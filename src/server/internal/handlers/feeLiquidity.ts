@@ -102,10 +102,16 @@ async function getValidatorTokens(
   }
 
   // Producer preferences rarely change, and a stale entry only delays picking
-  // up a new producer's token until the cache expires.
+  // up a new producer's token until the cache reloads. Loading takes three
+  // sequential rounds (latest block, earlier blocks, preferences), so an
+  // expired entry keeps serving for up to 10 minutes while it reloads in the
+  // background instead of holding up a fill's liquidity check.
   const { kv } = options
   if (!kv) return load()
-  return cached(kv, `fee.validatorTokens:${client.chain?.id ?? 0}`, load, { ttl: 60 })
+  return cached(kv, `fee.validatorTokens:${client.chain?.id ?? 0}`, load, {
+    stale: 10 * 60,
+    ttl: 60,
+  })
 }
 
 /**
