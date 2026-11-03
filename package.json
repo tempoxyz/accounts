@@ -16,6 +16,7 @@
     "expo-secure-store": "catalog:",
     "expo-web-browser": "catalog:",
     "mppx": "catalog:",
+    "pkg-pr-new": "catalog:",
     "react": "catalog:",
     "react-native-get-random-values": "catalog:",
     "typescript": "catalog:",

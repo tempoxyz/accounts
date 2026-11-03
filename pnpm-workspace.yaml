@@ -40,6 +40,7 @@ catalog:
   jose: 6.2.12
   mppx: 0.12.0
   ox: 0.14.59
+  pkg-pr-new: 0.0.70
   react: 19.3.0
   react-dom: 19.3.0
   react-native: 0.86.3
@@ -119,6 +120,9 @@ overrides:
   'example-web>vite': 'catalog:examples'
   # oxfmt 0.51, which zile pins, depends on tinypool 2.1.0, which GHSA-85c8-ppgw-ccpr affects.
   oxfmt>tinypool: 2.2.0
+  # pkg-pr-new pins query-registry and url-join releases that the registry policy refuses.
+  'pkg-pr-new>query-registry': 4.3.0
+  'query-registry>url-join': 5.0.0
 
   undici@>=7.0.0 <7.30.1: 7.30.1
   zod@>=4.0.0 <4.6.6: 4.6.7
