@@ -180,7 +180,9 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         const account = getAccount({ address: options.address, signable: false })
         return {
           account: { address: account.address, type: 'json-rpc' as const },
-          transport: custom(provider),
+          // Every request reaches a person in the dialog, and a retry after an
+          // uncertain failure could send a second transaction.
+          transport: custom(provider, { retryCount: 0 }),
         }
       },
     }

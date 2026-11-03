@@ -817,6 +817,34 @@ async function fill(client: Client, options: fill.Options) {
     }
   }
 
+  // The node's `eth_fillTransaction` may pick a fee token the user
+  // doesn't yet hold (e.g. one this transaction will mint via a
+  // swap). Tempo's gas check runs before the calls execute, so the
+  // tx would revert at broadcast with `have 0 want N`. Check the sender's
+  // pre-tx balance against the computed gas cost. A sponsored fill's fee
+  // comes from the fee payer, so its sender's balance doesn't matter:
+  // the relay only returns one once the fee payer signs, and refills
+  // without `feePayer` when it won't.
+  const sender = autoSwap && !request.feePayer ? (request.from as Address | undefined) : undefined
+  function getBalance(token: Address) {
+    return (
+      options.getBalance?.(token) ??
+      Actions.token
+        .getBalance(client, { account: sender!, token })
+        .then(({ amount }) => amount)
+        .catch(() => 0n)
+    )
+  }
+  // A fee token known before the fill is read alongside it.
+  const balance_early =
+    sender && feeToken
+      ? {
+          balance: getBalance(feeToken),
+          metadata: resolveTokenMetadata(client, { token: feeToken, kv }).catch(() => undefined),
+          token: feeToken,
+        }
+      : undefined
+
   try {
     const formatted = format(request)
     const result = await client.request({
@@ -860,14 +888,8 @@ async function fill(client: Client, options: fill.Options) {
     // typed envelope built for sponsorship signing throws CallsEmptyError.
     const mergedTx = mergeCallsFromRequest(result.tx as Record<string, unknown>, request)
 
-    // The node's `eth_fillTransaction` may pick a fee token the user
-    // doesn't yet hold (e.g. one this transaction will mint via a
-    // swap). Tempo's gas check runs before the calls execute, so the
-    // tx would revert at broadcast with `have 0 want N`. Validate the
-    // sender's pre-tx balance against the computed gas cost and, if
-    // short, autoSwap a token they do hold into the fee token.
-    if (autoSwap && !swap) {
-      const fromAddress = request.from as Address | undefined
+    // If the sender is short, autoSwap a token they do hold into the fee token.
+    if (sender && !swap) {
       const resolvedFeeToken = ((mergedTx.feeToken as Address | undefined) ?? feeToken) as
         | Address
         | undefined
@@ -875,14 +897,15 @@ async function fill(client: Client, options: fill.Options) {
       const maxFeePerGas = mergedTx.maxFeePerGas
         ? BigInt(mergedTx.maxFeePerGas as `0x${string}`)
         : 0n
-      if (fromAddress && resolvedFeeToken && gas > 0n && maxFeePerGas > 0n) {
+      if (resolvedFeeToken && gas > 0n && maxFeePerGas > 0n) {
+        const early =
+          balance_early?.token.toLowerCase() === resolvedFeeToken.toLowerCase()
+            ? balance_early
+            : undefined
         const [balance, metadata] = await Promise.all([
-          options.getBalance?.(resolvedFeeToken) ??
-            Actions.token
-              .getBalance(client, { account: fromAddress, token: resolvedFeeToken })
-              .then(({ amount }) => amount)
-              .catch(() => 0n),
-          resolveTokenMetadata(client, { token: resolvedFeeToken, kv }).catch(() => undefined),
+          early?.balance ?? getBalance(resolvedFeeToken),
+          early?.metadata ??
+            resolveTokenMetadata(client, { token: resolvedFeeToken, kv }).catch(() => undefined),
         ])
         if (metadata) {
           const requiredFee =
@@ -926,7 +949,10 @@ declare namespace fill {
   type Options = {
     autoSwap?: { slippage: number } | undefined
     feeToken?: Address | undefined
-    /** The sender's balance of a token, when already read (e.g. during fee-token resolution). */
+    /**
+     * The sender's balance of a token, when already read (e.g. during fee-token resolution).
+     * Only unsponsored fills read it.
+     */
     getBalance?: ((token: Address) => Promise<bigint> | undefined) | undefined
     kv?: Kv.Kv | undefined
     resolveFeeToken?: ((insufficientToken: Address) => Promise<Address | undefined>) | undefined

@@ -10,8 +10,8 @@ import { fromRequest } from './fromRequest.js'
 const root = accounts[0]!
 const accessKey = accounts[1]!
 
-/** Connects a request-based adapter whose wallet rejects every access-key request. */
-async function connect(retryCount: number) {
+/** Connects a request-based adapter whose wallet rejects every request after connecting. */
+async function connect(retryCount?: number | undefined) {
   const requests: { context: unknown; method: string }[] = []
   const provider = Provider.create({
     adapter: fromRequest({
@@ -23,9 +23,10 @@ async function connect(retryCount: number) {
         requests.push({ context, method })
         throw new Error('request rejected')
       },
-      retryCount,
+      ...(retryCount !== undefined ? { retryCount } : {}),
     }),
     chains: [tempo, tempoModerato],
+    mpp: false,
     storage: Storage.memory(),
   })
   await provider.request({ method: 'wallet_connect' })
@@ -65,6 +66,13 @@ describe.each([
     `)
   })
 
+  test('behavior: sends a failed request once by default', async () => {
+    const { provider, requests } = await connect()
+
+    await expect(provider.request(request)).rejects.toThrow('request rejected')
+    expect(requests.map(({ method }) => method)).toEqual([request.method])
+  })
+
   test('behavior: sends a failed request twice on the target chain with retryCount 1', async () => {
     const { provider, requests } = await connect(1)
 
@@ -102,6 +110,22 @@ describe.each([
     )
     expect(requests).toEqual([])
   })
+})
+
+test.each([
+  {
+    method: 'eth_sendTransactionSync',
+    params: [{ calls: [{ to: accessKey.address }] }],
+  },
+  {
+    method: 'wallet_authorizeAccessKey',
+    params: [{ expiry: 9999999999, keyType: 'secp256k1' }],
+  },
+] as const)('$method: sends a failed wallet request once by default', async (request) => {
+  const { provider, requests } = await connect()
+
+  await expect(provider.request(request as never)).rejects.toThrow('request rejected')
+  expect(requests.map(({ method }) => method)).toEqual([request.method])
 })
 
 test.each([
