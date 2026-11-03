@@ -471,6 +471,8 @@ export function waiting(options: waiting.Options): waiting.ReturnType {
   document.body.appendChild(dialog)
   dialog.showModal()
 
+  // Whether the dialog closed. Without its own binding, the name is the read-only `window.closed`.
+  let closed = false
   return () => {
     if (closed) return
     closed = true
