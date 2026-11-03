@@ -90,7 +90,7 @@ Thrown by the `connect` of [`tempoId`](wagmi.tempoId.md) without `signIn` when e
 
 ### `AccessKey.AccessKeyRequiredError`
 
-Thrown by [`AccessKey.toAccount`](AccessKey.toAccount.md) for an access key without material and no `accessKey`.
+Thrown by [`AccessKey.toAccount`](AccessKey.toAccount.md) for an access key without material and no `accessKey`. The result's `accessKey` of an access key given by its [`publicKey`](types.md#publickey-optional) rejects each signature with it.
 
 ### `AccessToken.InvalidError`
 

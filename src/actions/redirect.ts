@@ -8,6 +8,7 @@ import type { Account } from 'viem/tempo'
 import { type Config, RequestError } from '../Id.js'
 import type { Authorization } from '../Authorization.js'
 import type * as Funding from '../Funding.js'
+import * as AccessKey from '../internal/accessKey.js'
 import * as Api from '../internal/api.js'
 import * as Callback from '../internal/callback.js'
 import * as DefaultStore from '../internal/defaultStore.js'
@@ -100,7 +101,7 @@ export function complete(
     if (ours && error) throw error
     if (!url.searchParams.has('code') || !stored) return undefined
     return finish({
-      accessKey: options.accessKey?.account,
+      accessKey: AccessKey.own(options.accessKey),
       body: await (ours && early
         ? early
         : redeem(auth, { pending: stored, url })),
@@ -117,7 +118,7 @@ export declare namespace complete {
      * The access key that the app passed to {@link start}, if any, of which only `account` is read,
      * to rebuild the app's own access key.
      */
-    accessKey?: Pick<WithAccount, 'account'> | undefined
+    accessKey?: AccessKey.own.Options | undefined
   }
 
   /**
@@ -212,7 +213,7 @@ export async function handleCallback<
   options: handleCallback.Options<pending>,
 ): Promise<handleCallback.ReturnType<pending>> {
   return finish({
-    accessKey: options.accessKey?.account,
+    accessKey: AccessKey.own(options.accessKey),
     body: await redeem(auth, {
       pending: options.pending,
       url: new URL(options.url),
@@ -229,7 +230,7 @@ export declare namespace handleCallback {
      * The access key that the app passed to `createUrl`, if any, of which only `account` is read,
      * to rebuild the app's own access key.
      */
-    accessKey?: Pick<WithAccount, 'account'> | undefined
+    accessKey?: AccessKey.own.Options | undefined
     /** What `createUrl` returned to keep. */
     pending: pending
     /** The callback URL that Tempo ID redirected to. */

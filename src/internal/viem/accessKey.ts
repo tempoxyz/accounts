@@ -165,7 +165,7 @@ async function revoke_remote(
 ): Promise<TransactionReceipt> {
   const { config, parameters } = options
   const accessKey = address(parameters.accessKey)
-  const receipt = await Actions.account.revokeKey(config, {
+  const receipt = await Actions.account.revokeAccessKey(config, {
     accessKey,
     account: account(client),
     chainId: parameters.chain?.id ?? client.chain.id,
@@ -175,7 +175,7 @@ async function revoke_remote(
 }
 
 /**
- * Sets the access key's limit of one token through Tempo ID's `Actions.account.updateKey`, and returns
+ * Sets the access key's limit of one token through Tempo ID's `Actions.account.updateAccessKey`, and returns
  * the receipt that its response holds.
  */
 async function updateLimit_remote(
@@ -184,7 +184,7 @@ async function updateLimit_remote(
 ): Promise<TransactionReceipt> {
   const { config, parameters } = options
   const { limit, token } = parameters
-  return await Actions.account.updateKey(config, {
+  return await Actions.account.updateAccessKey(config, {
     accessKey: address(parameters.accessKey),
     account: account(client),
     chainId: parameters.chain?.id ?? client.chain.id,

@@ -60,10 +60,10 @@ Each plugin comes from `accounts/plugins`, and adds the namespace of its name.
 The actions that every flow shares:
 
 - [`Actions.account.get`](Actions.account.get.md): Returns the user's Tempo Account for the app, with its realm.
-- [`Actions.account.revokeKey`](Actions.account.revokeKey.md): Revokes an access key of the user's account, with the user's cloud wallet.
+- [`Actions.account.revokeAccessKey`](Actions.account.revokeAccessKey.md): Revokes an access key of the user's account, with the user's cloud wallet.
 - [`Actions.account.signMessage`](Actions.account.signMessage.md): Signs a message as the user's configurable account, with the user's cloud wallet.
 - [`Actions.account.signTypedData`](Actions.account.signTypedData.md): Signs EIP-712 typed data as the user's configurable account, with the user's cloud wallet.
-- [`Actions.account.updateKey`](Actions.account.updateKey.md): Changes the limits or scopes of an access key of the user's account, with the user's cloud wallet, headlessly or on Tempo ID's approval page.
+- [`Actions.account.updateAccessKey`](Actions.account.updateAccessKey.md): Changes the limits or scopes of an access key of the user's account, with the user's cloud wallet, headlessly or on Tempo ID's approval page.
 - [`Actions.account.upgrade`](Actions.account.upgrade.md): Upgrades a wallet.tempo passkey's account from the app's page, and keeps its access key.
 - [`Actions.authorize`](Actions.authorize.md): Authorizes the app for a user already signed in.
 - [`Actions.fetch`](Actions.fetch.md): Sends a request with an access token, with a DPoP proof for a DPoP token.

@@ -200,7 +200,6 @@ function App() {
           </select>
         </label>
       </details>
-      {authorization.isPending ? <p>Checking the sign-in…</p> : null}
 
       {/* A refused sign-in shows its error beside the form, so the user can sign in again. */}
       {!authorization.isPending && !signedIn ? (

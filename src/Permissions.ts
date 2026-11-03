@@ -3,8 +3,9 @@
  * requests.
  * @module
  */
-import { Address, Value } from 'ox'
+import { Address, type Hex, Value } from 'ox'
 import type { KeyAuthorization } from 'ox/tempo'
+import type { OneOf } from 'viem'
 import { type Account, Addresses, Scopes, Selectors } from 'viem/tempo'
 import {
   tempo,
@@ -119,18 +120,31 @@ export type Permissions<chainId extends number = number> = {
 }
 
 /**
- * The access key of a low-level action: its {@link Permissions}, and the app's own access key as a
- * Viem account, in place of a new one.
+ * The access key of a low-level action: its {@link Permissions}, and the app's own access key in
+ * place of a new one, as a Viem account, or as its `publicKey` and `type` for an access key whose
+ * private key the page does not hold.
  */
 export type WithAccount<chainId extends number = number> =
-  Permissions<chainId> & {
-    /**
-     * The app's own access key, as a Viem account. Its `access` names the Tempo Account, which
-     * defaults to the app's selected account, or the user's oldest. Defaults to a new access key,
-     * whose material the authorization keeps.
-     */
-    account?: Account.Account | undefined
-  }
+  Permissions<chainId> &
+    OneOf<
+      | {
+          /**
+           * The app's own access key, as a Viem account. Its `access` names the Tempo Account, which
+           * defaults to the app's selected account, or the user's oldest. Defaults to a new access
+           * key, whose material the authorization keeps.
+           */
+          account?: Account.Account | undefined
+        }
+      | {
+          /**
+           * The public key of the app's own access key, with or without its `0x04` prefix. The
+           * result's `accessKey` rejects each signature with `AccessKey.AccessKeyRequiredError`.
+           */
+          publicKey: Hex.Hex
+          /** The signature type of the access key of `publicKey`. Defaults to `secp256k1`. */
+          type?: 'p256' | 'secp256k1' | undefined
+        }
+    >
 
 /**
  * The permissions that {@link resolve} returns, as the key authorization request sends them: Unix

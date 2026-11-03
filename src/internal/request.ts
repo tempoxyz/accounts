@@ -30,7 +30,7 @@ export async function authorizeUrl(
     throw new ChallengeWithoutKeyError()
   const redirectUri =
     options.redirectUri ?? auth.redirectUri ?? `${window.location.origin}/`
-  const key = accessKey ? await AccessKey.resolve(accessKey.account) : undefined
+  const key = accessKey ? await AccessKey.resolve(accessKey) : undefined
   const pending = Pending.from({
     ...(key ? key.material : { key: false }),
     chainId: auth.chainId,
@@ -189,7 +189,7 @@ export function keyAuthorization(
 
 export declare namespace keyAuthorization {
   /** What the access key may do, and the Viem account that signs with it. */
-  type AccessKey = Permissions.WithAccount & {
+  type AccessKey = Permissions.Permissions & {
     /** The access key that the request authorizes, the app's own or a new one. */
     account: Account.Account
   }

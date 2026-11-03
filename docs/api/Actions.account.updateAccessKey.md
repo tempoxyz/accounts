@@ -1,4 +1,4 @@
-# Actions.account.updateKey
+# Actions.account.updateAccessKey
 
 ## Overview
 
@@ -20,7 +20,7 @@ The first-party page changes any of the user's access keys, after the user appro
 ```ts
 import { Actions } from 'accounts'
 
-const receipt = await Actions.account.updateKey(config, {
+const receipt = await Actions.account.updateAccessKey(config, {
   accessKey: '0x9f10…',
   account: '0x7a3f…',
   chainId: 31318,
@@ -35,7 +35,7 @@ A third-party app sends the browser to the approval page:
 import { Actions } from 'accounts'
 import { Scopes } from 'viem/tempo'
 
-const { url } = await Actions.account.updateKey(config, {
+const { url } = await Actions.account.updateAccessKey(config, {
   accessKey: '0x9f10…',
   account: '0x7a3f…',
   chainId: 31318,
@@ -80,7 +80,7 @@ The access key's chain ID.
 The new remaining limits, one for each token that the access key's limits name, at most 32. `limit` is the amount of the TIP-20 `token` that the access key can still spend, in base units. Absent, every limit stays. An access key without a limit of a token spends it without a ceiling, so a change cannot add a limit.
 
 ```ts
-await Actions.account.updateKey(config, {
+await Actions.account.updateAccessKey(config, {
   accessKey: '0x9f10…',
   account: '0x7a3f…',
   chainId: 31318,
@@ -112,7 +112,7 @@ With `redirect`, one of the app's redirect URIs, which the approval page returns
 The calls that the access key can make after the change, as [`Id.create`](Id.create.md#permissions-optional)'s `permissions` name them. They replace the access key's scopes. Absent, the scopes stay.
 
 ```ts
-await Actions.account.updateKey(config, {
+await Actions.account.updateAccessKey(config, {
   accessKey: '0x9f10…',
   account: '0x7a3f…',
   chainId: 31318,

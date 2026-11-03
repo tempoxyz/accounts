@@ -87,7 +87,7 @@ export async function signIn<
 
   authenticated(auth)
   const { accessKey } = options
-  const key = accessKey ? await AccessKey.resolve(accessKey.account) : undefined
+  const key = accessKey ? await AccessKey.resolve(accessKey) : undefined
   const body = await Api.token(auth, {
     ...(challenge === undefined ? {} : { challenge }),
     code,

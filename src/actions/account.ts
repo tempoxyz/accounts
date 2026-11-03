@@ -139,7 +139,7 @@ export declare namespace get {
  *
  * @example
  * ```ts
- * const receipt = await Actions.account.revokeKey(auth, {
+ * const receipt = await Actions.account.revokeAccessKey(auth, {
  *   accessKey: session.key.keyAuthorization.keyId,
  *   accessToken: session.tokens.accessToken,
  *   account: session.key.account,
@@ -147,10 +147,10 @@ export declare namespace get {
  * })
  * ```
  */
-export async function revokeKey(
+export async function revokeAccessKey(
   auth: Config,
-  options: revokeKey.Options,
-): Promise<revokeKey.ReturnType> {
+  options: revokeAccessKey.Options,
+): Promise<revokeAccessKey.ReturnType> {
   const { accessKey, accessToken, account, chainId } = options
   const json = {
     account,
@@ -180,7 +180,7 @@ export async function revokeKey(
   return body.receipt ? formatTransactionReceipt(body.receipt) : null
 }
 
-export declare namespace revokeKey {
+export declare namespace revokeAccessKey {
   type Options = {
     /** The access key's address. */
     accessKey: `0x${string}`
@@ -356,14 +356,14 @@ export declare namespace signTypedData {
  *
  * @example
  * ```ts
- * const receipt = await Actions.account.updateKey(auth, {
+ * const receipt = await Actions.account.updateAccessKey(auth, {
  *   accessKey: '0x9f10…',
  *   account: tempoAccount.address,
  *   chainId: 31318,
  *   limits: [{ limit: 10_000_000n, token: '0x20c0…' }],
  * })
  *
- * const { url } = await Actions.account.updateKey(auth, {
+ * const { url } = await Actions.account.updateAccessKey(auth, {
  *   accessKey: session.key.keyAuthorization.keyId,
  *   account: session.key.account,
  *   chainId: 31318,
@@ -373,10 +373,10 @@ export declare namespace signTypedData {
  * window.location.assign(url)
  * ```
  */
-export async function updateKey<const redirect extends boolean = false>(
+export async function updateAccessKey<const redirect extends boolean = false>(
   auth: Config,
-  options: updateKey.Options<redirect>,
-): Promise<updateKey.ReturnType<redirect>> {
+  options: updateAccessKey.Options<redirect>,
+): Promise<updateAccessKey.ReturnType<redirect>> {
   const { accessKey, account, chainId } = options
   const change = {
     ...(options.limits
@@ -411,7 +411,7 @@ export async function updateKey<const redirect extends boolean = false>(
         url: true,
       }),
     }).toString()
-    return { url: url.href } as updateKey.ReturnType<redirect>
+    return { url: url.href } as updateAccessKey.ReturnType<redirect>
   }
 
   const body = await Api.json<{ receipt: RpcTransactionReceipt }>(
@@ -427,10 +427,10 @@ export async function updateKey<const redirect extends boolean = false>(
   )
   return formatTransactionReceipt(
     body.receipt,
-  ) as updateKey.ReturnType<redirect>
+  ) as updateAccessKey.ReturnType<redirect>
 }
 
-export declare namespace updateKey {
+export declare namespace updateAccessKey {
   type Options<redirect extends boolean = false> = {
     /** The access key's address. */
     accessKey: `0x${string}`
@@ -521,7 +521,7 @@ export async function upgrade(
     | { account: Api.TempoAccountResponse }
     | {
         step: {
-          key?: { digest: `0x${string}` } | undefined
+          accessKey?: { digest: `0x${string}` } | undefined
           options: Types.CredentialRequestOptions<true>
         }
       }
@@ -539,14 +539,14 @@ export async function upgrade(
   )
   // The access key signs its registration raw, and Tempo ID wraps the signature for the account.
   const signature =
-    step.key && signer
-      ? await signer.sign({ hash: step.key.digest, raw: true })
+    step.accessKey && signer
+      ? await signer.sign({ hash: step.accessKey.digest, raw: true })
       : undefined
   const upgraded = await Api.json<{ account: Api.TempoAccountResponse }>(
     await Api.post(auth, '/v1/account/upgrade', {
       json: {
         ...json,
-        ...(signature ? { key: { signature } } : {}),
+        ...(signature ? { accessKey: { signature } } : {}),
         passkey: { assertion },
       },
     }),

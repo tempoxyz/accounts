@@ -132,8 +132,11 @@ declare namespace accessToken {
 
 export declare namespace funding {
   type Options = {
-    /** `popup` or `redirect` for every `open`. Defaults to `popup`. */
-    mode?: 'popup' | 'redirect' | undefined
+    /**
+     * `frame`, `popup`, or `redirect` for every `open`, as `Actions.funding.open` takes it. Defaults
+     * to `frame`.
+     */
+    mode?: 'frame' | 'popup' | 'redirect' | undefined
     /**
      * The registered redirect URI that the deposit page returns to. Defaults to the instance's
      * `redirectUri`, or the page's origin with `/`.

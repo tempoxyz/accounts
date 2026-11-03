@@ -36,7 +36,7 @@ export async function authorize<const chainId extends number = number>(
   auth: Config,
   options: authorize.Options<chainId>,
 ): Promise<authorize.ReturnType<chainId>> {
-  const key = await AccessKey.resolve(options.accessKey.account)
+  const key = await AccessKey.resolve(options.accessKey)
   // The device authorization request (RFC 8628 §3.1), with the access key as base64url JSON.
   const code = await Api.json<{
     device_code: string

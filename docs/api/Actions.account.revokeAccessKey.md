@@ -1,4 +1,4 @@
-# Actions.account.revokeKey
+# Actions.account.revokeAccessKey
 
 ## Overview
 
@@ -20,7 +20,7 @@ With `accessToken`, the revocation needs no approval and no recent sign-in, sinc
 ```ts
 import { Actions } from 'accounts'
 
-const receipt = await Actions.account.revokeKey(config, {
+const receipt = await Actions.account.revokeAccessKey(config, {
   accessKey: '0x9f10…',
   account: '0x7a3f…',
   chainId: 31318,
@@ -33,7 +33,7 @@ A third-party app revokes its own access key with its access token:
 ```ts
 import { Actions } from 'accounts'
 
-const receipt = await Actions.account.revokeKey(config, {
+const receipt = await Actions.account.revokeAccessKey(config, {
   accessKey: session.key.keyAuthorization.keyId,
   accessToken: session.tokens.accessToken,
   account: session.key.account,
@@ -56,7 +56,7 @@ Viem's receipt of the revoking transaction, or `null` when the chain held the ac
 The access key's address. Tempo ID must have signed the access key for the user.
 
 ```ts
-await Actions.account.revokeKey(config, {
+await Actions.account.revokeAccessKey(config, {
   accessKey: '0x9f10…',
   account: '0x7a3f…',
   chainId: 31318,
@@ -70,7 +70,7 @@ await Actions.account.revokeKey(config, {
 The app's access token, from a sign-in or a refresh, which authenticates the revocation of the app's own access key without the session cookie. The request sends it as a Bearer token, or as a DPoP token with a proof from the instance's `dpop` key.
 
 ```ts
-await Actions.account.revokeKey(config, {
+await Actions.account.revokeAccessKey(config, {
   accessKey: '0x9f10…',
   accessToken: tokens.accessToken,
   account: '0x7a3f…',
@@ -85,7 +85,7 @@ await Actions.account.revokeKey(config, {
 The address of the user's Tempo Account that the access key acts for.
 
 ```ts
-await Actions.account.revokeKey(config, {
+await Actions.account.revokeAccessKey(config, {
   accessKey: '0x9f10…',
   account: '0x7a3f…',
   chainId: 31318,
@@ -99,7 +99,7 @@ await Actions.account.revokeKey(config, {
 The access key's chain ID.
 
 ```ts
-await Actions.account.revokeKey(config, {
+await Actions.account.revokeAccessKey(config, {
   accessKey: '0x9f10…',
   account: '0x7a3f…',
   chainId: 4217,

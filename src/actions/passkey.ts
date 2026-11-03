@@ -281,7 +281,9 @@ export async function register(
       assertion,
       ...(chain !== undefined ? { chain } : {}),
       ...(prepared.proof ? { credential } : {}),
-      ...(key ? { key: { account: key.account, chainId: key.chainId } } : {}),
+      ...(key
+        ? { accessKey: { account: key.account, chainId: key.chainId } }
+        : {}),
     },
   })
   try {

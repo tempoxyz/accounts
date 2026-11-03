@@ -135,7 +135,7 @@ const tempoId = Id.create({
 
 ### Develop on localhost
 
-A deployment for local development, such as `pnpm dev`, accepts the page's localhost origin as its client ID, with no registration. The browser returns to any path on that origin, on the same port, such as `/auth/callback`.
+`id.tempo.xyz` and a deployment for local development, such as `pnpm dev`, accept the page's localhost origin as its client ID, such as `http://localhost:5173` or `https://app.localhost`, with no registration. The browser returns to any path on that origin, on the same port, such as `/auth/callback`.
 
 ```ts
 const tempoId = Id.create({
@@ -144,7 +144,7 @@ const tempoId = Id.create({
 })
 ```
 
-`id.tempo.xyz` refuses a localhost origin with [`localhost_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#localhost_not_permitted), as [Localhost origins](https://github.com/tempoxyz/id/blob/main/docs/apps.md#localhost-origins) describes.
+A deployment without `LOCALHOST_CLIENT_IDS` refuses a localhost origin with [`localhost_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#localhost_not_permitted), as [Localhost origins](https://github.com/tempoxyz/id/blob/main/docs/apps.md#localhost-origins) describes.
 
 ## Learn more
 

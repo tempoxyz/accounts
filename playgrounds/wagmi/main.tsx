@@ -399,11 +399,10 @@ function App() {
           {connection.status}
         </span>
       </p>
-      {checking ? (
+      {sessionStatus.status === 'reauthorizing' ? (
         <p aria-live="polite">
-          {sessionStatus.status === 'reauthorizing'
-            ? `Signed in as ${sessionStatus.session.user.email}. Renewing your access key…`
-            : 'Checking your Tempo session…'}
+          Signed in as {sessionStatus.session.user.email}. Renewing your access
+          key…
         </p>
       ) : null}
       {connecting ? (

@@ -36,9 +36,7 @@ export async function authorize(
   const { accessKey, challenge, getFn } = options
   // The user is signed in already, so every failure from here on, access key generation included, is marked.
   try {
-    const key = accessKey
-      ? await AccessKey.resolve(accessKey.account)
-      : undefined
+    const key = accessKey ? await AccessKey.resolve(accessKey) : undefined
     if (key)
       await Api.json(
         await Api.post(auth, '/v1/account', {
@@ -148,7 +146,7 @@ export declare namespace complete {
  */
 export async function prepare(auth: Config, options: prepare.Options) {
   const { accessKey } = options
-  const key = accessKey ? await AccessKey.resolve(accessKey.account) : undefined
+  const key = accessKey ? await AccessKey.resolve(accessKey) : undefined
   return {
     authorize: request(auth, {
       accessKey: key && accessKey && { ...accessKey, account: key.accessKey },

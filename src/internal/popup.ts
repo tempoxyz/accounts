@@ -88,3 +88,13 @@ export declare namespace watchPopup {
     origin: string
   }
 }
+
+/**
+ * Returns whether the page runs on iOS or iPadOS, whose deposit page opens in a popup in place of a
+ * frame. iPadOS Safari reports a Mac, so a Mac with a touch screen counts as an iPad.
+ */
+export function apple() {
+  const agent = navigator.userAgent
+  if (/iPad|iPhone|iPod/.test(agent)) return true
+  return /Macintosh/.test(agent) && navigator.maxTouchPoints > 1
+}

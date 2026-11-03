@@ -471,7 +471,6 @@ export function waiting(options: waiting.Options): waiting.ReturnType {
   document.body.appendChild(dialog)
   dialog.showModal()
 
-  let closed = false
   return () => {
     if (closed) return
     closed = true
@@ -492,6 +491,134 @@ export declare namespace waiting {
     onCancel: () => void
     /** The popup window that the user continues in. */
     popup: Window
+  }
+
+  /** Closes the dialog, after its exit. Later calls do nothing. */
+  type ReturnType = () => void
+}
+
+/**
+ * Shows the dialog with a frame of Tempo ID's deposit pages at `options.url`, for a first-party
+ * app's `funding.open` in `frame` mode. The frame's page reports that it loaded, its height, and the
+ * return to the app, each from Tempo ID's origin. A frame that loads without that report, such as
+ * one that Tempo ID refuses to frame, or the sign-in page without a session, shows the offer of a
+ * popup, which opens from the user's click. Returns the function that closes the dialog, after its
+ * exit.
+ */
+export function frame(options: frame.Options): frame.ReturnType {
+  const { onCallback, onCancel, onPopup, origin } = options
+
+  adopt()
+
+  const dialog = document.createElement('dialog')
+  dialog.setAttribute(attribute, '')
+  dialog.setAttribute('aria-label', 'Add funds with Tempo')
+
+  const element = document.createElement('iframe')
+  // Apple Pay and Google Pay need the `payment` permission in a frame, and their sheets open popups
+  // from the frame's own clicks. The frame runs third-party scripts and nests the card issuer's page,
+  // so it may never navigate this page.
+  element.setAttribute('allow', 'payment')
+  element.setAttribute(
+    'sandbox',
+    'allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts',
+  )
+  element.setAttribute('title', 'Tempo ID')
+  element.style.height = '420px'
+  element.src = options.url
+
+  // Whether the frame's current document reported that it shows a deposit page. Each document reports
+  // as it parses, before its `load`, which resets the report for the next document.
+  let shown = false
+  let closed = false
+  const listener = (event: MessageEvent) => {
+    if (event.origin !== origin || event.source !== element.contentWindow)
+      return
+    const data = event.data as {
+      height?: unknown
+      type?: unknown
+      url?: unknown
+    } | null
+    if (data?.type === 'tempo-id:frame.open') shown = true
+    else if (
+      data?.type === 'tempo-id:frame.resize' &&
+      typeof data.height === 'number'
+    )
+      element.style.height = `${Math.max(0, Math.ceil(data.height))}px`
+    else if (
+      data?.type === 'tempo-id:frame.callback' &&
+      typeof data.url === 'string'
+    )
+      onCallback(data.url)
+  }
+  window.addEventListener('message', listener)
+
+  // A document that fires `load` without the report shows no deposit page, such as the sign-in page
+  // after the session ends, which Tempo ID refuses to frame.
+  element.addEventListener('load', () => {
+    const reported = shown
+    shown = false
+    if (reported || closed) return
+    const panel = document.createElement('div')
+    panel.setAttribute('data-panel', '')
+    const text = document.createElement('p')
+    text.setAttribute('aria-live', 'polite')
+    text.textContent = 'Continue in a Tempo ID window to add funds.'
+    const primary = document.createElement('button')
+    primary.setAttribute('data-primary', '')
+    primary.type = 'button'
+    primary.textContent = 'Continue'
+    const cancel = document.createElement('button')
+    cancel.type = 'button'
+    cancel.textContent = 'Cancel'
+    primary.addEventListener('click', () => onPopup())
+    cancel.addEventListener('click', () => onCancel())
+    panel.appendChild(text)
+    panel.appendChild(primary)
+    panel.appendChild(cancel)
+    element.replaceWith(panel)
+  })
+
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault()
+    onCancel()
+  })
+  // A click on the backdrop targets the dialog itself, outside its content.
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) onCancel()
+  })
+
+  dialog.appendChild(element)
+  document.body.appendChild(dialog)
+  dialog.showModal()
+
+  return () => {
+    if (closed) return
+    closed = true
+    window.removeEventListener('message', listener)
+    const remove = () => {
+      dialog.close()
+      dialog.remove()
+    }
+    if (!motion()) return remove()
+    dialog.inert = true
+    dialog.setAttribute('data-closing', '')
+    setTimeout(remove, SheetMachine.exit)
+  }
+}
+
+export declare namespace frame {
+  type Options = {
+    /** Runs with the return to the app: the redirect URI with `deposit_status`. */
+    onCallback: (url: string) => void
+    /** Runs when the user selects Cancel, presses Escape, or clicks the backdrop. */
+    onCancel: () => void
+    /** Runs in the click of Continue, when the frame shows no deposit page, so a popup can open. */
+    onPopup: () => void
+    /** Tempo ID's origin, whose page in the frame posts the messages. */
+    origin: string
+    /** The deposit page's URL, with `display=frame`. */
+    url: string
   }
 
   /** Closes the dialog, after its exit. Later calls do nothing. */

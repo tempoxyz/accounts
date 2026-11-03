@@ -321,6 +321,26 @@ const authorization = await Actions.authorize(config, {
 
 The app's own access key, as a Viem account. Its `access` names the Tempo Account, which defaults to the app's selected account, or the user's oldest. [`AccessKey.toAccount`](AccessKey.toAccount.md#accesskey-optional) takes the same account as its own `accessKey` option, since the stored access key then carries no material.
 
+#### publicKey (optional)
+
+- **Type:** `Hex`
+
+In place of `account`, the public key of the app's own access key, with or without its `0x04` prefix, for an access key whose private key the page does not hold, such as one on the app's server. The result's `accessKey` has the access key's address, and rejects each signature with [`AccessKey.AccessKeyRequiredError`](errors.md#accesskeyaccesskeyrequirederror).
+
+```ts
+const authorization = await Actions.dialog.signIn(config, {
+  accessKey: { limits: [{ limit: '10', token: 'ousd' }], publicKey },
+})
+// The app's server verifies and uses `authorization.key.keyAuthorization`.
+```
+
+#### type (optional)
+
+- **Type:** `'p256' | 'secp256k1'`
+- **Default:** `'secp256k1'`
+
+The signature type of the access key of `publicKey`. Only with `publicKey`.
+
 ## Session
 
 `Session.Session` is the session of a signed-in user, which an instance holds and saves to its store, and each sign-in of a plugin returns. It holds the [`Tokens.Tokens`](#tokens), the user, the app's access key as data, and the user's Tempo Account. [`Session.expired`](Session.expired.md) reports an access key past its expiry.

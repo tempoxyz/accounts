@@ -2,18 +2,40 @@
  * Resolves the access key that a sign-in authorizes: the app's own, or a new one.
  * @module
  */
-import { WebCryptoP256 } from 'ox'
+import { PublicKey, WebCryptoP256 } from 'ox'
 import { Account, Secp256k1 } from 'viem/tempo'
-import type * as AccessKey from '../AccessKey.js'
+import * as AccessKey from '../AccessKey.js'
+import type { WithAccount } from '../Permissions.js'
 
 /**
- * Returns the app's access key, or creates one: a non-extractable `CryptoKey` in a browser, or else a
- * secp256k1 access key.
+ * Returns the app's own access key: its Viem account, or an account of its `publicKey` that signs
+ * nothing. Returns `undefined` for neither.
+ */
+export function own(
+  accessKey: own.Options | undefined,
+): Account.Account | undefined {
+  if (accessKey?.account) return accessKey.account
+  if (!accessKey?.publicKey) return undefined
+  return Account.from({
+    keyType: accessKey.type ?? 'secp256k1',
+    publicKey: PublicKey.fromHex(accessKey.publicKey),
+    sign: () => Promise.reject(new AccessKey.AccessKeyRequiredError()),
+  })
+}
+
+export declare namespace own {
+  type Options = Pick<WithAccount, 'account' | 'publicKey' | 'type'>
+}
+
+/**
+ * Returns the app's own access key, or creates one: a non-extractable `CryptoKey` in a browser, or
+ * else a secp256k1 access key.
  */
 export async function resolve(
-  accessKey: Account.Account | undefined,
+  accessKey: own.Options | undefined,
 ): Promise<resolve.ReturnType> {
-  if (accessKey) return { accessKey, material: {} }
+  const account = own(accessKey)
+  if (account) return { accessKey: account, material: {} }
 
   if (typeof indexedDB !== 'undefined') {
     const keyPair = await WebCryptoP256.createKeyPair()

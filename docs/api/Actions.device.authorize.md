@@ -67,7 +67,7 @@ Polls every 5 seconds, as Tempo ID sets, and adds 5 seconds after each `slow_dow
 
 What the access key may do, and the app's own access key as `account`. The grant always authorizes an access key, so the call names its `limits` and `scopes`, or Tempo ID refuses it with [`missing_permissions`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#missing_permissions). The action sends the fields as given. Without `expiry`, Tempo ID fills the [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry). The user approves the access key on the device page, so it may exceed the headless ceiling.
 
-`account` is the app's own access key, as an `Account.Account` from `viem/tempo`. Its `access` names the Tempo Account, which defaults to the one that the user selects at sign-in, or the user's oldest. It defaults to a new access key: WebCrypto P256 in a browser, secp256k1 elsewhere.
+`account` is the app's own access key, as an `Account.Account` from `viem/tempo`. Its `access` names the Tempo Account, which defaults to the one that the user selects at sign-in, or the user's oldest. It defaults to a new access key: WebCrypto P256 in a browser, secp256k1 elsewhere. Without `account`, `publicKey` and `type` name an access key whose private key the page does not hold, such as one on the app's server, and `type` defaults to `secp256k1`. The result's `accessKey` then rejects each signature with `AccessKey.AccessKeyRequiredError`.
 
 ```ts
 const device = await Actions.device.authorize(config, {

@@ -24,9 +24,9 @@ const authorization =
 
 ### accessKey (optional)
 
-- **Type:** `{ account?: Account.Account }`, a `Pick` of [`Permissions.WithAccount`](types.md#permissionswithaccount)
+- **Type:** `{ account?: Account.Account; publicKey?: Hex; type?: 'p256' | 'secp256k1' }`, a `Pick` of [`Permissions.WithAccount`](types.md#permissionswithaccount)
 
-The `accessKey` that the app passed to `redirect.start`, if any. The action reads only its `account`, the app's own access key as an `Account.Account` from `viem/tempo`, to rebuild that access key. Pass the same object that `redirect.start` received.
+The `accessKey` that the app passed to `redirect.start`, if any. The action reads only its `account`, or its `publicKey` and `type`, to rebuild that access key. Pass the same object that `redirect.start` received.
 
 ```ts
 const authorization = await Actions.redirect.complete(config, { accessKey })

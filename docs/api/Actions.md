@@ -28,7 +28,7 @@ The instance and its plugins call these actions, and keep the session. An app ca
 | `tempoId.backend.start`, `complete`    | [`Actions.redirect.createUrl`](Actions.redirect.createUrl.md) and [`Actions.redirect.handleCallback`](Actions.redirect.handleCallback.md)                                                                       |
 | `tempoId.backend.fetch`                | [`Actions.fetch`](Actions.fetch.md)                                                                                                                                                                             |
 | `tempoId.viem`, message signatures     | [`Actions.account.signMessage`](Actions.account.signMessage.md) and [`Actions.account.signTypedData`](Actions.account.signTypedData.md)                                                                         |
-| `tempoId.accessKey`                    | [`Actions.account.revokeKey`](Actions.account.revokeKey.md) and [`Actions.account.updateKey`](Actions.account.updateKey.md)                                                                                     |
+| `tempoId.accessKey`                    | [`Actions.account.revokeAccessKey`](Actions.account.revokeAccessKey.md) and [`Actions.account.updateAccessKey`](Actions.account.updateAccessKey.md)                                                             |
 
 The actions without an instance member:
 

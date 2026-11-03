@@ -60,7 +60,7 @@ await tempoId
 
 - **Type:** `{ revoke; revokeSync; updateLimit; updateLimitSync }`
 
-Viem's `accessKey` actions that change an access key, through Tempo ID with the account's owner, as [`Actions.account.revokeKey`](Actions.account.revokeKey.md) and [`Actions.account.updateKey`](Actions.account.updateKey.md) describe. Each returns what Viem's own action returns. They need the app's `tempo-id:sign` scope, an access key that Tempo ID signed for the user, and a sign-in within the last 10 minutes. An access key that the chain has not registered registers with the new limit. With an `account` in the parameters, such as the account's root key, each is Viem's own action.
+Viem's `accessKey` actions that change an access key, through Tempo ID with the account's owner, as [`Actions.account.revokeAccessKey`](Actions.account.revokeAccessKey.md) and [`Actions.account.updateAccessKey`](Actions.account.updateAccessKey.md) describe. Each returns what Viem's own action returns. They need the app's `tempo-id:sign` scope, an access key that Tempo ID signed for the user, and a sign-in within the last 10 minutes. An access key that the chain has not registered registers with the new limit. With an `account` in the parameters, such as the account's root key, each is Viem's own action.
 
 ```ts
 await tempoId.accessKey.updateLimitSync({
@@ -202,4 +202,4 @@ Thrown by `accessKey.revoke` and `accessKey.revokeSync` without `account` for an
 
 ### `Id.RequestError`
 
-Thrown when Tempo ID refuses a signature or an access key change, as [`Actions.account.signMessage`](Actions.account.signMessage.md#errors), [`Actions.account.revokeKey`](Actions.account.revokeKey.md#errors), and [`Actions.account.updateKey`](Actions.account.updateKey.md#errors) list.
+Thrown when Tempo ID refuses a signature or an access key change, as [`Actions.account.signMessage`](Actions.account.signMessage.md#errors), [`Actions.account.revokeAccessKey`](Actions.account.revokeAccessKey.md#errors), and [`Actions.account.updateAccessKey`](Actions.account.updateAccessKey.md#errors) list.

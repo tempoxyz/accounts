@@ -53,7 +53,7 @@ button.addEventListener('click', async () => {
 
 What the access key may do, which requests the access key, and the app's own access key as `account`. Without it, the sign-in authorizes no access key, and takes no `challenge`. The access key names its `limits` and `scopes`. Without `expiry`, Tempo ID fills the [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry). In `iframe` mode, an access key above the headless ceiling falls back to the popup, whose approval page shows it.
 
-`account` is the app's own access key, as an `Account.Account` from `viem/tempo`. Its `access` names the Tempo Account, which defaults to the one that the user selects at sign-in, or the user's oldest. It defaults to a new access key: WebCrypto P256 in a browser, secp256k1 elsewhere.
+`account` is the app's own access key, as an `Account.Account` from `viem/tempo`. Its `access` names the Tempo Account, which defaults to the one that the user selects at sign-in, or the user's oldest. It defaults to a new access key: WebCrypto P256 in a browser, secp256k1 elsewhere. Without `account`, `publicKey` and `type` name an access key whose private key the page does not hold, such as one on the app's server, and `type` defaults to `secp256k1`. The result's `accessKey` then rejects each signature with `AccessKey.AccessKeyRequiredError`.
 
 ```ts
 const authorization = await Actions.dialog.signIn(config, {

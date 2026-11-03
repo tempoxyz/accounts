@@ -33,12 +33,17 @@ export type Material = OneOf<
   | {}
 >
 
-/** `toAccount` received an access key without material, and no `accessKey`. */
+/**
+ * `toAccount` received an access key without material and no `accessKey`, or an access key given
+ * only by its `publicKey` received a signing request.
+ */
 export class AccessKeyRequiredError extends Error {
   override readonly name = 'AccessKey.AccessKeyRequiredError'
 
   constructor() {
-    super('The key carries no material. Pass the `accessKey` the app supplied.')
+    super(
+      'The access key has no signer here. Pass the `accessKey` the app supplied, or sign where the app holds the private key.',
+    )
   }
 }
 

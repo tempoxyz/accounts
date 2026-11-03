@@ -48,7 +48,7 @@ Tempo ID's authorization endpoint, `/oauth2/authorize`, with the authorization r
 
 What the access key may do, which requests the access key, and the app's own access key as `account`. Without it, the sign-in authorizes no access key, and takes no `challenge`. The action sends the fields as given. Without `expiry`, Tempo ID fills the [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry). The access key names its `limits` and `scopes`, which the user approves, so they may exceed the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling).
 
-`account` is the app's own access key, as an `Account.Account` from `viem/tempo`. Its `access` names the Tempo Account, which defaults to the one that the user selects at sign-in, or the user's oldest. It defaults to a new access key: WebCrypto P256 in a browser, secp256k1 elsewhere, whose material `pending` keeps. With `account`, pass the same object to `handleCallback` too.
+`account` is the app's own access key, as an `Account.Account` from `viem/tempo`. Its `access` names the Tempo Account, which defaults to the one that the user selects at sign-in, or the user's oldest. It defaults to a new access key: WebCrypto P256 in a browser, secp256k1 elsewhere, whose material `pending` keeps. With `account`, pass the same object to `handleCallback` too. Without `account`, `publicKey` and `type` name an access key whose private key the page does not hold, such as one on the app's server, and `type` defaults to `secp256k1`. The result's `accessKey` then rejects each signature with `AccessKey.AccessKeyRequiredError`.
 
 ```ts
 const { pending, url } = await Actions.redirect.createUrl(config, {

@@ -68,7 +68,7 @@ export async function authorize<
         ),
       ))(),
     accessKey
-      ? AccessKey.resolve(accessKey.account).then(
+      ? AccessKey.resolve(accessKey).then(
           (value) => ({ value }),
           (error: unknown) => ({ error }),
         )

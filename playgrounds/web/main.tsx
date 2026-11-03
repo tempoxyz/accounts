@@ -151,7 +151,9 @@ function App() {
   // Cancels a pending dialog sign-in from the page.
   const cancel = useRef<AbortController>(undefined)
   // Whether the signed-in wallet waits for its upgrade, which the page then offers.
-  const [upgradeAvailable, setUpgradeAvailable] = useState(false)
+  const [upgradeAvailable, setUpgradeAvailable] = useState(
+    () => preloaded !== undefined && readUpgrade(),
+  )
 
   // Authorizes a visitor whom Tempo ID already signed in, or returns `null`.
   const authorizeVisitor = async () => {
@@ -440,11 +442,10 @@ function App() {
 
   return (
     <Layout.Page title={appName}>
-      {session.isPending ? (
+      {sessionStatus.status === 'reauthorizing' ? (
         <p aria-live="polite">
-          {sessionStatus.status === 'reauthorizing'
-            ? `Signed in as ${sessionStatus.session.user.email}. Renewing your access key…`
-            : 'Checking your Tempo session…'}
+          Signed in as {sessionStatus.session.user.email}. Renewing your access
+          key…
         </p>
       ) : null}
 
@@ -1453,12 +1454,18 @@ function field(name: string, action: (value: string) => void) {
   }
 }
 
+// A saved session fills the query before the first render, so the page opens signed in. The read
+// makes no request, and a callback's redemption fills the query in its own request.
+const preloaded = callback ? undefined : await tempoId.session.get()
+const queryClient = new QueryClient()
+if (preloaded) queryClient.setQueryData(sessionKey, preloaded)
+
 document.title = appName
 // The page sends no `Cross-Origin-Opener-Policy`, so Tempo ID's page in a popup posts the callback to
 // the tab that opened it, and the page needs no `dialog.callback()`.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <App />
     </QueryClientProvider>
   </StrictMode>,

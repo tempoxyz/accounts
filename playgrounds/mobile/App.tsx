@@ -87,8 +87,6 @@ function Main() {
       contentInsetAdjustmentBehavior="automatic"
     >
       <Text style={styles.title}>Mobile playground</Text>
-      {session.isPending ? <Text>Checking your Tempo session…</Text> : null}
-
       {session.isSuccess && !signedInAs ? (
         <>
           <Text>Sign in to continue.</Text>

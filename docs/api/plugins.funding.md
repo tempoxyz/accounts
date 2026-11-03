@@ -47,8 +47,8 @@ const result = await tempoId.funding.open({ amount: '10', token: 'USDC.e' })
 
 ### mode (optional)
 
-- **Type:** `'popup' | 'redirect'`
-- **Default:** `'popup'`
+- **Type:** `'frame' | 'popup' | 'redirect'`
+- **Default:** `'frame'`
 
 Where every `open` opens the deposit page, unless the call passes `mode`.
 
