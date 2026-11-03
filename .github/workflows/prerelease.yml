@@ -24,8 +24,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # As `changeset:publish` does, the build compiles with `tsconfig.build.json`, whose files declare
+      # `cloudflare:workers`.
       - name: Build
-        run: pnpm zile publish:prepare
+        run: pnpm zile publish:prepare --project tsconfig.build.json
 
       # Runs the binary directly: `publish:prepare` rewrites package.json for
       # publishing, so `pnpm exec` would fail its lockfile check before running.
