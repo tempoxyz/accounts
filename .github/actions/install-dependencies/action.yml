@@ -2,10 +2,6 @@ name: 'Install dependencies'
 description: 'Prepare repository and all dependencies'
 
 inputs:
-  playwright:
-    description: 'Install Playwright browsers'
-    required: false
-    default: 'false'
   skip-cache:
     description: 'Skip package manager cache restore/save'
     required: false
@@ -14,39 +10,33 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Set up pnpm
-      uses: tempoxyz/gh-actions/vendor/pnpm/action-setup@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
-
     - name: Set up Node
       uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
         node-version: '24'
-        cache: ${{ inputs.skip-cache != 'true' && 'pnpm' || '' }}
+        package-manager-cache: false
+
+    - name: Set up pnpm
+      id: pnpm
+      shell: bash
+      run: |
+        corepack enable
+        echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache pnpm store
+      id: cache
+      if: inputs.skip-cache != 'true'
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ steps.pnpm.outputs.store }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-store-${{ runner.os }}-
 
     - name: Install dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
 
-    - name: Get Playwright version
-      if: inputs.playwright == 'true'
-      id: playwright-version
+    - name: Prune pnpm store
+      if: inputs.skip-cache != 'true' && steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: echo "version=$(node -e "const lf = require('fs').readFileSync('pnpm-lock.yaml','utf8'); const m = lf.match(/playwright@(\d+\.\d+\.\d+)/); process.stdout.write(m?.[1] ?? 'unknown')")" >> "$GITHUB_OUTPUT"
-
-    - name: Cache Playwright browsers
-      if: inputs.playwright == 'true'
-      id: playwright-cache
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-      with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-
-    - name: Install Playwright browsers
-      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: pnpx playwright install chromium --with-deps
-
-    - name: Install Playwright system deps
-      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
-      shell: bash
-      run: pnpx playwright install-deps chromium
+      run: pnpm store prune

@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.turbo
 .wrangler
 .vercel
 .vocs

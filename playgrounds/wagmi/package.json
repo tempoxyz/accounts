@@ -6,7 +6,9 @@
   "scripts": {
     "check:types": "tsc -b",
     "dev": "vp dev",
-    "build": "tsc -b && vp build",
+    "build": "vp build",
+    "deploy": "wrangler deploy",
+    "deploy:preview": "wrangler versions upload",
     "postinstall": "wrangler types",
     "preview": "vp preview"
   },
