@@ -41,7 +41,7 @@ const provider = Provider.create({
 ### host
 
 - **Type:** `string`
-- **Default:** `'https://wallet.tempo.xyz/embed'`
+- **Default:** `'https://wallet.tempo.xyz/remote'`
 
 URL of the embed app.
 
@@ -50,7 +50,7 @@ import { dialog, Provider } from 'accounts'
 
 const provider = Provider.create({
   adapter: dialog({
-    host: 'https://wallet.tempo.xyz/embed', // [!code focus]
+    host: 'https://wallet.tempo.xyz/remote', // [!code focus]
   }),
 })
 ```

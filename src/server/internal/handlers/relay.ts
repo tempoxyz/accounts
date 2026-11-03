@@ -37,6 +37,13 @@ import * as Utils from './utils.js'
 const defaultCacheTtl = 10 * 60
 
 /**
+ * Calldata bytes per batched `eth_call`. A Worker opens at most six connections at once, so viem's
+ * 1 KB default split one fill's reads (e.g. a balance for each of 37 tokens) into calls that queued
+ * ahead of the fill.
+ */
+const batchSize = 16 * 1024
+
+/**
  * Instantiates a relay handler that proxies `eth_fillTransaction`
  * with wallet-aware enrichment (fee token resolution, simulation,
  * sponsorship, AMM resolution).
@@ -114,9 +121,16 @@ export function relay(options: relay.Options = {}): Handler {
   const clients = new Map<number, Client>()
   for (const chain of chains) {
     const transport = transports[chain.id] ?? http()
+    const chain_multicall = Utils.withMulticall3(chain)
     clients.set(
       chain.id,
-      createClient({ chain, batch: { multicall: { deployless: true } }, transport }),
+      createClient({
+        batch: {
+          multicall: { batchSize, deployless: !chain_multicall.contracts?.multicall3 },
+        },
+        chain: chain_multicall,
+        transport,
+      }),
     )
   }
 
@@ -316,8 +330,8 @@ export function relay(options: relay.Options = {}): Handler {
           // through that service so it can sign the transaction.
           const fillClient = externalFeePayerUrl
             ? createClient({
+                batch: client.batch,
                 chain: client.chain,
-                batch: { multicall: { deployless: true } },
                 transport: http(externalFeePayerUrl),
               })
             : client
