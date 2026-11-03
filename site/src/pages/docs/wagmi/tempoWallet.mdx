@@ -122,7 +122,7 @@ export const config = createConfig({
 ### host
 
 - **Type:** `string`
-- **Default:** `'https://wallet.tempo.xyz/embed'`
+- **Default:** `'https://wallet.tempo.xyz/remote'`
 
 URL of the embed app.
 
@@ -135,7 +135,7 @@ export const config = createConfig({
   chains: [tempo],
   connectors: [
     tempoWallet({
-      host: 'https://wallet.tempo.xyz/embed', // [!code focus]
+      host: 'https://wallet.tempo.xyz/remote', // [!code focus]
     }),
   ],
   transports: { [tempo.id]: http() },
