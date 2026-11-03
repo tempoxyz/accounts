@@ -18,6 +18,20 @@ export async function has(client: Client, options: has.Options): Promise<boolean
   return check(options.amount)
 }
 
+/**
+ * Starts loading the recent producers' fee tokens, which {@link prepare} waits for before it reads
+ * any reserves. Pass the same `kv` to both so `prepare` joins this load.
+ */
+export function prefetch(client: Client, options: prefetch.Options) {
+  void getValidatorTokens(client, options).catch(() => {})
+}
+
+/** Parameters for prefetching the producers' fee tokens. */
+export declare namespace prefetch {
+  /** Producer-preference cache, shared with {@link prepare}. */
+  type Options = Pick<has.Options, 'kv'>
+}
+
 /** Reads fee reserves ahead of filling and returns a reusable maximum-fee check. */
 export async function prepare(client: Client, options: prepare.Options) {
   const { kv, token } = options
