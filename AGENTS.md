@@ -101,6 +101,8 @@
 
 ## Learned Workspace Facts
 
+- **Provider error codes survive viem action wrappers** -- viem's `sendTransaction` wraps a wallet's error in `TransactionExecutionError`, which has no code, so Ox reparses a `4001` rejection as `-32603`. `ProviderError.parse` runs at the Provider boundary and returns the first coded cause only when Ox recognizes it as an EIP-1193 provider error. Leave other wrapped errors, and uncoded errors that are not viem's, unchanged.
+
 - **Wallet-forwarding transports send each request once** -- viem's `custom` transport retries `-32603` and uncoded errors three times with backoff. viem's wallet actions pass `retryCount: 0` per request, but the provider's raw `client.request` calls (`eth_sendTransactionSync`, `wallet_authorizeAccessKey`, access-key revocation and updates) use the transport's setting, so an adapter transport that reaches a person must default `retryCount` to `0`. Keep explicit opt-ins such as the CLI's `retryCount`.
 
 - **Popups close when their request queue drains** -- holding a popup open for a chained request would skip a wallet cold boot (about 0.9 s), but the wallet's idle `/post-message` page renders nothing, so the held window is blank. Don't add a grace period unless the wallet first renders a held state in popup mode. Point apps at `wallet_connect` capabilities (`personalSign`, `authorizeAccessKey`) to combine sign-in with a signature or key in one approval.
