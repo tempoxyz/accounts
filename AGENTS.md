@@ -101,6 +101,8 @@
 
 ## Learned Workspace Facts
 
+- **Provider error codes survive viem action wrappers** -- viem's `sendTransaction` wraps a wallet's error in `TransactionExecutionError`, which has no code, so Ox reparses a `4001` rejection as `-32603`. `ProviderError.parse` runs at the Provider boundary and returns the first coded cause only when Ox recognizes it as an EIP-1193 provider error. Leave other wrapped errors, and uncoded errors that are not viem's, unchanged.
+
 - **Wallet-forwarding transports send each request once** -- viem's `custom` transport retries `-32603` and uncoded errors three times with backoff. viem's wallet actions pass `retryCount: 0` per request, but the provider's raw `client.request` calls (`eth_sendTransactionSync`, `wallet_authorizeAccessKey`, access-key revocation and updates) use the transport's setting, so an adapter transport that reaches a person must default `retryCount` to `0`. Keep explicit opt-ins such as the CLI's `retryCount`.
 
 - **Chain-bound clients answer `eth_chainId` locally** -- `Client.fromChainId` returns a configured chain's ID without a request, since viem asks for it before every send from a JSON-RPC account. Tests that prove a client's transport routing must use another method, such as `eth_blockNumber`.
@@ -113,6 +115,7 @@
 
 - **Fee-token balances do not prove FeeAMM eligibility** — transaction filling can succeed for tokens that pool admission rejects. For automatic selection, check reserves against the maximum fee, including quote-token routing, and exclude failed candidates even when they are the user's funded on-chain preference. Keep explicit fee-token choices and swap funding-source selection separate.
 - **Use Tempo's genesis Multicall3, not deployless calls** — mainnet, Moderato, devnet and localnet deploy Multicall3 at `0xcA11bde05977b3631167028862bE2a173976CA11` from block 0, but viem's Tempo chains don't declare it. Server clients add it with `Utils.withMulticall3` (localnet's generic chain ID keeps deployless calls). Some viem Tempo actions force deployless multicalls regardless of the client (`Actions.amm.getPool`); read their `.calls()` with `readContract` so they batch through the client.
+- **Cache both outcomes of per-request probes** — a key written only on failure misses on every request when things work, and a shared `Kv` (Cache API, KV) answers a miss with a remote read. Store the success too (for example `simulate.tempoV1:<chain>` as `true`/`false`) so the lookup hits memory.
 - **Sponsored fills skip the sender's fee-token check** — the fee payer pays a sponsored fee, so the post-fill balance check (and its autoSwap into the fee token) applies only to fills without `feePayer`, including the refill after `validate` rejects. Read a fee token known before the fill alongside `eth_fillTransaction`. `InsufficientBalance` recovery for the calls' own tokens still applies to sponsored fills.
 - **Prefetch fee reserves with balance discovery** — overlap reserve reads with automatic unsponsored token discovery and reuse request-scoped balance/reserve promises across retries. Evaluate reserves against the filled maximum fee, and consume speculative errors only when the corresponding candidate or route is needed.
 
