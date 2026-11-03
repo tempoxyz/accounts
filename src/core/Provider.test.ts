@@ -1,3 +1,4 @@
+import { Fetch } from 'mppx/client'
 import { Hex } from 'ox'
 import { custom } from 'viem'
 import { createSiweMessage } from 'viem/siwe'
@@ -430,6 +431,30 @@ describe('getMppxParameters', () => {
       }),
     ).rejects.toThrowError(`Account "${payer.address}" not found.`)
   })
+})
+
+describe('mpp', () => {
+  const fetch_original = globalThis.fetch
+
+  afterEach(() => {
+    Fetch.restore()
+    globalThis.fetch = fetch_original
+  })
+
+  test('behavior: polyfills fetch before mppx loads', () => {
+    const fetch_raw = globalThis.fetch
+    Provider.create({ storage: Storage.memory() })
+    expect(globalThis.fetch === fetch_raw).toMatchInlineSnapshot(`false`)
+  })
+
+  test.each([{ mpp: false }, { mpp: { polyfill: false } }] as const)(
+    'behavior: leaves fetch alone with $mpp',
+    ({ mpp }) => {
+      const fetch_raw = globalThis.fetch
+      Provider.create({ mpp, storage: Storage.memory() })
+      expect(globalThis.fetch === fetch_raw).toMatchInlineSnapshot(`true`)
+    },
+  )
 })
 
 describe('ready', () => {

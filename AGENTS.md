@@ -27,7 +27,7 @@
 - **Return directly** — don't declare a variable just to return it. Use `return { ... }` unless the variable is needed (e.g. self-reference for chaining).
 - **Skip braces for single-statement blocks** — omit `{}` for single-statement `if`, `for`, etc.
 - **No section separator comments** — don't use `// ---` or `// ===` divider comments. Let JSDoc and whitespace provide structure.
-- **No dynamic imports** — use static `import` declarations. No `await import(...)` or `import(...)` expressions.
+- **No dynamic imports** — use static `import` declarations. No `await import(...)` or `import(...)` expressions. The exceptions are optional dependencies most consumers never run: mppx behind the fetch polyfill (`src/core/internal/MppxPolyfill.ts`) and React Native storage modules.
 - **`as never` over `as any`** — when a type assertion is unavoidable, use `as never` instead of `as any`.
 - **Destructure when accessing multiple properties** — prefer `const { a, b } = options` over repeated `options.a`, `options.b`.
 - **Keep hook results grouped** — when consuming a hook that returns a related bundle (e.g. `useMutation`, Wagmi/React Query hooks, `Steps.use()`), assign the whole result to a single noun and access fields via `.`. Prefer `const send = Hooks.wallet.useSend(); send.mutate(...); send.isPending` over `const { mutate: send, isPending } = Hooks.wallet.useSend()`. The grouping keeps the call site self-documenting and avoids inventing per-hook aliases.
@@ -114,6 +114,8 @@
 - **Popups close when their request queue drains** -- holding a popup open for a chained request would skip a wallet cold boot (about 0.9 s), but the wallet's idle `/post-message` page renders nothing, so the held window is blank. Don't add a grace period unless the wallet first renders a held state in popup mode. Point apps at `wallet_connect` capabilities (`personalSign`, `authorizeAccessKey`) to combine sign-in with a signature or key in one approval.
 
 - **Node request-body cancellation must detach listeners** -- remove `IncomingMessage` data/end callbacks when the Web stream is canceled, and close unfinished uploads after the response finishes so later events cannot touch a closed controller or leave an upload open.
+
+- **Keep mppx out of the provider's static graph** -- `Provider.ts` may import only types from `mppx/client`; a value import ships about 34 kB (brotli) to every dialog and app, including those that pass `mpp: false`. The polyfill installs a synchronous placeholder and hands the global to mppx's own polyfill once loaded so `Fetch.restore()` keeps working. Check with an esbuild split bundle that no eager chunk contains mppx.
 
 - **CI registry policy also applies to frozen installs** -- lockfile refreshes can select recently published transitive DevTools packages even when the direct tool is older. Retain compatible established dependency versions when updating the security-patched Vite toolchain.
 

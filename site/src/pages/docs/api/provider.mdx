@@ -364,6 +364,8 @@ const provider = Provider.create({
 
 Enable [Machine Payment Protocol](https://mpp.dev) (mppx) support. Enabled by default — pass an options object to configure, or `false` to disable.
 
+When enabled, the provider replaces `globalThis.fetch` with a payment-aware `fetch` right away and loads mppx in the background. Requests sent before it finishes loading wait for it. With `polyfill: false` (or `mpp: false`), `fetch` is left alone and mppx is not loaded at all.
+
 ```ts twoslash
 import { Provider } from 'accounts'
 
