@@ -52,11 +52,16 @@ export function prepare() {
  * node and the Tempo API. Returns the teardown.
  *
  * The harness reads its configs from paths relative to the checkout, so the process works in the
- * checkout from here on.
+ * checkout from here on. Its scripts run `vp` and `wrangler` by name, so the checkout's own binaries
+ * come first on `PATH`. This repository's Vite+ builds the app with this repository's dependencies.
  */
 export async function setup(options: setup.Options = {}) {
   prepare()
   process.chdir(dir)
+  process.env.PATH = [
+    Path.join(dir, 'node_modules', '.bin'),
+    process.env.PATH,
+  ].join(Path.delimiter)
 
   const build = (await import(Path.join(dir, 'test', 'build.ts'))) as Setup
   const teardowns = [await build.default(options.project)]
@@ -121,7 +126,14 @@ function checkout() {
   } else if (!process.env.TEMPO_ID_REF) return
 
   // A fetch by name or commit with depth 1 works for a branch, a tag, and a full commit hash.
-  git(['fetch', '--depth', '1', '--quiet', 'origin', process.env.TEMPO_ID_REF ?? ref])
+  git([
+    'fetch',
+    '--depth',
+    '1',
+    '--quiet',
+    'origin',
+    process.env.TEMPO_ID_REF ?? ref,
+  ])
   git(['checkout', '--force', '--quiet', 'FETCH_HEAD'])
 }
 
@@ -174,7 +186,11 @@ function link() {
       return undefined
     }
   })()
-  if (stat?.isSymbolicLink() && Fs.realpathSync(target) === Fs.realpathSync(root)) return
+  if (
+    stat?.isSymbolicLink() &&
+    Fs.realpathSync(target) === Fs.realpathSync(root)
+  )
+    return
   const empty = stat?.isDirectory() && Fs.readdirSync(target).length === 0
   if (stat && !empty)
     throw new Error(

@@ -5,8 +5,10 @@
     "changeset:version": "changeset version && pnpm check",
     "check": "vp check --fix",
     "check:types": "tsc && pnpm --filter './examples/*' --filter './playgrounds/*' check:types",
+    "check:types:test": "node test/id.ts && tsc -p tsconfig.test.json",
     "postinstall": "zile dev",
-    "test": "vp test"
+    "test": "vp test --project unit",
+    "test:integration": "vp test --project integration"
   },
   "devDependencies": {
     "@changesets/cli": "catalog:",

@@ -23,12 +23,16 @@
     "verbatimModuleSyntax": true
   },
   // The examples and playgrounds check their own types. `scripts/publish.mjs` is the release script.
+  // `tsconfig.test.json` checks the tests and `test/`, which import the Tempo ID checkout at `.tempo-id`.
   "exclude": [
+    "**/*.test.ts",
     "**/dist",
     "**/node_modules",
     ".claude",
+    ".tempo-id",
     "examples",
     "playgrounds",
-    "scripts"
+    "scripts",
+    "test"
   ]
 }
