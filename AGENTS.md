@@ -101,6 +101,8 @@
 
 ## Learned Workspace Facts
 
+- **Provider error codes survive viem action wrappers** -- viem's `sendTransaction` wraps a wallet's error in `TransactionExecutionError`, which has no code, so Ox reparses a `4001` rejection as `-32603`. `ProviderError.parse` runs at the Provider boundary and returns the first coded cause only when Ox recognizes it as an EIP-1193 provider error. Leave other wrapped errors, and uncoded errors that are not viem's, unchanged.
+
 - **Chain-bound clients answer `eth_chainId` locally** -- `Client.fromChainId` returns a configured chain's ID without a request, since viem asks for it before every send from a JSON-RPC account. Tests that prove a client's transport routing must use another method, such as `eth_blockNumber`.
 
 - **Resolve large ABIs once in request paths** -- viem's `decodeFunctionData` hashes each function selector until one matches, and ox's `AbiItem.fromAbi` hashes the signature on every call; against `Abis.tip20` that costs about 0.1-2 ms per call. Resolve items at module level and decode arguments with `decodeAbiParameters`.

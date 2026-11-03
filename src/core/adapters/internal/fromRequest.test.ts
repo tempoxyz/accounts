@@ -1,4 +1,4 @@
-import { Hex } from 'ox'
+import { Hex, Provider as ox_Provider } from 'ox'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
@@ -126,4 +126,46 @@ test.each([
     }),
   ).rejects.toThrow('not found')
   expect(requests).toMatchInlineSnapshot(`[]`)
+})
+
+test.each([
+  { method: 'eth_sendTransaction', sync: undefined },
+  { method: 'eth_sendTransactionSync', sync: undefined },
+  { method: 'wallet_sendCalls', sync: false },
+  { method: 'wallet_sendCalls', sync: true },
+] as const)("$method (sync: $sync) preserves the wallet's user rejection", async (request) => {
+  const { method, sync } = request
+  const provider = Provider.create({
+    adapter: fromRequest({
+      name: 'Test',
+      rdns: 'xyz.tempo.test',
+      async request({ method }) {
+        if (method === 'wallet_connect')
+          return { accounts: [{ address: root.address, capabilities: {} }] }
+        throw new ox_Provider.UserRejectedRequestError()
+      },
+    }),
+    chains: [tempo, tempoModerato],
+    mpp: false,
+    storage: Storage.memory(),
+  })
+  await provider.request({ method: 'wallet_connect' })
+
+  const error = (await provider
+    .request({
+      method,
+      params: [
+        {
+          calls: [{ to: accessKey.address }],
+          ...(sync !== undefined ? { capabilities: { sync } } : {}),
+        },
+      ],
+    } as never)
+    .catch((error) => error)) as ox_Provider.ProviderRpcError
+  expect({ code: error.code, name: error.name }).toMatchInlineSnapshot(`
+    {
+      "code": 4001,
+      "name": "Provider.UserRejectedRequestError",
+    }
+  `)
 })
