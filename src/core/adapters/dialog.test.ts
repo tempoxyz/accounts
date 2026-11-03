@@ -291,6 +291,31 @@ describe('dialog', () => {
     await expect(second).resolves.toMatchInlineSnapshot(`"0x2"`)
   })
 
+  test('behavior: opens the wallet at /remote by default', async () => {
+    const hosts: string[] = []
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: tempoLocalnet.id, storage })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+    const adapter = dialog({
+      dialog: Dialog.define({ name: 'test' }, (parameters) => {
+        hosts.push(parameters.host)
+        return { close() {}, destroy() {}, open() {}, async syncRequests() {}, syncTheme() {} }
+      }),
+    })({
+      getAccount: () => ({ address, type: 'json-rpc' }) as never,
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+
+    expect(hosts).toMatchInlineSnapshot(`
+      [
+        "https://wallet.tempo.xyz/remote",
+      ]
+    `)
+    adapter.cleanup?.()
+  })
+
   test('behavior: dialog transport resolves chain ID locally', async () => {
     const { adapter, dialog } = setup()
     const client = await getDialogClient(adapter)
