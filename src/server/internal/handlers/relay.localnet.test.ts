@@ -1,6 +1,13 @@
 import type { RpcRequest } from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
-import { custom, MethodNotFoundRpcError, parseUnits, type Address, type BaseError } from 'viem'
+import {
+  custom,
+  http as viem_http,
+  MethodNotFoundRpcError,
+  parseUnits,
+  type Address,
+  type BaseError,
+} from 'viem'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
 import { Actions, Addresses, Capabilities, Tick, Transaction, VirtualAddress } from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
@@ -1792,6 +1799,53 @@ describe('behavior: simulation', () => {
         expect(findDiffs(result.capabilities?.balanceDiffs, userAccount.address)).toBeDefined()
     } finally {
       server.close()
+    }
+  })
+
+  test('behavior: falls back at once when a method filter refuses tempo_simulateV1', async () => {
+    // Public RPCs answer methods outside their allowlist with HTTP 403, which viem retries.
+    const methods: string[] = []
+    const upstream = http()({ chain, retryCount: 0 })
+    const filter = await createServer(async (req, res) => {
+      let body = ''
+      for await (const chunk of req) body += chunk
+      const { id, method, params } = JSON.parse(body)
+      methods.push(method)
+      res.setHeader('content-type', 'application/json')
+      if (method === 'tempo_simulateV1') {
+        res.statusCode = 403
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32601, message: `method not allowed: ${method}` },
+          }),
+        )
+        return
+      }
+      const result = await upstream.request({ method, params } as never)
+      res.end(JSON.stringify({ jsonrpc: '2.0', id, result }))
+    })
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        resolveTokens: () => localnetTokens,
+        transports: { [chain.id]: viem_http(filter.url) },
+      }).listener,
+    )
+    try {
+      const result = await fillTransaction(getClient({ transport: http(server.url) }), {
+        account: userAccount.address,
+        calls: [transferCall()],
+      })
+
+      expect(methods.filter((method) => method === 'tempo_simulateV1')).toHaveLength(1)
+      expect(methods.filter((method) => method === 'eth_simulateV1')).toHaveLength(1)
+      expect(findDiffs(result.capabilities?.balanceDiffs, userAccount.address)).toBeDefined()
+    } finally {
+      server.close()
+      filter.close()
     }
   })
 
