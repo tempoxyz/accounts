@@ -1,7 +1,28 @@
 import { Hex, RpcRequest, RpcResponse } from 'ox'
 import { KeyAuthorization, Transaction as core_Transaction, TxEnvelopeTempo } from 'ox/tempo'
-import { type Client, BaseError } from 'viem'
+import { type Chain, type Client, BaseError } from 'viem'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
+
+/** Multicall3, which Tempo mainnet, Moderato and devnet deploy at genesis. */
+const multicall3 = {
+  address: '0xcA11bde05977b3631167028862bE2a173976CA11',
+  blockCreated: 0,
+} as const
+
+/** Chains known to deploy {@link multicall3} at genesis. */
+const multicall3Chains = new Set<number>([tempo.id, tempoModerato.id, tempoDevnet.id])
+
+/**
+ * Returns `chain` with the Multicall3 that Tempo's public chains deploy at genesis, which viem's
+ * Tempo chains don't declare yet. A client batches `eth_call`s through its chain's Multicall3, so
+ * only chains without one (local or unknown chains) need deployless calls, which carry Multicall3's
+ * ~6.6 KB of bytecode in every call.
+ */
+export function withMulticall3(chain: Chain): Chain {
+  if (chain.contracts?.multicall3 || !multicall3Chains.has(chain.id)) return chain
+  return { ...chain, contracts: { ...chain.contracts, multicall3 } }
+}
 
 export function resolveChainId(value: unknown) {
   if (typeof value === 'number') return value

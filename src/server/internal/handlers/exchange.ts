@@ -20,6 +20,7 @@ import * as Kv from '../../Kv.js'
 import * as Hono from '../hono.js'
 import { cached } from '../kv.js'
 import * as Tokenlist from '../tokenlist.js'
+import * as Utils from './utils.js'
 
 /** Default cache TTL in seconds (10 minutes). */
 const defaultCacheTtl = 10 * 60
@@ -156,9 +157,14 @@ export function exchange<const path extends string = '/exchange'>(
   const clients = new Map<number, Client>()
   for (const chain of chains) {
     const transport = transports[chain.id] ?? http()
+    const chain_multicall = Utils.withMulticall3(chain)
     clients.set(
       chain.id,
-      createClient({ batch: { multicall: { deployless: true } }, chain, transport }),
+      createClient({
+        batch: { multicall: { deployless: !chain_multicall.contracts?.multicall3 } },
+        chain: chain_multicall,
+        transport,
+      }),
     )
   }
 
