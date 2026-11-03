@@ -235,9 +235,14 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 ## Testing Conventions
 
 - Test behavior: API contracts, flows, security boundaries, errors.
-- `src/` holds `<module>.machine.test.ts` files and other tests that need no server.
-- Integration tests run the package against a real Tempo ID. They live in `tempoxyz/id` until a Tempo ID test image exists.
-- No mocks, stubs, fakes, fake timers, stubbed globals, or MSW in `src/`.
+- Unit tests need no server. `pnpm test` runs them.
+- Integration tests run the package against a real Tempo ID. A test in `src/` that imports `test/` is one. `pnpm test:integration` runs them.
+- End-to-end tests drive the playgrounds and the package in Chromium against a real Tempo ID. They live in `test/e2e/`. `pnpm test:e2e` runs them.
+- Both suites run `tempoxyz/id` from the checkout at `.tempo-id`, which `test/id.ts` prepares. Its `accounts` links to this repository.
+- Reach the checkout only through `test/TempoId.ts`. Depend only on its harness, `test/build.ts`, `Database`, `Env`, its local Tempo nodes, and its stand-in Workers.
+- Register OAuth apps and realms through the Admin API, with `test/Admin.ts`. Read or write the database directly only for what the Admin API does not cover.
+- The suites need Docker, Playwright's Chromium, and access to `ghcr.io/tempoxyz/api-dev`.
+- No mocks, stubs, fakes, fake timers, stubbed globals, or MSW in `src/` or `test/`.
 - Keep a module's tests in one `Module.test.ts` beside it. Never split into variant files.
 - Group tests in a `describe` named for the entrypoint.
 - Use inline snapshots, one value each. Use property matchers only for nondeterministic fields. Never derive expectations from the implementation.
@@ -247,7 +252,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 ## Workflow Conventions
 
 - Run focused tests while iterating.
-- Run `pnpm check:types` after TypeScript changes.
+- Run `pnpm check:types` after TypeScript changes, and `pnpm check:types:test` after changes to tests or `test/`.
 - Run `pnpm check`, and keep only task-related fixes.
 - Run `git diff --check` and review the diff before finishing.
 - Add a changeset for every change to the published package.
@@ -280,9 +285,11 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - `src/actions/` holds the actions that `Actions` exports. `src/plugins/` holds the plugins.
 - `docs/` documents the package.
 - `examples/` holds one small app per platform (`backend`, `cli`, `mobile`, `wagmi`, `web`). Each names a published range, so a copy installs as it is. CI type-checks them.
-- `playgrounds/` holds one app per flow (`api`, `backend`, `cli`, `mobile`, `third-party`, `wagmi`, `web`). They use client IDs that `tempoxyz/id` registers in its seed. Its end-to-end suite drives them.
-- Keep the playgrounds' names, client IDs, environment variables, ports, and page labels stable. `tempoxyz/id`'s end-to-end suite depends on them.
+- `playgrounds/` holds one app per flow (`api`, `backend`, `cli`, `mobile`, `third-party`, `wagmi`, `web`). They use client IDs that `tempoxyz/id` registers in its seed. The end-to-end suite drives them.
+- Keep the playgrounds' names, client IDs, environment variables, ports, and page labels stable. `tempoxyz/id`'s seed and `test/Playgrounds.ts` depend on them.
 - `scripts/` holds the release script.
+- `test/` holds the fixtures of the integration and end-to-end suites, and `test/e2e/` the end-to-end specs. `test/fixtures/` holds the Workers that the integration tests run.
+- `.tempo-id` is the checkout of `tempoxyz/id`. Git ignores it. `TEMPO_ID_REF` selects its ref, and `TEMPO_ID_DIR` a local checkout.
 
 ## Tooling
 
@@ -294,12 +301,15 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 
 ## Commands
 
-| Command            | Description                                                   |
-| ------------------ | ------------------------------------------------------------- |
-| `pnpm build`       | Builds the package. Run `pnpm exec zile dev` after.           |
-| `pnpm check`       | Formats and lints with fixes.                                 |
-| `pnpm check:types` | Runs `tsc` on the package, the examples, and the playgrounds. |
-| `pnpm test`        | Runs the tests in `src/` and `scripts/`.                      |
+| Command                 | Description                                                              |
+| ----------------------- | ------------------------------------------------------------------------ |
+| `pnpm build`            | Builds the package. Run `pnpm exec zile dev` after.                      |
+| `pnpm check`            | Formats and lints with fixes.                                            |
+| `pnpm check:types`      | Runs `tsc` on the package, the examples, and the playgrounds.            |
+| `pnpm check:types:test` | Prepares the Tempo ID checkout, and runs `tsc` on the tests and `test/`. |
+| `pnpm test`             | Runs the unit tests in `src/` and `scripts/`.                            |
+| `pnpm test:e2e`         | Runs the end-to-end tests in `test/e2e/` against the Tempo ID checkout.  |
+| `pnpm test:integration` | Runs the integration tests in `src/` against the Tempo ID checkout.      |
 
 ## Friction Logging
 
