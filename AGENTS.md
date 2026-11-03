@@ -101,6 +101,8 @@
 
 ## Learned Workspace Facts
 
+- **Wallet-forwarding transports send each request once** -- viem's `custom` transport retries `-32603` and uncoded errors three times with backoff. viem's wallet actions pass `retryCount: 0` per request, but the provider's raw `client.request` calls (`eth_sendTransactionSync`, `wallet_authorizeAccessKey`, access-key revocation and updates) use the transport's setting, so an adapter transport that reaches a person must default `retryCount` to `0`. Keep explicit opt-ins such as the CLI's `retryCount`.
+
 - **Chain-bound clients answer `eth_chainId` locally** -- `Client.fromChainId` returns a configured chain's ID without a request, since viem asks for it before every send from a JSON-RPC account. Tests that prove a client's transport routing must use another method, such as `eth_blockNumber`.
 
 - **Resolve large ABIs once in request paths** -- viem's `decodeFunctionData` hashes each function selector until one matches, and ox's `AbiItem.fromAbi` hashes the signature on every call; against `Abis.tip20` that costs about 0.1-2 ms per call. Resolve items at module level and decode arguments with `decodeAbiParameters`.
