@@ -1390,7 +1390,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
           from:  0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
         Details: plain send failure
-        Version: viem@0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26]
+        Version: viem@0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf]
       `)
     })
   })

@@ -52,7 +52,7 @@ describe.each([
       [RpcResponse.InternalError: An unknown RPC error occurred.
 
       Details: request rejected
-      Version: viem@0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26]
+      Version: viem@0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf]
     `)
     expect(requests.map(({ method }) => method)).toEqual([request.method])
     expect(requests.map(({ context }) => context)).toMatchInlineSnapshot(`
@@ -72,7 +72,7 @@ describe.each([
       [RpcResponse.InternalError: An unknown RPC error occurred.
 
       Details: request rejected
-      Version: viem@0.0.0-9a2b41b10a791e5ee55eab66110139e2043ccf26]
+      Version: viem@0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf]
     `)
     expect(requests.map(({ method }) => method)).toEqual([request.method, request.method])
     expect(requests.map(({ context }) => context)).toMatchInlineSnapshot(`
