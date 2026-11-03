@@ -114,9 +114,9 @@ describe('publishPackage', () => {
 
     const result = await publishPackage({ ...parameters, run, version })
 
-    const args = (run.mock.calls.at(-1)?.[1] as readonly string[]).map((arg) =>
-      arg.endsWith('/package.tgz') ? '<archive>' : arg,
-    )
+    const args = (
+      run.mock.calls.at(-1)?.[1] as readonly string[] | undefined
+    )?.map((arg) => (arg.endsWith('/package.tgz') ? '<archive>' : arg))
 
     expect({ args, result }).toMatchInlineSnapshot(`
       {
