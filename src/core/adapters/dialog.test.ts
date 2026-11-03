@@ -386,6 +386,31 @@ describe('dialog', () => {
     await expect(promise.then((x) => x.status)).resolves.toMatchInlineSnapshot(`"0x1"`)
   })
 
+  test('behavior: provider sends a failed eth_sendTransactionSync to the dialog once', async () => {
+    const dialog_ = createDialog()
+    const provider = Provider.create({
+      adapter: dialog({ dialog: dialog_.dialog, host }),
+      chains: [tempoLocalnet],
+      mpp: false,
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    const promise = provider.request({
+      method: 'eth_sendTransactionSync',
+      params: [{ calls: [{ to: address, value: '0x1' }] }],
+    })
+    const request = await dialog_.takeRequest()
+    dialog_.failure(request, { code: -32603, message: 'Transaction failed' })
+
+    await expect(promise).rejects.toThrow('Transaction failed')
+    expect(dialog_.synced.flat().map((x) => x.request.id)).toMatchInlineSnapshot(`
+      [
+        0,
+      ]
+    `)
+  })
+
   test('behavior: provider forwards JSON-RPC access-key authorization with encoded params', async () => {
     const dialog_ = createDialog()
     const provider = Provider.create({
