@@ -1173,9 +1173,11 @@ function sameCalls(a: readonly Call[], b: readonly Call[]) {
 // TODO: cleanup/remove
 async function simulate(client: Client, options: simulate.Options) {
   const { account, calls, kv } = options
-  // Nodes without `tempo_simulateV1` answer every fill with "method not found", so skip it for a
-  // while once seen rather than spend a round trip on it each time.
-  const unsupported = `simulate.tempoUnsupported:${client.chain?.id ?? 0}`
+  // Whether the node serves `tempo_simulateV1`, as last seen. Nodes without it answer every fill
+  // with "method not found", so skip it for a while once seen rather than spend a round trip on
+  // it each time. Support is recorded too: a store answers a key it holds from memory, where a
+  // missing key costs a shared store a remote read before every simulation.
+  const support = `simulate.tempoV1:${client.chain?.id ?? 0}`
   async function fallback() {
     const { results } = await simulateCalls(client, {
       ...(account ? { account } : {}),
@@ -1183,11 +1185,12 @@ async function simulate(client: Client, options: simulate.Options) {
     })
     return { results, tokenMetadata: undefined }
   }
-  if (kv && (await kv.get(unsupported).catch(() => undefined))) return fallback()
+  const supported = kv ? await kv.get<boolean>(support).catch(() => undefined) : undefined
+  if (supported === false) return fallback()
   try {
     // Probe without retries: a node behind a method filter refuses with HTTP 403, which viem
     // retries with backoff (~1 s) before the fallback below can run.
-    return await Actions.simulate.simulateCalls(
+    const result = await Actions.simulate.simulateCalls(
       {
         ...client,
         request: (args, options) => client.request(args as never, { ...options, retryCount: 0 }),
@@ -1198,6 +1201,8 @@ async function simulate(client: Client, options: simulate.Options) {
         traceTransfers: true,
       },
     )
+    if (supported !== true) void kv?.set(support, true, { ttl: 10 * 60 }).catch(() => {})
+    return result
   } catch (error) {
     // TODO: Remove fallback once all nodes support tempo_simulateV1.
     // Fall back to viem's simulateCalls (eth_simulateV1) if the Tempo
@@ -1206,7 +1211,7 @@ async function simulate(client: Client, options: simulate.Options) {
       (error as { code?: number | undefined }).code ??
       (error as { cause?: { code?: number | undefined } | undefined }).cause?.code
     if (code === -32601) {
-      await kv?.set(unsupported, true, { ttl: 10 * 60 }).catch(() => {})
+      await kv?.set(support, false, { ttl: 10 * 60 }).catch(() => {})
       return fallback()
     }
     // A transient transport failure (the probe got no retries) falls back to

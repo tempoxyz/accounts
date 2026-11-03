@@ -313,6 +313,10 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
           // 250 ms closed-window poll notices: a request sent in between
           // reaches the closed window. The next request waits for the close,
           // then reconnects through a fresh popup.
+          // The popup is not held open for a chained request: between
+          // requests the wallet shows its idle page, which renders nothing,
+          // so a held popup would be a blank window. Apps chain sign-in with
+          // a signature or access key through `wallet_connect` capabilities.
           const closing = session?.close().catch(() => {})
           queue = queue.then(() => closing)
         })
