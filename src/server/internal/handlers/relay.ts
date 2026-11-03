@@ -163,6 +163,18 @@ export function relay(options: relay.Options = {}): Handler {
         const parameters = params[0] as Record<string, unknown>
         const capabilities = (parameters.capabilities ?? {}) as Record<string, unknown>
 
+        // Fee-token resolution and defaults need the token list, but a sponsored fill with a
+        // known fee token doesn't, so the list loads alongside it. Token metadata comes from the
+        // list once it has loaded.
+        const tokenlist = Tokenlist.fetch(chainId, kv, { cacheTtl, resolver: resolveTokens })
+        let tokens: readonly Tokenlist.Token[] | undefined
+        void tokenlist.then(
+          (value) => {
+            tokens = value
+          },
+          () => {},
+        )
+
         try {
           const from =
             typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
@@ -232,32 +244,31 @@ export function relay(options: relay.Options = {}): Handler {
                   account: from,
                   feeToken: undefined,
                   kv,
-                  tokens: (await getTokens(chainId)).filter(
-                    (t) => t.toLowerCase() !== insufficientToken.toLowerCase(),
-                  ),
+                  tokens: (await tokenlist)
+                    .map((t) => t.address)
+                    .filter((t) => t.toLowerCase() !== insufficientToken.toLowerCase()),
                 })
             : undefined
 
-          // When no sponsor will pay, prefer fee tokens the user actually
-          // holds. Extend the configured token list with any TIP20 token
-          // the transaction is calling — typically the token being
-          // transferred — so a user transferring USDC.e can pay gas in
-          // USDC.e even when the configured list defaults to pathUSD.
-          // An unsponsored fill checks its automatic fee token's liquidity, which needs the recent
-          // producers' fee tokens. When no sponsor is asked, load them alongside the token list.
+          // An unsponsored fill checks its automatic fee token's liquidity.
           const checksLiquidity = features.feeTokenResolution && !requestFeeToken
-          if (checksLiquidity && !requestsSponsorship) FeeLiquidity.prefetch(client, { kv })
-          const configuredTokens = await getTokens(chainId)
-          const unsponsoredTokens = [
-            ...configuredTokens,
-            ...callTargetTokens(baseTx).filter(
-              (t) => !configuredTokens.some((rt) => rt.toLowerCase() === t.toLowerCase()),
-            ),
-          ]
 
           async function fillUnsponsored() {
-            // A rejected sponsorship starts here.
+            // The liquidity check needs the recent producers' fee tokens: load them alongside the
+            // token list.
             if (checksLiquidity) FeeLiquidity.prefetch(client, { kv })
+            // When no sponsor will pay, prefer fee tokens the user actually
+            // holds. Extend the configured token list with any TIP20 token
+            // the transaction is calling — typically the token being
+            // transferred — so a user transferring USDC.e can pay gas in
+            // USDC.e even when the configured list defaults to pathUSD.
+            const configuredTokens = (await tokenlist).map((t) => t.address)
+            const unsponsoredTokens = [
+              ...configuredTokens,
+              ...callTargetTokens(baseTx).filter(
+                (t) => !configuredTokens.some((rt) => rt.toLowerCase() === t.toLowerCase()),
+              ),
+            ]
             const excluded = new Set<string>()
             const balances = new Map<string, Promise<bigint>>()
             const liquidity = new Map<string, ReturnType<typeof FeeLiquidity.prepare>>()
@@ -292,6 +303,7 @@ export function relay(options: relay.Options = {}): Handler {
                   // Fee-token resolution already read these balances.
                   getBalance: (token) => balances.get(token.toLowerCase()),
                   kv,
+                  tokens,
                   // So does a swap's source token.
                   resolveFeeToken: from
                     ? (insufficientToken) =>
@@ -355,7 +367,7 @@ export function relay(options: relay.Options = {}): Handler {
             //     `validate` only governs the wallet's own fee payer).
             // Default to the chain's first token so the broadcast envelope
             // always carries a feeToken the chain can charge.
-            if (!feeToken) feeToken = (await getTokens(chainId))[0]
+            if (!feeToken) feeToken = (await tokenlist)[0]?.address
             const transaction = {
               ...baseTx,
               feePayer: true,
@@ -392,8 +404,12 @@ export function relay(options: relay.Options = {}): Handler {
             // case (common) avoids the upfront `resolveFeeToken` round
             // trips and the second `eth_fillTransaction`.
             const sponsoredTx = { ...baseTx, feePayer: true }
+            // Without a fee token the response defaults to the token list's first, so a
+            // failure to load the list surfaces before `validate`, which may meter the fill.
+            const ready = feeToken ? undefined : tokenlist
 
             if (Sponsorship.isPreparedTransaction(sponsoredTx)) {
+              await ready
               // Already prepared — skip fills, just validate sponsorship.
               const prepared = {
                 transaction: Utils.normalizeTempoTransaction(sponsoredTx),
@@ -416,6 +432,7 @@ export function relay(options: relay.Options = {}): Handler {
                 feeToken,
                 transaction: sponsoredTx,
               })
+              await ready
               sponsored = await Sponsorship.shouldSponsor({
                 sender: from,
                 transaction: fill_sponsored.transaction,
@@ -441,7 +458,7 @@ export function relay(options: relay.Options = {}): Handler {
           const swap = 'swap' in filled ? filled.swap : undefined
           if (!feeToken)
             feeToken =
-              (transaction_filled.feeToken as Address | undefined) ?? (await getTokens(chainId))[0]
+              (transaction_filled.feeToken as Address | undefined) ?? (await tokenlist)[0]?.address
 
           // Parallelize: simulate, fee payer signing, and autoSwap metadata.
           const alreadySigned =
@@ -465,6 +482,7 @@ export function relay(options: relay.Options = {}): Handler {
                   kv,
                   maxFeePerGas: transaction_filled.maxFeePerGas,
                   simulation: sameCalls(calls, calls_requested) ? simulation_early : undefined,
+                  tokens,
                 })
               const fee = await computeFee(client, {
                 feeToken,
@@ -807,7 +825,7 @@ export namespace relay {
 
 // TODO: cleanup
 async function fill(client: Client, options: fill.Options) {
-  const { autoSwap, feeToken, kv, transaction: request } = options
+  const { autoSwap, feeToken, kv, tokens, transaction: request } = options
 
   // Skip re-formatting if already in RPC format (e.g. from viem's fillTransaction).
   const format = (value: Record<string, unknown>) =>
@@ -870,14 +888,19 @@ async function fill(client: Client, options: fill.Options) {
   function getBalance(token: Address) {
     return options.getBalance?.(token) ?? readBalance(client, { account: sender!, token })
   }
+  /** A fee token's decimals, from the token list when it lists the token. */
+  function getDecimals(token: Address) {
+    const listed = getListed(tokens, token)
+    if (listed) return Promise.resolve(listed.decimals)
+    return resolveTokenMetadata(client, { token, kv }).then(
+      ({ decimals }) => decimals,
+      () => undefined,
+    )
+  }
   // A fee token known before the fill is read alongside it.
   const balance_early =
     sender && feeToken
-      ? {
-          balance: getBalance(feeToken),
-          metadata: resolveTokenMetadata(client, { token: feeToken, kv }).catch(() => undefined),
-          token: feeToken,
-        }
+      ? { balance: getBalance(feeToken), decimals: getDecimals(feeToken), token: feeToken }
       : undefined
 
   try {
@@ -937,14 +960,12 @@ async function fill(client: Client, options: fill.Options) {
           balance_early?.token.toLowerCase() === resolvedFeeToken.toLowerCase()
             ? balance_early
             : undefined
-        const [balance, metadata] = await Promise.all([
+        const [balance, decimals] = await Promise.all([
           early?.balance ?? getBalance(resolvedFeeToken),
-          early?.metadata ??
-            resolveTokenMetadata(client, { token: resolvedFeeToken, kv }).catch(() => undefined),
+          early?.decimals ?? getDecimals(resolvedFeeToken),
         ])
-        if (metadata) {
-          const requiredFee =
-            (gas * maxFeePerGas) / 10n ** BigInt(Math.max(0, 18 - metadata.decimals))
+        if (decimals !== undefined) {
+          const requiredFee = (gas * maxFeePerGas) / 10n ** BigInt(Math.max(0, 18 - decimals))
           if (balance < requiredFee) {
             // Best-effort: if the swap itself can't be filled (e.g. the
             // source token also has insufficient balance), fall through
@@ -991,6 +1012,8 @@ declare namespace fill {
     getBalance?: ((token: Address) => Promise<bigint> | undefined) | undefined
     kv?: Kv.Kv | undefined
     resolveFeeToken?: ((insufficientToken: Address) => Promise<Address | undefined>) | undefined
+    /** The token list, whose decimals spare a metadata read. */
+    tokens?: readonly Tokenlist.Token[] | undefined
     transaction: Record<string, unknown>
   }
 }
@@ -1301,7 +1324,7 @@ declare namespace simulate {
 }
 
 async function simulateAndParseDiffs(client: Client, options: simulateAndParseDiffs.Options) {
-  const { account, calls, swap, feeToken, gas, kv, maxFeePerGas } = options
+  const { account, calls, swap, feeToken, gas, kv, maxFeePerGas, tokens } = options
 
   try {
     const { results, tokenMetadata } = await (options.simulation ??
@@ -1323,6 +1346,7 @@ async function simulateAndParseDiffs(client: Client, options: simulateAndParseDi
       kv,
       maxFeePerGas,
       tokenMetadata: tokenMetadata as never,
+      tokens,
     }).catch(() => undefined)
 
     // Build per-token balance diffs relative to the sender.
@@ -1333,6 +1357,7 @@ async function simulateAndParseDiffs(client: Client, options: simulateAndParseDi
           logs,
           swap,
           tokenMetadata: tokenMetadata as never,
+          tokens,
         })
       : {}
 
@@ -1356,11 +1381,13 @@ declare namespace simulateAndParseDiffs {
     maxFeePerGas?: bigint | undefined
     /** A simulation of `calls` already in flight, started before the fill. */
     simulation?: ReturnType<typeof simulate> | undefined
+    /** The token list, whose decimals spare a metadata read. */
+    tokens?: readonly Tokenlist.Token[] | undefined
   }
 }
 
 async function buildBalanceDiffs(client: Client, options: buildBalanceDiffs.Options) {
-  const { account, kv, logs, swap, tokenMetadata } = options
+  const { account, kv, logs, swap, tokenMetadata, tokens } = options
   const accountLower = account.toLowerCase()
   const dexLower = Addresses.stablecoinDex.toLowerCase()
   const swapTokenIn = swap?.tokenIn.toLowerCase()
@@ -1452,6 +1479,7 @@ async function buildBalanceDiffs(client: Client, options: buildBalanceDiffs.Opti
           token: entry.token,
           tokenMetadata,
           kv,
+          tokens,
         })
         metadataMap.set(entry.token.toLowerCase(), metadata)
       } catch {}
@@ -1495,12 +1523,18 @@ declare namespace buildBalanceDiffs {
     logs: Log[]
     swap?: { tokenIn: Address; tokenOut: Address } | undefined
     tokenMetadata: Record<Address, { name: string; symbol: string; currency: string }>
+    /** The token list, whose decimals spare a metadata read. */
+    tokens?: readonly Tokenlist.Token[] | undefined
   }
 }
 
 async function resolveTokenMetadata(client: Client, options: resolveTokenMetadata.Options) {
   const { token, tokenMetadata, kv } = options
   const meta = tokenMetadata?.[token] ?? tokenMetadata?.[token.toLowerCase() as Address]
+  // A simulation names the token and the token list knows its decimals, so there's nothing to read.
+  const listed = getListed(options.tokens, token)
+  if (listed && meta?.symbol && meta.name)
+    return { decimals: listed.decimals, symbol: meta.symbol, name: meta.name }
   // TIP-20 metadata (decimals/symbol/name) is immutable per token, so cache
   // long-term in KV. Skips the multicall RPC on cache hits.
   const fetcher = () => Actions.token.getMetadata(client, { token })
@@ -1521,7 +1555,14 @@ declare namespace resolveTokenMetadata {
     token: Address
     tokenMetadata?: Record<Address, { name: string; symbol: string; currency: string }> | undefined
     kv?: Kv.Kv | undefined
+    /** The token list, whose decimals spare a read for a token the simulation named. */
+    tokens?: readonly Tokenlist.Token[] | undefined
   }
+}
+
+/** Returns `token`'s entry in the token list, if it has one. */
+function getListed(tokens: readonly Tokenlist.Token[] | undefined, token: Address) {
+  return tokens?.find((listed) => listed.address.toLowerCase() === token.toLowerCase())
 }
 
 async function resolveAutoSwapMetadata(client: Client, options: resolveAutoSwapMetadata.Options) {
@@ -1571,11 +1612,16 @@ declare namespace resolveAutoSwapMetadata {
 }
 
 async function computeFee(client: Client, options: computeFee.Options) {
-  const { feeToken, gas, kv, maxFeePerGas, tokenMetadata } = options
+  const { feeToken, gas, kv, maxFeePerGas, tokenMetadata, tokens } = options
   if (!feeToken || !gas || !maxFeePerGas) return undefined
 
   try {
-    const metadata = await resolveTokenMetadata(client, { token: feeToken, tokenMetadata, kv })
+    const metadata = await resolveTokenMetadata(client, {
+      token: feeToken,
+      tokenMetadata,
+      kv,
+      tokens,
+    })
     const raw = gas * maxFeePerGas
     const amount = raw / 10n ** BigInt(18 - metadata.decimals)
     return {
@@ -1596,6 +1642,8 @@ declare namespace computeFee {
     kv?: Kv.Kv | undefined
     maxFeePerGas?: bigint | undefined
     tokenMetadata?: Record<Address, { name: string; symbol: string; currency: string }> | undefined
+    /** The token list, whose decimals spare a metadata read. */
+    tokens?: readonly Tokenlist.Token[] | undefined
   }
 }
 

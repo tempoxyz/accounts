@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vp/test'
+import { describe, expect, test, vi } from 'vp/test'
 
 import * as Kv from '../Kv.js'
 import { cached } from './kv.js'
@@ -158,6 +158,87 @@ describe('cached', () => {
     }
 
     expect(await cached(failing, 'k', async () => 'value', { ttl: 60 })).toBe('value')
+  })
+
+  test('behavior: serves an entry within `stale` of expiring while one reload runs', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const { kv } = counting()
+      let invocations = 0
+      const reload = Promise.withResolvers<void>()
+      async function fn() {
+        invocations++
+        if (invocations === 2) await reload.promise
+        return invocations
+      }
+      const options = { stale: 600, ttl: 60 }
+      const results = [await cached(kv, 'k', fn, options)]
+      vi.setSystemTime(Date.now() + 61_000)
+      results.push(await cached(kv, 'k', fn, options), await cached(kv, 'k', fn, options))
+      reload.resolve()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      results.push(await cached(kv, 'k', fn, options))
+      // Past the stale window, the caller waits for a fresh value.
+      vi.setSystemTime(Date.now() + 661_000)
+      results.push(await cached(kv, 'k', fn, options))
+      expect({ invocations, results }).toMatchInlineSnapshot(`
+        {
+          "invocations": 3,
+          "results": [
+            1,
+            1,
+            1,
+            2,
+            3,
+          ],
+        }
+      `)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('behavior: keeps stale entries in storage for views with an empty L1', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      // Each view has its own L1, like a store a host wraps per request.
+      const store = Kv.memory()
+      const ttls: (number | undefined)[] = []
+      function view(): Kv.Kv {
+        return {
+          get: (key) => store.get(key),
+          async set(key, value, options) {
+            ttls.push(options?.ttl)
+            await store.set(key, value, options)
+          },
+          delete: (key) => store.delete(key),
+        }
+      }
+      let invocations = 0
+      const fn = async () => ++invocations
+      const options = { stale: 600, ttl: 60 }
+      const results = [await cached(view(), 'k', fn, options)]
+      vi.setSystemTime(Date.now() + 61_000)
+      results.push(await cached(view(), 'k', fn, options))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      results.push(await cached(view(), 'k', fn, options))
+      expect({ invocations, results, ttls }).toMatchInlineSnapshot(`
+        {
+          "invocations": 2,
+          "results": [
+            1,
+            1,
+            2,
+          ],
+          "ttls": [
+            660,
+            660,
+          ],
+        }
+      `)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   test('behavior: caches forever when ttl is omitted', async () => {
