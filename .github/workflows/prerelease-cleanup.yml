@@ -94,8 +94,8 @@ jobs:
             exit 0
           fi
           # A failed lookup fails the job, so it never prunes the tag of an open pull request.
-          open="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].number')"
-          keep="$(printf 'alpha\nlatest\nmain\n%s\n' "$(echo "$open" | sed 's/^/pr-/')")"
+          open="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[] | "pr-\(.number)"')"
+          keep="$(printf 'alpha\nlatest\nmain\n%s\n' "$open")"
           failed=0
           for name in accounts; do
             if ! tags="$(npm view "$name" dist-tags --json)"; then

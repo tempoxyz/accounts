@@ -106,7 +106,6 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          version="$VERSION"
           npm version --no-git-tag-version "$VERSION"
           pnpm changeset:prepublish
           mkdir -p "$RUNNER_TEMP/prereleases"
@@ -179,6 +178,8 @@ jobs:
           # The pack comes from the commit's code, so its manifest must name this package and version
           # before it publishes.
           manifest="$(tar -xOzf "$pack" package/package.json)"
+          # The backticks are a JavaScript template literal, which the shell must not expand.
+          # shellcheck disable=SC2016
           if [ "$(echo "$manifest" | node -p 'const pkg = JSON.parse(require("fs").readFileSync(0)); `${pkg.name}@${pkg.version}`')" != "accounts@$VERSION" ]; then
             echo "::error::$pack does not hold accounts@$VERSION."
             exit 1
@@ -199,7 +200,7 @@ jobs:
           # comment names it, so a pull request waits until it installs. Main has no comment, and its
           # wait would hold the release queue.
           [ "$GITHUB_EVENT_NAME" = push ] && exit 0
-          for attempt in $(seq 1 240); do
+          for _ in $(seq 1 240); do
             [ -n "$(npm view "accounts@$VERSION" version 2> /dev/null)" ] && exit 0
             sleep 10
           done

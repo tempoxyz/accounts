@@ -145,7 +145,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tempoxyz/accounts.git"
+    "url": "git+https://github.com/tempoxyz/accounts2.git"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
