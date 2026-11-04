@@ -3,7 +3,7 @@
  * after the sign-in. Every instance holds it, so an app passes it only to set its options.
  * @module
  */
-import * as Actions from '../Actions.js'
+import * as Actions from '../internal/Actions.js'
 import * as Core from '../internal/core.js'
 import * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'

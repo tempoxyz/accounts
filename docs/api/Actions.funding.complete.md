@@ -9,7 +9,7 @@ The result is a hint. Any page can link to the redirect URI with the same parame
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const result = Actions.funding.complete(config)
 if (result?.status === 'received') await refreshBalance()

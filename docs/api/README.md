@@ -2,16 +2,16 @@
 
 Each page documents one export of `accounts` or one of its entries. An app creates an instance with [`Accounts.create`](Accounts.create.md), and each plugin adds a namespace of actions to it. The low-level [`Actions`](Actions.md) take the instance's configuration, for an app that keeps its state itself. The errors leave out `body_too_large`, `cross_site_request`, and `malformed_body`, which the package's own requests do not cause.
 
-| Entry                 | Exports                                                                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `accounts`            | `AccessKey`, `AccessToken`, `Accounts`, `Actions`, `ClientAssertion`, `Dpop`, `LogoutToken`, `Permissions`, `Plugin`, `Session`, `Store`, `TempoAccount`, `Tokens` |
-| `accounts/internal`   | `Authorization`, `Funding`, `Pending`, `User`, the types that the actions build and return                                                                         |
-| `accounts/plugins`    | `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, `viem`                                                                                     |
-| `accounts/react`      | `react`                                                                                                                                                            |
-| `accounts/expo`       | `expo`                                                                                                                                                             |
-| `accounts/mpp`        | `mpp` and `mpp.MaxAmountError`                                                                                                                                     |
-| `accounts/cloudflare` | `Accounts`, `DurableObject`, `Plugin`, `Store`                                                                                                                     |
-| `accounts/wagmi`      | `tempoId`, `wagmi`, and their error classes                                                                                                                        |
+| Entry                 | Exports                                                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accounts`            | `Accounts`, `Permissions`, `Plugin`, `Session`, `Store`                                                                                                  |
+| `accounts/internal`   | `AccessKey`, `AccessToken`, `Actions`, `Authorization`, `ClientAssertion`, `Dpop`, `Funding`, `LogoutToken`, `Pending`, `TempoAccount`, `Tokens`, `User` |
+| `accounts/plugins`    | `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, `viem`                                                                           |
+| `accounts/react`      | `react`                                                                                                                                                  |
+| `accounts/expo`       | `expo`                                                                                                                                                   |
+| `accounts/mpp`        | `mpp` and `mpp.MaxAmountError`                                                                                                                           |
+| `accounts/cloudflare` | `Accounts`, `DurableObject`, `Plugin`, `Store`                                                                                                           |
+| `accounts/wagmi`      | `tempoId`, `wagmi`, and their error classes                                                                                                              |
 
 ## Accounts
 

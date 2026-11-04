@@ -2,10 +2,11 @@
  * An app's access key on a user's Tempo Account, as the app stores it.
  * @module
  */
-import { type Address, type Hex, PublicKey, type WebCryptoP256 } from 'ox'
+import { type Address, type Hex, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import type { OneOf } from 'viem'
-import { Account } from 'viem/tempo'
+import { Account, Secp256k1 } from 'viem/tempo'
+import type { WithAccount } from '../Permissions.js'
 
 /**
  * A stored access key. A browser key is a non-extractable WebCrypto key pair, and any other a
@@ -91,13 +92,67 @@ export declare namespace from {
 }
 
 /**
+ * Returns the app's own access key: its Viem account, or an account of its `publicKey` that signs
+ * nothing. Returns `undefined` for neither.
+ */
+export function own(accessKey: own.Options | undefined): own.ReturnType {
+  if (accessKey?.account) return accessKey.account
+  if (!accessKey?.publicKey) return undefined
+  return Account.from({
+    keyType: accessKey.type ?? 'secp256k1',
+    publicKey: PublicKey.fromHex(accessKey.publicKey),
+    sign: () => Promise.reject(new AccessKeyRequiredError()),
+  })
+}
+
+export declare namespace own {
+  type Options = Pick<WithAccount, 'account' | 'publicKey' | 'type'>
+
+  type ReturnType = Account.Account | undefined
+}
+
+/**
+ * Returns the app's own access key, or creates one: a non-extractable `CryptoKey` in a browser, or
+ * else a secp256k1 access key.
+ */
+export async function resolve(
+  accessKey: own.Options | undefined,
+): Promise<resolve.ReturnType> {
+  const account = own(accessKey)
+  if (account) return { accessKey: account, material: {} }
+
+  if (typeof indexedDB !== 'undefined') {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    return {
+      accessKey: Account.fromWebCryptoP256(keyPair),
+      material: { keyPair },
+    }
+  }
+
+  const privateKey = Secp256k1.randomPrivateKey()
+  return {
+    accessKey: Account.fromSecp256k1(privateKey),
+    material: { privateKey },
+  }
+}
+
+export declare namespace resolve {
+  type ReturnType = {
+    /** A Viem account that signs with the access key. */
+    accessKey: Account.Account
+    /** What the authorization keeps to rebuild the access key. Empty for the app's own access key. */
+    material: Material
+  }
+}
+
+/**
  * Returns the key as a Viem access key account for its Tempo Account. Viem attaches the
  * authorization to transactions until the chain registers the access key. Throws
  * {@link AccessKeyRequiredError} for an access key without material and no `accessKey`.
  *
  * @example
  * ```ts
- * import { AccessKey } from 'accounts'
+ * import { AccessKey } from 'accounts/internal'
  *
  * const account = AccessKey.toAccount(key)
  * await client.token.transferSync({ account, amount, to, token })

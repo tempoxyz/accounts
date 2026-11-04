@@ -9,7 +9,7 @@ An instance with a client secret, a client assertion, or [`par`](Accounts.from.m
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 import { Expiry, Scopes } from 'viem/tempo'
 
 // An access key that may transfer up to 100 OUSD for 30 days.

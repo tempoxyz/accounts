@@ -4,12 +4,12 @@
  */
 import { Authentication, type Types } from 'ox/webauthn'
 import { type Config, ChallengeWithoutKeyError } from '../Accounts.js'
-import type { Authorization } from '../Authorization.js'
+import type { Authorization } from '../internal/Authorization.js'
 import * as Api from '../internal/api.js'
 import * as Headless from '../internal/headless.js'
 import * as RegistrationOptions from '../internal/registration.js'
 import type { ChainId, Keyed, WithAccount } from '../Permissions.js'
-import type { TempoAccount } from '../TempoAccount.js'
+import type { TempoAccount } from '../internal/TempoAccount.js'
 import type * as AccountActions from './account.js'
 
 /**

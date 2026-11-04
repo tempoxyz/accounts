@@ -7,7 +7,7 @@ Returns the user that an access token names, from Tempo ID's UserInfo endpoint (
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const user = await Actions.oauth.userInfo(config, { accessToken })
 // { email: 'user@example.com', id: 'user_…' }

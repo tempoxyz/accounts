@@ -10,7 +10,8 @@ Starts the device grant ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)) for
 ## Usage
 
 ```ts
-import { Accounts, Actions } from 'accounts'
+import { Accounts } from 'accounts'
+import { Actions } from 'accounts/internal'
 import { Expiry, Scopes } from 'viem/tempo'
 
 const config = Accounts.from({ clientId: 'tempo-cli' })

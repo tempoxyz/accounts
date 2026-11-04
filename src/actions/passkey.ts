@@ -16,9 +16,9 @@ import {
   ChallengeWithoutKeyError,
   RequestError,
 } from '../Accounts.js'
-import type { Authorization } from '../Authorization.js'
-import type * as AccessKey_public from '../AccessKey.js'
-import type * as AccessKey from '../internal/accessKey.js'
+import type { Authorization } from '../internal/Authorization.js'
+import type * as AccessKey_public from '../internal/AccessKey.js'
+import type * as AccessKey from '../internal/AccessKey.js'
 import * as Api from '../internal/api.js'
 import * as Headless from '../internal/headless.js'
 import * as RegistrationOptions from '../internal/registration.js'

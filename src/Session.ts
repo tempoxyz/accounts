@@ -2,10 +2,10 @@
  * The session of a signed-in user, which an instance holds and saves to its store.
  * @module
  */
-import * as AccessKey from './AccessKey.js'
-import type * as TempoAccount from './TempoAccount.js'
-import type { Tokens } from './Tokens.js'
-import type { User } from './User.js'
+import * as AccessKey from './internal/AccessKey.js'
+import type * as TempoAccount from './internal/TempoAccount.js'
+import type { Tokens } from './internal/Tokens.js'
+import type { User } from './internal/User.js'
 
 /** The tokens, the user, the app's access key, and the user's Tempo Account. */
 export type Session = Tokens & {

@@ -7,12 +7,12 @@ import type { KeyAuthorization } from 'ox/tempo'
 import { Account } from 'viem/tempo'
 import type * as Accounts from '../Accounts.js'
 import { RequestError } from '../Accounts.js'
-import type { Authorization } from '../Authorization.js'
-import * as Dpop from '../Dpop.js'
-import * as AccessKey from '../AccessKey.js'
-import * as TempoAccount from '../TempoAccount.js'
-import type { Tokens } from '../Tokens.js'
-import type { User } from '../User.js'
+import type { Authorization } from './Authorization.js'
+import * as Dpop from './Dpop.js'
+import * as AccessKey from './AccessKey.js'
+import * as TempoAccount from './TempoAccount.js'
+import type { Tokens } from './Tokens.js'
+import type { User } from './User.js'
 
 /**
  * Builds an authorization from Tempo ID's response and the sign-in's access key: generated material, or

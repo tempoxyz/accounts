@@ -12,7 +12,7 @@ The action builds the account with `Account.fromConfig` from `viem/tempo`. With 
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const account = await Actions.account.get(config, { chainId: 31318 })
 await client.sendTransaction({ account, calls })

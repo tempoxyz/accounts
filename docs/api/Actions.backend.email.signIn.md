@@ -9,7 +9,8 @@ The first sign-in of an address creates the user. Each sign-in, with or without 
 ## Usage
 
 ```ts
-import { Accounts, Actions } from 'accounts'
+import { Accounts } from 'accounts'
+import { Actions } from 'accounts/internal'
 import { Expiry, Scopes } from 'viem/tempo'
 
 const config = Accounts.from({

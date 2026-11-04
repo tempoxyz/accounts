@@ -13,7 +13,7 @@ import {
 } from 'viem'
 import { toAccount } from 'viem/accounts'
 import { Account } from 'viem/tempo'
-import * as Actions from '../Actions.js'
+import * as Actions from './Actions.js'
 import {
   ChainUnavailableError,
   type Config,
@@ -21,9 +21,9 @@ import {
   RequestError,
   SignedOutError,
 } from '../Accounts.js'
-import * as AccessKey from '../AccessKey.js'
+import * as AccessKey from './AccessKey.js'
 import type * as Session from '../Session.js'
-import type * as TempoAccount from '../TempoAccount.js'
+import type * as TempoAccount from './TempoAccount.js'
 
 /**
  * Returns the Viem account of `session` on the chain `chainId`. Its access key signs transactions,

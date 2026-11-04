@@ -7,7 +7,7 @@ Lists the [realms](https://github.com/tempoxyz/id/blob/main/docs/realms.md) that
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const realms = await Actions.realm.list(config)
 // [{ id: 'default', name: 'Tempo' }]

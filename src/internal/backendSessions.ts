@@ -5,14 +5,14 @@
  * @module
  */
 import { Base64, Bytes } from 'ox'
-import * as Actions from '../Actions.js'
-import type * as Funding from '../Funding.js'
+import * as Actions from './Actions.js'
+import type * as Funding from './Funding.js'
 import { type Config, PendingNotFoundError, RequestError } from '../Accounts.js'
-import type * as Pending from '../Pending.js'
+import type * as Pending from './Pending.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Session from '../Session.js'
 import type { Store } from '../Store.js'
-import * as TempoAccount from '../TempoAccount.js'
+import * as TempoAccount from './TempoAccount.js'
 import * as Api from './api.js'
 import * as Callback from './callback.js'
 

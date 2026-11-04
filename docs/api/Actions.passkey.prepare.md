@@ -20,7 +20,7 @@ On a chain with [configurable accounts](https://github.com/tempoxyz/id/blob/main
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 // Once the sign-in form shows:
 const passkey = Actions.passkey.prepare(config, { accessKey })

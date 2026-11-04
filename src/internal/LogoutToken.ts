@@ -4,7 +4,7 @@
  * @module
  */
 import { createRemoteJWKSet, customFetch, errors, jwtVerify } from 'jose'
-import { type Config, RequestError } from './Accounts.js'
+import { type Config, RequestError } from '../Accounts.js'
 
 /** A logout token that does not verify, or names an app that the verifier does not allow. */
 export class InvalidError extends Error {

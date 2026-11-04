@@ -3,7 +3,7 @@
  * `clientAssertion`, which only a backend holds, it calls the backend's routes.
  * @module
  */
-import * as Actions from '../Actions.js'
+import * as Actions from '../internal/Actions.js'
 import type * as Api from '../internal/api.js'
 import * as SignIn from '../internal/signIn.js'
 import * as Plugin from '../Plugin.js'

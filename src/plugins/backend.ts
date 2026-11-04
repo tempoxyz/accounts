@@ -5,7 +5,7 @@
  * @module
  */
 import { Base64, Bytes } from 'ox'
-import type * as Funding from '../Funding.js'
+import type * as Funding from '../internal/Funding.js'
 import * as BackendSessions from '../internal/backendSessions.js'
 import * as Rpc from '../internal/rpc.js'
 import * as SignIn from '../internal/signIn.js'

@@ -11,7 +11,7 @@ import {
   jwtVerify,
 } from 'jose'
 import { Address } from 'ox'
-import { type Config, RequestError } from './Accounts.js'
+import { type Config, RequestError } from '../Accounts.js'
 
 /** An access token that does not verify, or names an app that the verifier does not allow. */
 export class InvalidError extends Error {

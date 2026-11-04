@@ -4,9 +4,9 @@
  */
 import { Base64 } from 'ox'
 import { type Config, RequestError } from '../Accounts.js'
-import type { Authorization } from '../Authorization.js'
-import type * as Funding from '../Funding.js'
-import * as AccessKey from '../internal/accessKey.js'
+import type { Authorization } from '../internal/Authorization.js'
+import type * as Funding from '../internal/Funding.js'
+import * as AccessKey from '../internal/AccessKey.js'
 import * as Api from '../internal/api.js'
 import { keyAuthorization } from '../internal/request.js'
 import type { WithAccount } from '../Permissions.js'

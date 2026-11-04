@@ -9,7 +9,7 @@ A browser partitions its cache by site. Only a page on Tempo ID's site gains, su
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 // Once the sign-in button shows:
 void Actions.redirect.prefetch(config)

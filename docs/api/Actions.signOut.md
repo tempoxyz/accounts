@@ -7,7 +7,7 @@ Ends the user's Tempo ID session, which signs the user out of every app that rel
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 await Actions.signOut(config)
 ```

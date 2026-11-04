@@ -18,7 +18,7 @@ The first-party page changes any of the user's access keys, after the user appro
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const receipt = await Actions.account.updateAccessKey(config, {
   accessKey: '0x9f10…',
@@ -32,7 +32,7 @@ const receipt = await Actions.account.updateAccessKey(config, {
 A third-party app sends the browser to the approval page:
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 import { Scopes } from 'viem/tempo'
 
 const { url } = await Actions.account.updateAccessKey(config, {

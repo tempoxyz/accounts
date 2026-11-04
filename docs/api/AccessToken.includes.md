@@ -7,7 +7,7 @@ Returns whether an address is one of a verified access token's Tempo Accounts, i
 ## Usage
 
 ```ts
-import { AccessToken } from 'accounts'
+import { AccessToken } from 'accounts/internal'
 
 const token = await verifier.verify({ accessToken })
 if (!AccessToken.includes(token, { address: transaction.from }))

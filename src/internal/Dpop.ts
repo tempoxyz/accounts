@@ -5,7 +5,8 @@
  *
  * @example
  * ```ts
- * import { Accounts, Dpop } from 'accounts'
+ * import { Accounts } from 'accounts'
+ * import { Dpop } from 'accounts/internal'
  *
  * const tempoId = Accounts.create({ clientId: 'tempo-cli', dpop: await Dpop.create() })
  * await tempoId.session.refresh()

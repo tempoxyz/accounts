@@ -80,7 +80,7 @@ if (session && Session.expired(session)) await tempoId.dialog.signIn()
 Send the access token with [`Actions.fetch`](../api/Actions.fetch.md), which sends a Bearer token as one, and a DPoP token with its proof.
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const session = await tempoId.session.get()
 const response = await Actions.fetch(tempoId.config, {
@@ -94,7 +94,8 @@ const response = await Actions.fetch(tempoId.config, {
 Pass a [`Dpop.create`](../api/Dpop.create.md) key as `dpop`, so each token request sends a [DPoP proof](https://github.com/tempoxyz/id/blob/main/docs/dpop.md), and a stolen token is of no use without the key. Keep the key beside the session, since each refresh needs a proof from the key that bound the tokens. [`Actions.fetch`](../api/Actions.fetch.md) sends the access token with the `DPoP` scheme and a new proof on each request.
 
 ```ts
-import { Accounts, Dpop } from 'accounts'
+import { Accounts } from 'accounts'
+import { Dpop } from 'accounts/internal'
 
 const dpop = (await keys.get('dpop')) ?? (await Dpop.create())
 await keys.set('dpop', dpop)
@@ -106,7 +107,8 @@ const tempoId = Accounts.create({ dpop })
 An app that keeps its state itself, such as in a sealed cookie, calls the low-level [`Actions`](../api/Actions.md) with [`Accounts.from`](../api/Accounts.from.md). Each sign-in action returns an [`Authorization`](../api/types.md#authorization), and [`Actions.refresh`](../api/Actions.refresh.md) returns new tokens. Refresh tokens rotate, so save the new tokens over the old ones.
 
 ```ts
-import { Accounts, Actions } from 'accounts'
+import { Accounts } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const config = Accounts.from({ clientId: 'client_…' })
 const tokens = await Actions.refresh(config, {

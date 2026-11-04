@@ -15,7 +15,7 @@ import {
 import { RequestError, SupersededError } from '../Accounts.js'
 import * as Session from '../Session.js'
 import type { Store } from '../Store.js'
-import * as TempoAccount from '../TempoAccount.js'
+import * as TempoAccount from './TempoAccount.js'
 
 /** How a change yields to others. A sign-out overtakes every change that started before it. */
 export type ChangeOptions = {

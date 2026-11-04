@@ -9,7 +9,7 @@ The handle of [`Actions.passkey.prepare`](Actions.passkey.prepare.md) reads it a
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 if (await Actions.passkey.available(config)) showPasskeyButton()
 ```

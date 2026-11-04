@@ -15,7 +15,7 @@ import type {
   Transport,
 } from 'viem'
 import { Actions as ViemActions } from 'viem/tempo'
-import * as Actions from '../../Actions.js'
+import * as Actions from '../Actions.js'
 import { type Config, RevokedError, SignedOutError } from '../../Accounts.js'
 
 /** A revocation of an access key that the chain holds revoked already, which sends no transaction. */

@@ -3,7 +3,8 @@
  * names its expiry, limits, and scopes, since Tempo ID refuses a third-party key without them.
  * @module
  */
-import { AccessKey, Accounts, Actions, Permissions, Session } from 'accounts'
+import { Accounts, Permissions, Session } from 'accounts'
+import { AccessKey, Actions } from 'accounts/internal'
 import type { Authorization, Funding } from 'accounts/internal'
 import {
   QueryClient,

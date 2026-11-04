@@ -7,26 +7,26 @@ import {
   type Config,
   ChallengeWithoutKeyError,
   RequestError,
-} from './Accounts.js'
+} from '../Accounts.js'
 import type { Authorization } from './Authorization.js'
-import * as AccessKey from './internal/accessKey.js'
-import * as Api from './internal/api.js'
-import * as Headless from './internal/headless.js'
-import { request } from './internal/request.js'
-import type { ChainId, Keyed, WithAccount } from './Permissions.js'
+import * as AccessKey from './AccessKey.js'
+import * as Api from './api.js'
+import * as Headless from './headless.js'
+import { request } from './request.js'
+import type { ChainId, Keyed, WithAccount } from '../Permissions.js'
 import type * as TempoAccount from './TempoAccount.js'
 import type { Tokens } from './Tokens.js'
 
-export * as account from './actions/account.js'
-export * as backend from './actions/backend.js'
-export * as device from './actions/device.js'
-export * as dialog from './actions/dialog.js'
-export * as email from './actions/email.js'
-export * as funding from './actions/funding.js'
-export * as oauth from './actions/oauth.js'
-export * as passkey from './actions/passkey.js'
-export * as realm from './actions/realm.js'
-export * as redirect from './actions/redirect.js'
+export * as account from '../actions/account.js'
+export * as backend from '../actions/backend.js'
+export * as device from '../actions/device.js'
+export * as dialog from '../actions/dialog.js'
+export * as email from '../actions/email.js'
+export * as funding from '../actions/funding.js'
+export * as oauth from '../actions/oauth.js'
+export * as passkey from '../actions/passkey.js'
+export * as realm from '../actions/realm.js'
+export * as redirect from '../actions/redirect.js'
 
 /**
  * Authorizes a first-party app for a user already signed in to Tempo ID, from a page on a redirect

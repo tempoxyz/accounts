@@ -6,15 +6,15 @@
  */
 import type { Account } from 'viem/tempo'
 import { type Config, RequestError } from '../Accounts.js'
-import type { Authorization } from '../Authorization.js'
-import type * as Funding from '../Funding.js'
-import * as AccessKey from '../internal/accessKey.js'
+import type { Authorization } from '../internal/Authorization.js'
+import type * as Funding from '../internal/Funding.js'
+import * as AccessKey from '../internal/AccessKey.js'
 import * as Api from '../internal/api.js'
 import * as Callback from '../internal/callback.js'
 import * as DefaultStore from '../internal/defaultStore.js'
 import { authorizeUrl } from '../internal/request.js'
 import * as Verifier from '../internal/verifier.js'
-import type * as Pending from '../Pending.js'
+import type * as Pending from '../internal/Pending.js'
 import type { Keyed, WithAccount } from '../Permissions.js'
 
 /**

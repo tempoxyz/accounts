@@ -43,7 +43,8 @@ The actions without an instance member:
 ## Usage
 
 ```ts
-import { Accounts, Actions } from 'accounts'
+import { Accounts } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 // With an instance, the actions take its configuration.
 const active = await Actions.oauth.introspect(tempoId.config, { token })

@@ -9,7 +9,8 @@ A plugin changes the session only through `context.session.change()`, which hold
 ## Usage
 
 ```ts
-import { Accounts, Actions, Plugin } from 'accounts'
+import { Accounts, Plugin } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 function realms() {
   return Plugin.from({

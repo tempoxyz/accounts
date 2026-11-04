@@ -19,7 +19,7 @@ import {
   tempoLocalnet,
   tempoTestnet,
 } from 'viem/tempo/chains'
-import * as AccessToken from '../AccessToken.js'
+import * as AccessToken from '../internal/AccessToken.js'
 import type * as Accounts from '../Accounts.js'
 import { KeyRequiredError } from '../Accounts.js'
 import * as Core from '../internal/core.js'

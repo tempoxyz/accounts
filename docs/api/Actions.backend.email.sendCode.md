@@ -7,7 +7,8 @@ Emails the user a 6-digit sign-in code from the app's backend, with `POST /v1/au
 ## Usage
 
 ```ts
-import { Accounts, Actions } from 'accounts'
+import { Accounts } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const config = Accounts.from({
   clientId: process.env.CLIENT_ID!,

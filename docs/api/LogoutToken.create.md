@@ -14,7 +14,8 @@ Each fetch of the keys ends within `timeout`. Create one verifier for each Worke
 ## Usage
 
 ```ts
-import { Accounts, LogoutToken } from 'accounts'
+import { Accounts } from 'accounts'
+import { LogoutToken } from 'accounts/internal'
 
 const verifier = LogoutToken.create(Accounts.from({ clientId: 'tempo-wallet' }))
 

@@ -9,7 +9,8 @@ The app creates the pair before the sign-in. It passes the pair's account as the
 ## Usage
 
 ```ts
-import { Accounts, Actions, Dpop } from 'accounts'
+import { Accounts } from 'accounts'
+import { Actions, Dpop } from 'accounts/internal'
 import { WebCryptoP256 } from 'ox'
 import { Account } from 'viem/tempo'
 

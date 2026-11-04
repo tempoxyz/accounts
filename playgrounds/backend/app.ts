@@ -4,7 +4,8 @@
  * session ID in an HttpOnly cookie.
  * @module
  */
-import { Accounts, Actions } from 'accounts'
+import { Accounts } from 'accounts'
+import { Actions } from 'accounts/internal'
 import { mpp } from 'accounts/mpp'
 import { type Context, Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'

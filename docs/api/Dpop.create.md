@@ -9,7 +9,8 @@ The private key is non-extractable by default, so no script can read its bytes. 
 ## Usage
 
 ```ts
-import { Accounts, Actions, Dpop } from 'accounts'
+import { Accounts } from 'accounts'
+import { Actions, Dpop } from 'accounts/internal'
 
 const dpop = (await store.get('dpop')) ?? (await Dpop.create())
 await store.set('dpop', dpop)

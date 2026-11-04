@@ -4,7 +4,8 @@
  * disconnects it. The page reads the connection, the balance, and the sends through wagmi's hooks.
  * @module
  */
-import { AccessKey, Accounts, Permissions, type Session } from 'accounts'
+import { Accounts, Permissions, type Session } from 'accounts'
+import { AccessKey } from 'accounts/internal'
 import type { Funding } from 'accounts/internal'
 import {
   QueryClient,

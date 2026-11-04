@@ -26,7 +26,7 @@ The deposit page needs a Tempo ID session. Without one, the page signs the user 
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 button.addEventListener('click', async () => {
   const result = await Actions.funding.open(config, {

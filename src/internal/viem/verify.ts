@@ -18,7 +18,7 @@ import {
   type VerifyTypedDataParameters,
 } from 'viem'
 import { verifyHash } from 'viem/actions'
-import type * as AccessToken from '../../AccessToken.js'
+import type * as AccessToken from '../AccessToken.js'
 
 /**
  * Returns whether `signature` signs `hash` for `address` on the client's chain. With `accessToken`, an

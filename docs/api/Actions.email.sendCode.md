@@ -7,7 +7,7 @@ Emails the user a 6-digit sign-in code, with `POST /v1/auth/code`. [`Actions.ema
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 await Actions.email.sendCode(config, { email: 'user@example.com' })
 ```

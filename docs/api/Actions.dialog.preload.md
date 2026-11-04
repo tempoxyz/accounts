@@ -11,7 +11,7 @@ Each sign-in keeps the frame loaded, hidden, whether it preloaded or not, and th
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 Actions.dialog.preload(config)
 

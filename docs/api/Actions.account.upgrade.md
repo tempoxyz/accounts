@@ -13,7 +13,7 @@ The chain registers the access key before the upgrade, so the access key keeps w
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const result = await Actions.passkey.signIn(config, { accessKey })
 if (!('step' in result) && result.upgradeAvailable) {

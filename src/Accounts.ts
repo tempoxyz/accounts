@@ -17,8 +17,8 @@
  * ```
  * @module
  */
-import type * as ClientAssertion from './ClientAssertion.js'
-import type { Dpop } from './Dpop.js'
+import type * as ClientAssertion from './internal/ClientAssertion.js'
+import type { Dpop } from './internal/Dpop.js'
 import * as Api from './internal/api.js'
 import * as Chains from './internal/chains.js'
 import * as ClientId from './internal/clientId.js'
@@ -31,7 +31,7 @@ import * as Plugin from './Plugin.js'
 import { funding } from './plugins/funding.js'
 import type * as Session from './Session.js'
 import type { Store } from './Store.js'
-import type * as TempoAccount from './TempoAccount.js'
+import type * as TempoAccount from './internal/TempoAccount.js'
 
 /** Tempo ID lists no chain with the access key's chain ID, so the client's account signs no message on it. */
 export class ChainUnavailableError extends Error {

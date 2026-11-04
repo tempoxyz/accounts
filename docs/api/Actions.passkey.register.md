@@ -16,7 +16,7 @@ The user approves two prompts, so call it from a click. The session must have si
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const authorization = await Actions.email.signIn(config, {
   accessKey,

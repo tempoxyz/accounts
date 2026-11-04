@@ -5,7 +5,7 @@
  */
 import { PendingNotFoundError, RequestError } from '../Accounts.js'
 import type * as Session from '../Session.js'
-import * as TempoAccount from '../TempoAccount.js'
+import * as TempoAccount from './TempoAccount.js'
 
 /** A method's result across RPC: its value, or the refusal that it threw, as data. */
 export type Result<value> =

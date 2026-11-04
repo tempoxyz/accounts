@@ -79,7 +79,7 @@ if (session instanceof Accounts.RequestError) console.error(session.message)
 The approval page shows the device's name. The name defaults to the machine's hostname. The low-level [`Actions.device.authorize`](../api/Actions.device.authorize.md#device-optional) takes `device`, at most 64 characters, to set another. It returns the authorization, which the app keeps itself.
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const grant = await Actions.device.authorize(tempoId.config, {
   accessKey: permissions,
@@ -96,7 +96,7 @@ Pass a DPoP key as `dpop`, so the code's redemption and each refresh send a [DPo
 ```ts
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
-import { Dpop } from 'accounts'
+import { Dpop } from 'accounts/internal'
 
 const path = `${os.homedir()}/.config/my-cli/dpop.json`
 const algorithm = { name: 'ECDSA', namedCurve: 'P-256' }

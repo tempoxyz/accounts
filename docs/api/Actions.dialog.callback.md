@@ -11,7 +11,7 @@ The callback reaches the opening page on a `BroadcastChannel` of the page's orig
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 // On the redirect URI's page of an app that sends `Cross-Origin-Opener-Policy: same-origin`,
 // before any other sign-in:

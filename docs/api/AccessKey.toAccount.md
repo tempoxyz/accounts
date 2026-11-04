@@ -7,7 +7,7 @@ Returns a stored access key as a Viem access key account for its Tempo Account. 
 ## Usage
 
 ```ts
-import { AccessKey } from 'accounts'
+import { AccessKey } from 'accounts/internal'
 
 const account = AccessKey.toAccount(saved.key)
 await client.token.transferSync({ account, amount, to, token })

@@ -7,7 +7,7 @@ Rebuilds a Tempo Account from the JSON of [`TempoAccount.serialize`](TempoAccoun
 ## Usage
 
 ```ts
-import { TempoAccount } from 'accounts'
+import { TempoAccount } from 'accounts/internal'
 
 const account = TempoAccount.deserialize(
   JSON.parse(localStorage.getItem('account')!),

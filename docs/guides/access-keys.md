@@ -184,7 +184,7 @@ const limited = await tempoId.authorize({
 The instance always creates the access key. An app that supplies its own Viem account as the access key calls the low-level actions with `accessKey.account`, and keeps the result itself. [`Permissions.WithAccount`](../api/types.md#permissionswithaccount) adds `account` to the permissions. The stored access key then holds no private key, so [`AccessKey.toAccount`](../api/AccessKey.toAccount.md) needs the same account as its `accessKey`.
 
 ```ts
-import { AccessKey, Actions } from 'accounts'
+import { AccessKey, Actions } from 'accounts/internal'
 import { WebCryptoP256 } from 'ox'
 import { Account } from 'viem/tempo'
 

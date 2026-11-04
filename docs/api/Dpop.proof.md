@@ -9,7 +9,7 @@ The token actions, [`Actions.oauth.userInfo`](Actions.oauth.userInfo.md), and [`
 ## Usage
 
 ```ts
-import { Dpop } from 'accounts'
+import { Dpop } from 'accounts/internal'
 
 const url = 'https://api.example.com/me'
 const response = await fetch(url, {

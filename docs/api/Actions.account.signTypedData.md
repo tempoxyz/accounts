@@ -9,7 +9,7 @@ Tempo ID derives the typed data's EIP-712 hash itself, never taking a digest, so
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const signature = await Actions.account.signTypedData(config, {
   account: tempoAccount.address,

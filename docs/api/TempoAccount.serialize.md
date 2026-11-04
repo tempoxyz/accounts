@@ -7,7 +7,7 @@ Returns the JSON form of a Tempo Account, which [`TempoAccount.deserialize`](Tem
 ## Usage
 
 ```ts
-import { Actions, TempoAccount } from 'accounts'
+import { Actions, TempoAccount } from 'accounts/internal'
 
 const account = await Actions.account.get(config, { chainId: 31318 })
 localStorage.setItem(

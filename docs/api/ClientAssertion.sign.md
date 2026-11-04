@@ -7,7 +7,7 @@ Signs one [client assertion](https://github.com/tempoxyz/id/blob/main/docs/apps.
 ## Usage
 
 ```ts
-import { ClientAssertion } from 'accounts'
+import { ClientAssertion } from 'accounts/internal'
 
 const assertion = await ClientAssertion.sign({
   audience: 'https://id.tempo.xyz',

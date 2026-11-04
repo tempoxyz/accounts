@@ -27,7 +27,7 @@ A popup that the user closes rejects the call with an `AbortError`, in either mo
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 import { Expiry, Scopes } from 'viem/tempo'
 
 button.addEventListener('click', async () => {

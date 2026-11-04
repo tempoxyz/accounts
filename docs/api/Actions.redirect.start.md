@@ -7,7 +7,7 @@ Sends the browser to Tempo ID's pages to sign in, and keeps the redirect's state
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 import { Expiry, Scopes } from 'viem/tempo'
 
 // An access key that may transfer up to 100 OUSD for 30 days.

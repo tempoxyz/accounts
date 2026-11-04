@@ -14,7 +14,7 @@ On a chain with [configurable accounts](https://github.com/tempoxyz/id/blob/main
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 import { Expiry, Scopes } from 'viem/tempo'
 
 // An access key that may transfer up to 10 OUSD for a day.

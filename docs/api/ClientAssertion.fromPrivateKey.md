@@ -7,7 +7,8 @@ Returns a signer of [client assertions](https://github.com/tempoxyz/id/blob/main
 ## Usage
 
 ```ts
-import { Accounts, ClientAssertion } from 'accounts'
+import { Accounts } from 'accounts'
+import { ClientAssertion } from 'accounts/internal'
 
 const config = Accounts.from({
   clientAssertion: ClientAssertion.fromPrivateKey({

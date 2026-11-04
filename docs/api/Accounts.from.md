@@ -9,7 +9,8 @@ The scope always holds `openid` and `email`, since every authorization reads the
 ## Usage
 
 ```ts
-import { Accounts, Actions } from 'accounts'
+import { Accounts } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const config = Accounts.from({
   clientId: process.env.CLIENT_ID!,

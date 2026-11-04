@@ -7,7 +7,8 @@ Checks whether a token is active, at `POST /oauth2/introspect` (RFC 7662). Verif
 ## Usage
 
 ```ts
-import { Accounts, Actions } from 'accounts'
+import { Accounts } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const config = Accounts.from({
   clientId: env.CLIENT_ID,

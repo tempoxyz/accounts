@@ -4,7 +4,7 @@
  */
 import type { Config } from '../Accounts.js'
 import * as Api from '../internal/api.js'
-import type { User } from '../User.js'
+import type { User } from '../internal/User.js'
 
 /**
  * Checks whether a token is active (RFC 7662). Unlike local verification against {@link jwks}, it

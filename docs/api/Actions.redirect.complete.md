@@ -7,7 +7,7 @@ Finishes an [`Actions.redirect.start`](Actions.redirect.start.md) when the page 
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const authorization =
   (await Actions.redirect.complete(config)) ??

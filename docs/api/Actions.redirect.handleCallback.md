@@ -7,7 +7,7 @@ Finishes a sign-in redirect. It checks the callback's `state` against `pending`,
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const authorization = await Actions.redirect.handleCallback(config, {
   pending: await unseal(c, 'oauth'),

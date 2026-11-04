@@ -7,7 +7,7 @@ Returns Tempo ID's JSON Web Key Set from `/oauth2/jwks`, whose RS256 keys verify
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 import { createLocalJWKSet, errors, jwtVerify } from 'jose'
 
 // Tempo ID's origin is both the issuer and the audience of every access token.

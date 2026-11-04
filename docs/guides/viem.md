@@ -207,7 +207,7 @@ const { receipt } = await tempoId.accessKey.revokeSync({ accessKey })
 [`AccessKey.toAccount`](../api/AccessKey.toAccount.md) returns the session's access key as a Viem access key account, for a client that the plugin does not create.
 
 ```ts
-import { AccessKey } from 'accounts'
+import { AccessKey } from 'accounts/internal'
 import { createClient } from 'viem/tempo'
 
 const session = await tempoId.session.get()

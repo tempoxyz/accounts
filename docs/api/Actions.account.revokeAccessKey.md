@@ -18,7 +18,7 @@ With `accessToken`, the revocation needs no approval and no recent sign-in, sinc
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const receipt = await Actions.account.revokeAccessKey(config, {
   accessKey: '0x9f10…',
@@ -31,7 +31,7 @@ const receipt = await Actions.account.revokeAccessKey(config, {
 A third-party app revokes its own access key with its access token:
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const receipt = await Actions.account.revokeAccessKey(config, {
   accessKey: session.key.keyAuthorization.keyId,

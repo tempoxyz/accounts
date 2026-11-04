@@ -5,10 +5,10 @@
 import { Base64, Bytes, Hash, Hex } from 'ox'
 import type { Account } from 'viem/tempo'
 import { type Config, ChallengeWithoutKeyError } from '../Accounts.js'
-import type * as Funding from '../Funding.js'
-import * as Pending from '../Pending.js'
+import type * as Funding from './Funding.js'
+import * as Pending from './Pending.js'
 import * as Permissions from '../Permissions.js'
-import * as AccessKey from './accessKey.js'
+import * as AccessKey from './AccessKey.js'
 import * as Api from './api.js'
 
 /** Unpadded URL-safe Base64, as PKCE and `key_authorization` use. */

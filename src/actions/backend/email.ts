@@ -11,13 +11,13 @@ import {
   ChallengeWithoutKeyError,
   RequestError,
 } from '../../Accounts.js'
-import type { Authorization } from '../../Authorization.js'
-import * as AccessKey from '../../internal/accessKey.js'
+import type { Authorization } from '../../internal/Authorization.js'
+import * as AccessKey from '../../internal/AccessKey.js'
 import * as Api from '../../internal/api.js'
 import { keyAuthorization } from '../../internal/request.js'
 import type { ChainId, Keyed, WithAccount } from '../../Permissions.js'
-import type { Tokens } from '../../Tokens.js'
-import type { User } from '../../User.js'
+import type { Tokens } from '../../internal/Tokens.js'
+import type { User } from '../../internal/User.js'
 
 /** The grant type of backend sign-in with an emailed code. */
 const grantType = 'urn:tempo:params:oauth:grant-type:email-code'

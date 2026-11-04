@@ -7,9 +7,9 @@ import { RequestError } from '../Accounts.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
-import type * as TempoAccount from '../TempoAccount.js'
-import type { Tokens } from '../Tokens.js'
-import type { User } from '../User.js'
+import type * as TempoAccount from './TempoAccount.js'
+import type { Tokens } from './Tokens.js'
+import type { User } from './User.js'
 import * as Api from './api.js'
 
 /**

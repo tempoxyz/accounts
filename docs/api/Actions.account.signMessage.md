@@ -9,7 +9,7 @@ Tempo ID signs the message's EIP-191 hash, never a raw digest, so the signature 
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const account = await Actions.account.get(config, { chain: 'devnet' })
 const signature = await Actions.account.signMessage(config, {

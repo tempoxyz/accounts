@@ -9,7 +9,7 @@ An API that receives DPoP tokens accepts the `DPoP` scheme, and checks the proof
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const response = await Actions.fetch(config, {
   accessToken: tokens.accessToken,

@@ -253,7 +253,8 @@ Forward the user's IP address as `userIp`, so rate limits count each user, not t
 An app that registers [public keys](https://github.com/tempoxyz/id/blob/main/docs/apps.md#client-assertions) holds a private key in place of a client secret. The instance signs a new client assertion for each request, so no value that the backend sends authenticates a second request.
 
 ```ts
-import { Accounts, ClientAssertion } from 'accounts'
+import { Accounts } from 'accounts'
+import { ClientAssertion } from 'accounts/internal'
 
 const tempoId = Accounts.create({
   clientAssertion: ClientAssertion.fromPrivateKey({
@@ -273,7 +274,7 @@ An app without server storage can seal the session into an encrypted `HttpOnly` 
 The start seals `pending` for 10 minutes. The callback deletes it before it redeems the code, since a second redemption of one code revokes the tokens that the first one issued. It then seals the authorization without `accessKey` and `idToken`. [`AccessKey.toAccount`](../api/AccessKey.toAccount.md) rebuilds the access key from `key`.
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 import type { Pending } from 'accounts/internal'
 
 const { pending, url } = await Actions.redirect.createUrl(tempoId.config, {
@@ -307,7 +308,8 @@ await seal(c, 'session', session)
 An app with a [back-channel logout URI](https://github.com/tempoxyz/id/blob/main/docs/authentication.md#back-channel-logout) receives a logout token when a session that signed the user in to it ends, such as a sign-out on another app. The backend verifies the token, ends its own sessions that the token names, and responds with 204.
 
 ```ts
-import { Accounts, LogoutToken } from 'accounts'
+import { Accounts } from 'accounts'
+import { LogoutToken } from 'accounts/internal'
 import { Hono } from 'hono'
 
 const verifier = LogoutToken.create(

@@ -7,7 +7,7 @@ Returns whether an access key's authorization expired, so a new sign-in must aut
 ## Usage
 
 ```ts
-import { AccessKey } from 'accounts'
+import { AccessKey } from 'accounts/internal'
 
 if (AccessKey.expired(saved.key)) await signInAgain()
 ```

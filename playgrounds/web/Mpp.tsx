@@ -4,7 +4,7 @@
  * the routes do not serve, the section offers a switch to Tempo testnet in place of the payments.
  * @module
  */
-import type { AccessKey } from 'accounts'
+import type { AccessKey } from 'accounts/internal'
 import type { mpp } from 'accounts/mpp'
 import { useMutation } from '@tanstack/react-query'
 import { Receipt } from 'mppx'

@@ -4,12 +4,12 @@
  * Tempo Account.
  * @module
  */
-import * as Actions from '../Actions.js'
+import * as Actions from './Actions.js'
 import { RequestError, SupersededError } from '../Accounts.js'
-import * as AccessKey from '../AccessKey.js'
+import * as AccessKey from './AccessKey.js'
 import type * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
-import type * as TempoAccount from '../TempoAccount.js'
+import type * as TempoAccount from './TempoAccount.js'
 import * as SignIn from './signIn.js'
 
 /**

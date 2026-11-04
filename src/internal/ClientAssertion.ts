@@ -5,7 +5,7 @@
  *
  * @example
  * ```ts
- * import { ClientAssertion } from 'accounts'
+ * import { ClientAssertion } from 'accounts/internal'
  *
  * const auth = Accounts.create({
  *   clientAssertion: ClientAssertion.fromPrivateKey({ privateKey: JSON.parse(process.env.TEMPO_ID_PRIVATE_KEY!) }),

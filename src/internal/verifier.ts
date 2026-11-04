@@ -7,7 +7,7 @@
  */
 /* istanbul ignore file -- `sessionStorage` exists only in a browser. */
 import type { Config } from '../Accounts.js'
-import type * as Pending from '../Pending.js'
+import type * as Pending from './Pending.js'
 
 /** The part of a redirect's state that redeems its code. */
 export type Ticket = {

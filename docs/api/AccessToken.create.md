@@ -17,7 +17,8 @@ Each fetch of the keys ends within `timeout`. Concurrent verifications share one
 ## Usage
 
 ```ts
-import { AccessToken, Accounts } from 'accounts'
+import { Accounts } from 'accounts'
+import { AccessToken } from 'accounts/internal'
 
 const config = Accounts.from({ clientId: 'tempo-wallet' })
 const verifier = AccessToken.create(config)

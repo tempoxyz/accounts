@@ -1,5 +1,6 @@
 /** A public client with its own sign-in UI and an access key for each sign-in. @module */
-import { AccessKey, Accounts, Permissions, type Session } from 'accounts'
+import { Accounts, Permissions, type Session } from 'accounts'
+import { AccessKey } from 'accounts/internal'
 import type { Funding } from 'accounts/internal'
 import {
   QueryClient,

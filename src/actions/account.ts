@@ -15,9 +15,9 @@ import {
 } from 'viem'
 import type { Config } from '../Accounts.js'
 import * as Api from '../internal/api.js'
-import * as AccessKey from '../AccessKey.js'
+import * as AccessKey from '../internal/AccessKey.js'
 import type { Permissions } from '../Permissions.js'
-import type { TempoAccount } from '../TempoAccount.js'
+import type { TempoAccount } from '../internal/TempoAccount.js'
 
 /**
  * Returns the user's Tempo Account for the app as a Viem configurable account (TIP-1107): the

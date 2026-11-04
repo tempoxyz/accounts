@@ -9,7 +9,7 @@ Two refreshes with one refresh token within 30 seconds return the same tokens, a
 ## Usage
 
 ```ts
-import { Actions } from 'accounts'
+import { Actions } from 'accounts/internal'
 
 const tokens = await Actions.refresh(config, {
   refreshToken: saved.refreshToken,
