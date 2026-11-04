@@ -60,7 +60,7 @@ const session = await accounts.backend.get({ id })
 const response = await accounts.mpp({ session }).fetch(url)
 ```
 
-A session manager holds its channel in memory. The [backend playground](../../playgrounds/backend) serves each request apart, so it opens a session, pays two requests, and closes the session in one request.
+A session manager holds its channel in memory. The [backend playground](https://github.com/tempoxyz/id/tree/main/playgrounds/backend) serves each request apart, so it opens a session, pays two requests, and closes the session in one request.
 
 ## Learn more
 

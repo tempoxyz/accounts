@@ -1,8 +1,8 @@
 /**
  * Runs the machine of an instance's dialog on its own, with no frame: the sign-in that holds the
  * dialog, the replacement that the next one emits, the frame that a sign-in takes or keeps, and
- * `ending`'s decision for each case. `test/e2e/web-dialog.e2e.ts` runs the same machine through the
- * web playground.
+ * `ending`'s decision for each case. The `test/e2e/web-dialog.e2e.ts` of `tempoxyz/id` runs the same
+ * machine through its web playground.
  * @module
  */
 import type * as Sheet from '../internal/Sheet.js'

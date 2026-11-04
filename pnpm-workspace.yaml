@@ -1,7 +1,6 @@
 packages:
   - .
   - examples/*
-  - playgrounds/*
 
 auditConfig:
   ignoreGhsas:
@@ -25,7 +24,6 @@ allowBuilds:
 catalog:
   '@changesets/cli': 2.31.0
   '@cloudflare/workers-types': 5.20261014.1
-  '@hono/node-server': 2.1.5
   '@tanstack/react-query': 5.104.1
   '@types/node': 26.6.4
   '@types/react': 19.3.0
@@ -36,7 +34,6 @@ catalog:
   expo-secure-store: 57.0.4
   expo-web-browser: 57.0.3
   hono: 4.13.13
-  incur: 0.7.0
   jose: 6.2.12
   mppx: 0.17.1
   ox: 0.14.59
@@ -60,7 +57,7 @@ catalogs:
   # is Vite+'s core, which has no `vite` command.
   examples:
     vite: 8.3.4
-  # React Native 0.86 needs React 19.2, so the mobile playground pins its own React.
+  # React Native 0.86 needs React 19.2, so the mobile example pins its own React.
   mobile:
     '@types/react': 19.2.18
     react: 19.2.3

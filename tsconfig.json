@@ -22,12 +22,6 @@
     "types": ["node"],
     "verbatimModuleSyntax": true
   },
-  // The examples and playgrounds check their own types.
-  "exclude": [
-    "**/dist",
-    "**/node_modules",
-    ".claude",
-    "examples",
-    "playgrounds"
-  ]
+  // The examples check their own types.
+  "exclude": ["**/dist", "**/node_modules", ".claude", "examples"]
 }
