@@ -50,6 +50,7 @@ const accounts = Accounts.create({ dev: true, plugins: [dialog(), viem()] })
 `accounts.viem({ chainId })` returns the client of another chain, a Tempo chain or one whose options name its `chain`, with an account of the same session. An access key acts only on the chain of its authorization, so sign in with an access key on that chain, as [Access keys](access-keys.md#authorize-an-access-key-on-another-chain) shows.
 
 ```ts
+import { Addresses } from 'viem/tempo'
 import { tempoTestnet } from 'viem/tempo/chains'
 
 const testnet = accounts.viem({ chainId: tempoTestnet.id })
@@ -82,6 +83,7 @@ On a server, such as a backend that holds the user's session, the transport send
 import { Accounts } from 'accounts'
 import { backend, viem } from 'accounts/plugins'
 import { http } from 'viem'
+import { Addresses } from 'viem/tempo'
 
 const accounts = Accounts.create({
   clientId: process.env.CLIENT_ID!,
@@ -136,6 +138,7 @@ await accounts.token.transferSync({
 // The app's server.
 import { relay } from 'accounts/plugins'
 import { privateKeyToAccount } from 'viem/accounts'
+import { Addresses } from 'viem/tempo'
 
 const server = Accounts.create({
   clientId: 'https://app.example',

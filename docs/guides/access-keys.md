@@ -7,6 +7,7 @@ An access key is a key that the app holds, which acts for the user's Tempo Accou
 ```ts
 import { Accounts } from 'accounts'
 import { dialog, viem } from 'accounts/plugins'
+import { Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 
 const accounts = Accounts.create({
