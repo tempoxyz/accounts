@@ -5,6 +5,8 @@ on:
 
 permissions:
   contents: read
+  # The secure-runner action authenticates with an OIDC token.
+  id-token: write
 
 jobs:
   checks:

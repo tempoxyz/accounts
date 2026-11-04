@@ -22,7 +22,8 @@ jobs:
     environment: npm-dist-tag
     # Only a branch of this repository publishes prereleases.
     if: github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && vars.NPM_TRUSTED_PUBLISHING == 'true'
-    permissions: {}
+    permissions:
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -68,6 +69,7 @@ jobs:
     environment: npm-dist-tag
     if: github.event_name != 'pull_request_target' && vars.NPM_TRUSTED_PUBLISHING == 'true'
     permissions:
+      id-token: write
       pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
