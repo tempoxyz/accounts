@@ -6,7 +6,7 @@ import { Expiry, Scopes } from 'viem/tempo'
 import { tempoLocalnet, tempoTestnet } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 import * as Defaults from '../Defaults.ts'
-import { ousd, tempoId } from '../TempoId.ts'
+import { ousd, accounts } from '../TempoId.ts'
 
 export default Cli.command({
   description: 'Sign in by approving a code in any browser',
@@ -57,7 +57,7 @@ export default Cli.command({
     // The approval page shows the key's limits beside the machine's hostname. `PERMISSIONS` is ox's `Json`, which encodes
     // bigints. Flags replace the fields they set.
     const base = Permissions.from(Json.parse(process.env.PERMISSIONS ?? '{}'))
-    const { chainId } = tempoId.config
+    const { chainId } = accounts.config
     // `fund` and `send` use the instance's chain, so a key for another chain could not send.
     if (base.chainId !== undefined && base.chainId !== chainId)
       return c.error({
@@ -65,10 +65,10 @@ export default Cli.command({
         message: `PERMISSIONS names chain ${base.chainId}, but the CLI sends on chain ${chainId}. Remove chainId, or set it to ${chainId}.`,
       })
     // A new sign-in replaces the saved one, whose refresh token the sign-out revokes.
-    if (await tempoId.session.get()) await tempoId.signOut()
+    if (await accounts.session.get()) await accounts.signOut()
     // `onCode` prints the link and the code. The CLI fills what the flags and `PERMISSIONS` leave
     // out, the expiry too, which Tempo ID otherwise fills.
-    const session = await tempoId.device
+    const session = await accounts.device
       .signIn({
         accessKey: Defaults.fill({
           ...base,
@@ -157,14 +157,14 @@ function token(value: string) {
   const addresses = listing.addresses as Record<number, `0x${string}`>
   // A local node predeploys the testnet's tokens, and OUSD has its mainnet address everywhere.
   const address =
-    addresses[tempoId.config.chainId] ??
-    (tempoId.config.chainId === tempoLocalnet.id
+    addresses[accounts.config.chainId] ??
+    (accounts.config.chainId === tempoLocalnet.id
       ? addresses[tempoTestnet.id]
       : undefined) ??
     (listing.symbol === 'OUSD' ? ousd : undefined)
   if (!address)
     throw new Error(
-      `${listing.symbol} is not on chain ${tempoId.config.chainId}.`,
+      `${listing.symbol} is not on chain ${accounts.config.chainId}.`,
     )
   return { address, decimals: listing.decimals }
 }

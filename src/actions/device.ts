@@ -23,8 +23,8 @@ import type { WithAccount } from '../Permissions.js'
  * const auth = Accounts.create({ clientId: 'tempo-cli' })
  * const device = await Actions.device.authorize(auth, {
  *   accessKey: {
- *     expiry: Expiry.days(1),
- *     limits: [{ limit: 10_000_000n, token: ousd }],
+ *     expiry: '1d',
+ *     limits: [{ limit: '10', token: 'ousd' }],
  *     scopes: [Scopes.tip20(ousd).transfer()],
  *   },
  * })

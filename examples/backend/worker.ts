@@ -12,7 +12,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { csrf } from 'hono/csrf'
 import { html } from 'hono/html'
 import { parseUnits } from 'viem'
-import { Expiry, Scopes } from 'viem/tempo'
+import { Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
@@ -41,8 +41,8 @@ export const SESSIONS = DurableObject.sessions((env: Env) => ({
 function create(env: Env) {
   return Accounts.create({
     accessKey: () => ({
-      expiry: Expiry.days(1),
-      limits: [{ limit: parseUnits('100', 6), token: ousd }],
+      expiry: '1d',
+      limits: [{ limit: '100', token: 'ousd' }],
       scopes: [Scopes.tip20(ousd).transfer()],
     }),
     clientId: env.CLIENT_ID,
@@ -97,11 +97,11 @@ export default new Hono<{ Bindings: Env }>()
   })
   .post('/send', async (c) => {
     const id = getCookie(c, 'sid', 'host')
-    const tempoId = create(c.env)
-    const session = id ? await tempoId.backend.get({ id }) : undefined
+    const accounts = create(c.env)
+    const session = id ? await accounts.backend.get({ id }) : undefined
     if (!session) return c.redirect('/', 302)
     // The client signs with this session's key, which no other request reaches.
-    const { receipt } = await tempoId.viem({ session }).token.transferSync({
+    const { receipt } = await accounts.viem({ session }).token.transferSync({
       amount: parseUnits('0.01', 6),
       to: '0x000000000000000000000000000000000000dEaD',
       token: ousd,

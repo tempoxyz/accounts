@@ -1,5 +1,5 @@
 /**
- * The entry for MPP: `mpp`, a plugin that adds `tempoId.fetch` and `tempoId.mpp`, which pay the
+ * The entry for MPP: `mpp`, a plugin that adds `accounts.fetch` and `accounts.mpp`, which pay the
  * 402 challenges of Machine Payments Protocol (MPP) endpoints with the session's access key,
  * through mppx.
  *
@@ -9,10 +9,10 @@
  * import { mpp } from 'accounts/mpp'
  * import { dialog } from 'accounts/plugins'
  *
- * const tempoId = Accounts.create({ accessKey, plugins: [dialog(), mpp()] })
+ * const accounts = Accounts.create({ accessKey, plugins: [dialog(), mpp()] })
  *
- * await tempoId.dialog.signIn()
- * const response = await tempoId.fetch('https://api.example.com/fortune')
+ * await accounts.dialog.signIn()
+ * const response = await accounts.fetch('https://api.example.com/fortune')
  * ```
  * @module
  */
@@ -65,23 +65,23 @@ export declare namespace MaxAmountPrecisionError {
 }
 
 /**
- * Returns the plugin of MPP payments, which adds `tempoId.fetch` and `tempoId.mpp`. `tempoId.fetch`
- * is `fetch` that pays each charge an endpoint challenges for, and `tempoId.mpp.session()` returns
+ * Returns the plugin of MPP payments, which adds `accounts.fetch` and `accounts.mpp`. `accounts.fetch`
+ * is `fetch` that pays each charge an endpoint challenges for, and `accounts.mpp.session()` returns
  * a session manager, which pays each request of a channel with a voucher. The access key of the
  * instance's session signs every payment, so no payment reaches the account's owner.
- * `tempoId.mpp({ session })` returns a payer of a fixed session's access key, such as one that
- * `tempoId.backend.get` returns.
+ * `accounts.mpp({ session })` returns a payer of a fixed session's access key, such as one that
+ * `accounts.backend.get` returns.
  *
  * The plugin reads the chains and transports of the `viem` plugin, or of a `viem` plugin of its
  * own without one in `plugins`. `mppx` is an optional peer dependency of `accounts`.
  *
  * @example
  * ```ts
- * const tempoId = Accounts.create({ accessKey, plugins: [dialog(), mpp()] })
+ * const accounts = Accounts.create({ accessKey, plugins: [dialog(), mpp()] })
  *
- * const response = await tempoId.fetch('https://api.example.com/fortune')
+ * const response = await accounts.fetch('https://api.example.com/fortune')
  *
- * const session = tempoId.mpp.session()
+ * const session = accounts.mpp.session()
  * await session.fetch('https://api.example.com/content')
  * await session.close()
  * ```
@@ -238,7 +238,7 @@ export declare namespace mpp {
      */
     accessKey?: Account.Account | undefined
     /**
-     * A fixed session, such as one that `tempoId.backend.get` returns, whose access key pays.
+     * A fixed session, such as one that `accounts.backend.get` returns, whose access key pays.
      * Defaults to the instance's session, read at each payment.
      */
     session?: Session.Session | undefined
@@ -258,7 +258,7 @@ export declare namespace mpp {
      * endpoint, pays each request with a voucher of the access key, and closes the channel at
      * `close()`. The manager holds the channel in memory, so close it before it is discarded. It
      * reads the instance's session without loading it, so read the session first, such as with
-     * `tempoId.session.get()`, after a reload or a restart.
+     * `accounts.session.get()`, after a reload or a restart.
      */
     session: (
       parameters?: Omit<
@@ -269,7 +269,7 @@ export declare namespace mpp {
   }
 
   /**
-   * `tempoId.mpp`: the session manager of the instance's session, and a call that returns a payer
+   * `accounts.mpp`: the session manager of the instance's session, and a call that returns a payer
    * with overrides, such as another session.
    */
   type Namespace = Pick<Payer, 'session'> & ((overrides?: Overrides) => Payer)

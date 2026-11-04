@@ -9,7 +9,7 @@ import { react } from 'accounts/react'
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { parseUnits } from 'viem'
-import { Expiry, Scopes } from 'viem/tempo'
+import { Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
@@ -17,21 +17,19 @@ import * as Tokens from 'viem/tokens'
 const ousd = Tokens.ousd(tempo.id).address
 
 /** The instance, on Tempo testnet. Each sign-in requests a key that sends up to 100 OUSD for a day. */
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   accessKey: () => ({
-    expiry: Expiry.days(1),
-    limits: [{ limit: parseUnits('100', 6), token: ousd }],
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
     scopes: [Scopes.tip20(ousd).transfer()],
   }),
   dev: true,
-  // Without a sign-in plugin, the instance signs in with the dialog. The first render authorizes a
-  // visitor whom Tempo ID already signed in.
   plugins: [react(), viem()],
   url: import.meta.env.VITE_TEMPO_ID_URL ?? 'http://localhost:5173',
 })
 
 function App() {
-  const { isPending, isReauthorizing, session } = tempoId.useSession()
+  const { isPending, isReauthorizing, session } = accounts.useSession()
   const [status, setStatus] = React.useState<string>()
 
   /** Runs `fn`, and shows its result or its error. */
@@ -47,7 +45,7 @@ function App() {
     return (
       <main>
         <button
-          onClick={() => run(async () => (await tempoId.dialog.signIn(), ''))}
+          onClick={() => run(async () => (await accounts.dialog.signIn(), ''))}
           type="button"
         >
           Sign in with Tempo
@@ -69,7 +67,7 @@ function App() {
         disabled={isReauthorizing}
         onClick={() =>
           run(async () => {
-            await tempoId.faucet.fundSync({ account: account! })
+            await accounts.faucet.fundSync({ account: account! })
             return 'Funded with testnet tokens.'
           })
         }
@@ -82,7 +80,7 @@ function App() {
           event.preventDefault()
           const form = new FormData(event.currentTarget)
           run(async () => {
-            const { receipt } = await tempoId.token.transferSync({
+            const { receipt } = await accounts.token.transferSync({
               amount: parseUnits(String(form.get('amount')), 6),
               to: String(form.get('to')) as `0x${string}`,
               token: ousd,
@@ -98,7 +96,7 @@ function App() {
         </button>
       </form>
       <button
-        onClick={() => run(async () => (await tempoId.signOut(), ''))}
+        onClick={() => run(async () => (await accounts.signOut(), ''))}
         type="button"
       >
         Sign out

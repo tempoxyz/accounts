@@ -23,7 +23,7 @@ export const SESSIONS = DurableObject.sessions(settings)
 // Each request creates its instance, since the session's Durable Object shares its refreshes.
 export default create({
   stylesheet,
-  tempoId: (env, options) =>
+  accounts: (env, options) =>
     instance(env, {
       backend: { namespace: (env as Bindings).SESSIONS },
       clientId: options.clientId,

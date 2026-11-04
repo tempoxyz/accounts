@@ -14,10 +14,10 @@ import type * as Session from '../Session.js'
  *
  * @example
  * ```ts
- * const tempoId = Accounts.create({ plugins: [email()] })
+ * const accounts = Accounts.create({ plugins: [email()] })
  *
- * await tempoId.email.sendCode({ email })
- * const session = await tempoId.email.signIn({ code, email })
+ * await accounts.email.sendCode({ email })
+ * const session = await accounts.email.signIn({ code, email })
  * ```
  */
 export function email(options: email.Options = {}) {

@@ -34,7 +34,7 @@ export const tempoIdUrl =
  * hidden with the page, so "Sign in via dialog" shows a ready sign-in. `VITE_PAR`: `true` pushes each
  * authorization request to `/oauth2/par`. `VITE_PRELOAD`: `false` loads the frame only at the click.
  */
-export const tempoId = Accounts.create({
+export const accounts = Accounts.create({
   chainId: Chain.chain.id,
   // The app that `scripts/seed.ts` registers. `web-cash` and `web-shared` set their own.
   clientId,

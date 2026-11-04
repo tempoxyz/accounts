@@ -15,7 +15,7 @@
 import { Accounts, Store } from 'accounts'
 import { device, viem } from 'accounts/plugins'
 import { parseUnits } from 'viem'
-import { Expiry, Scopes } from 'viem/tempo'
+import { Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
@@ -23,10 +23,10 @@ import * as Tokens from 'viem/tokens'
 const ousd = Tokens.ousd(tempo.id).address
 
 /** The instance, on Tempo testnet. An unregistered CLI's key names its limits and scopes. */
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   accessKey: () => ({
-    expiry: Expiry.days(7),
-    limits: [{ limit: parseUnits('100', 6), token: ousd }],
+    expiry: '7d',
+    limits: [{ limit: '100', token: 'ousd' }],
     scopes: [Scopes.tip20(ousd).transfer()],
   }),
   clientId: 'cli:tempo-example',
@@ -45,13 +45,13 @@ const tempoId = Accounts.create({
 })
 
 const [command, ...args] = process.argv.slice(2)
-const session = await tempoId.session.get()
+const session = await accounts.session.get()
 
 if (command === 'login') {
-  const { user } = await tempoId.device.signIn()
+  const { user } = await accounts.device.signIn()
   console.log(`Signed in as ${user.email}.`)
 } else if (command === 'logout') {
-  await tempoId.signOut()
+  await accounts.signOut()
   console.log('Signed out.')
 } else if (!session?.key) {
   console.log('Not signed in. Run `login`.')
@@ -60,7 +60,7 @@ if (command === 'login') {
   console.log(`${session.user.email} ${session.key.account}`)
 } else if (command === 'send') {
   const [to, amount] = args as [`0x${string}`, string]
-  const { receipt } = await tempoId.token.transferSync({
+  const { receipt } = await accounts.token.transferSync({
     amount: parseUnits(amount, 6),
     to,
     token: ousd,

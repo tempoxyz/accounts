@@ -16,12 +16,12 @@ import type * as Session from '../Session.js'
  *
  * @example
  * ```ts
- * const tempoId = Accounts.create({
+ * const accounts = Accounts.create({
  *   plugins: [device({ onCode: (code) => console.log(`Open ${code.verificationUriComplete}`) })],
  *   store: Store.file('~/.config/my-cli/session.json'),
  * })
  *
- * if (!(await tempoId.session.get())) await tempoId.device.signIn()
+ * if (!(await accounts.session.get())) await accounts.device.signIn()
  * ```
  */
 export function device(options: device.Options) {

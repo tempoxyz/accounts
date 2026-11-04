@@ -93,13 +93,13 @@ export type Env = {
 type Bindings = { Bindings: Env }
 
 /**
- * Creates the app. `tempoId` returns the instance of the app `clientId`, whose `backend` holds
+ * Creates the app. `accounts` returns the instance of the app `clientId`, whose `backend` holds
  * the sessions: in memory on Node, or in one Durable Object for each session on Cloudflare Workers.
  */
 export function create(options: create.Options) {
   /** Returns the instance of the request's app, or of the app `clientId`. */
-  function tempoId(c: Context<Bindings>, clientId_: string = clientId(c)) {
-    return options.tempoId(c.env, { clientId: clientId_ })
+  function accounts(c: Context<Bindings>, clientId_: string = clientId(c)) {
+    return options.accounts(c.env, { clientId: clientId_ })
   }
 
   /**
@@ -110,7 +110,7 @@ export function create(options: create.Options) {
     const id = sessionId(c)
     if (!id) return undefined
     try {
-      return await tempoId(c).backend.get({ id })
+      return await accounts(c).backend.get({ id })
     } catch (error) {
       console.warn('The session could not be read.', error)
       return undefined
@@ -188,7 +188,7 @@ export function create(options: create.Options) {
 
         // The access token never reaches the browser: the server calls the API itself, with the
         // session that the request already read.
-        const response = await Actions.fetch(tempoId(c).config, {
+        const response = await Actions.fetch(accounts(c).config, {
           accessToken: session.accessToken,
           url: new URL('/me', config(c.env).API_URL),
         })
@@ -332,7 +332,7 @@ ${Json.stringify(
         // `?funding_hint=10` sends a funding hint, with `funding_currency` and `funding_token` if given.
         // The form sends an empty field, which sends no parameter.
         const amount = c.req.query('funding_hint') || undefined
-        const started = await tempoId(c)
+        const started = await accounts(c)
           .backend.start({
             accessKey: key ? permissions(c) : false,
             funding: amount
@@ -360,7 +360,7 @@ ${Json.stringify(
       .get('/auth/callback', async (c) => {
         // The deposit page returns to the same redirect URI, with its result in place of a code.
         const request = new URL(c.req.url)
-        const funded = Actions.funding.complete(tempoId(c).config, {
+        const funded = Actions.funding.complete(accounts(c).config, {
           redirectUri: redirectUri(c),
           url: new URL(`${request.pathname}${request.search}`, origin(c)),
         })
@@ -378,7 +378,7 @@ ${Json.stringify(
         const id = valid(read(c, { name: 'backend-pending' }))
         if (!id) return c.text('Sign-in failed. Start again.', 400)
 
-        const session = await tempoId(c)
+        const session = await accounts(c)
           .backend.complete({ id, url: c.req.url })
           .catch((error: unknown) => {
             if (error instanceof Error) return error
@@ -419,7 +419,7 @@ ${Json.stringify(
       .get('/deposit', async (c) => {
         const session = await current(c)
         if (!session?.key) return c.redirect('/', 302)
-        const { clientId, url } = tempoId(c).config
+        const { clientId, url } = accounts(c).config
         // The deposit funds the access key's chain.
         const chainId = Number(session.key.chainId)
         const target = new URL('/deposit', url)
@@ -444,7 +444,7 @@ ${Json.stringify(
         const kind =
           c.req.query('kind') === 'typed-data' ? 'typed-data' : 'message'
         // The access key signs only on its own chain.
-        const client = tempoId(c).viem({
+        const client = accounts(c).viem({
           chainId: Number(session.key.chainId),
           session,
         })
@@ -480,7 +480,7 @@ ${Json.stringify(
         const session = await current(c)
         if (!session?.key) return c.redirect('/', 302)
         // The client signs with the session's key, which no other request reaches.
-        const { receipt } = await tempoId(c)
+        const { receipt } = await accounts(c)
           .viem({ session })
           .token.transferSync({
             amount: 10_000n,
@@ -496,7 +496,7 @@ ${Json.stringify(
       .post('/mpp/charge', async (c) => {
         const session = await current(c)
         if (!session?.key) return c.redirect('/', 302)
-        const response = await tempoId(c)
+        const response = await accounts(c)
           .mpp({ session })
           .fetch(new URL('/mpp/charge', config(c.env).API_URL))
         return c.redirect(
@@ -510,7 +510,7 @@ ${Json.stringify(
       .post('/mpp/session', async (c) => {
         const session = await current(c)
         if (!session?.key) return c.redirect('/', 302)
-        const manager = tempoId(c).mpp({ session }).session()
+        const manager = accounts(c).mpp({ session }).session()
         const url = new URL('/mpp/session', config(c.env).API_URL)
         const receipt = await (async () => {
           try {
@@ -555,7 +555,7 @@ ${Json.stringify(
     options: { clientId: string; id: string },
   ) {
     try {
-      await tempoId(c, options.clientId).backend.end({ id: options.id })
+      await accounts(c, options.clientId).backend.end({ id: options.id })
     } catch (error) {
       console.warn('The session could not be ended.', error)
     }
@@ -567,7 +567,7 @@ export declare namespace create {
     /** The playgrounds' stylesheet, `web/style.css`, which `/style.css` serves. */
     stylesheet: string
     /** Returns the instance of the app `clientId`, such as one from {@link instance}. */
-    tempoId: (
+    accounts: (
       env: Env | undefined,
       options: { clientId: string },
     ) => ReturnType<typeof instance>

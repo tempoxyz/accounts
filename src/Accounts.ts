@@ -5,7 +5,7 @@
  * @example
  * ```ts
  * import { Accounts, Plugin } from 'accounts'
- * const tempoId = Accounts.create({
+ * const accounts = Accounts.create({
  *   accessKey: {
  *     expiry: '1d',
  *     limits: [{ limit: '10', token: 'ousd' }],
@@ -13,7 +13,7 @@
  *   plugins: [email()],
  * })
  *
- * const session = await tempoId.session.get()
+ * const session = await accounts.session.get()
  * ```
  * @module
  */
@@ -495,7 +495,7 @@ export declare namespace from {
  *
  * @example
  * ```ts
- * const tempoId = Accounts.create({ plugins: [dialog()] })
+ * const accounts = Accounts.create({ plugins: [dialog()] })
  * ```
  */
 export function create<const plugins extends readonly Plugin.Option[] = []>(

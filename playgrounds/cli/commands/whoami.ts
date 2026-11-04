@@ -1,11 +1,11 @@
 /** Prints the signed-in user's email and Tempo Account. @module */
 import { Cli } from 'incur'
-import { tempoId } from '../TempoId.ts'
+import { accounts } from '../TempoId.ts'
 
 export default Cli.command({
   description: 'Show who is signed in',
   async run(c) {
-    const session = await tempoId.session.get()
+    const session = await accounts.session.get()
     if (!session?.key)
       return c.error({
         code: 'SIGNED_OUT',

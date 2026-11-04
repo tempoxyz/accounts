@@ -24,13 +24,13 @@ import type { Store } from '../Store.js'
  *
  * @example
  * ```ts
- * const tempoId = Accounts.create({
+ * const accounts = Accounts.create({
  *   clientId,
  *   clientSecret,
  *   plugins: [email(), backend({ store: Store.redis(redis) })],
  * })
  *
- * const { id, url } = await tempoId.backend.start({ redirectUri })
+ * const { id, url } = await accounts.backend.start({ redirectUri })
  * ```
  */
 export function backend(options: backend.Options) {

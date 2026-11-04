@@ -19,7 +19,7 @@ import type * as Session from '../Session.js'
  *
  * @example
  * ```ts
- * const tempoId = Accounts.create({
+ * const accounts = Accounts.create({
  *   plugins: [
  *     redirect({
  *       open: async (url) => (await WebBrowser.openAuthSessionAsync(url, redirectUri)).url,
@@ -28,7 +28,7 @@ import type * as Session from '../Session.js'
  *   redirectUri: 'myapp://callback',
  * })
  *
- * const session = await tempoId.redirect.signIn()
+ * const session = await accounts.redirect.signIn()
  * ```
  */
 export function redirect(options: redirect.Options = {}) {

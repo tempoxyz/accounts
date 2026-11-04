@@ -24,15 +24,15 @@ const app = create({
     new URL('../web/style.css', import.meta.url),
     'utf8',
   ),
-  tempoId: (env, options) => {
+  accounts: (env, options) => {
     const existing = instances.get(options.clientId)
     if (existing) return existing
-    const tempoId = instance(env, {
+    const accounts = instance(env, {
       backend: { store: Store.memory() },
       clientId: options.clientId,
     })
-    instances.set(options.clientId, tempoId)
-    return tempoId
+    instances.set(options.clientId, accounts)
+    return accounts
   },
 })
 

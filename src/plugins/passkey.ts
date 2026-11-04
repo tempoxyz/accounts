@@ -14,9 +14,9 @@ import type * as Session from '../Session.js'
  *
  * @example
  * ```ts
- * const tempoId = Accounts.create({ plugins: [passkey(), email()] })
+ * const accounts = Accounts.create({ plugins: [passkey(), email()] })
  *
- * const result = await tempoId.passkey.signIn()
+ * const result = await accounts.passkey.signIn()
  * if ('step' in result) showEmailForm(result.step.link)
  * ```
  */

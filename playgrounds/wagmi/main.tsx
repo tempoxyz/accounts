@@ -43,7 +43,7 @@ import * as Mpp from '../web/Mpp.tsx'
 import * as Defaults from './Defaults.ts'
 import * as FundingFields from './FundingFields.tsx'
 import * as PermissionFields from './PermissionFields.tsx'
-import { clientId, ousd, tempoId, tempoIdUrl } from './TempoId.ts'
+import { clientId, ousd, accounts, tempoIdUrl } from './TempoId.ts'
 
 /** The access key expired before a send. */
 class KeyExpiredError extends Error {
@@ -63,7 +63,7 @@ const appName = 'Wagmi playground'
  * The result of the deposit page that a redirect opened, read once on load before the address bar
  * drops its `deposit_status`.
  */
-const returned = tempoId.funding.complete()
+const returned = accounts.funding.complete()
 
 /** The message that the page signs. */
 const message = 'Sign in to the wagmi playground'
@@ -116,7 +116,7 @@ const upgradeKey = `upgrade-available:${clientId}`
 // The callback's code redemption starts before the first render. The instance completes one
 // redirect for each page load, so wagmi's reconnection and the restore read the same result, and the
 // restore handles its refusal.
-if (callback) void tempoId.session.get().catch(() => undefined)
+if (callback) void accounts.session.get().catch(() => undefined)
 
 /**
  * Returns the instance's session, and renders again at each change. wagmi holds only the connection's
@@ -124,8 +124,8 @@ if (callback) void tempoId.session.get().catch(() => undefined)
  */
 function useSession() {
   return useSyncExternalStore(
-    tempoId.session.subscribe,
-    () => tempoId.session.actor?.getSnapshot().context.session,
+    accounts.session.subscribe,
+    () => accounts.session.actor?.getSnapshot().context.session,
   )
 }
 
@@ -135,8 +135,8 @@ function useSession() {
  */
 function useStatus() {
   return useSyncExternalStore(
-    tempoId.session.status.subscribe,
-    tempoId.session.status.get,
+    accounts.session.status.subscribe,
+    accounts.session.status.get,
   )
 }
 
@@ -164,7 +164,7 @@ function App() {
   const authorizeVisitor = async () => {
     try {
       const result = await withAccount(() =>
-        tempoId.authorize({ accessKey: permissions() }),
+        accounts.authorize({ accessKey: permissions() }),
       )
       if (!result) return null
       setUpgradeAvailable(result.upgradeAvailable)
@@ -184,7 +184,7 @@ function App() {
         error instanceof Accounts.RequestError &&
         error.reason === 'webauthn_required'
       )
-        return (await tempoId.authorize({ accessKey: false })) ?? null
+        return (await accounts.authorize({ accessKey: false })) ?? null
       throw error
     }
   }
@@ -202,7 +202,7 @@ function App() {
       // sign-in with the refusal.
       const restored = await (async () => {
         try {
-          return await tempoId.session.get({
+          return await accounts.session.get({
             async reauthorize() {
               authorizing = true
               return (await authorizeVisitor()) ?? undefined
@@ -237,7 +237,7 @@ function App() {
   useEffect(() => {
     if (restore.isPending || session) return
     // The prefetch never rejects, and the sign-in works without it.
-    void tempoId.redirect.prefetch()
+    void accounts.redirect.prefetch()
     prepared.current = prepare()
   }, [restore.isPending, session])
   const passkey = useMutation({
@@ -256,7 +256,7 @@ function App() {
           error instanceof Accounts.RequestError &&
           error.reason === 'webauthn_required'
         )
-          return await tempoId.authorize({ accessKey: false })
+          return await accounts.authorize({ accessKey: false })
         // No realm of the app holds passkeys for this page's origin, such as Tempo Cash's.
         if (
           error instanceof Accounts.RequestError &&
@@ -279,17 +279,17 @@ function App() {
     },
   })
   const sendCode = useMutation({
-    mutationFn: (email: string) => tempoId.email.sendCode({ email }),
+    mutationFn: (email: string) => accounts.email.sendCode({ email }),
     onSuccess: (_, email) => setEmail(email),
   })
   const resendCode = useMutation({
-    mutationFn: () => tempoId.email.sendCode({ email: email! }),
+    mutationFn: () => accounts.email.sendCode({ email: email! }),
   })
   const verifyCode = useMutation({
     mutationFn: async (code: string) => {
       try {
         return await upgrade(
-          await tempoId.email.signIn({
+          await accounts.email.signIn({
             accessKey: permissions(),
             code,
             email: email!,
@@ -304,7 +304,7 @@ function App() {
           error instanceof Accounts.RequestError &&
           error.reason === 'webauthn_required'
         )
-          return await tempoId.authorize({ accessKey: false })
+          return await accounts.authorize({ accessKey: false })
         throw error
       }
     },
@@ -319,7 +319,7 @@ function App() {
     mutationFn: async () => {
       writeUpgrade(false)
       if (connection.status === 'connected') await disconnect.mutateAsync()
-      else await tempoId.signOut()
+      else await accounts.signOut()
     },
     onSettled: () => {
       setEmail(undefined)
@@ -514,7 +514,7 @@ function App() {
                       redirect.reset()
                       cancel.current = new AbortController()
                       dialog.mutate(
-                        tempoId.dialog.signIn({
+                        accounts.dialog.signIn({
                           accessKey: key ? permissions() : false,
                           signal: cancel.current.signal,
                         }),
@@ -555,7 +555,7 @@ function App() {
                 </Layout.Row>
                 <details>
                   <summary>Funding hint, for the redirect</summary>
-                  <FundingFields.Form chainId={tempoId.config.chainId} />
+                  <FundingFields.Form chainId={accounts.config.chainId} />
                 </details>
                 <PermissionsPanel onReset={reset} resets={resets} />
               </form>
@@ -644,7 +644,7 @@ function SignedIn(props: SignedIn.Props) {
   // authorized a key.
   const tempoAccount = useQuery({
     // A query holds no `undefined`, so a user without an account in the app's realms reads `null`.
-    queryFn: async () => (await tempoId.account.get()) ?? null,
+    queryFn: async () => (await accounts.account.get()) ?? null,
     queryKey: ['account', user.id],
   })
   // The default realm goes unnamed, so only a named realm, such as Tempo Cash, shows.
@@ -659,7 +659,7 @@ function SignedIn(props: SignedIn.Props) {
       const tokens = await (async () => {
         const current = props.session
         if (current.expiresAt - 30_000 > Date.now()) return current
-        return (await tempoId.session.refresh()) ?? current
+        return (await accounts.session.refresh()) ?? current
       })()
       const response = await fetch(new URL('/me', apiUrl), {
         headers: { authorization: `Bearer ${tokens.accessToken}` },
@@ -671,21 +671,21 @@ function SignedIn(props: SignedIn.Props) {
   // The dialog shows the approval page on this page, which shows the key and signs it on approval.
   // The instance's store holds the new session, which the page and the connector read.
   const authorize = useMutation({
-    mutationFn: () => tempoId.dialog.signIn({ accessKey: permissions() }),
+    mutationFn: () => accounts.dialog.signIn({ accessKey: permissions() }),
   })
   const hasPasskey = tempoAccount.data?.keys.some(
     (entry) => entry.type === 'webAuthn',
   )
   // Two prompts: the authenticator creates the passkey, then the new passkey signs Tempo ID's proof.
   const addPasskey = useMutation({
-    mutationFn: () => tempoId.passkey.register(),
+    mutationFn: () => accounts.passkey.register(),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['account', user.id] }),
   })
   // A sign-in upgrades a wallet.tempo passkey's wallet, unless it ran on page load or the user
   // canceled the upgrade's prompt. Then the wallet upgrades on a click, and keeps the key.
   const walletUpgrade = useMutation({
-    mutationFn: () => tempoId.account.upgrade(),
+    mutationFn: () => accounts.account.upgrade(),
     onSuccess: props.onUpgrade,
   })
 
@@ -890,7 +890,7 @@ function Deposit(props: Deposit.Props) {
   const deposit = useMutation({
     // The deposit funds the access key's chain, where the page reads and sends.
     mutationFn: (mode: 'popup' | 'redirect') =>
-      tempoId.funding.open({ chainId: props.chainId, mode }),
+      accounts.funding.open({ chainId: props.chainId, mode }),
     onSuccess: () => props.onDeposit?.(),
   })
   const result = deposit.data ?? returned
@@ -1006,7 +1006,7 @@ function Wallet(props: Wallet.Props) {
   // The dialog shows the approval page on this page, which signs a new key for the remembered
   // permissions.
   const renew = useMutation({
-    mutationFn: () => tempoId.dialog.signIn({ accessKey: permissions() }),
+    mutationFn: () => accounts.dialog.signIn({ accessKey: permissions() }),
   })
 
   const sendError = invalid ?? send.error ?? undefined
@@ -1170,7 +1170,7 @@ function Wallet(props: Wallet.Props) {
 
       {/* The mpp plugin pays only on the viem plugin's chains, whose chains wagmi holds too. */}
       {chain ? (
-        <Mpp.Section apiUrl={apiUrl} payer={tempoId.mpp} sessionKey={key} />
+        <Mpp.Section apiUrl={apiUrl} payer={accounts.mpp} sessionKey={key} />
       ) : null}
     </>
   )
@@ -1204,7 +1204,7 @@ function PermissionsPanel(props: PermissionsPanel.Props) {
             : "Empty fields use Tempo ID's defaults."}
         </p>
         <PermissionFields.Form
-          chainId={tempoId.config.chainId}
+          chainId={accounts.config.chainId}
           defaultValue={stored()}
           disabled={Boolean(configured)}
           tempoIdUrl={tempoIdUrl}
@@ -1306,14 +1306,14 @@ type Prepared = {
   /** The remembered fields, as JSON, when the page prepared the sign-in. */
   fields: string
   /** The sign-in's handle. */
-  passkey: ReturnType<typeof tempoId.passkey.prepare>
+  passkey: ReturnType<typeof accounts.passkey.prepare>
 }
 
 /** Prepares the passkey sign-in of the remembered fields. */
 function prepare(): Prepared {
   return {
     fields: JSON.stringify(stored()),
-    passkey: tempoId.passkey.prepare({ accessKey: permissions() }),
+    passkey: accounts.passkey.prepare({ accessKey: permissions() }),
   }
 }
 
@@ -1335,7 +1335,7 @@ async function upgrade<
 >(result: result): Promise<result> {
   if (!result.upgradeAvailable) return result
   // The upgrade registers the session's key first, so the key keeps working.
-  const upgraded = await tempoId.account.upgrade().then(
+  const upgraded = await accounts.account.upgrade().then(
     () => true,
     () => false,
   )
@@ -1366,8 +1366,8 @@ async function withAccount<result>(fn: () => Promise<result>) {
     )
       throw error
     // No account to create, such as in a realm without a Privy app, leaves the refusal as it was.
-    if (!(await tempoId.account.get())) throw error
-    return await tempoId.authorize({ accessKey: permissions() })
+    if (!(await accounts.account.get())) throw error
+    return await accounts.authorize({ accessKey: permissions() })
   }
 }
 
@@ -1378,7 +1378,7 @@ async function start(options: {
   funding?: Funding.Funding | undefined
   key: boolean
 }) {
-  await tempoId.redirect.signIn({
+  await accounts.redirect.signIn({
     accessKey: options.key ? permissions() : false,
     funding: options.funding,
   })
@@ -1420,7 +1420,7 @@ document.title = appName
 // instance's saved session as it mounts.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <WagmiProvider config={tempoId.wagmi}>
+    <WagmiProvider config={accounts.wagmi}>
       <QueryClientProvider client={new QueryClient()}>
         <App />
       </QueryClientProvider>

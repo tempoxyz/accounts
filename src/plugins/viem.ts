@@ -1,5 +1,5 @@
 /**
- * The plugin of the Viem client: `tempoId.viem`, a client whose account follows the instance's
+ * The plugin of the Viem client: `accounts.viem`, a client whose account follows the instance's
  * session, which a call configures for another chain, a fixed session, or other client options.
  * @module
  */
@@ -65,9 +65,9 @@ export class RetryClosedError extends Error {
 
 /**
  * Returns the plugin of the Viem client, which adds `viem`, and the default client's actions to the
- * instance itself, such as `tempoId.token.transferSync()`. `tempoId.viem` is the default client: the
+ * instance itself, such as `accounts.token.transferSync()`. `accounts.viem` is the default client: the
  * instance's chain, its transport, and an account that follows the instance's session.
- * `tempoId.viem({ … })` returns a client with overrides, such as another chain, or a fixed `session`
+ * `accounts.viem({ … })` returns a client with overrides, such as another chain, or a fixed `session`
  * for one request on a backend. Without options, the clients use Tempo's chains and their own RPC.
  * The plugin takes options, or a function that returns the options of a chain by its ID, such as
  * for a transport of each chain. A chain ID is valid when it names a Tempo chain, or when its
@@ -89,13 +89,13 @@ export class RetryClosedError extends Error {
  *
  * @example
  * ```ts
- * const tempoId = Accounts.create({
+ * const accounts = Accounts.create({
  *   plugins: [email(), viem()],
  * })
  *
- * await tempoId.token.transferSync({ amount, to, token })
- * await tempoId.viem({ chainId: tempoTestnet.id }).token.transferSync({ amount, to, token })
- * await tempoId.viem({ session }).token.transferSync({ amount, to, token })
+ * await accounts.token.transferSync({ amount, to, token })
+ * await accounts.viem({ chainId: tempoTestnet.id }).token.transferSync({ amount, to, token })
+ * await accounts.viem({ session }).token.transferSync({ amount, to, token })
  * ```
  */
 export function viem(options: viem.Options | viem.Resolver = {}) {
@@ -458,8 +458,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       }) as unknown as viem.Namespace
     },
     // The default client's actions, also on the instance itself. They read the default client,
-    // whose account follows the session, so `tempoId.token.transferSync()` sends as
-    // `tempoId.viem.token.transferSync()` does.
+    // whose account follows the session, so `accounts.token.transferSync()` sends as
+    // `accounts.viem.token.transferSync()` does.
     extend: (instance: Accounts.Accounts) => {
       const namespace = (
         instance as unknown as {
@@ -564,7 +564,7 @@ export declare namespace viem {
     /** Which refused transactions of the client retry. Defaults to the plugin's `retry`. */
     retry?: RetryOptions | undefined
     /**
-     * A fixed session, such as one that `tempoId.backend.get` returns, whose access key signs. A
+     * A fixed session, such as one that `accounts.backend.get` returns, whose access key signs. A
      * client of a session without an access key throws `Accounts.KeyRequiredError`.
      */
     session?: Session.Session | undefined
@@ -598,7 +598,7 @@ export declare namespace viem {
     | 'type'
     | 'uid'
 
-  /** The chains and transports of the plugin, which `tempoId.viem[settings]` returns. */
+  /** The chains and transports of the plugin, which `accounts.viem[settings]` returns. */
   type Settings = {
     /**
      * Returns the chain of `chainId`: its options' `chain`, or Tempo's chain of that ID. Absent when
@@ -611,12 +611,12 @@ export declare namespace viem {
     transport: (chainId: number) => Transport
   }
 
-  /** `tempoId.viem`: the default client, which a call configures. */
+  /** `accounts.viem`: the default client, which a call configures. */
   type Namespace = Client & ((overrides?: Overrides) => Client)
 }
 
 /**
- * The key of `tempoId.viem` that returns the plugin's {@link viem.Settings}. The entries of the
+ * The key of `accounts.viem` that returns the plugin's {@link viem.Settings}. The entries of the
  * package do not export it, so only the package's own plugins read it.
  */
 export const settings = Symbol('viem.settings')

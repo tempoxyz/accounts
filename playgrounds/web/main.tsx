@@ -39,7 +39,7 @@ import * as FundingFields from './FundingFields.tsx'
 import * as Layout from './Layout.tsx'
 import * as Mpp from './Mpp.tsx'
 import * as PermissionFields from './PermissionFields.tsx'
-import { clientId, ousd, tempoId, tempoIdUrl } from './TempoId.ts'
+import { clientId, ousd, accounts, tempoIdUrl } from './TempoId.ts'
 
 /** The access key expired before a send. */
 class KeyExpiredError extends Error {
@@ -63,7 +63,7 @@ const appName = (() => {
  * The result of the deposit page that a redirect opened, read once on load before the address bar
  * drops its `deposit_status`.
  */
-const returned = tempoId.funding.complete()
+const returned = accounts.funding.complete()
 
 /** Whether the page load is a callback, read before the instance's completion removes `state`. */
 const callback = new URLSearchParams(location.search).has('state')
@@ -130,15 +130,15 @@ const thirdParty = URL.canParse(clientId) || clientId.startsWith('app_')
 
 // The callback's code redemption starts before the first render. The instance completes one
 // redirect for each page load, so the query reads the same result, and handles its refusal.
-if (callback) void tempoId.session.get().catch(() => undefined)
+if (callback) void accounts.session.get().catch(() => undefined)
 
 function App() {
   const queryClient = useQueryClient()
   // The instance's status, which holds a saved session whose access key expired while the restore
   // renews it.
   const sessionStatus = useSyncExternalStore(
-    tempoId.session.status.subscribe,
-    tempoId.session.status.get,
+    accounts.session.status.subscribe,
+    accounts.session.status.get,
   )
   const [email, setEmail] = useState<string>()
   // Why the permission fields cannot form permissions, until the next sign-in starts.
@@ -162,7 +162,7 @@ function App() {
     try {
       // An app that requests no key signs a visitor in without one, as its sign-in does.
       const result = await withAccount(() =>
-        tempoId.authorize({ accessKey: key ? permissions() : false }),
+        accounts.authorize({ accessKey: key ? permissions() : false }),
       )
       if (!result) return null
       setUpgradeAvailable(result.upgradeAvailable)
@@ -182,7 +182,7 @@ function App() {
         error instanceof Accounts.RequestError &&
         error.reason === 'webauthn_required'
       )
-        return (await tempoId.authorize({ accessKey: false })) ?? null
+        return (await accounts.authorize({ accessKey: false })) ?? null
       throw error
     }
   }
@@ -199,7 +199,7 @@ function App() {
       // sign-in with the refusal.
       const restored = await (async () => {
         try {
-          return await tempoId.session.get({
+          return await accounts.session.get({
             async reauthorize() {
               authorizing = true
               return (await authorizeVisitor()) ?? undefined
@@ -237,7 +237,7 @@ function App() {
   useEffect(() => {
     if (session.isPending || session.data) return
     // The prefetch never rejects, and the sign-in works without it.
-    void tempoId.redirect.prefetch()
+    void accounts.redirect.prefetch()
     prepared.current = prepare()
   }, [session.data, session.isPending])
   const passkey = useMutation({
@@ -256,7 +256,7 @@ function App() {
           error instanceof Accounts.RequestError &&
           error.reason === 'webauthn_required'
         )
-          return await tempoId.authorize({ accessKey: false })
+          return await accounts.authorize({ accessKey: false })
         // No realm of the app holds passkeys for this page's origin, such as Tempo Cash's.
         if (
           error instanceof Accounts.RequestError &&
@@ -279,17 +279,17 @@ function App() {
     },
   })
   const sendCode = useMutation({
-    mutationFn: (email: string) => tempoId.email.sendCode({ email }),
+    mutationFn: (email: string) => accounts.email.sendCode({ email }),
     onSuccess: (_, email) => setEmail(email),
   })
   const resendCode = useMutation({
-    mutationFn: () => tempoId.email.sendCode({ email: email! }),
+    mutationFn: () => accounts.email.sendCode({ email: email! }),
   })
   const verifyCode = useMutation({
     mutationFn: async (code: string) => {
       try {
         return await upgrade(
-          await tempoId.email.signIn({
+          await accounts.email.signIn({
             accessKey: permissions(),
             code,
             email: email!,
@@ -304,7 +304,7 @@ function App() {
           error instanceof Accounts.RequestError &&
           error.reason === 'webauthn_required'
         )
-          return await tempoId.authorize({ accessKey: false })
+          return await accounts.authorize({ accessKey: false })
         throw error
       }
     },
@@ -317,7 +317,7 @@ function App() {
   const signOut = useMutation({
     mutationFn: async () => {
       writeUpgrade(false)
-      await tempoId.signOut()
+      await accounts.signOut()
     },
     mutationKey: signOutKey,
     onSettled: () => forget(),
@@ -344,7 +344,7 @@ function App() {
   // follows the status, which a sign-out during an authorization changes only once it ends.
   useEffect(() => {
     const check = () => {
-      const current = tempoId.session.status.get()
+      const current = accounts.session.status.get()
       const shown = queryClient.getQueryData<Session.Session | null>(sessionKey)
       // Another tab's sign-in shows here too. A sign-in of this page's own sets the same session
       // once it settles. The upgrade flag is the app's, which the `storage` listener below reads
@@ -378,7 +378,7 @@ function App() {
     }
     window.addEventListener('storage', stored)
     check()
-    const unsubscribe = tempoId.session.status.subscribe(check)
+    const unsubscribe = accounts.session.status.subscribe(check)
     return () => {
       window.removeEventListener('storage', stored)
       unsubscribe()
@@ -544,7 +544,7 @@ function App() {
                       redirect.reset()
                       cancel.current = new AbortController()
                       dialog.mutate(
-                        tempoId.dialog.signIn({
+                        accounts.dialog.signIn({
                           accessKey: key ? permissions() : false,
                           funding: FundingFields.read(
                             new FormData(event.currentTarget.form!),
@@ -589,7 +589,7 @@ function App() {
                 </Layout.Row>
                 <details>
                   <summary>Funding hint</summary>
-                  <FundingFields.Form chainId={tempoId.config.chainId} />
+                  <FundingFields.Form chainId={accounts.config.chainId} />
                 </details>
                 <PermissionsPanel onReset={reset} resets={resets} />
               </form>
@@ -680,7 +680,7 @@ function SignedIn(props: SignedIn.Props) {
   async function tokens() {
     const current = props.session
     if (current.expiresAt - 30_000 > Date.now()) return current
-    const refreshed = await tempoId.session.refresh()
+    const refreshed = await accounts.session.refresh()
     if (!refreshed) return current
     queryClient.setQueryData(sessionKey, refreshed)
     return refreshed
@@ -696,7 +696,7 @@ function SignedIn(props: SignedIn.Props) {
     // reads them with the session cookie. A query holds no `undefined`, so a user without an
     // account in the app's realms reads `null`.
     queryFn: async () =>
-      (await tempoId.account.get(
+      (await accounts.account.get(
         thirdParty ? {} : { accessToken: (await tokens()).accessToken },
       )) ?? null,
     queryKey: ['account', user.id],
@@ -719,7 +719,7 @@ function SignedIn(props: SignedIn.Props) {
 
   // The dialog shows the approval page on this page, which shows the key and signs it on approval.
   const authorize = useMutation({
-    mutationFn: () => tempoId.dialog.signIn({ accessKey: permissions() }),
+    mutationFn: () => accounts.dialog.signIn({ accessKey: permissions() }),
     onSuccess: (result) => queryClient.setQueryData(sessionKey, result),
   })
   const hasPasskey = tempoAccount.data?.keys.some(
@@ -727,14 +727,14 @@ function SignedIn(props: SignedIn.Props) {
   )
   // Two prompts: the authenticator creates the passkey, then the new passkey signs Tempo ID's proof.
   const addPasskey = useMutation({
-    mutationFn: () => tempoId.passkey.register(),
+    mutationFn: () => accounts.passkey.register(),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['account', user.id] }),
   })
   // A sign-in upgrades a wallet.tempo passkey's wallet, unless it ran on page load or the user
   // canceled the upgrade's prompt. Then the wallet upgrades on a click, and keeps the key.
   const walletUpgrade = useMutation({
-    mutationFn: () => tempoId.account.upgrade(),
+    mutationFn: () => accounts.account.upgrade(),
     onSuccess: props.onUpgrade,
   })
 
@@ -898,7 +898,7 @@ function KeyDetails(props: KeyDetails.Props) {
   const { chainId, expiry, limits } = KeyAuthorization.fromRpc(
     props.sessionKey.keyAuthorization,
   )
-  const chain = tempoId.viem({ chainId: Number(chainId) }).chain
+  const chain = accounts.viem({ chainId: Number(chainId) }).chain
 
   return (
     <dl id="key">
@@ -947,7 +947,7 @@ function Deposit(props: Deposit.Props) {
   const deposit = useMutation({
     // The deposit funds the access key's chain, where the page reads and sends.
     mutationFn: (mode: 'frame' | 'popup' | 'redirect') =>
-      tempoId.funding.open({
+      accounts.funding.open({
         ...(props.address ? { address: props.address } : {}),
         chainId: props.chainId,
         mode,
@@ -1025,7 +1025,7 @@ function Wallet(props: Wallet.Props) {
   const { account } = key
   const { chainId } = KeyAuthorization.fromRpc(key.keyAuthorization)
   // Sends and reads go to the key's chain, which the permissions can set apart from the page's.
-  const client = tempoId.viem({ chainId: Number(chainId) })
+  const client = accounts.viem({ chainId: Number(chainId) })
   // Reads go through the same transport without an account, since the node checks a key's scopes
   // on a call from its account.
   const reader = useMemo(
@@ -1102,7 +1102,7 @@ function Wallet(props: Wallet.Props) {
   // The dialog shows the approval page on this page, which signs a new key for the remembered
   // permissions.
   const renew = useMutation({
-    mutationFn: () => tempoId.dialog.signIn({ accessKey: permissions() }),
+    mutationFn: () => accounts.dialog.signIn({ accessKey: permissions() }),
     onSuccess: (result) => queryClient.setQueryData(sessionKey, result),
   })
 
@@ -1252,7 +1252,7 @@ function Wallet(props: Wallet.Props) {
         )}
       </Layout.Section>
 
-      <Mpp.Section apiUrl={apiUrl} payer={tempoId.mpp} sessionKey={key} />
+      <Mpp.Section apiUrl={apiUrl} payer={accounts.mpp} sessionKey={key} />
     </>
   )
 }
@@ -1283,7 +1283,7 @@ function PermissionsPanel(props: PermissionsPanel.Props) {
             : "Empty fields use Tempo ID's defaults."}
         </p>
         <PermissionFields.Form
-          chainId={tempoId.config.chainId}
+          chainId={accounts.config.chainId}
           defaultValue={stored()}
           disabled={Boolean(configured)}
           tempoIdUrl={tempoIdUrl}
@@ -1373,14 +1373,14 @@ type Prepared = {
   /** The remembered fields, as JSON, when the page prepared the sign-in. */
   fields: string
   /** The sign-in's handle. */
-  passkey: ReturnType<typeof tempoId.passkey.prepare>
+  passkey: ReturnType<typeof accounts.passkey.prepare>
 }
 
 /** Prepares the passkey sign-in of the remembered fields. */
 function prepare(): Prepared {
   return {
     fields: JSON.stringify(stored()),
-    passkey: tempoId.passkey.prepare({ accessKey: permissions() }),
+    passkey: accounts.passkey.prepare({ accessKey: permissions() }),
   }
 }
 
@@ -1402,7 +1402,7 @@ async function upgrade<
 >(result: result): Promise<result> {
   if (!result.upgradeAvailable) return result
   // The upgrade registers the session's key first, so the key keeps working.
-  const upgraded = await tempoId.account.upgrade().then(
+  const upgraded = await accounts.account.upgrade().then(
     () => true,
     () => false,
   )
@@ -1433,7 +1433,7 @@ async function withAccount<result>(fn: () => Promise<result>) {
     )
       throw error
     // No account to create, such as in a realm without a Privy app, leaves the refusal as it was.
-    if (!(await tempoId.account.get())) throw error
+    if (!(await accounts.account.get())) throw error
     return await fn()
   }
 }
@@ -1445,7 +1445,7 @@ async function start(options: {
   funding?: Funding.Funding | undefined
   key: boolean
 }) {
-  await tempoId.redirect.signIn({
+  await accounts.redirect.signIn({
     accessKey: options.key ? permissions() : false,
     funding: options.funding,
   })
@@ -1483,7 +1483,7 @@ function field(name: string, action: (value: string) => void) {
 
 // A saved session fills the query before the first render, so the page opens signed in. The read
 // makes no request, and a callback's redemption fills the query in its own request.
-const preloaded = callback ? undefined : await tempoId.session.get()
+const preloaded = callback ? undefined : await accounts.session.get()
 const queryClient = new QueryClient()
 if (preloaded) queryClient.setQueryData(sessionKey, preloaded)
 

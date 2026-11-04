@@ -28,7 +28,7 @@ const rpcUrl = process.env.EXPO_PUBLIC_TEMPO_RPC_URL
 /** The app's registered redirect URI, which the sign-in and the deposit page return to. */
 export const redirectUri = 'xyz.tempo.example.mobile:/callback'
 
-export const tempoId = Accounts.create({
+export const accounts = Accounts.create({
   accessKey: { expiry: '1d', limits: [{ limit: '1000', token: 'ousd' }] },
   // A local node, or Tempo testnet without a URL.
   chainId: rpcUrl ? tempoLocalnet.id : tempoTestnet.id,

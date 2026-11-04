@@ -40,7 +40,7 @@ export const tempoIdUrl =
  * authorization request to `/oauth2/par`. `VITE_PRELOAD`: `false` loads the frame only at the click.
  * The `wagmi` plugin reads the chains and transports of the `viem` plugin.
  */
-export const tempoId = Accounts.create({
+export const accounts = Accounts.create({
   chainId: Chain.chain.id,
   // The app that `scripts/seed.ts` registers.
   clientId,

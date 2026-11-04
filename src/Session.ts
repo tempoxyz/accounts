@@ -22,9 +22,9 @@ export type Session = Tokens & {
 }
 
 /**
- * The status of an instance's session, with the session to show, which `tempoId.useSession()`
- * returns. It is the state of `tempoId.session.actor`. An authorization of the browser's Tempo ID
- * session, such as `tempoId.authorize`, holds it at `pending`, or at `reauthorizing` while it renews
+ * The status of an instance's session, with the session to show, which `accounts.useSession()`
+ * returns. It is the state of `accounts.session.actor`. An authorization of the browser's Tempo ID
+ * session, such as `accounts.authorize`, holds it at `pending`, or at `reauthorizing` while it renews
  * a saved session whose access key expired.
  */
 export type Status =
@@ -78,7 +78,7 @@ export function from(value: Session): Session {
  *
  * @example
  * ```ts
- * if (Session.expired(session)) await tempoId.signOut()
+ * if (Session.expired(session)) await accounts.signOut()
  * ```
  */
 export function expired(session: Session): boolean {

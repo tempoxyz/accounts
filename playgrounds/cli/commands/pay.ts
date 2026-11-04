@@ -1,7 +1,7 @@
 /** Pays an MPP endpoint with the CLI's access key: one charge, or several requests of a session. @module */
 import { Cli, z } from 'incur'
 import { Receipt } from 'mppx'
-import { tempoId } from '../TempoId.ts'
+import { accounts } from '../TempoId.ts'
 
 /** The API playground's URL, whose MPP routes the command pays without a URL. */
 const apiUrl = process.env.API_URL ?? 'http://127.0.0.1:5176'
@@ -41,7 +41,7 @@ export default Cli.command({
       ),
   }),
   async run(c) {
-    const session = await tempoId.session.get()
+    const session = await accounts.session.get()
     if (!session?.key)
       return c.error({
         code: 'SIGNED_OUT',
@@ -55,7 +55,7 @@ export default Cli.command({
 
     if (!requests) {
       // The access key signs, and a charge above `--max` throws before it does.
-      const response = await tempoId
+      const response = await accounts
         .mpp({ maxAmount: c.options.max, mode: c.options.mode })
         .fetch(url)
       return {
@@ -68,7 +68,7 @@ export default Cli.command({
     }
 
     // The first request opens a channel on the channel reserve, and each one pays with a voucher.
-    const manager = tempoId.mpp.session({ maxDeposit: '0.05' })
+    const manager = accounts.mpp.session({ maxDeposit: '0.05' })
     const paid = []
     try {
       for (let index = 0; index < requests; index++) {

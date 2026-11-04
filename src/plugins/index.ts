@@ -7,7 +7,7 @@
  * import { Accounts } from 'accounts'
  * import { email, passkey, viem } from 'accounts/plugins'
  *
- * const tempoId = Accounts.create({ plugins: [email(), passkey(), viem({ chain: tempo })] })
+ * const accounts = Accounts.create({ plugins: [email(), passkey(), viem({ chain: tempo })] })
  * ```
  * @module
  */

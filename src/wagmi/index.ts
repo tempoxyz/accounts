@@ -1,6 +1,6 @@
 /**
- * The entry for wagmi: `tempoId`, a connector whose wallet is a Tempo ID instance, and `wagmi`, a
- * plugin that adds `tempoId.wagmi`, a config whose connector is the app's own instance. The
+ * The entry for wagmi: `accounts`, a connector whose wallet is a Tempo ID instance, and `wagmi`, a
+ * plugin that adds `accounts.wagmi`, a config whose connector is the app's own instance. The
  * instance's session is the connection, and its Viem client signs: the access key signs
  * transactions, messages, and typed data. The account's owner signs messages and typed data for a
  * session without an access key, and on a page until the chain holds the session's access key.
@@ -276,23 +276,23 @@ export declare namespace tempoId {
 }
 
 /**
- * Returns the plugin of the wagmi config: `tempoId.wagmi`, a config whose one connector is the
+ * Returns the plugin of the wagmi config: `accounts.wagmi`, a config whose one connector is the
  * instance itself, over the chains and transports of the `viem` plugin. Without a `viem` plugin in
  * `plugins`, it adds the Viem client itself, as `viem()` does. An app passes `viem({ … })` for
  * other options, such as a `feeToken`.
- * The instance's chain is the config's first. `tempoId.wagmi({ … })` returns a config with overrides,
+ * The instance's chain is the config's first. `accounts.wagmi({ … })` returns a config with overrides,
  * such as `ssr` or more connectors. Without `connectors`, the config holds only Tempo ID.
  *
- * The connector is the one that {@link tempoId} returns, over the app's own instance: `connect`
+ * The connector is the one that {@link accounts} returns, over the app's own instance: `connect`
  * signs in with the instance's sign-in, and `disconnect` signs out.
  *
  * @example
  * ```tsx
- * const tempoId = Accounts.create({ accessKey, plugins: [passkey(), wagmi()] })
+ * const accounts = Accounts.create({ accessKey, plugins: [passkey(), wagmi()] })
  *
- * <WagmiProvider config={tempoId.wagmi}>…</WagmiProvider>
+ * <WagmiProvider config={accounts.wagmi}>…</WagmiProvider>
  *
- * const config = tempoId.wagmi({ ssr: true })
+ * const config = accounts.wagmi({ ssr: true })
  * ```
  */
 export function wagmi(options: wagmi.Options = {}) {
@@ -392,7 +392,7 @@ export declare namespace wagmi {
     viem: viem.Namespace
   } & viem.Actions
 
-  /** `tempoId.wagmi`: the default config, which a call configures. */
+  /** `accounts.wagmi`: the default config, which a call configures. */
   type Namespace = Config & ((overrides?: Overrides) => Config)
 
   type Options = Omit<

@@ -1,5 +1,5 @@
 /**
- * The plugin of an app's relay route: `tempoId.relay`, the handler on the app's server that pays the
+ * The plugin of an app's relay route: `accounts.relay`, the handler on the app's server that pays the
  * fees of its pages' transactions, through the Tempo API's sponsor or the app's own fee payer.
  * @module
  */
@@ -11,7 +11,7 @@ import * as Plugin from '../Plugin.js'
 import { settings, viem } from './viem.js'
 
 /**
- * Returns the plugin of the app's relay route, which adds `tempoId.relay`: a handler of the Fetch
+ * Returns the plugin of the app's relay route, which adds `accounts.relay`: a handler of the Fetch
  * API that the app's server serves at the URL of the page's `viem({ relay })`.
  *
  * With `apiKey`, the handler forwards each request to the Tempo API's `/rpc/sponsor`, whose sponsor
@@ -24,12 +24,12 @@ import { settings, viem } from './viem.js'
  *
  * @example
  * ```ts
- * const tempoId = Accounts.create({
+ * const accounts = Accounts.create({
  *   clientId: 'https://app.example',
  *   plugins: [relay({ account: privateKeyToAccount(env.FEE_PAYER_KEY) })],
  * })
  *
- * app.post('/api/relay', (c) => tempoId.relay.fetch(c.req.raw))
+ * app.post('/api/relay', (c) => accounts.relay.fetch(c.req.raw))
  * ```
  */
 export function relay(options: relay.Options) {

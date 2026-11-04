@@ -22,7 +22,7 @@ import {
 import { custom } from 'viem'
 import { createClient } from 'viem/tempo'
 import { tempo, tempoTestnet } from 'viem/tempo/chains'
-import { ousd, redirectUri, tempoId } from './TempoId.ts'
+import { ousd, redirectUri, accounts } from './TempoId.ts'
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:5176'
 
@@ -56,7 +56,7 @@ function Main() {
 
   // The saved session from the secure store, or `null`.
   const session = useQuery({
-    queryFn: async () => (await tempoId.session.get()) ?? null,
+    queryFn: async () => (await accounts.session.get()) ?? null,
     queryKey: sessionKey,
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
@@ -73,7 +73,7 @@ function Main() {
   // The instance empties the session even when Tempo ID cannot end it, since the user asked to
   // leave, and the error still shows.
   const signOut = useMutation({
-    mutationFn: () => tempoId.signOut(),
+    mutationFn: () => accounts.signOut(),
     onSettled: () => {
       queryClient.setQueryData(sessionKey, null)
     },
@@ -119,7 +119,7 @@ async function signIn(
 ): Promise<Session.Session | undefined> {
   try {
     // The instance's `accessKey` requests the key.
-    return await tempoId.redirect.signIn(
+    return await accounts.redirect.signIn(
       options.key ? {} : { accessKey: false },
     )
   } catch (error) {
@@ -161,7 +161,7 @@ function SignedIn(props: SignedIn.Props) {
       // rotates, so the instance saves the new one.
       const session = await (async () => {
         if (props.session.expiresAt - 30_000 > Date.now()) return props.session
-        const refreshed = await tempoId.session.refresh()
+        const refreshed = await accounts.session.refresh()
         queryClient.setQueryData(sessionKey, refreshed ?? null)
         return refreshed ?? props.session
       })()
@@ -270,7 +270,7 @@ declare namespace Section {
 function Funding(props: Funding.Props) {
   const deposit = useMutation({
     mutationFn: async () => {
-      const { chainId, clientId, url } = tempoId.config
+      const { chainId, clientId, url } = accounts.config
       const target = new URL('/deposit', url)
       target.search = new URLSearchParams({
         address: props.account,
@@ -288,7 +288,7 @@ function Funding(props: Funding.Props) {
         redirectUri,
       )
       if (result.type !== 'success') return 'Closed the deposit page.'
-      const returned = Actions.funding.complete(tempoId.config, {
+      const returned = Actions.funding.complete(accounts.config, {
         redirectUri,
         url: result.url,
       })
@@ -303,7 +303,7 @@ function Funding(props: Funding.Props) {
   // and cannot return to the app. On a test chain, the app funds the account from the chain's faucet.
   const faucet = useMutation({
     mutationFn: async () => {
-      await tempoId.faucet.fundSync({ account: props.account })
+      await accounts.faucet.fundSync({ account: props.account })
       return 'Funded with testnet tokens.'
     },
   })
@@ -320,7 +320,7 @@ function Funding(props: Funding.Props) {
           }}
           title="Deposit"
         />
-        {tempoId.config.chainId === tempo.id ? null : (
+        {accounts.config.chainId === tempo.id ? null : (
           <Button
             disabled={funding}
             onPress={() => {
@@ -359,7 +359,7 @@ function Transfers() {
   const send = useMutation({
     mutationFn: async () => {
       // The client's account follows the session's access key, so the transfer names none.
-      const { receipt } = await tempoId.token.transferSync({
+      const { receipt } = await accounts.token.transferSync({
         amount: 10_000n,
         to: '0x000000000000000000000000000000000000dEaD',
         token: ousd,
@@ -389,7 +389,7 @@ function Transfers() {
 function Signatures(props: Signatures.Props) {
   const sign = useMutation({
     mutationFn: async (kind: 'message' | 'typed-data') => {
-      const client = tempoId.viem()
+      const client = accounts.viem()
       // Reads go through the same transport without an account, since the node checks a key's
       // scopes on a call from its account.
       const reader = createClient({
@@ -454,7 +454,7 @@ function Payments(props: Payments.Props) {
   // access key starts one too.
   const [closes, setCloses] = useState(0)
   const manager = useMemo(
-    () => tempoId.mpp.session({ maxDeposit: '0.05' }),
+    () => accounts.mpp.session({ maxDeposit: '0.05' }),
     [props.sessionKey, closes],
   )
   // The manager holds its channel in memory alone. A sign-out, a new access key, or a close replaces
@@ -473,7 +473,7 @@ function Payments(props: Payments.Props) {
   )
   const charge = useMutation({
     mutationFn: async () => {
-      const response = await tempoId.fetch(new URL('/mpp/charge', apiUrl))
+      const response = await accounts.fetch(new URL('/mpp/charge', apiUrl))
       return `${response.status} ${await response.text()}`
     },
   })

@@ -314,7 +314,7 @@ export declare namespace Section {
     /** The API playground's URL, whose `/mpp` routes respond with 402 challenges. */
     apiUrl: string
     /**
-     * Returns the payer of the session's access key with the overrides, such as `tempoId.mpp`, whose
+     * Returns the payer of the session's access key with the overrides, such as `accounts.mpp`, whose
      * access key signs each transaction, proof, and voucher.
      */
     payer: (overrides?: mpp.Overrides) => mpp.Payer

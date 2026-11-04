@@ -36,7 +36,7 @@ export type BackendSession = Omit<
  *
  * @example
  * ```ts
- * const sessions = BackendSessions.create(tempoId.config, { store })
+ * const sessions = BackendSessions.create(accounts.config, { store })
  * ```
  */
 export function create(

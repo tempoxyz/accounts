@@ -1,7 +1,7 @@
 /** Sends OUSD with the CLI's access key. @module */
 import { Cli, z } from 'incur'
 import { Value } from 'ox'
-import { ousd, tempoId } from '../TempoId.ts'
+import { ousd, accounts } from '../TempoId.ts'
 
 export default Cli.command({
   args: z.object({
@@ -16,14 +16,14 @@ export default Cli.command({
   }),
   description: 'Send OUSD from your Tempo Account',
   async run(c) {
-    if (!(await tempoId.session.get())?.key)
+    if (!(await accounts.session.get())?.key)
       return c.error({
         code: 'SIGNED_OUT',
         message: 'Not signed in. Run `login`.',
       })
 
     // The client's account is the session's access key.
-    const { receipt } = await tempoId.token.transferSync({
+    const { receipt } = await accounts.token.transferSync({
       amount: Value.from(c.args.amount, 6),
       to: c.args.to as `0x${string}`,
       token: ousd,

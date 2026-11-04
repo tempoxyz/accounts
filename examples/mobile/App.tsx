@@ -10,7 +10,7 @@ import { react } from 'accounts/react'
 import * as React from 'react'
 import { Button, SafeAreaView, Text } from 'react-native'
 import { parseUnits } from 'viem'
-import { Expiry, Scopes } from 'viem/tempo'
+import { Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
@@ -22,10 +22,10 @@ const ousd = Tokens.ousd(tempo.id).address
  * Tempo ID's pages in the system browser, which returns to the app's scheme from `app.json`. Each
  * sign-in requests a key that sends up to 100 OUSD for a day.
  */
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   accessKey: () => ({
-    expiry: Expiry.days(1),
-    limits: [{ limit: parseUnits('100', 6), token: ousd }],
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
     scopes: [Scopes.tip20(ousd).transfer()],
   }),
   clientId: 'tempo-example-mobile',
@@ -40,7 +40,7 @@ const tempoId = Accounts.create({
 
 /** The root component. */
 export function App() {
-  const { session } = tempoId.useSession()
+  const { session } = accounts.useSession()
   const [status, setStatus] = React.useState<string>()
 
   /** Runs `fn`, and shows its result or its error. */
@@ -59,7 +59,7 @@ export function App() {
           <Button
             onPress={() =>
               run(async () => {
-                const { receipt } = await tempoId.token.transferSync({
+                const { receipt } = await accounts.token.transferSync({
                   amount: parseUnits('0.01', 6),
                   to: '0x000000000000000000000000000000000000dEaD',
                   token: ousd,
@@ -70,13 +70,15 @@ export function App() {
             title="Send 0.01 OUSD"
           />
           <Button
-            onPress={() => run(async () => (await tempoId.signOut(), ''))}
+            onPress={() => run(async () => (await accounts.signOut(), ''))}
             title="Sign out"
           />
         </>
       ) : (
         <Button
-          onPress={() => run(async () => (await tempoId.redirect.signIn(), ''))}
+          onPress={() =>
+            run(async () => (await accounts.redirect.signIn(), ''))
+          }
           title="Sign in with Tempo"
         />
       )}

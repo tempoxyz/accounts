@@ -15,7 +15,7 @@ const rpcUrl = process.env.TEMPO_RPC_URL
  * The instance. `CLIENT_ID` names the device app, and `tempo-cli-cash` signs in to Tempo Cash. The
  * session saves to a file that only the user can read, and `TEMPO_ID_CREDENTIALS` moves it.
  */
-export const tempoId = Accounts.create({
+export const accounts = Accounts.create({
   // A local node, or Tempo testnet without a URL.
   chainId: rpcUrl ? tempoLocalnet.id : tempoTestnet.id,
   clientId: process.env.CLIENT_ID ?? 'tempo-cli',

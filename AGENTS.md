@@ -30,10 +30,10 @@
 - Use `const` generics when callers keep literal or tuple types.
 - Default option bags in the signature: `options: fn.Options = {}`.
 - Name option bags `options`.
-- Take at most two positional parameters: an optional receiver (`tempoId`, `client`, `store`) or the inspected value (`error`, `session`), then one options object.
+- Take at most two positional parameters: an optional receiver (`accounts`, `client`, `store`) or the inspected value (`error`, `session`), then one options object.
 
   ```ts
-  Actions.authorize(tempoId, { permissions }) // not authorize(tempoId, permissions)
+  Actions.authorize(accounts, { permissions }) // not authorize(accounts, permissions)
   Store.file({ path }) // not file(path)
   ```
 
@@ -162,7 +162,7 @@ Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustan
 - Create actors with `createActor(machine).start()` in the owning lifecycle, never at module scope.
 - `send` is synchronous.
 - Wait with `waitFor(actor, predicate)`.
-- Expose actors read-only. For common reads, expose a stable `{ get, subscribe }` pair, such as `tempoId.session.status`.
+- Expose actors read-only. For common reads, expose a stable `{ get, subscribe }` pair, such as `accounts.session.status`.
 - `accounts` does not depend on `@xstate/react`. It reads `{ get, subscribe }` with `useSyncExternalStore`.
 
 **Testing**

@@ -103,7 +103,7 @@ export async function callback(auth: Config): Promise<boolean> {
 
 /**
  * Loads the `iframe` dialog of a later {@link signIn}, hidden, so the dialog shows the sign-in at
- * once. Call it when the page loads, such as beside the sign-in button. `tempoId` calls it when it
+ * once. Call it when the page loads, such as beside the sign-in button. `accounts` calls it when it
  * creates the client, unless its `preload` is `false`. Without it, the dialog shows once its frame
  * loads.
  *

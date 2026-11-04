@@ -20,12 +20,12 @@ import { redirect } from './redirect.js'
  * ```ts
  * import { expo } from 'accounts/expo'
  *
- * const tempoId = Accounts.create({
+ * const accounts = Accounts.create({
  *   clientId: 'client_…',
  *   plugins: [expo({ redirectUri: 'myapp:/callback' })],
  * })
  *
- * const session = await tempoId.redirect.signIn()
+ * const session = await accounts.redirect.signIn()
  * ```
  */
 export function expo(options: expo.Options) {

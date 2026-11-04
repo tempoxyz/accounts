@@ -8,8 +8,8 @@
  * import { Accounts } from 'accounts'
  * import { Dpop } from 'accounts/internal'
  *
- * const tempoId = Accounts.create({ clientId: 'tempo-cli', dpop: await Dpop.create() })
- * await tempoId.session.refresh()
+ * const accounts = Accounts.create({ clientId: 'tempo-cli', dpop: await Dpop.create() })
+ * await accounts.session.refresh()
  * ```
  * @module
  */

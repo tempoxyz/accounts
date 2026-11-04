@@ -47,7 +47,7 @@ Create an instance with `Accounts.create`, and add a plugin from `accounts/plugi
 import { Accounts } from 'accounts'
 import { viem } from 'accounts/plugins'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   // Each sign-in requests an access key that may spend up to 10 OUSD for a day.
   accessKey: {
     expiry: '1d',
@@ -56,8 +56,8 @@ const tempoId = Accounts.create({
   plugins: [viem()],
 })
 
-await tempoId.dialog.signIn()
-await tempoId.token.transferSync({ amount, to, token })
+await accounts.dialog.signIn()
+await accounts.token.transferSync({ amount, to, token })
 ```
 
 ## Documentation

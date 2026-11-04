@@ -27,16 +27,16 @@ import * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
 
 /**
- * Returns the plugin of React, which adds `tempoId.useSession()`.
+ * Returns the plugin of React, which adds `accounts.useSession()`.
  *
  * @example
  * ```tsx
- * const tempoId = Accounts.create({ plugins: [react()] })
+ * const accounts = Accounts.create({ plugins: [react()] })
  *
  * function Account() {
- *   const { isPending, session } = tempoId.useSession()
+ *   const { isPending, session } = accounts.useSession()
  *   if (isPending) return <p>Checking your Tempo session…</p>
- *   if (!session) return <button onClick={() => tempoId.dialog.signIn()}>Sign in</button>
+ *   if (!session) return <button onClick={() => accounts.dialog.signIn()}>Sign in</button>
  *   return <p>Signed in as {session.user.email}</p>
  * }
  * ```
@@ -153,8 +153,8 @@ export declare namespace react {
   type Options = {
     /**
      * Whether the first render authorizes the browser's Tempo ID session when it finds no session,
-     * or a session whose access key expired, as `tempoId.authorize` does: `true`, the parameters of
-     * that authorization, or a function that authorizes, as `tempoId.session.get` takes. While it
+     * or a session whose access key expired, as `accounts.authorize` does: `true`, the parameters of
+     * that authorization, or a function that authorizes, as `accounts.session.get` takes. While it
      * renews an expired session, the status is `reauthorizing`, with that session. Defaults to
      * `true` on a page of a first-party app, and `false` elsewhere, such as in a third-party app or
      * a native app. A failure of the default authorization leaves the status `signedOut`, and a

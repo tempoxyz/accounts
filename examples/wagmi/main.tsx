@@ -12,7 +12,7 @@ import { wagmi } from 'accounts/wagmi'
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { parseUnits } from 'viem'
-import { Expiry, Scopes } from 'viem/tempo'
+import { Scopes } from 'viem/tempo'
 import { tempo, tempoTestnet } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 import {
@@ -29,12 +29,12 @@ const ousd = Tokens.ousd(tempo.id).address
 
 /**
  * The Tempo ID instance, on Tempo testnet. Each connection requests a key that sends up to 100 OUSD
- * for a day, and `tempoId.wagmi` is its wagmi config.
+ * for a day, and `accounts.wagmi` is its wagmi config.
  */
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   accessKey: () => ({
-    expiry: Expiry.days(1),
-    limits: [{ limit: parseUnits('100', 6), token: ousd }],
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
     scopes: [Scopes.tip20(ousd).transfer()],
   }),
   chainId: tempoTestnet.id,
@@ -99,7 +99,7 @@ function App() {
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <WagmiProvider config={tempoId.wagmi}>
+    <WagmiProvider config={accounts.wagmi}>
       <QueryClientProvider client={queryClient}>
         <App />
       </QueryClientProvider>
