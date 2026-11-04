@@ -97,8 +97,10 @@ export type Options = {
    * This is a perimeter check for persisted state, not the full account schema.
    */
   schema?: z.ZodMiniType | undefined
-  /** Initial chain ID. */
+  /** Initial chain ID, also used when a persisted selection is unsupported. */
   chainId: number
+  /** Allowed chain IDs for restoring persisted state. Omit to preserve any stored selection. */
+  chainIds?: readonly number[] | undefined
   /** Keystores backing access-key records that carry an opaque `handle`. */
   keystores?: core_Keystore.Keystores | undefined
   /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
@@ -115,6 +117,7 @@ export type Options = {
 export function create(options: Options): Store {
   const {
     chainId,
+    chainIds,
     keystores = core_Keystore.defaults,
     maxAccounts,
     persistCredentials = true,
@@ -138,7 +141,12 @@ export function create(options: Options): Store {
           chainId,
         }),
         {
-          merge: (persisted, current) => hydrate(persisted, current, { schema }),
+          merge: (persisted, current) => {
+            const state = hydrate(persisted, current, { schema })
+            // Older SDK versions could persist unsupported connect chains.
+            if (chainIds && !chainIds.includes(state.chainId)) return { ...state, chainId }
+            return state
+          },
           name: 'store',
           // Runs as each load starts. Unlike `onFinishHydration`, it also reports failed loads.
           onRehydrateStorage() {

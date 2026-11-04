@@ -178,3 +178,9 @@
 - **Cancel the queue at the cancellation boundary** -- custom dialogs use `onCancel(keep?)` to reject the current queue atomically, retaining only an already approved/executing request ID when needed. Never defer a blanket queue drain until that execution settles: it would reject fresh requests submitted after Back. The callback belongs to its dialog/context and cannot affect a replacement after reset.
 
 - **Queue cancellation is a custom-dialog contract** — built-in iframe/popup transports do not call `onCancel`. Removing successors must not force-sync an already-synced executing head: that can reopen a dismissed approval. Sync only a new unsynced head, and close an empty queue. The new required setup callback ships in a minor release.
+
+- **Reject unsupported chains at the SDK boundary** -- validate explicit connect chains before changing provider state. Remote request syncs must finish chain switching before approval and return switch errors with their EIP-1193 code intact (use Ox Provider.parseError, not RpcResponse.parseError). Settled queues close without chain/account checks; serialize in-flight switches across subscription replacement and ignore superseded completions.
+
+- **Repair legacy chain selections during hydration** -- provider state written by older SDKs may contain unsupported chains. Validate each hydrated selection against the provider's configured chain IDs and use its mainnet/testnet default when unsupported, without clearing accounts or changing valid custom-chain selections. Keep public remote subscriptions safe to call without a receiver.
+
+- **Short device-code fixtures need a consumer polling override** -- the host advertises whole seconds and rounds sub-second polling intervals up to one second. Set the adapter's `pollingInterval` explicitly when testing denial with a short deadline; otherwise a pending first poll can consume the entire timeout before observing the denial.

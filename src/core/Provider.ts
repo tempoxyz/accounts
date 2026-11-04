@@ -155,6 +155,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
+    chainIds: chains.map((chain) => chain.id),
     keystores,
     maxAccounts,
     persistCredentials,
@@ -1397,7 +1398,13 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                   case 'wallet_connect': {
                     const chainId = request._decoded.params?.[0]?.chainId
-                    if (chainId) store.setState((x) => ({ ...x, chainId }))
+                    if (chainId !== undefined) {
+                      if (!chains.some((c) => c.id === chainId))
+                        throw new ox_Provider.UnsupportedChainIdError({
+                          message: `Chain ${chainId} not configured.`,
+                        })
+                      store.setState({ chainId })
+                    }
 
                     const capabilities = request._decoded.params?.[0]?.capabilities
                     const authorizeAccessKey =
