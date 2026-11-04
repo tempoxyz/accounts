@@ -938,7 +938,10 @@ export function create(options: create.Options = {}): create.ReturnType {
         chainId: info.chainId,
       })
 
-    const accessKey = AddressUtil.from(info.operation.authority)
+    const accessKey =
+      info.operation.kind === 'authorizePaymentChannel'
+        ? AddressUtil.from(info.operation.authority)
+        : undefined
     if (!accessKey) return await store.accessKeys.select({ account, chainId: info.chainId })
     if (AddressUtil.isZero(accessKey) || AddressUtil.isEqual(accessKey, account)) return undefined
 

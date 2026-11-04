@@ -256,6 +256,33 @@ describe('getMppxParameters', () => {
     expect(resolvedKey?.source).toBe('accessKey')
   })
 
+  test('behavior: resolves existing access key to sign a payment proof', async () => {
+    const payer = accounts[0]!
+    const provider = Provider.create({ storage: Storage.memory() })
+    const chainId = provider.store.getState().chainId
+
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId,
+      parameters: { expiry: 9999999999, privateKey: privateKeys[2] },
+    })
+    const key = provider.store.getState().accessKeys[0]!
+    provider.store.setState({ accounts: [{ address: payer.address }], activeAccount: 0 })
+
+    const resolved = await provider.getMppxParameters().resolveAccount({
+      account: { address: payer.address, type: 'json-rpc' },
+      chainId,
+      operation: { kind: 'signPaymentProof' },
+    })
+    const resolvedKey = resolved as
+      | { accessKeyAddress: string; address: string; source: string }
+      | undefined
+
+    expect(resolvedKey?.accessKeyAddress.toLowerCase()).toBe(key.address.toLowerCase())
+    expect(resolvedKey?.address).toBe(payer.address)
+    expect(resolvedKey?.source).toBe('accessKey')
+  })
+
   test('behavior: resolves requested access key for connected account', async () => {
     const payer = accounts[0]!
     const provider = Provider.create({ storage: Storage.memory() })

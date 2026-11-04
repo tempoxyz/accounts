@@ -6,6 +6,10 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    ignore:
+      # `@voidzero-dev/vite-plus-core` peers on `@vitejs/devtools@^0.7`. A newer version resolves a second `vite`.
+      - dependency-name: "@vitejs/devtools"
+        versions: [">=0.8.0"]
     groups:
       npm-weekly:
         applies-to: "version-updates"
