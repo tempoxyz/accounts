@@ -1,0 +1,8 @@
+# Lets the workflows of `tempoxyz/id` mint a short-lived token that reads this repository, so they
+# check out its `accounts` submodule. Jobs in an environment, such as `preview` and `production`,
+# present the environment form of the subject.
+subject_pattern: repo:tempoxyz@211589300/id@1414265934:(ref:refs/heads/.+|pull_request|environment:(preview|production))
+claim_pattern:
+  job_workflow_ref: tempoxyz/id/\.github/workflows/[\w-]+\.yml@.+
+permissions:
+  contents: read
