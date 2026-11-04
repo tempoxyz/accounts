@@ -5,7 +5,7 @@
  * web playground.
  * @module
  */
-import type * as Sheet from '../internal/sheet.js'
+import type * as Sheet from '../internal/Sheet.js'
 import { createActor } from 'xstate'
 import { describe, expect, test } from 'vite-plus/test'
 import { getShortestPaths } from 'xstate/graph'

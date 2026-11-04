@@ -70,6 +70,7 @@
 ## Module and Instance Conventions
 
 - One module is one namespace of types, constants, functions, and errors, read as `Module.operation(...)`.
+- Name every module file in PascalCase, after its namespace, in `src/internal/` too: `Session.ts`, `Popup.ts`. Folders stay lowercase, such as `actions/` and `internal/viem/`.
 - The root entry exports only `Accounts`, `Permissions`, `Plugin`, `Session`, and `Store`, which sit at the top of `src/`. Every other module goes in `src/internal/`, and `accounts/internal` exports those that apps can use.
 - Prefer stateless functions. Create an instance only for dependencies or lifecycle state, through `Module.create(options)` returning a plain object.
 - `Accounts.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons.
@@ -96,7 +97,7 @@
 
 ## State Machines
 
-Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustand, Redux, and `let`-flag stores are banned. `machines.session` in `src/internal/session.ts` is the reference.
+Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustand, Redux, and `let`-flag stores are banned. `machines.session` in `src/internal/Session.ts` is the reference.
 
 | State                                                      | Model                                |
 | ---------------------------------------------------------- | ------------------------------------ |
@@ -129,7 +130,7 @@ Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustan
 
 - Persist a store with `persist` from `@xstate/store/persist`, with `skipHydration: true`. Call `rehydrateStore` in the owning lifecycle.
 - Persist a machine through a provided action, such as `save`. Never use `getPersistedSnapshot`.
-- The session's write queue lives in `src/internal/session.ts`. Its non-extractable `CryptoKey` needs IndexedDB. A failed save rejects its change.
+- The session's write queue lives in `src/internal/Session.ts`. Its non-extractable `CryptoKey` needs IndexedDB. A failed save rejects its change.
 
 **Structure**
 

@@ -6,9 +6,9 @@
  */
 import { Base64, Bytes } from 'ox'
 import type * as Funding from '../internal/Funding.js'
-import * as BackendSessions from '../internal/backendSessions.js'
-import * as Rpc from '../internal/rpc.js'
-import * as SignIn from '../internal/signIn.js'
+import * as BackendSessions from '../internal/BackendSessions.js'
+import * as Rpc from '../internal/Rpc.js'
+import * as SignIn from '../internal/SignIn.js'
 import * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
 import type { Store } from '../Store.js'

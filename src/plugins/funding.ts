@@ -4,7 +4,7 @@
  * @module
  */
 import * as Actions from '../internal/Actions.js'
-import * as Core from '../internal/core.js'
+import * as Core from '../internal/Core.js'
 import * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
 

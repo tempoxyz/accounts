@@ -13,8 +13,8 @@ import type { Permissions } from '../Permissions.js'
 import type * as Session from '../Session.js'
 import type { Store } from '../Store.js'
 import * as TempoAccount from './TempoAccount.js'
-import * as Api from './api.js'
-import * as Callback from './callback.js'
+import * as Api from './Api.js'
+import * as Callback from './Callback.js'
 
 /** A session of a backend's user, as `get` returns it. The refresh token stays in the store. */
 export type BackendSession = Omit<

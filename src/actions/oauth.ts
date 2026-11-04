@@ -3,7 +3,7 @@
  * @module
  */
 import type { Config } from '../Accounts.js'
-import * as Api from '../internal/api.js'
+import * as Api from '../internal/Api.js'
 import type { User } from '../internal/User.js'
 
 /**

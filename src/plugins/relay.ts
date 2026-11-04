@@ -6,7 +6,7 @@
 import { createClient, type LocalAccount } from 'viem'
 import { Relay } from 'viem/tempo'
 import type * as Accounts from '../Accounts.js'
-import * as RelayRoute from '../internal/relayRoute.js'
+import * as RelayRoute from '../internal/RelayRoute.js'
 import * as Plugin from '../Plugin.js'
 import { settings, viem } from './viem.js'
 

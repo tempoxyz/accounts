@@ -3,7 +3,7 @@
  * @module
  */
 import type { Config } from '../Accounts.js'
-import * as Api from '../internal/api.js'
+import * as Api from '../internal/Api.js'
 
 /**
  * Lists the realms that the app reaches, in its settings' order. The first holds a user's first

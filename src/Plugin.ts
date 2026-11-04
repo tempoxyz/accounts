@@ -4,7 +4,7 @@
  * @module
  */
 import type * as Accounts from './Accounts.js'
-import type { Change, ChangeOptions } from './internal/session.js'
+import type { Change, ChangeOptions } from './internal/Session.js'
 import type { Permissions } from './Permissions.js'
 import type * as Session from './Session.js'
 

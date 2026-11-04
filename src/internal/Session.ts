@@ -950,7 +950,7 @@ export namespace machines {
           started: args.context.logouts.started + 1,
         },
       })),
-      /** Saves `context.session` to the store. `session.ts` provides it. */
+      /** Saves `context.session` to the store. `Session.ts` provides it. */
       save: () => {},
       /** Sets the session, and counts the change, and the sign-in when it is one. */
       set: assign((args) => {

@@ -16,16 +16,16 @@ const source = import.meta.dirname
 /** The modules that only one plugin's flow imports, by plugin. */
 const modules = {
   backend: [
-    'internal/backendSessions.ts',
-    'internal/rpc.ts',
+    'internal/BackendSessions.ts',
+    'internal/Rpc.ts',
     'plugins/backend.ts',
   ],
   device: ['actions/device.ts', 'plugins/device.ts'],
-  dialog: ['actions/dialog.ts', 'internal/sheet.ts', 'plugins/dialog.ts'],
+  dialog: ['actions/dialog.ts', 'internal/Sheet.ts', 'plugins/dialog.ts'],
   email: ['actions/email.ts', 'plugins/email.ts'],
   passkey: ['actions/passkey.ts', 'plugins/passkey.ts'],
   redirect: ['plugins/redirect.ts'],
-  viem: ['internal/viem/accessKey.ts', 'internal/signer.ts', 'plugins/viem.ts'],
+  viem: ['internal/viem/AccessKey.ts', 'internal/Signer.ts', 'plugins/viem.ts'],
 } as const
 
 /** Each plugin's options in the app, where it needs some. */

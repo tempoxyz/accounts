@@ -5,7 +5,7 @@
  * @module
  */
 /* istanbul ignore file -- The popup window exists only in a browser. */
-import * as Chains from './chains.js'
+import * as Chains from './Chains.js'
 
 /**
  * Milliseconds that a closed popup has to deliver a callback that its page posted as it closed,

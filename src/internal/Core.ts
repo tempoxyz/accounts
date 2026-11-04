@@ -10,7 +10,7 @@ import * as AccessKey from './AccessKey.js'
 import type * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
 import type * as TempoAccount from './TempoAccount.js'
-import * as SignIn from './signIn.js'
+import * as SignIn from './SignIn.js'
 
 /**
  * Requests the app's tokens, and an access key, for the user's Tempo ID session in the

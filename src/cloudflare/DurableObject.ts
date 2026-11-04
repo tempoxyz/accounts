@@ -5,8 +5,8 @@
 /* istanbul ignore file -- The class runs only in workerd, which the suite reaches through a test Worker. */
 import * as Workers from 'cloudflare:workers'
 import * as Accounts from '../Accounts.js'
-import * as BackendSessions from '../internal/backendSessions.js'
-import * as Rpc from '../internal/rpc.js'
+import * as BackendSessions from '../internal/BackendSessions.js'
+import * as Rpc from '../internal/Rpc.js'
 import type * as Session from '../Session.js'
 import * as Store from '../Store.js'
 

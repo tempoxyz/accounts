@@ -7,9 +7,9 @@
  */
 /* istanbul ignore file -- Each action needs a browser window, for the popup or the redirect. */
 import type { Config } from '../Accounts.js'
-import * as Chains from '../internal/chains.js'
-import * as Popup from '../internal/popup.js'
-import type * as Sheet from '../internal/sheet.js'
+import * as Chains from '../internal/Chains.js'
+import * as Popup from '../internal/Popup.js'
+import type * as Sheet from '../internal/Sheet.js'
 
 /** The browser blocked the popup, since `open` ran outside a user gesture such as a click. */
 export class BlockedError extends Error {
@@ -230,7 +230,7 @@ export async function open(
   // and iPadOS open, so a dialog offers it, and the user's click on Continue opens it.
   if (mode === 'popup' && options.mode !== 'popup' && !Popup.activated()) {
     const address = await abortable(read(), { signal })
-    const Sheet = await import('../internal/sheet.js')
+    const Sheet = await import('../internal/Sheet.js')
     return await new Promise((resolve, reject) => {
       const abort = () => {
         close()
@@ -300,7 +300,7 @@ async function watch(
         // not bundle it, and the dialog shows once the chunk loads unless the call settled before. A
         // chunk that fails to load leaves the page without the dialog, and the popup still settles
         // the call, so the import's own rejection handler makes it safe to leave unawaited.
-        void import('../internal/sheet.js').then(
+        void import('../internal/Sheet.js').then(
           (Sheet) => {
             if (settled) return
             unblock = Sheet.waiting({
@@ -503,7 +503,7 @@ async function frame(
 ): Promise<NonNullable<open.ReturnType>> {
   const { redirectUri, signal, toUrl } = options
   const address = await abortable(options.address, { signal })
-  const Sheet = await import('../internal/sheet.js')
+  const Sheet = await import('../internal/Sheet.js')
   // An abort while the dialog's module loads fired before the listener below, so it rejects here.
   signal?.throwIfAborted()
 

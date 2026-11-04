@@ -10,7 +10,7 @@ import * as Session from '../Session.js'
 import type * as TempoAccount from './TempoAccount.js'
 import type { Tokens } from './Tokens.js'
 import type { User } from './User.js'
-import * as Api from './api.js'
+import * as Api from './Api.js'
 
 /**
  * The `accessKey` of a sign-in: what the access key may do, a function that returns it, or `false`

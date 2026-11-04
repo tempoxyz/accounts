@@ -5,7 +5,7 @@
 import { KeyRequiredError } from '../Accounts.js'
 import * as Actions from '../internal/Actions.js'
 import type * as Funding from '../internal/Funding.js'
-import * as SignIn from '../internal/signIn.js'
+import * as SignIn from '../internal/SignIn.js'
 import * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
 

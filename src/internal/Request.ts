@@ -9,7 +9,7 @@ import type * as Funding from './Funding.js'
 import * as Pending from './Pending.js'
 import * as Permissions from '../Permissions.js'
 import * as AccessKey from './AccessKey.js'
-import * as Api from './api.js'
+import * as Api from './Api.js'
 
 /** Unpadded URL-safe Base64, as PKCE and `key_authorization` use. */
 const base64url = { pad: false, url: true } as const

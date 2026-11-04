@@ -4,7 +4,7 @@
  */
 /* istanbul ignore file -- IndexedDB exists only in a browser. */
 import type { Store } from '../Store.js'
-import * as IndexedDb from './indexedDb.js'
+import * as IndexedDb from './IndexedDb.js'
 
 /** The default store, opened on first use. */
 let indexedDb: Store | undefined

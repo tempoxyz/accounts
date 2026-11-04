@@ -14,7 +14,7 @@ import {
   type TypedDataDefinition,
 } from 'viem'
 import type { Config } from '../Accounts.js'
-import * as Api from '../internal/api.js'
+import * as Api from '../internal/Api.js'
 import * as AccessKey from '../internal/AccessKey.js'
 import type { Permissions } from '../Permissions.js'
 import type { TempoAccount } from '../internal/TempoAccount.js'

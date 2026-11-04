@@ -8,8 +8,8 @@ import { type Config, RequestError } from '../Accounts.js'
 import type { Authorization } from './Authorization.js'
 import type { WithAccount } from '../Permissions.js'
 import * as AccessKey from './AccessKey.js'
-import * as Api from './api.js'
-import { request } from './request.js'
+import * as Api from './Api.js'
+import { request } from './Request.js'
 
 /**
  * A headless authorization, without its access key for a sign-in without `accessKey`, and whether

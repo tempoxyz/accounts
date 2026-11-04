@@ -8,7 +8,7 @@ import * as Session from '../Session.js'
 import { createActor } from 'xstate'
 import { describe, expect, test } from 'vite-plus/test'
 import { getShortestPaths } from 'xstate/graph'
-import { machines } from './session.js'
+import { machines } from './Session.js'
 
 describe('machines.session', () => {
   /** A saved session whose access key expired, which an authorization renews. */

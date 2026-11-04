@@ -19,9 +19,9 @@ import {
 import type { Authorization } from '../internal/Authorization.js'
 import type * as AccessKey_public from '../internal/AccessKey.js'
 import type * as AccessKey from '../internal/AccessKey.js'
-import * as Api from '../internal/api.js'
-import * as Headless from '../internal/headless.js'
-import * as RegistrationOptions from '../internal/registration.js'
+import * as Api from '../internal/Api.js'
+import * as Headless from '../internal/Headless.js'
+import * as RegistrationOptions from '../internal/Registration.js'
 import type { ChainId, Keyed, WithAccount } from '../Permissions.js'
 
 /**

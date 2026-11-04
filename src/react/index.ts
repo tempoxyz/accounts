@@ -21,8 +21,8 @@ import {
   waitFor,
 } from 'xstate'
 import type * as Accounts from '../Accounts.js'
-import * as ClientId from '../internal/clientId.js'
-import type * as Core from '../internal/core.js'
+import * as ClientId from '../internal/ClientId.js'
+import type * as Core from '../internal/Core.js'
 import * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
 

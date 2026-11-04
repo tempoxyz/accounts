@@ -4,8 +4,8 @@
  * @module
  */
 import * as Actions from '../internal/Actions.js'
-import type * as Api from '../internal/api.js'
-import * as SignIn from '../internal/signIn.js'
+import type * as Api from '../internal/Api.js'
+import * as SignIn from '../internal/SignIn.js'
 import * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
 

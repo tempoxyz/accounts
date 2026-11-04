@@ -21,7 +21,7 @@ import {
   setup,
   stateIn,
 } from 'xstate'
-import * as Popup from './popup.js'
+import * as Popup from './Popup.js'
 
 /** The stylesheets that {@link adopt} constructed, which a document adopts once. */
 const adopted = new WeakSet<CSSStyleSheet>()
@@ -913,38 +913,38 @@ export namespace machines {
    */
   export const sheet = setup({
     actions: {
-      /** Plays the dialog's exit, and keeps the frame from input. `sheet.ts` provides it. */
+      /** Plays the dialog's exit, and keeps the frame from input. `Sheet.ts` provides it. */
       animate: () => {},
-      /** Shows that the browser blocked the popup. `sheet.ts` provides it. */
+      /** Shows that the browser blocked the popup. `Sheet.ts` provides it. */
       blocked: () => {},
       /** Ends the current request. */
       clear: assign({ current: undefined, request: undefined }),
-      /** Takes the dialog out of the top layer, the accessibility tree, and focus. `sheet.ts` provides it. */
+      /** Takes the dialog out of the top layer, the accessibility tree, and focus. `Sheet.ts` provides it. */
       conceal: () => {},
-      /** Posts the end of the current request to the page. `sheet.ts` provides it. */
+      /** Posts the end of the current request to the page. `Sheet.ts` provides it. */
       end: () => {},
       /** Raises `fallback` for `params.reason`. */
       fail: raise((_, params: { reason: 'popup' | 'unavailable' }) => ({
         reason: params.reason,
         type: 'fallback' as const,
       })),
-      /** Replaces the frame with the offer of a popup, on `fallback`. `sheet.ts` provides it. */
+      /** Replaces the frame with the offer of a popup, on `fallback`. `Sheet.ts` provides it. */
       offer: () => {},
-      /** Runs the current request's `onCallback`, on `embed.callback` or `popup.callback`. `sheet.ts` provides it. */
+      /** Runs the current request's `onCallback`, on `embed.callback` or `popup.callback`. `Sheet.ts` provides it. */
       onCallback: () => {},
-      /** Runs the current request's `onClose`. `sheet.ts` provides it. */
+      /** Runs the current request's `onClose`. `Sheet.ts` provides it. */
       onClose: () => {},
-      /** Shows that the popup opened, and removes Continue. `sheet.ts` provides it. */
+      /** Shows that the popup opened, and removes Continue. `Sheet.ts` provides it. */
       opened: () => {},
-      /** Posts `context.request` to the page. `sheet.ts` provides it. */
+      /** Posts `context.request` to the page. `Sheet.ts` provides it. */
       post: () => {},
       /** Stops the popup's watch, and keeps the popup open. */
       receive: sendTo('popup', { type: 'received' }),
-      /** Removes the dialog and its frame from the document. `sheet.ts` provides it. */
+      /** Removes the dialog and its frame from the document. `Sheet.ts` provides it. */
       remove: () => {},
-      /** Sets the frame's height, on `embed.resize`. `sheet.ts` provides it. */
+      /** Sets the frame's height, on `embed.resize`. `Sheet.ts` provides it. */
       resize: () => {},
-      /** Shows the dialog, and admits it to the accessibility tree and to focus. `sheet.ts` provides it. */
+      /** Shows the dialog, and admits it to the accessibility tree and to focus. `Sheet.ts` provides it. */
       reveal: () => {},
       /** Marks the request posted. */
       sent: assign({ request: undefined }),
@@ -969,14 +969,14 @@ export namespace machines {
         if (event.type !== 'embed.loaded') return {}
         return { trusted: event.trusted }
       }),
-      /** Stops taking the page's messages. `sheet.ts` provides it. */
+      /** Stops taking the page's messages. `Sheet.ts` provides it. */
       unlisten: () => {},
     },
     actors: {
       /**
        * Opens the popup of `input.url`, watches it, and closes it once its state ends. It sends
        * `popup.opened` or `popup.blocked`, then `popup.callback` and `popup.close`, and stops watching
-       * on `received`. `sheet.ts` provides it.
+       * on `received`. `Sheet.ts` provides it.
        */
       popup: fromCallback<{ type: 'received' }, { url: string }>(() => {}),
     },
@@ -1348,7 +1348,7 @@ export namespace machines {
           type: 'received'
         }
       | (Handlers & {
-          /** The ID of the request, which `sheet.ts` generates. */
+          /** The ID of the request, which `Sheet.ts` generates. */
           id: string
           /** The `/oauth2/authorize` URL of the request, which a fallback popup opens. */
           popupUrl: string

@@ -7,8 +7,8 @@ import { type Config, RequestError } from '../Accounts.js'
 import type { Authorization } from '../internal/Authorization.js'
 import type * as Funding from '../internal/Funding.js'
 import * as AccessKey from '../internal/AccessKey.js'
-import * as Api from '../internal/api.js'
-import { keyAuthorization } from '../internal/request.js'
+import * as Api from '../internal/Api.js'
+import { keyAuthorization } from '../internal/Request.js'
 import type { WithAccount } from '../Permissions.js'
 
 /**
