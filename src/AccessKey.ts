@@ -5,7 +5,7 @@
 import { type Address, type Hex, PublicKey, type WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import type { OneOf } from 'viem'
-import { Account, KeyAuthorizationManager } from 'viem/tempo'
+import { Account } from 'viem/tempo'
 
 /**
  * A stored access key. A browser key is a non-extractable WebCrypto key pair, and any other a
@@ -108,19 +108,10 @@ export function toAccount(
   options: toAccount.Options = {},
 ): Account.AccessKeyAccount {
   const { accessKey } = options
-  const keyAuthorization = KeyAuthorization.fromRpc(key.keyAuthorization)
-  const keyAuthorizationManager = KeyAuthorizationManager.memory()
-  // The memory manager stores synchronously, so the authorization is in place before the account
-  // is returned.
-  void keyAuthorizationManager.set(
-    {
-      accessKey: keyAuthorization.address,
-      address: key.account,
-      chainId: Number(keyAuthorization.chainId),
-    },
-    keyAuthorization,
-  )
-  const access = { access: key.account, keyAuthorizationManager }
+  const access = {
+    access: key.account,
+    keyAuthorization: KeyAuthorization.fromRpc(key.keyAuthorization),
+  }
 
   if (key.keyPair) return Account.fromWebCryptoP256(key.keyPair, access)
   if (key.privateKey) return Account.fromSecp256k1(key.privateKey, access)

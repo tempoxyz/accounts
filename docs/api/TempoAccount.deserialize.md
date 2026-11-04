@@ -2,7 +2,7 @@
 
 ## Overview
 
-Rebuilds a Tempo Account from the JSON of [`TempoAccount.serialize`](TempoAccount.serialize.md), with no request. On a chain with configurable accounts, each passkey among `keys` with a `credential` signs as an owner, as in the account that `Actions.account.get` returns.
+Rebuilds a Tempo Account from the JSON of [`TempoAccount.serialize`](TempoAccount.serialize.md), with no request, through Viem's `Account.deserialize`. On a chain with configurable accounts, each passkey among `keys` whose `credential` derives one of the configuration's owners signs as that owner, as in the account that `Actions.account.get` returns.
 
 ## Usage
 
@@ -41,4 +41,4 @@ const account = TempoAccount.deserialize(value, { getFn })
 
 ### `TempoAccount.AddressMismatchError`
 
-Thrown when a version 0 configuration does not derive `address`, such as for a value that changed after `serialize`. A later version keeps `address`, since its configuration no longer derives it. Read the account again with `Actions.account.get`.
+Viem's `Account.AddressMismatchError`, whose `derived` is the address the configuration derives. Thrown when a version 0 configuration does not derive `address`, such as for a value that changed after `serialize`. A later version keeps `address`, since its configuration no longer derives it. Read the account again with `Actions.account.get`.

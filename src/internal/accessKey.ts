@@ -52,20 +52,6 @@ export async function resolve(
   }
 }
 
-/**
- * Rebuilds an access key that {@link resolve} generated from its material. Returns `undefined` for the
- * empty material of the app's own access key.
- */
-export function restore(
-  material: AccessKey.Material,
-): resolve.ReturnType | undefined {
-  if (material.keyPair)
-    return { accessKey: Account.fromWebCryptoP256(material.keyPair), material }
-  if (material.privateKey)
-    return { accessKey: Account.fromSecp256k1(material.privateKey), material }
-  return undefined
-}
-
 export declare namespace resolve {
   type ReturnType = {
     /** A Viem account that signs with the access key. */

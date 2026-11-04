@@ -2,32 +2,14 @@
  * One of a user's Tempo Accounts, as a Viem configurable account (TIP-1107) with Tempo ID's fields.
  * @module
  */
-import { Address } from 'ox'
-import { AccountConfig } from 'ox/tempo'
 import { Account } from 'viem/tempo'
 
-/** A configuration that does not derive the account's address. */
-export class AddressMismatchError extends Error {
-  override readonly name = 'TempoAccount.AddressMismatchError'
-  /** The address that the configuration derives. */
-  readonly derived: `0x${string}`
-
-  constructor(options: AddressMismatchError.Options) {
-    super(
-      `Invalid account configuration: it derives ${options.derived}, not ${options.address}. Read the account again.`,
-    )
-    this.derived = options.derived
-  }
-}
-
-export declare namespace AddressMismatchError {
-  type Options = {
-    /** The address of the account. */
-    address: `0x${string}`
-    /** The address that the configuration derives. */
-    derived: `0x${string}`
-  }
-}
+/**
+ * A version 0 configuration that does not derive the account's address: Viem's
+ * `Account.AddressMismatchError`, whose `derived` is the address that the configuration derives.
+ */
+export const AddressMismatchError = Account.AddressMismatchError
+export type AddressMismatchError = Account.AddressMismatchError
 
 /**
  * One of the user's Tempo Accounts: the Viem account that `Account.fromConfig` from `viem/tempo`
@@ -86,10 +68,11 @@ export declare namespace TempoAccount {
 }
 
 /**
- * Rebuilds a Tempo Account from the value of {@link serialize}, with no request. On a chain with
- * configurable accounts, a passkey among `keys` that holds a credential signs as an owner, through
- * `getFn`. Throws {@link AddressMismatchError} for a version 0 configuration that does not derive
- * `address`. A later version keeps `address`, since its configuration no longer derives it.
+ * Rebuilds a Tempo Account from the value of {@link serialize}, with no request, through Viem's
+ * `Account.deserialize`. On a chain with configurable accounts, a passkey among `keys` whose
+ * `credential` derives one of the configuration's owners signs as that owner, through `getFn`.
+ * Throws {@link AddressMismatchError} for a version 0 configuration that does not derive `address`.
+ * A later version keeps `address`, since its configuration no longer derives it.
  *
  * @example
  * ```ts
@@ -101,33 +84,14 @@ export function deserialize(
   options: deserialize.Options = {},
 ): TempoAccount {
   const { address, config, keys, owner, realm } = value
-
-  const viem = (() => {
-    if (!config) return Account.fromConfig(address)
-    const owners = config.owners.map((entry) => {
-      const credential = keys.find((key) =>
-        Address.isEqual(key.address, entry.owner),
-      )?.credential
-      return {
-        owner: credential
-          ? Account.fromWebAuthnP256(credential, {
-              getFn: options.getFn,
-              rpId: credential.rpId,
-            })
-          : entry.owner,
-        weight: entry.weight,
-      }
-    })
-    const { salt, threshold } = config
-    const version = BigInt(config.version)
-    // Viem derives the address of a version 0 configuration, and refuses an address beside it.
-    if (version === 0n) return Account.fromConfig({ owners, salt, threshold })
-    return Account.fromConfig({ address, owners, salt, threshold, version })
-  })()
-  if (!Address.isEqual(viem.address, address))
-    throw new AddressMismatchError({ address, derived: viem.address })
-
-  return { ...viem, keys, owner, realm }
+  const credentials = keys.flatMap((key) =>
+    key.credential ? [key.credential] : [],
+  )
+  const account = Account.deserialize(
+    { address, ...(config ? { config } : {}) },
+    { credentials, getFn: options.getFn },
+  )
+  return { ...account, keys, owner, realm }
 }
 
 export declare namespace deserialize {
@@ -154,12 +118,11 @@ export function from(value: TempoAccount): TempoAccount {
   return value
 }
 
-/** A Tempo Account as JSON, which {@link serialize} returns and {@link deserialize} rebuilds. */
-export type Serialized = {
-  /** The account's address. */
-  address: `0x${string}`
-  /** The account's configuration. Absent where the account is not configurable. */
-  config?: AccountConfig.Rpc | undefined
+/**
+ * A Tempo Account as JSON, which {@link serialize} returns and {@link deserialize} rebuilds: Viem's
+ * `Account.Serialized`, with Tempo ID's fields.
+ */
+export type Serialized = Account.Serialized & {
   /** The owner keys, as for `TempoAccount.keys`. */
   keys: readonly TempoAccount.Key[]
   /** Who signs the account's key authorizations, as for `TempoAccount.owner`. */
@@ -178,11 +141,6 @@ export type Serialized = {
  * ```
  */
 export function serialize(account: TempoAccount): Serialized {
-  return {
-    address: account.address,
-    ...(account.config ? { config: AccountConfig.toRpc(account.config) } : {}),
-    keys: account.keys,
-    owner: account.owner,
-    realm: account.realm,
-  }
+  const { keys, owner, realm } = account
+  return { ...Account.serialize(account), keys, owner, realm }
 }

@@ -130,4 +130,4 @@ Thrown by a transaction of the [`viem`](plugins.viem.md#pluginsviemretrycloseder
 
 ### `TempoAccount.AddressMismatchError`
 
-Thrown by [`TempoAccount.deserialize`](TempoAccount.deserialize.md) for a version 0 configuration that does not derive the account's address.
+Thrown by [`TempoAccount.deserialize`](TempoAccount.deserialize.md) for a version 0 configuration that does not derive the account's address. It is Viem's `Account.AddressMismatchError` from `viem/tempo`, whose `name` is `Account.AddressMismatchError` and whose `derived` is the address that the configuration derives. Match it with `instanceof TempoAccount.AddressMismatchError`, not by `name`.

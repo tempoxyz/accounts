@@ -6,8 +6,6 @@
  */
 import { Address } from 'ox'
 import {
-  hashMessage,
-  hashTypedData,
   type LocalAccount,
   type SignableMessage,
   type TypedData,
@@ -174,10 +172,8 @@ function ownerSigners(
       .reduce((total, owner) => total + Number(owner.weight), 0)
     if (weight < Number(configuration.threshold)) return undefined
     return {
-      signMessage: (parameters) =>
-        account.sign!({ hash: hashMessage(parameters.message) }),
-      signTypedData: (typedData) =>
-        account.sign!({ hash: hashTypedData(typedData as never) }),
+      signMessage: (parameters) => account.signMessage(parameters),
+      signTypedData: (typedData) => account.signTypedData(typedData as never),
     }
   }
 
