@@ -11,7 +11,7 @@ import { Accounts, Store } from 'accounts'
 import { backend } from 'accounts/plugins'
 import { Pool } from 'pg'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
   plugins: [

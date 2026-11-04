@@ -15,12 +15,12 @@ The preset of an Expo app, from `accounts/expo`. The preset has an entry of its 
 import { Accounts } from 'accounts'
 import { expo } from 'accounts/expo'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: 'client_…',
   plugins: [expo({ redirectUri: 'com.example.app:/callback' })],
 })
 
-const session = await tempoId.redirect.signIn()
+const session = await accounts.redirect.signIn()
 ```
 
 ## Parameters

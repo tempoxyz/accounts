@@ -2,7 +2,7 @@
 
 ## Overview
 
-Instantiates a plugin, which adds a namespace of actions to an instance, and keeps its `id` and actions as literal types, so the instance's type holds `tempoId[id]`. The built-in plugins of `accounts/plugins` use it. An app writes a plugin of its own for actions that share the instance's configuration and session, or for hooks at the instance's sign-in and sign-out.
+Instantiates a plugin, which adds a namespace of actions to an instance, and keeps its `id` and actions as literal types, so the instance's type holds `accounts[id]`. The built-in plugins of `accounts/plugins` use it. An app writes a plugin of its own for actions that share the instance's configuration and session, or for hooks at the instance's sign-in and sign-out.
 
 A plugin changes the session only through `context.session.change()`, which holds the race guard of the instance's sign-ins and saves the session.
 
@@ -10,22 +10,21 @@ A plugin changes the session only through `context.session.change()`, which hold
 
 ```ts
 import { Accounts, Plugin } from 'accounts'
-import { Actions } from 'accounts/internal'
 
-function realms() {
+function profile() {
   return Plugin.from({
     actions: (context) => ({
-      list: () => Actions.realm.list(context.config),
+      email: () => context.session.get()?.user.email,
     }),
     hooks: {
       afterSignIn: (context, session) => analytics.identify(session.user.id),
     },
-    id: 'realms',
+    id: 'profile',
   })
 }
 
-const tempoId = Accounts.create({ plugins: [realms()] })
-const list = await tempoId.realms.list()
+const accounts = Accounts.create({ plugins: [profile()] })
+const email = accounts.profile.email()
 ```
 
 ## Return type
@@ -59,7 +58,7 @@ Returns the access key of a sign-in that names none, or `undefined` for a sign-i
 
 - **Type:** [`Accounts.Config`](types.md#config)
 
-The instance's configuration, which every action of `Actions` takes.
+The instance's configuration.
 
 #### context.session.authorize
 
@@ -175,5 +174,5 @@ const preset = (options: { redirectUri: string }) => [
   redirect(),
 ]
 
-const tempoId = Accounts.create({ plugins: [preset({ redirectUri }), viem()] })
+const accounts = Accounts.create({ plugins: [preset({ redirectUri }), viem()] })
 ```

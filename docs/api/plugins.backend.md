@@ -2,7 +2,7 @@
 
 ## Overview
 
-The plugin of a backend's sessions: one for each of its users, under an opaque session ID that the browser holds in an `HttpOnly` cookie. It adds `tempoId.backend.start`, `complete`, `save`, `get`, `fetch`, and `end`. The tokens and the access key stay on the server, so an XSS on the app's pages cannot copy one.
+The plugin of a backend's sessions: one for each of its users, under an opaque session ID that the browser holds in an `HttpOnly` cookie. It adds `accounts.backend.start`, `complete`, `save`, `get`, `fetch`, and `end`. The tokens and the access key stay on the server, so an XSS on the app's pages cannot copy one.
 
 Concurrent requests of one session share one refresh. A [reused refresh token](https://github.com/tempoxyz/id/blob/main/docs/access-tokens.md#token-refresh) fails with `invalid_grant`, and revokes every refresh token of the app for the user. The plugin holds the refreshes in progress, so one process serves every request of a session:
 
@@ -19,18 +19,18 @@ A backend's instance holds no session of its own, since it serves many users. Wi
 import { Accounts, Store } from 'accounts'
 import { backend } from 'accounts/plugins'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
   plugins: [backend({ store: Store.redis(redis) })],
 })
 
 // GET /login
-const { id, url } = await tempoId.backend.start({ redirectUri })
+const { id, url } = await accounts.backend.start({ redirectUri })
 // GET /callback, with the session ID from the cookie
-await tempoId.backend.complete({ id, url: request.url })
+await accounts.backend.complete({ id, url: request.url })
 // Any later request
-const session = await tempoId.backend.get({ id })
+const session = await accounts.backend.get({ id })
 ```
 
 ## Return type
@@ -43,10 +43,10 @@ const session = await tempoId.backend.get({ id })
 
 - **Type:** `(parameters: { id: string; url: string }) => Promise<BackendSession>`
 
-Redeems the callback of `start` for the session `id`, as [`Actions.redirect.handleCallback`](Actions.redirect.handleCallback.md) does, and stores the session. A second callback for the same ID redeems no code. A callback with a missing or mismatched `state` keeps the pending sign-in. A matching callback consumes it before the token exchange, also when that exchange fails.
+Redeems the callback of `start` for the session `id`, and stores the session. A second callback for the same ID redeems no code. A callback with a missing or mismatched `state` keeps the pending sign-in. A matching callback consumes it before the token exchange, also when that exchange fails.
 
 ```ts
-const session = await tempoId.backend.complete({ id, url: c.req.url })
+const session = await accounts.backend.complete({ id, url: c.req.url })
 ```
 
 ### backend.end
@@ -56,17 +56,17 @@ const session = await tempoId.backend.complete({ id, url: c.req.url })
 Revokes the session's refresh token at `POST /oauth2/revoke`, then deletes the session. A refresh or a `complete` in progress finishes first, so `end` revokes the token that it stored.
 
 ```ts
-await tempoId.backend.end({ id })
+await accounts.backend.end({ id })
 ```
 
 ### backend.fetch
 
 - **Type:** `(parameters: { id: string; init?: RequestInit; url: string | URL }) => Promise<Response | undefined>`
 
-Sends a request with the session's access token, as [`Actions.fetch`](Actions.fetch.md) does, after a refresh if necessary. `init` holds the request's other options, and its `Authorization` and `DPoP` headers are replaced. Returns `undefined` without a session, and sends no request.
+Sends a request with the session's access token, after a refresh if necessary. `init` holds the request's other options, and its `Authorization` and `DPoP` headers are replaced. Returns `undefined` without a session, and sends no request.
 
 ```ts
-const response = await tempoId.backend.fetch({
+const response = await accounts.backend.fetch({
   id,
   url: 'https://api.example.com/me',
 })
@@ -79,7 +79,7 @@ const response = await tempoId.backend.fetch({
 Returns the session, after a refresh if its access token expires within 30 seconds. A session without a refresh token, from a sign-in without `offline_access`, lasts until its access token expires. Returns `undefined` if the session never existed, ended, or Tempo ID refused its refresh token.
 
 ```ts
-const session = await tempoId.backend.get({ id })
+const session = await accounts.backend.get({ id })
 if (!session) return c.redirect('/login')
 ```
 
@@ -90,18 +90,18 @@ if (!session) return c.redirect('/login')
 Stores a session from a sign-in without a redirect, such as the [`email`](plugins.email.md) plugin's [backend sign-in](https://github.com/tempoxyz/id/blob/main/docs/backend-sign-in.md), under `id` or a new session ID, and returns the ID. A new ID is 32 random bytes in URL-safe Base64.
 
 ```ts
-const session = await tempoId.email.signIn({ code, email: address, userIp })
-const { id } = await tempoId.backend.save({ session })
+const session = await accounts.email.signIn({ code, email: address, userIp })
+const { id } = await accounts.backend.save({ session })
 ```
 
 ### backend.start
 
 - **Type:** `(parameters?: backend.start.Parameters) => Promise<{ id: string; url: string }>`
 
-Starts a redirect sign-in through [`Actions.redirect.createUrl`](Actions.redirect.createUrl.md), and stores its state for 10 minutes. Returns the session ID, for an `HttpOnly` cookie, and the URL to redirect to.
+Starts a redirect sign-in, and stores its state for 10 minutes. Returns the session ID, for an `HttpOnly` cookie, and the URL to redirect to.
 
 ```ts
-const { id, url } = await tempoId.backend.start({
+const { id, url } = await accounts.backend.start({
   redirectUri: new URL('/callback', c.req.url).href,
 })
 setCookie(c, 'sid', id, { httpOnly: true, path: '/', sameSite: 'Lax' })
@@ -119,7 +119,7 @@ The plugin takes one of `store` and `namespace`.
 The Durable Object namespace of [`DurableObject.sessions`](DurableObject.sessions.md), which holds each session in the object that its ID names. The object's name holds the app's client ID beside the session ID, so one class serves several apps.
 
 ```ts
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: env.CLIENT_ID,
   clientSecret: env.CLIENT_SECRET,
   plugins: [backend({ namespace: env.SESSIONS })],
@@ -133,7 +133,7 @@ const tempoId = Accounts.create({
 Where the sessions and the redirects in progress live, such as [`Store.postgres`](Store.postgres.md) or [`Store.redis`](Store.redis.md). Keys start with `tempo-id:session:` and `tempo-id:pending:`. A pending entry passes `expiresAt` to `setItem`, so the store deletes an abandoned sign-in.
 
 ```ts
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
   plugins: [backend({ store: Store.postgres(pool) })],
@@ -153,7 +153,7 @@ const tempoId = Accounts.create({
 What the access key may do, a function that returns it, or `false` for a sign-in without an access key. The user approves the access key, so it may exceed the headless ceiling.
 
 ```ts
-const { id, url } = await tempoId.backend.start({ accessKey: false })
+const { id, url } = await accounts.backend.start({ accessKey: false })
 ```
 
 #### funding (optional)
@@ -163,7 +163,7 @@ const { id, url } = await tempoId.backend.start({ accessKey: false })
 The amount that the app needs in the user's Tempo Account, which opens the funding page, as [Funding hints](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md) describes.
 
 ```ts
-const { id, url } = await tempoId.backend.start({ funding: { amount: '10' } })
+const { id, url } = await accounts.backend.start({ funding: { amount: '10' } })
 ```
 
 #### id (optional)
@@ -174,7 +174,7 @@ const { id, url } = await tempoId.backend.start({ funding: { amount: '10' } })
 The session ID.
 
 ```ts
-const { url } = await tempoId.backend.start({ id: existing })
+const { url } = await accounts.backend.start({ id: existing })
 ```
 
 #### redirectUri (optional)
@@ -185,7 +185,7 @@ const { url } = await tempoId.backend.start({ id: existing })
 Where Tempo ID redirects back to.
 
 ```ts
-const { id, url } = await tempoId.backend.start({
+const { id, url } = await accounts.backend.start({
   redirectUri: 'https://app.example/callback',
 })
 ```
@@ -198,4 +198,4 @@ Thrown by `complete` without a redirect in progress for the session ID. This hap
 
 ### `Accounts.RequestError`
 
-Thrown by `complete` for a forged `state` or a refused code, as [`Actions.redirect.handleCallback`](Actions.redirect.handleCallback.md#errors) lists. Thrown by `get` and `fetch` when a refresh fails for a reason other than `invalid_grant`. A refusal with a 4xx status keeps the session for the next request. A failure without a response, or with a 5xx status, ends the session, since Tempo ID may have rotated the refresh token. Thrown by `end` when the revocation fails. The session stays, so a later `end` revokes it again.
+Thrown by `complete` for a forged `state` or a refused code, as the [errors of `redirect.signIn`](plugins.redirect.md#errors) list. Thrown by `get` and `fetch` when a refresh fails for a reason other than `invalid_grant`. A refusal with a 4xx status keeps the session for the next request. A failure without a response, or with a 5xx status, ends the session, since Tempo ID may have rotated the refresh token. Thrown by `end` when the revocation fails. The session stays, so a later `end` revokes it again.

@@ -9,7 +9,7 @@ Each module throws its own error classes beside [`Accounts.RequestError`](Accoun
 ```ts
 import { Accounts } from 'accounts'
 
-const session = await tempoId.email
+const session = await accounts.email
   .signIn({ code, email: address })
   .catch((error: unknown) => {
     // A newer sign-in or a sign-out completed first, and the instance kept its result.
@@ -38,7 +38,7 @@ Thrown by [`signOut`](Accounts.create.md#signout) with `everywhere` from an app 
 
 ### `Accounts.KeyRequiredError`
 
-Thrown when a sign-in without an access key cannot serve the call: [`device.signIn`](plugins.device.md) without `accessKey`, since the device grant always requests an access key, a transaction from the account of a [`viem`](plugins.viem.md) client whose session holds no access key, and `tempoId.viem({ session })` for a session without an access key.
+Thrown when a sign-in without an access key cannot serve the call: [`device.signIn`](plugins.device.md) without `accessKey`, since the device grant always requests an access key, a transaction from the account of a [`viem`](plugins.viem.md) client whose session holds no access key, and `accounts.viem({ session })` for a session without an access key.
 
 ### `Accounts.PendingNotFoundError`
 
@@ -56,21 +56,21 @@ Thrown by a sign-in that another sign-in or a sign-out overtook. The instance ke
 
 ### `Actions.dialog.BlockedError`
 
-Thrown by [`Actions.dialog.signIn`](Actions.dialog.signIn.md) when the browser blocks the popup, since the call ran outside a user gesture such as a click.
+Thrown by [`dialog.signIn`](plugins.dialog.md#dialogsignin) when the browser blocks the popup, since the call ran outside a user gesture such as a click.
 
 ### `Actions.dialog.OriginError`
 
-Thrown by [`Actions.dialog.signIn`](Actions.dialog.signIn.md) when the redirect URI is on another origin than the page, so its callback page cannot reach the page that called `signIn`.
+Thrown by [`dialog.signIn`](plugins.dialog.md#dialogsignin) when the redirect URI is on another origin than the page, so its callback page cannot reach the page that called `signIn`.
 
 ## mpp
 
 ### `mpp.MaxAmountError`
 
-Thrown by a payment of [`tempoId.fetch` or `tempoId.mpp`](mpp.mpp.md) whose charge costs more than `maxAmount`. The access key signs nothing. Raise `maxAmount` to pay it.
+Thrown by a payment of [`accounts.fetch` or `accounts.mpp`](mpp.mpp.md) whose charge costs more than `maxAmount`. The access key signs nothing. Raise `maxAmount` to pay it.
 
 ### `mpp.MaxAmountPrecisionError`
 
-Thrown by a payment of [`tempoId.fetch` or `tempoId.mpp`](mpp.mpp.md) whose `maxAmount` names more than 6 decimals, which a TIP-20 token cannot hold. The access key signs nothing. Round `maxAmount` to 6 decimals.
+Thrown by a payment of [`accounts.fetch` or `accounts.mpp`](mpp.mpp.md) whose `maxAmount` names more than 6 decimals, which a TIP-20 token cannot hold. The access key signs nothing. Round `maxAmount` to 6 decimals.
 
 ## wagmi
 
@@ -92,17 +92,9 @@ Thrown by the `connect` of [`tempoId`](wagmi.tempoId.md) without `signIn` when e
 
 ## Other modules
 
-### `AccessKey.AccessKeyRequiredError`
-
-Thrown by [`AccessKey.toAccount`](AccessKey.toAccount.md) for an access key without material and no `accessKey`. The result's `accessKey` of an access key given by its [`publicKey`](types.md#publickey-optional) rejects each signature with it.
-
 ### `AccessToken.InvalidError`
 
-Thrown by the verifier of [`AccessToken.create`](AccessToken.create.md) for an access token that does not verify, or names an app that the verifier does not allow.
-
-### `LogoutToken.InvalidError`
-
-Thrown by the verifier of [`LogoutToken.create`](LogoutToken.create.md) for a logout token that does not verify, or names an app that the verifier does not allow.
+Thrown by `verifyHash`, `verifyMessage`, and `verifyTypedData` of the [`viem`](plugins.viem.md) plugin for an `accessToken` that does not verify, or names an app that the verifier does not allow.
 
 ### `Permissions.DecimalsUnknownError`
 
@@ -127,7 +119,3 @@ Thrown by a transaction of the [`viem`](plugins.viem.md#pluginsviemretryaccounte
 ### `Plugins.viem.RetryClosedError`
 
 Thrown by a transaction of the [`viem`](plugins.viem.md#pluginsviemretryclosederror) plugin's client when the user closes the screen of its [retry](plugins.viem.md#retry-optional). Its `kind` names the failure, and its `cause` is the transaction's error. Match it by `name`.
-
-### `TempoAccount.AddressMismatchError`
-
-Thrown by [`TempoAccount.deserialize`](TempoAccount.deserialize.md) for a version 0 configuration that does not derive the account's address. It is Viem's `Account.AddressMismatchError` from `viem/tempo`, whose `name` is `Account.AddressMismatchError` and whose `derived` is the address that the configuration derives. Match it with `instanceof TempoAccount.AddressMismatchError`, not by `name`.

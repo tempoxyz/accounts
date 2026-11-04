@@ -2,7 +2,7 @@
 
 ## Overview
 
-Each type lives in its own module of `accounts`, named after it, such as `Permissions.Permissions`. `Authorization`, `Funding`, `Pending`, and `User` come from `accounts/internal`, since the actions build and return them. Each module has a `from`, which returns its value with the type. `Accounts.Config` is the exception: [`Accounts.from`](Accounts.from.md) returns it with its defaults.
+Each page documents the types that an instance takes and returns, such as `Permissions.Permissions`. `Permissions.from` returns a value with its type, and [`Accounts.from`](Accounts.from.md) returns an `Accounts.Config` with its defaults.
 
 ## Usage
 
@@ -17,7 +17,7 @@ const permissions = Permissions.from({
 
 ## AccessKey
 
-`AccessKey.AccessKey` is an app's access key as the app stores it. An access key that the app supplied as `accessKey.account` carries no material. `AccessKey.from` fills an absent `chainId` from the key authorization.
+`AccessKey.AccessKey` is an app's access key as the session holds it.
 
 ### account
 
@@ -49,28 +49,6 @@ A non-extractable WebCrypto P256 key pair, in a browser. IndexedDB stores it wit
 
 A secp256k1 private key, outside a browser. Keep it as secret as a session.
 
-## Authorization
-
-`Authorization.Authorization` is what every sign-in returns: the [`Tokens.Tokens`](#tokens), the access key, and the user. It is what each low-level sign-in action of [`Actions`](Actions.md) returns. Its `chainId` type parameter types `key.chainId`, as a literal for a literal `accessKey.chainId`. An instance's sign-in returns a [`Session`](#session) instead.
-
-### accessKey
-
-- **Type:** `Account.AccessKeyAccount`, from `viem/tempo`
-
-The app's access key, as a Viem account at the user's Tempo Account, from [`AccessKey.toAccount`](AccessKey.toAccount.md). It signs transactions, messages, and typed data with the access key, within the access key's limits, scopes, and expiry. Pass it as `account` to a Viem action, such as `client.token.transferSync({ account: authorization.accessKey, … })`.
-
-### key
-
-- **Type:** [`AccessKey.AccessKey`](#accesskey)
-
-The same access key as data, which [`AccessKey.toAccount`](AccessKey.toAccount.md) rebuilds into `accessKey`.
-
-### user
-
-- **Type:** [`User.User`](#user)
-
-The signed-in user, from the ID token.
-
 ## BackendSession
 
 A backend session is the session that the [`backend`](plugins.backend.md) plugin's `complete` and `get` return. Its refresh token and ID token stay in the plugin's store. The package exports no name for the type.
@@ -97,13 +75,13 @@ When the access token expires, in milliseconds.
 
 - **Type:** [`AccessKey.AccessKey`](#accesskey)
 
-The app's access key, with its private key. [`tempoId.viem({ session })`](plugins.viem.md#session-optional) signs with it. Absent after a sign-in without an access key.
+The app's access key, with its private key. [`accounts.viem({ session })`](plugins.viem.md#session-optional) signs with it. Absent after a sign-in without an access key.
 
 ### sid (optional)
 
 - **Type:** `string`
 
-The Tempo ID session that signed the user in, as the ID token's `sid`. A [logout token](LogoutToken.create.md) names it as `sessionId`. Absent when the ID token holds no `sid`, as for an app without a back-channel logout URI.
+The Tempo ID session that signed the user in, as the ID token's `sid`. A [logout token](https://github.com/tempoxyz/id/blob/main/docs/authentication.md#back-channel-logout) names it as `sessionId`. Absent when the ID token holds no `sid`, as for an app without a back-channel logout URI.
 
 ### user
 
@@ -113,7 +91,7 @@ The signed-in user.
 
 ## Config
 
-`Accounts.Config` is the configuration of an instance, `tempoId.config`, which every action of [`Actions`](Actions.md) takes. [`Accounts.from`](Accounts.from.md) returns it with its defaults, and [`Accounts.from`](Accounts.from.md#parameters) documents each option.
+`Accounts.Config` is the configuration of an instance, `accounts.config`. [`Accounts.from`](Accounts.from.md) returns it with its defaults, and [`Accounts.from`](Accounts.from.md#parameters) documents each option.
 
 ### chainId
 
@@ -129,9 +107,9 @@ The app's client ID: from its registration, the URL of its metadata document, it
 
 ### clientAssertion (optional)
 
-- **Type:** `ClientAssertion.Signer`
+- **Type:** `(options: { audience: string; clientId: string }) => Promise<string>`
 
-Signs a [client assertion](https://github.com/tempoxyz/id/blob/main/docs/apps.md#client-assertions) for each request that authenticates the app, such as [`ClientAssertion.fromPrivateKey`](ClientAssertion.fromPrivateKey.md) returns. Only a backend holds one.
+Signs a [client assertion](https://github.com/tempoxyz/id/blob/main/docs/apps.md#client-assertions) for each request that authenticates the app, a JWT with `audience` as `aud` and `clientId` as `iss` and `sub`. Only a backend holds one.
 
 ### clientSecret (optional)
 
@@ -183,7 +161,7 @@ Where Tempo ID runs, such as `https://id.tempo.xyz`.
 
 ## Dpop
 
-`Dpop.Dpop` is a [DPoP key](https://github.com/tempoxyz/id/blob/main/docs/dpop.md), which [`Dpop.create`](Dpop.create.md) generates or [`Dpop.fromKeyPair`](Dpop.fromKeyPair.md) reads from an access key's WebCrypto key pair, and [`Dpop.proof`](Dpop.proof.md) signs with. `Dpop.from` returns a stored key with the type.
+`Dpop.Dpop` is a [DPoP key](https://github.com/tempoxyz/id/blob/main/docs/dpop.md), whose proofs bind the instance's tokens.
 
 ### jwk
 
@@ -199,7 +177,7 @@ The private key, which signs each proof with ES256. IndexedDB stores it as it is
 
 ## Funding
 
-`Funding.Funding` is a [funding hint](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md): the amount that an app needs in the user's Tempo Account, which the `funding` of [`redirect.signIn`](plugins.redirect.md#funding-optional), [`dialog.signIn`](plugins.dialog.md#funding-optional), [`device.signIn`](plugins.device.md#funding-optional), [`backend.start`](plugins.backend.md#funding-optional), and their low-level actions sends. [`funding.open`](plugins.funding.md#fundingopen) and [`Actions.funding.open`](Actions.funding.open.md#amount-optional) take its fields as `amount`, `currency`, and `token`, and send them to the deposit page, whose methods they select. `Funding.from` returns it with the type.
+`Funding.Funding` is a [funding hint](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md): the amount that an app needs in the user's Tempo Account, which the `funding` of [`redirect.signIn`](plugins.redirect.md#funding-optional), [`dialog.signIn`](plugins.dialog.md#funding-optional), [`device.signIn`](plugins.device.md#funding-optional), [`backend.start`](plugins.backend.md#funding-optional) sends. [`funding.open`](plugins.funding.md#fundingopen) takes its fields as `amount`, `currency`, and `token`, and sends them to the deposit page, whose methods they select.
 
 ### amount
 
@@ -220,37 +198,9 @@ The ISO 4217 currency of `amount`, such as `EUR`. Every listed token of the curr
 
 The symbol or address of the only token that counts, such as `USDC.e`. Its currency must equal `currency`.
 
-## Pending
-
-`Pending.Pending` is a sign-in redirect in progress, which the app keeps until Tempo ID redirects back, with the key material of [`AccessKey.AccessKey`](#accesskey). `Pending.WithoutKey` authorizes no access key, and holds no material.
-
-### key (optional)
-
-- **Type:** `false`
-
-`false` in a `Pending.WithoutKey`, and absent in a `Pending.Pending`.
-
-### redirectUri
-
-- **Type:** `string`
-
-Where Tempo ID redirects back to, which the code exchange repeats.
-
-### state
-
-- **Type:** `string`
-
-The value that the callback must echo, so the library refuses a forged callback.
-
-### verifier
-
-- **Type:** `string`
-
-The PKCE verifier that redeems the code.
-
 ## Permissions
 
-`Permissions.Permissions` is what an app's access key may do. [`Accounts.create`](Accounts.create.md#accesskey-optional) takes it, or a function that returns it, for each sign-in, and each sign-in and `authorize` take it as `accessKey`, or `false` for no access key. Each low-level action takes a [`Permissions.WithAccount`](#permissionswithaccount) as `accessKey`. [`Permissions.resolve`](Permissions.resolve.md) turns it into the key authorization request at each call, so a duration expiry counts from that call. Without `expiry`, Tempo ID fills the [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry). Without `scopes`, the library fills them from `limits`. An access key that never expires (`expiry: false`), spends any amount (no `limits`), or makes any call (`scopes: 'any'`) is an [access key without bounds](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#access-keys-without-bounds), which only a headless sign-in of an app with `tempo-id:sign` may request. `from` keeps `chainId` as a literal type.
+`Permissions.Permissions` is what an app's access key may do. [`Accounts.create`](Accounts.create.md#accesskey-optional) takes it, or a function that returns it, for each sign-in, and each sign-in and `authorize` take it as `accessKey`, or `false` for no access key. [`Permissions.resolve`](Permissions.resolve.md) turns it into the key authorization request at each call, so a duration expiry counts from that call. Without `expiry`, Tempo ID fills the [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry). Without `scopes`, the library fills them from `limits`. An access key that never expires (`expiry: false`), spends any amount (no `limits`), or makes any call (`scopes: 'any'`) is an [access key without bounds](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#access-keys-without-bounds), which only a headless sign-in of an app with `tempo-id:sign` may request. `from` keeps `chainId` as a literal type.
 
 ```ts
 const permissions = Permissions.from({
@@ -300,47 +250,6 @@ The calls the access key may make, such as `[Scopes.tip20(token).transfer()]` fr
 const permissions = Permissions.from({ expiry: false, scopes: 'any' })
 ```
 
-### Permissions.WithAccount
-
-`Permissions.WithAccount` is the `accessKey` of a low-level action of [`Actions`](Actions.md): the `Permissions.Permissions` above, and the app's own access key as `account`. Its `chainId` type parameter types `key.chainId` as `Permissions.Permissions` does.
-
-```ts
-const authorization = await Actions.authorize(config, {
-  accessKey: {
-    account,
-    expiry: '1h',
-    limits: [{ limit: '10', token: 'ousd' }],
-  },
-})
-```
-
-#### account (optional)
-
-- **Type:** `Account.Account`, from `viem/tempo`
-- **Default:** A new access key: WebCrypto P256 in a browser, secp256k1 elsewhere, whose material the result keeps
-
-The app's own access key, as a Viem account. Its `access` names the Tempo Account, which defaults to the app's selected account, or the user's oldest. [`AccessKey.toAccount`](AccessKey.toAccount.md#accesskey-optional) takes the same account as its own `accessKey` option, since the stored access key then carries no material.
-
-#### publicKey (optional)
-
-- **Type:** `Hex`
-
-In place of `account`, the public key of the app's own access key, with or without its `0x04` prefix, for an access key whose private key the page does not hold, such as one on the app's server. The result's `accessKey` has the access key's address, and rejects each signature with [`AccessKey.AccessKeyRequiredError`](errors.md#accesskeyaccesskeyrequirederror).
-
-```ts
-const authorization = await Actions.dialog.signIn(config, {
-  accessKey: { limits: [{ limit: '10', token: 'ousd' }], publicKey },
-})
-// The app's server verifies and uses `authorization.key.keyAuthorization`.
-```
-
-#### type (optional)
-
-- **Type:** `'p256' | 'secp256k1'`
-- **Default:** `'secp256k1'`
-
-The signature type of the access key of `publicKey`. Only with `publicKey`.
-
 ## Session
 
 `Session.Session` is the session of a signed-in user, which an instance holds and saves to its store, and each sign-in of a plugin returns. It holds the [`Tokens.Tokens`](#tokens), the user, the app's access key as data, and the user's Tempo Account. [`Session.expired`](Session.expired.md) reports an access key past its expiry.
@@ -349,7 +258,7 @@ The signature type of the access key of `publicKey`. Only with `publicKey`.
 
 - **Type:** [`TempoAccount.TempoAccount`](#tempoaccount)
 
-The user's Tempo Account that Tempo ID selects for the app, on the instance's chain: the account that the user selected, else the oldest. Absent where the sign-in read no account, such as a sign-in through a redirect, a dialog, or a device. [`tempoId.account.get`](Accounts.create.md#accountget) reads it.
+The user's Tempo Account that Tempo ID selects for the app, on the instance's chain: the account that the user selected, else the oldest. Absent where the sign-in read no account, such as a sign-in through a redirect, a dialog, or a device. [`accounts.account.get`](Accounts.create.md#accountget) reads it.
 
 ### accessToken
 
@@ -373,13 +282,13 @@ The OIDC ID token, which names the user. A refresh may omit it.
 
 - **Type:** [`AccessKey.AccessKey`](#accesskey)
 
-The app's access key, with its material. [`AccessKey.toAccount`](AccessKey.toAccount.md) rebuilds it into a Viem account, and the [`viem`](plugins.viem.md) plugin signs with it. Absent after a sign-in without an access key.
+The app's access key, with its material. The [`viem`](plugins.viem.md) plugin signs with it. Absent after a sign-in without an access key.
 
 ### refreshToken (optional)
 
 - **Type:** `string`
 
-Exchanges for new tokens through [`tempoId.session.refresh`](Accounts.create.md#sessionrefresh). It rotates on every refresh.
+Exchanges for new tokens through [`accounts.session.refresh`](Accounts.create.md#sessionrefresh). It rotates on every refresh.
 
 ### user
 
@@ -389,7 +298,7 @@ The signed-in user, from the ID token.
 
 ## Session.Status
 
-`Session.Status` is the status of an instance's session, which [`tempoId.session.status`](Accounts.create.md#sessionstatus) and [`tempoId.useSession()`](react.react.md) return. An authorization of the browser's Tempo ID session, such as [`tempoId.authorize`](Accounts.create.md#authorize), holds it at `pending`, or at `reauthorizing` while it renews a saved session that expired.
+`Session.Status` is the status of an instance's session, which [`accounts.session.status`](Accounts.create.md#sessionstatus) and [`accounts.useSession()`](react.react.md) return. An authorization of the browser's Tempo ID session, such as [`accounts.authorize`](Accounts.create.md#authorize), holds it at `pending`, or at `reauthorizing` while it renews a saved session that expired.
 
 | `status`        | `session`                 | When                                                                                                                |
 | --------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -434,7 +343,7 @@ Writes `value` at `key`, without serializing it. A store that expires entries de
 
 ## TempoAccount
 
-`TempoAccount.TempoAccount` is one of the user's Tempo Accounts: the Viem configurable account (TIP-1107) that `Account.fromConfig` from `viem/tempo` returns, with Tempo ID's fields. A client signs and sends with it as it is. It holds functions, so store the JSON of [`TempoAccount.serialize`](TempoAccount.serialize.md), and rebuild the account with [`TempoAccount.deserialize`](TempoAccount.deserialize.md).
+`TempoAccount.TempoAccount` is one of the user's Tempo Accounts: the Viem configurable account (TIP-1107) that `Account.fromConfig` from `viem/tempo` returns, with Tempo ID's fields. A client signs and sends with it as it is. It holds functions, so the instance's store keeps it as JSON, and [`accounts.session.get`](Accounts.create.md#sessionget) rebuilds it with no request.
 
 ### address
 
@@ -504,7 +413,7 @@ The OIDC ID token, which names the user. A refresh may omit it.
 
 - **Type:** `string`
 
-Exchanges for new tokens through [`Actions.refresh`](Actions.refresh.md). It rotates on every refresh.
+Exchanges for new tokens through [`accounts.session.refresh`](Accounts.create.md#sessionrefresh). It rotates on every refresh.
 
 ## User
 

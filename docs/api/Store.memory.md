@@ -10,7 +10,7 @@ Returns a [`Store`](types.md#store) that holds each value in the process's memor
 import { Accounts, Store } from 'accounts'
 import { backend } from 'accounts/plugins'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
   plugins: [backend({ store: Store.memory() })],

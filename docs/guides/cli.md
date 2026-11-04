@@ -7,18 +7,16 @@ A command-line tool signs in through the device grant ([RFC 8628](https://www.rf
 ```ts
 import { Accounts, Store } from 'accounts'
 import { device, viem } from 'accounts/plugins'
-import { Expiry, Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
 const ousd = Tokens.ousd(tempo.id).address
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   // The CLI's access key may transfer up to 1,000 OUSD for a year.
   accessKey: () => ({
-    expiry: Expiry.days(365),
-    limits: [{ limit: 1_000_000_000n, token: ousd }],
-    scopes: [Scopes.tip20(ousd).transfer()],
+    expiry: '365d',
+    limits: [{ limit: '1000', token: 'ousd' }],
   }),
   // 1. A CLI without a registration sends `cli:` and its name.
   clientId: 'cli:acme-deploy',
@@ -37,14 +35,14 @@ const tempoId = Accounts.create({
 
 async function login() {
   // 2. Request a code, and show it. 3. Resolve once the user approves it.
-  const { user } = await tempoId.device.signIn()
+  const { user } = await accounts.device.signIn()
   console.log(`Signed in as ${user.email}.`)
 }
 
 // Any other command restores the session, and sends with its access key.
 async function send(to: `0x${string}`, amount: bigint) {
-  if (!(await tempoId.session.get())) throw new Error('Run `login` first.')
-  await tempoId.token.transferSync({ amount, to, token: ousd })
+  if (!(await accounts.session.get())) throw new Error('Run `login` first.')
+  await accounts.token.transferSync({ amount, to, token: ousd })
 }
 ```
 
@@ -59,10 +57,10 @@ async function send(to: `0x${string}`, amount: bigint) {
 
 ### Sign out
 
-[`tempoId.signOut`](../api/Accounts.create.md#signout) empties the saved session, and revokes its refresh token. The CLI holds no Tempo ID session cookie, so the revocation ends its session.
+[`accounts.signOut`](../api/Accounts.create.md#signout) empties the saved session, and revokes its refresh token. The CLI holds no Tempo ID session cookie, so the revocation ends its session.
 
 ```ts
-await tempoId.signOut()
+await accounts.signOut()
 ```
 
 ### Handle a denial or an expired code
@@ -70,65 +68,8 @@ await tempoId.signOut()
 `device.signIn` throws an [`Accounts.RequestError`](../api/Accounts.RequestError.md) when the user denies the code, or it expires.
 
 ```ts
-const session = await tempoId.device.signIn().catch((error: unknown) => error)
+const session = await accounts.device.signIn().catch((error: unknown) => error)
 if (session instanceof Accounts.RequestError) console.error(session.message)
-```
-
-### Name the device
-
-The approval page shows the device's name. The name defaults to the machine's hostname. The low-level [`Actions.device.authorize`](../api/Actions.device.authorize.md#device-optional) takes `device`, at most 64 characters, to set another. It returns the authorization, which the app keeps itself.
-
-```ts
-import { Actions } from 'accounts/internal'
-
-const grant = await Actions.device.authorize(tempoId.config, {
-  accessKey: permissions,
-  device: 'build-server',
-})
-console.log(`Open ${grant.verificationUriComplete}.`)
-const authorization = await grant.wait()
-```
-
-### Bind the tokens to a key
-
-Pass a DPoP key as `dpop`, so the code's redemption and each refresh send a [DPoP proof](https://github.com/tempoxyz/id/blob/main/docs/dpop.md). The refresh token works only with the key that it is bound to, so a CLI that refreshes in a later run keeps the key between runs. Create an extractable key once, and write its private JWK beside the session, as securely as the refresh token. In a later run, import the JWK and pass it to `Dpop.from`.
-
-```ts
-import * as fs from 'node:fs/promises'
-import * as os from 'node:os'
-import { Dpop } from 'accounts/internal'
-
-const path = `${os.homedir()}/.config/my-cli/dpop.json`
-const algorithm = { name: 'ECDSA', namedCurve: 'P-256' }
-
-const dpop = await (async () => {
-  const saved = await fs.readFile(path, 'utf8').catch(() => undefined)
-  if (saved) {
-    const jwk = JSON.parse(saved) as JsonWebKey
-    const privateKey = await crypto.subtle.importKey(
-      'jwk',
-      jwk,
-      algorithm,
-      false,
-      ['sign'],
-    )
-    return Dpop.from({
-      jwk: { crv: jwk.crv!, kty: jwk.kty!, x: jwk.x!, y: jwk.y! },
-      privateKey,
-    })
-  }
-  const created = await Dpop.create({ extractable: true })
-  const jwk = await crypto.subtle.exportKey('jwk', created.privateKey)
-  await fs.writeFile(path, JSON.stringify(jwk), { mode: 0o600 })
-  return created
-})()
-
-const tempoId = Accounts.create({
-  clientId: 'tempo-cli',
-  dpop,
-  plugins: [device({ onCode })],
-  store: Store.file('~/.config/my-cli/session.json'),
-})
 ```
 
 ## Learn more

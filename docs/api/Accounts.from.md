@@ -2,7 +2,7 @@
 
 ## Overview
 
-Returns the configuration that every low-level action of [`Actions`](Actions.md) takes, with its defaults, and no session or plugin. [`Accounts.create`](Accounts.create.md) builds its own with it, as `tempoId.config`. An app that keeps its state itself, such as a backend that seals the session into a cookie, calls the actions with this value and no instance.
+Returns an instance's configuration, with its defaults, and no session or plugin. [`Accounts.create`](Accounts.create.md) builds its own with it, as `accounts.config`, and takes the same parameters.
 
 The scope always holds `openid` and `email`, since every authorization reads the user from the ID token.
 
@@ -10,13 +10,12 @@ The scope always holds `openid` and `email`, since every authorization reads the
 
 ```ts
 import { Accounts } from 'accounts'
-import { Actions } from 'accounts/internal'
 
 const config = Accounts.from({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
 })
-const tokens = await Actions.refresh(config, { refreshToken })
+const { scope, url } = config
 ```
 
 ## Return type
@@ -126,7 +125,7 @@ const config = Accounts.from({ fetch: loggedFetch })
 - **Type:** `boolean`
 - **Default:** `true` with `clientSecret` or `clientAssertion`, and `false` otherwise
 
-Whether a redirect or a dialog pushes each authorization request to `POST /oauth2/par` ([RFC 9126](https://www.rfc-editor.org/rfc/rfc9126)), so the browser's URL holds only `client_id` and `request_uri`. [`Actions.dialog.signIn`](Actions.dialog.signIn.md) pushes it too, and then signs in with a popup. An app that [requires pushed requests](https://github.com/tempoxyz/id/blob/main/docs/pushed-authorization-requests.md#required-pushed-requests) sets it, or holds a client secret or a client assertion. [`Accounts.create`](Accounts.create.md) takes no `par`. The [`dialog`](plugins.dialog.md#par-optional) and [`redirect`](plugins.redirect.md#par-optional) plugins take it instead.
+Whether a redirect or a dialog pushes each authorization request to `POST /oauth2/par` ([RFC 9126](https://www.rfc-editor.org/rfc/rfc9126)), so the browser's URL holds only `client_id` and `request_uri`. [`dialog.signIn`](plugins.dialog.md#dialogsignin) pushes it too, and then signs in with a popup. An app that [requires pushed requests](https://github.com/tempoxyz/id/blob/main/docs/pushed-authorization-requests.md#required-pushed-requests) sets it, or holds a client secret or a client assertion. [`Accounts.create`](Accounts.create.md) takes no `par`. The [`dialog`](plugins.dialog.md#par-optional) and [`redirect`](plugins.redirect.md#par-optional) plugins take it instead.
 
 ```ts
 const config = Accounts.from({ clientId: 'client_…', par: true })
@@ -162,7 +161,7 @@ const config = Accounts.from({ scope: 'offline_access profile' })
 - **Type:** [`Store.Store`](types.md#store)
 - **Default:** IndexedDB, in a browser
 
-Where an instance keeps its session, and where a redirect or a popup keeps its state until Tempo ID redirects back. It must store values without serializing them, since a browser access key is a non-extractable `CryptoKey`. With the default, [`Actions.redirect.start`](Actions.redirect.start.md) also keeps the PKCE verifier, without the access key, in the tab's `sessionStorage`. A custom `store` holds the whole state alone.
+Where an instance keeps its session, and where a redirect or a popup keeps its state until Tempo ID redirects back. It must store values without serializing them, since a browser access key is a non-extractable `CryptoKey`. With the default, [`redirect.signIn`](plugins.redirect.md#redirectsignin) also keeps the PKCE verifier, without the access key, in the tab's `sessionStorage`. A custom `store` holds the whole state alone.
 
 ```ts
 const config = Accounts.from({

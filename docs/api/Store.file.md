@@ -12,7 +12,7 @@ Each write replaces the file atomically with mode `0600`, in a folder with mode 
 import { Accounts, Store } from 'accounts'
 import { device } from 'accounts/plugins'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: 'cli:acme-deploy',
   plugins: [device({ onCode })],
   store: Store.file('~/.config/acme-deploy/session.json'),

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Creates a Tempo ID instance: its configuration, the session of its user, and one namespace for each plugin. Each plugin adds a sign-in method or another set of actions, such as [`email`](plugins.email.md) or [`viem`](plugins.viem.md), under its own name, such as `tempoId.email`. An app bundles only the plugins that it imports.
+Creates a Tempo ID instance: its configuration, the session of its user, and one namespace for each plugin. Each plugin adds a sign-in method or another set of actions, such as [`email`](plugins.email.md) or [`viem`](plugins.viem.md), under its own name, such as `accounts.email`. An app bundles only the plugins that it imports.
 
 The instance holds the session of one user in two cases:
 
@@ -23,13 +23,12 @@ Every instance holds the [`funding`](plugins.funding.md) plugin, which opens Tem
 ```ts
 import { Accounts } from 'accounts'
 import { email, viem } from 'accounts/plugins'
-import { Expiry, Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
 const ousd = Tokens.ousd(tempo.id).address
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   // Each sign-in requests an access key that may transfer up to 10 OUSD for a day.
   accessKey: {
     expiry: '1d',
@@ -38,15 +37,15 @@ const tempoId = Accounts.create({
   plugins: [email(), viem()],
 })
 
-const session = await tempoId.session.get()
+const session = await accounts.session.get()
 ```
 
 With no options, the instance signs in through the dialog, with the page's origin as its client ID:
 
 ```ts
-const tempoId = Accounts.create()
+const accounts = Accounts.create()
 
-button.onclick = () => tempoId.dialog.signIn()
+button.onclick = () => accounts.dialog.signIn()
 ```
 
 ## Return type
@@ -59,45 +58,45 @@ The instance. Each plugin's namespace sits beside these members, under the plugi
 
 - **Type:** `(parameters?: { accessToken?: string; getFn?: GetFn }) => Promise<TempoAccount | undefined>`
 
-Returns the user's [Tempo Account](types.md#tempoaccount) that Tempo ID selects for the app, on the instance's chain, as [`Actions.account.get`](Actions.account.get.md) does. A user without one in the app's realms receives one, if the app's first realm creates accounts. `accessToken` authenticates the read in place of the session cookie. `getFn` runs the ceremony of a passkey owner in place of `navigator.credentials.get`.
+Returns the user's [Tempo Account](types.md#tempoaccount) that Tempo ID selects for the app, on the instance's chain. A user without one in the app's realms receives one, if the app's first realm creates accounts. `accessToken` authenticates the read in place of the session cookie. `getFn` runs the ceremony of a passkey owner in place of `navigator.credentials.get`.
 
 ```ts
-const account = await tempoId.account.get()
+const account = await accounts.account.get()
 ```
 
 ### account.upgrade
 
 - **Type:** `(parameters?: { addOwner?: 'privy'; getFn?: GetFn }) => Promise<TempoAccount>`
 
-Upgrades a wallet.tempo passkey's account to a [configurable account](https://github.com/tempoxyz/id/blob/main/docs/configurable-accounts.md), when a sign-in returns `upgradeAvailable: true`, as [`Actions.account.upgrade`](Actions.account.upgrade.md) does. The session's access key registers first, so it keeps working. The passkey signs once. The session's account then becomes the upgraded account. `addOwner: 'privy'` adds the user's Privy wallet as a second owner in the same transaction.
+Upgrades a wallet.tempo passkey's account to a [configurable account](https://github.com/tempoxyz/id/blob/main/docs/configurable-accounts.md), when a sign-in returns `upgradeAvailable: true`. The session's access key registers first, so it keeps working. The passkey signs once. The session's account then becomes the upgraded account. `addOwner: 'privy'` adds the user's Privy wallet as a second owner in the same transaction.
 
 ```ts
-const session = await tempoId.email.signIn({ code, email: address })
-if (session.upgradeAvailable) await tempoId.account.upgrade()
+const session = await accounts.email.signIn({ code, email: address })
+if (session.upgradeAvailable) await accounts.account.upgrade()
 ```
 
 ### authorize
 
 - **Type:** `(parameters?: { accessKey?: Permissions | (() => Permissions | undefined) | false; challenge?: string; getFn?: GetFn; passkey?: boolean }) => Promise<(Session & { upgradeAvailable: boolean }) | undefined>`
 
-Requests the app's tokens, and an access key, for the user's Tempo ID session in the browser, with no sign-in, as [`Actions.authorize`](Actions.authorize.md) does. Sets the instance's session, and returns it. Returns `undefined`, and empties the session, when the browser holds no Tempo ID session. Only a [first-party app](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps) authorizes this way, and the access key must fit the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling), unless the app holds `tempo-id:sign`.
+Requests the app's tokens, and an access key, for the user's Tempo ID session in the browser, with no sign-in. Sets the instance's session, and returns it. Returns `undefined`, and empties the session, when the browser holds no Tempo ID session. Only a [first-party app](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps) authorizes this way, and the access key must fit the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling), unless the app holds `tempo-id:sign`.
 
 `accessKey` defaults to the instance's `accessKey`, and `false` requests no access key. `passkey: true` lets a passkey that owns the account sign the access key on the page, so call it from a click.
 
 While it runs, [`session.status`](#sessionstatus) is `pending`. To restore the saved session first, and show an expired one while the authorization renews it, call [`session.get`](#sessionget) with `reauthorize`.
 
 ```ts
-const session = await tempoId.session.get({ reauthorize: true })
+const session = await accounts.session.get({ reauthorize: true })
 ```
 
 ### config
 
 - **Type:** [`Accounts.Config`](types.md#config)
 
-The instance's configuration, with its defaults. Every low-level action of [`Actions`](Actions.md) takes it.
+The instance's configuration, with its defaults.
 
 ```ts
-const tokens = await Actions.refresh(tempoId.config, { refreshToken })
+const { chainId, clientId } = accounts.config
 ```
 
 ### session.actor
@@ -120,7 +119,7 @@ stateDiagram-v2
 ```
 
 ```ts
-const subscription = tempoId.session.actor!.subscribe((snapshot) => {
+const subscription = accounts.session.actor!.subscribe((snapshot) => {
   if (snapshot.matches('signedOut')) showSignIn()
 })
 ```
@@ -134,7 +133,7 @@ Returns the [session](types.md#session). The first call reads the saved session.
 With `reauthorize`, a call that finds no session, or an expired one, authorizes the browser's Tempo ID session, as [`authorize`](#authorize) does. After a [`signOut`](#signout) without `everywhere`, `reauthorize` authorizes nothing until the next sign-in, since the Tempo ID session stays. `true` uses the instance's `accessKey`, an object passes the parameters of `authorize`, and a function runs as the authorization. One authorization spans the restore, so [`session.status`](#sessionstatus) is `pending` throughout, or `reauthorizing` with the expired session. The result holds no `upgradeAvailable`. A function can call `authorize` itself to read it. With `true` or an object, a refusal that only an interactive sign-in resolves (`reauthentication_required`, `upgrade_required`, or `webauthn_required`) returns `undefined`, so the page shows its sign-in. A `webauthn_required` from a passkey's ceremony that ran on the page and failed, such as a dismissed prompt with `passkey: true`, throws with the ceremony's error as its `cause`. A function receives every refusal itself.
 
 ```ts
-const session = await tempoId.session.get({ reauthorize: true })
+const session = await accounts.session.get({ reauthorize: true })
 if (!session) showSignIn()
 ```
 
@@ -142,10 +141,10 @@ if (!session) showSignIn()
 
 - **Type:** `() => Promise<Session | undefined>`
 
-Refreshes the session's tokens with its refresh token, as [`Actions.refresh`](Actions.refresh.md) does, saves them, and returns the session. Returns `undefined` without a session or a refresh token.
+Refreshes the session's tokens with its refresh token, saves them, and returns the session. Returns `undefined` without a session or a refresh token.
 
 ```ts
-const session = await tempoId.session.refresh()
+const session = await accounts.session.refresh()
 ```
 
 ### session.status
@@ -155,21 +154,21 @@ const session = await tempoId.session.refresh()
 The [status](types.md#sessionstatus) of the session, `pending`, `reauthorizing`, `signedIn`, or `signedOut`, with the session to show. `get` returns it, and returns the same object while the status is unchanged. `subscribe` calls its listener with each new status and the one before it, and returns the function that unsubscribes. An instance without a session, such as a backend's, is `signedOut`, and never calls the listener.
 
 ```ts
-const { session, status } = tempoId.session.status.get()
+const { session, status } = accounts.session.status.get()
 
-const unsubscribe = tempoId.session.status.subscribe((status, previous) => {
+const unsubscribe = accounts.session.status.subscribe((status, previous) => {
   if (status.status === 'reauthorizing') showRenewing(status.session.user)
   if (previous.status === 'signedIn' && status.status === 'signedOut')
     showSignIn()
 })
 ```
 
-The pair fits `useSyncExternalStore` as it is. [`tempoId.useSession()`](react.react.md) reads it in React.
+The pair fits `useSyncExternalStore` as it is. [`accounts.useSession()`](react.react.md) reads it in React.
 
 ```tsx
 const status = useSyncExternalStore(
-  tempoId.session.status.subscribe,
-  tempoId.session.status.get,
+  accounts.session.status.subscribe,
+  accounts.session.status.get,
 )
 ```
 
@@ -180,7 +179,7 @@ const status = useSyncExternalStore(
 Calls `listener` with each new session and the one before it, at each sign-in and sign-out. Returns the function that unsubscribes. An instance without a session never calls it.
 
 ```ts
-const unsubscribe = tempoId.session.subscribe((session) => render(session))
+const unsubscribe = accounts.session.subscribe((session) => render(session))
 ```
 
 ### signOut
@@ -189,16 +188,16 @@ const unsubscribe = tempoId.session.subscribe((session) => render(session))
 
 Empties the session at once, also when a request fails, and deletes the saved session. It then revokes the session's refresh token at `POST /oauth2/revoke`. The user's Tempo ID session, and every other app's session, stay signed in. The instance saves a signed-out mark, so [`session.get`](#sessionget) with `reauthorize`, and the [`react`](react.react.md) plugin's first render, sign the user in again only after the next sign-in, such as through [`authorize`](#authorize). Access tokens work until they expire, at most 5 minutes, and the access key until its `expiry`, but the instance forgets both.
 
-With `everywhere: true`, a first-party app also ends the user's Tempo ID session with `POST /v1/auth/logout`, which signs the user out of every app that relies on it, as [`Actions.signOut`](Actions.signOut.md) does. Tempo ID accepts that request only from an enabled first-party app's origin, or from its own. The logout ends only the session whose cookie the instance's requests send, so a native app's sign-out with the [`redirect`](plugins.redirect.md) plugin and `open` leaves the system browser's session. Any other app's `everywhere` throws [`Accounts.EverywhereNotAllowedError`](errors.md#accountseverywherenotallowederror), and signs nothing out.
+With `everywhere: true`, a first-party app also ends the user's Tempo ID session with `POST /v1/auth/logout`, which signs the user out of every app that relies on it. Tempo ID accepts that request only from an enabled first-party app's origin, or from its own. The logout ends only the session whose cookie the instance's requests send, so a native app's sign-out with the [`redirect`](plugins.redirect.md) plugin and `open` leaves the system browser's session. Any other app's `everywhere` throws [`Accounts.EverywhereNotAllowedError`](errors.md#accountseverywherenotallowederror), and signs nothing out.
 
 Outside a page, the sign-out rejects with the request's error when Tempo ID does not answer the revocation. It also rejects when a refresh in progress had an attempt that received no answer, since that refresh may have rotated the token, so the sign-out does not revoke it. On a page, both reject only when no logout runs. The session stays empty in both cases.
 
 ```ts
 // Signs out of this app only.
-await tempoId.signOut()
+await accounts.signOut()
 
 // Signs out of every app on the user's Tempo ID session.
-await tempoId.signOut({ everywhere: true })
+await accounts.signOut({ everywhere: true })
 ```
 
 ## Parameters
@@ -212,7 +211,7 @@ await tempoId.signOut({ everywhere: true })
 The access key of each sign-in that names none, as [`Permissions`](types.md#permissions), or a function that the instance calls at each sign-in to return it. A duration expiry, such as `'7d'`, counts from the sign-in. Without an expiry, Tempo ID fills the app's refresh token lifetime, as [Default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry) describes. Without this option, a sign-in without `accessKey` requests no access key.
 
 ```ts
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   accessKey: {
     expiry: '7d',
     limits: [{ limit: '100', token: 'ousd' }],
@@ -230,26 +229,26 @@ The plugins, each of which adds a namespace with its `id`. The built-in plugins 
 ```ts
 import { email, passkey, viem } from 'accounts/plugins'
 
-const tempoId = Accounts.create({ plugins: [passkey(), email(), viem()] })
+const accounts = Accounts.create({ plugins: [passkey(), email(), viem()] })
 ```
 
-| Plugin                            | Namespace          | For                                         |
-| --------------------------------- | ------------------ | ------------------------------------------- |
-| [`backend`](plugins.backend.md)   | `tempoId.backend`  | A backend's sessions, one for each user     |
-| [`device`](plugins.device.md)     | `tempoId.device`   | The device grant, such as in a CLI          |
-| [`dialog`](plugins.dialog.md)     | `tempoId.dialog`   | Tempo ID's sign-in in a dialog or popup     |
-| [`email`](plugins.email.md)       | `tempoId.email`    | An emailed code in the app's own UI         |
-| [`funding`](plugins.funding.md)   | `tempoId.funding`  | Tempo ID's deposit page, on every instance  |
-| [`passkey`](plugins.passkey.md)   | `tempoId.passkey`  | A passkey in the app's own UI               |
-| [`redirect`](plugins.redirect.md) | `tempoId.redirect` | A redirect to Tempo ID's pages              |
-| [`viem`](plugins.viem.md)         | `tempoId.viem`     | A Viem client with the session's access key |
+| Plugin                            | Namespace           | For                                         |
+| --------------------------------- | ------------------- | ------------------------------------------- |
+| [`backend`](plugins.backend.md)   | `accounts.backend`  | A backend's sessions, one for each user     |
+| [`device`](plugins.device.md)     | `accounts.device`   | The device grant, such as in a CLI          |
+| [`dialog`](plugins.dialog.md)     | `accounts.dialog`   | Tempo ID's sign-in in a dialog or popup     |
+| [`email`](plugins.email.md)       | `accounts.email`    | An emailed code in the app's own UI         |
+| [`funding`](plugins.funding.md)   | `accounts.funding`  | Tempo ID's deposit page, on every instance  |
+| [`passkey`](plugins.passkey.md)   | `accounts.passkey`  | A passkey in the app's own UI               |
+| [`redirect`](plugins.redirect.md) | `accounts.redirect` | A redirect to Tempo ID's pages              |
+| [`viem`](plugins.viem.md)         | `accounts.viem`     | A Viem client with the session's access key |
 
 ### Configuration
 
 `chainId`, `clientAssertion`, `clientId`, `clientSecret`, `dev`, `dpop`, `fetch`, `redirectUri`, `scope`, `store`, and `url`, as [`Accounts.from`](Accounts.from.md#parameters) documents them. `store` also decides whether the instance holds a session outside a browser.
 
 ```ts
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: 'cli:acme-deploy',
   plugins: [device({ onCode })],
   store: Store.file('~/.config/acme-deploy/session.json'),
@@ -269,6 +268,72 @@ Thrown by `signOut` with `everywhere` from an app that is not first-party.
 ### `Error`
 
 Thrown for a plugin whose `id` is a member of every instance: `account`, `authorize`, `config`, `session`, or `signOut`.
+
+### `Accounts.RequestError`
+
+Thrown when Tempo ID refuses a request of a member, with its `reason`.
+
+#### account.get
+
+- [`session_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#session_required): The user is not signed in to Tempo ID, and the call passes no `accessToken`.
+- [`invalid_token`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_token): `accessToken` is expired or revoked, its session ended, or it belongs to another app. Refresh the tokens, or sign in again.
+- [`invalid_dpop_proof`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_dpop_proof): `accessToken` is a DPoP token, and the instance holds no key or another key than the one that bound it.
+- [`invalid_field`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_field): The instance's `clientId` is not a valid client ID, `chain` names no listed chain, or `chainId` is not a listed chain's ID. The action throws the `chainId` refusal itself, with status `0`, before the account request.
+- [`origin_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#origin_required): The request carries no `Origin`, such as from outside a browser, so it does not prove the app of `clientId`. Call the action from a page at a redirect URI of the app.
+- [`rate_limited`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rate_limited): The user exceeded the limit of account reads, or Privy rate limited the request. Retry after `Retry-After` seconds.
+- [`upstream_unavailable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#upstream_unavailable): Privy failed or timed out. Retry later.
+- [`unexpected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unexpected): An unexpected failure. Retry the request.
+
+#### account.upgrade
+
+- [`session_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#session_required): The user is not signed in to Tempo ID.
+- [`reauthentication_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#reauthentication_required): The session signed in more than 10 minutes before. Sign in again.
+- [`configurable_accounts_disabled`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#configurable_accounts_disabled): The chain's accounts are not configurable.
+- [`foreign_account`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#foreign_account): The account is not the user's in the app's realms.
+- [`not_configurable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#not_configurable): No passkey owns the account, such as a cloud wallet's.
+- [`origin_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#origin_required): The request carries no `Origin`, such as from outside a browser, so it does not prove the app of `clientId`. Call the action from a page at a redirect URI of the app.
+- [`owner_exists`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#owner_exists): The account is configurable already. With `addOwner`, the account holds a cloud wallet already.
+- [`owner_unavailable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#owner_unavailable): With `addOwner`, the user's Privy wallet holds at least 1 USD on its own account, or owns another account, or the realm creates none.
+- [`invalid_field`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_field): The account's passkey did not sign `key`, the access key expired, no scope of the access key allows a TIP-20 transfer of 0 that registers it, or the account upgraded before the chain registered the access key.
+- [`webauthn_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#webauthn_required): The passkey's relying party does not cover the page.
+- [`webauthn_rejected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#webauthn_rejected): The assertion does not verify, or its step expired. Run the action again.
+- [`config_conflict`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#config_conflict): The chain holds a configuration that Tempo ID did not send.
+- [`rate_limited`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rate_limited): The user exceeded the limit of account changes. Retry after `Retry-After` seconds.
+- [`upstream_unavailable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#upstream_unavailable): The chain or the sponsor refused or failed a transaction. Retry later.
+- [`unexpected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unexpected): An unexpected failure. Retry the request.
+
+#### authorize
+
+##### Authorization
+
+- [`foreign_account`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#foreign_account): The access key names a Tempo Account that is not the user's.
+- [`invalid_origin`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_origin): The request came from an origin other than the redirect URI's.
+- [`rejected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rejected): Tempo ID refused the app or its request, or the user holds no Tempo Account and the app's first realm creates none.
+- [`webauthn_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#webauthn_required): A passkey owns the Tempo Account, and the call has no `passkey`, the passkey's relying party does not cover the page, or the ceremony failed, with its error as `cause`. Pass `passkey: true`, or authorize through [`redirect.signIn`](plugins.redirect.md#redirectsignin).
+- [`webauthn_rejected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#webauthn_rejected): The assertion of the passkey step did not verify, or was spent before.
+
+##### Access keys
+
+- **Key rules:** [`invalid_chain`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_chain), [`missing_key`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#missing_key), [`missing_permissions`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#missing_permissions), [`invalid_public_key`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_public_key), [`invalid_expiry`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_expiry), [`expiry_passed`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#expiry_passed), [`empty_limits`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#empty_limits), [`empty_scopes`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#empty_scopes), [`duplicate_limit`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#duplicate_limit), [`unsupported_token`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unsupported_token), [`invalid_period`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_period), [`scope_without_limit`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#scope_without_limit), [`missing_recipients`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#missing_recipients), [`unsupported_call`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unsupported_call), [`duplicate_scope`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#duplicate_scope), [`invalid_recipients`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_recipients). The access key breaks a [key rule](https://github.com/tempoxyz/id/blob/main/docs/errors.md#access-key-rules).
+- **Headless ceiling:** [`expiry_exceeds_maximum`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#expiry_exceeds_maximum), [`limit_exceeds_maximum`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#limit_exceeds_maximum). The access key exceeds the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/errors.md#headless-ceiling). An app with `tempo-id:sign` has no ceiling.
+- [`challenge_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#challenge_not_permitted): The app sent a `challenge` without the `tempo-id:sign` scope.
+
+##### Requests
+
+- [`invalid_field`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_field), [`rate_limited`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rate_limited), [`upstream_unavailable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#upstream_unavailable), [`unexpected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unexpected): A field is missing or malformed, or a retry later may succeed.
+
+#### session.refresh
+
+Thrown when the token endpoint refuses the request:
+
+- **`invalid_grant`:** The refresh token was revoked, expired, or used more than 30 seconds earlier, also on the retry. Sign in again. This code carries no `reason`.
+- **`invalid_dpop_proof`:** The refresh token is a [DPoP token](https://github.com/tempoxyz/id/blob/main/docs/dpop.md), and the instance holds no key or another key than the one that bound it. Refresh with the instance's `dpop` key. This code carries no `reason`.
+- [`rate_limited`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rate_limited): The request exceeded a rate limit. Retry later.
+- [`unexpected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unexpected): An unexpected failure. Retry the request.
+
+#### signOut
+
+Thrown with [`unexpected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unexpected) when Tempo ID fails. Retry the request.
 
 ### Action errors
 

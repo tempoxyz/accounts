@@ -12,7 +12,7 @@ import { backend } from 'accounts/plugins'
 import { createClient } from 'redis'
 
 const redis = await createClient({ url: process.env.REDIS_URL }).connect()
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
   plugins: [backend({ store: Store.redis(redis) })],

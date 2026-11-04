@@ -9,22 +9,22 @@ import { Accounts } from 'accounts'
 import { mpp } from 'accounts/mpp'
 import { dialog } from 'accounts/plugins'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   // 1. The access key may spend 10 OUSD for a day, in charges and sessions.
   accessKey: { expiry: '1d', limits: [{ limit: '10', token: 'ousd' }] },
   // 2. The plugin pays with the access key of the instance's session.
   plugins: [dialog(), mpp({ maxAmount: '1' })],
 })
 
-await tempoId.dialog.signIn()
+await accounts.dialog.signIn()
 
 // 3. A 402 response starts the payment, and the retry returns the content.
-const response = await tempoId.fetch('https://api.example.com/fortune')
+const response = await accounts.fetch('https://api.example.com/fortune')
 ```
 
 1. Without `scopes`, the access key may call `transfer` and `transferWithMemo` on OUSD, and `open` and `topUp` on the TIP-1034 channel reserve. A charge calls `transferWithMemo`, since mppx binds each transfer to its challenge with a memo. A session calls `open` and `topUp`, which the [recognized calls](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#recognized-calls) include. The token limit caps each deposit.
 2. The access key signs every transaction, proof, and voucher. The first payment attaches the key authorization, which registers the access key on chain. `maxAmount` refuses a charge above 1 OUSD before the access key signs.
-3. `tempoId.fetch` is `fetch` with the payment of each 402 charge challenge. The app's other requests stay unchanged. In the default `'pull'` mode, the endpoint broadcasts the charge's transaction. `mode: 'push'` makes the app broadcast it.
+3. `accounts.fetch` is `fetch` with the payment of each 402 charge challenge. The app's other requests stay unchanged. In the default `'pull'` mode, the endpoint broadcasts the charge's transaction. `mode: 'push'` makes the app broadcast it.
 
 ## Recipes
 
@@ -33,7 +33,7 @@ const response = await tempoId.fetch('https://api.example.com/fortune')
 A session opens a channel with a deposit, and then pays each request with a voucher. The channel names the access key as its signer, so no voucher reaches the account's owner.
 
 ```ts
-const session = tempoId.mpp.session({ maxDeposit: '0.05' })
+const session = accounts.mpp.session({ maxDeposit: '0.05' })
 
 try {
   await session.fetch('https://api.example.com/content') // opens the channel
@@ -51,13 +51,13 @@ A charge of `0` asks for a signed proof of the account, and moves no tokens. The
 
 ### Pay from a backend
 
-A backend pays with the access key of a session that its [`backend`](backend.md) plugin holds, such as the session that `tempoId.backend.get` returns.
+A backend pays with the access key of a session that its [`backend`](backend.md) plugin holds, such as the session that `accounts.backend.get` returns.
 
 ```ts
-const tempoId = Accounts.create({ plugins: [backend(), viem(), mpp()] })
+const accounts = Accounts.create({ plugins: [backend(), viem(), mpp()] })
 
-const session = await tempoId.backend.get({ id })
-const response = await tempoId.mpp({ session }).fetch(url)
+const session = await accounts.backend.get({ id })
+const response = await accounts.mpp({ session }).fetch(url)
 ```
 
 A session manager holds its channel in memory. The [backend playground](../../playgrounds/backend) serves each request apart, so it opens a session, pays two requests, and closes the session in one request.

@@ -12,7 +12,6 @@ npm i accounts @wagmi/core viem
 import { tempoId } from 'accounts/wagmi'
 import { connect, createConfig, disconnect, http } from '@wagmi/core'
 import { Actions } from '@wagmi/core/tempo'
-import { Expiry, Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
@@ -24,9 +23,8 @@ const config = createConfig({
   connectors: [
     tempoId({
       accessKey: () => ({
-        expiry: Expiry.days(1),
-        limits: [{ limit: 10_000_000n, token: ousd }],
-        scopes: [Scopes.tip20(ousd).transfer()],
+        expiry: '1d',
+        limits: [{ limit: '10', token: 'ousd' }],
       }),
     }),
   ],
@@ -53,13 +51,13 @@ button.onclick = async () => {
 1. [`tempoId`](../api/wagmi.tempoId.md) takes the options of [`Accounts.create`](../api/Accounts.create.md) but `chainId`, and adds the `viem` plugin over the config's `chains` and `transports`. A `viem` plugin in `plugins`, such as `viem({ feeToken })`, sets that plugin's other options. In a browser, the page's origin serves as the client ID.
 2. Without a sign-in plugin, the instance holds [`dialog`](../api/plugins.dialog.md), so `connect` runs `dialog.signIn`. Call it in a click handler. The connector's `accessKey` requests the access key.
 3. wagmi's actions use the instance's Viem client. Send tokens with the token actions of `@wagmi/core/tempo`, or the `Hooks.token` hooks of `wagmi/tempo`, not with a hand-built ABI call. The access key attaches its key authorization to the first transaction, which registers the access key.
-4. `disconnect` calls [`tempoId.signOut`](../api/Accounts.create.md#signout).
+4. `disconnect` calls [`accounts.signOut`](../api/Accounts.create.md#signout).
 
 ## Recipes
 
 ### Use the instance's config
 
-The [`wagmi`](../api/wagmi.wagmi.md) plugin adds `tempoId.wagmi`, a config whose one connector is the app's own instance. The config holds Tempo's chains and the instance's chain, each with the chain and transport of the Viem client's options, with the instance's chain first. The plugin adds the Viem client itself, as `viem()` does, unless `plugins` holds a `viem` plugin, such as one with a `feeToken`. A call returns a config with overrides, as `tempoId.viem` does for a client.
+The [`wagmi`](../api/wagmi.wagmi.md) plugin adds `accounts.wagmi`, a config whose one connector is the app's own instance. The config holds Tempo's chains and the instance's chain, each with the chain and transport of the Viem client's options, with the instance's chain first. The plugin adds the Viem client itself, as `viem()` does, unless `plugins` holds a `viem` plugin, such as one with a `feeToken`. A call returns a config with overrides, as `accounts.viem` does for a client.
 
 ```tsx
 import { Accounts } from 'accounts'
@@ -67,20 +65,20 @@ import { passkey, viem } from 'accounts/plugins'
 import { wagmi } from 'accounts/wagmi'
 import { WagmiProvider } from 'wagmi'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   accessKey,
   // `viem()` is optional. `wagmi()` adds one with its defaults.
   plugins: [passkey(), viem(), wagmi()],
 })
 
 // The default config, the same at each read.
-<WagmiProvider config={tempoId.wagmi}>…</WagmiProvider>
+<WagmiProvider config={accounts.wagmi}>…</WagmiProvider>
 
 // A new config with overrides.
-const config = tempoId.wagmi({ connectors: [injected()], ssr: true })
+const config = accounts.wagmi({ connectors: [injected()], ssr: true })
 ```
 
-The app keeps one instance, so a sign-in through `tempoId.passkey.signIn` connects wagmi, and `tempoId.signOut` disconnects it.
+The app keeps one instance, so a sign-in through `accounts.passkey.signIn` connects wagmi, and `accounts.signOut` disconnects it.
 
 ### Sign in with a passkey
 

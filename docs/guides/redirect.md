@@ -14,36 +14,34 @@ An instance without a sign-in plugin receives `dialog`, so `Accounts.create()` a
 ```ts
 import { Accounts } from 'accounts'
 import { dialog } from 'accounts/plugins'
-import { Expiry, Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
 const ousd = Tokens.ousd(tempo.id).address
 
 // 1. The page loads the dialog's frame, hidden, as the instance is created.
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   // Each sign-in requests an access key that may transfer up to 100 OUSD for 30 days.
   accessKey: () => ({
-    expiry: Expiry.days(30),
-    limits: [{ limit: 100_000_000n, token: ousd }],
-    scopes: [Scopes.tip20(ousd).transfer()],
+    expiry: '30d',
+    limits: [{ limit: '100', token: 'ousd' }],
   }),
   plugins: [dialog()],
 })
 
 // 2. On every page load, restore the saved session.
-const session = await tempoId.session.get()
+const session = await accounts.session.get()
 
 // 3. Otherwise, the sign-in button shows Tempo ID's sign-in in the dialog.
 if (!session)
   button.onclick = async () => {
-    const signedIn = await tempoId.dialog.signIn()
+    const signedIn = await accounts.dialog.signIn()
     render(signedIn)
   }
 ```
 
 1. The page's origin is the client ID and the redirect URI by default, so the app needs no registration. The [`dialog`](../api/plugins.dialog.md) plugin preloads the frame of the [embedded sign-in](https://github.com/tempoxyz/id/blob/main/docs/embedded-sign-in.md), so the first sign-in shows at once.
-2. [`tempoId.session.get`](../api/Accounts.create.md#sessionget) reads the session from IndexedDB, and empties one whose access key expired.
+2. [`accounts.session.get`](../api/Accounts.create.md#sessionget) reads the session from IndexedDB, and empties one whose access key expired.
 3. [`dialog.signIn`](../api/plugins.dialog.md#dialogsignin) shows the sign-in, waits for the user's approval, redeems the code, and sets the session. Call it in the click handler, before any `await`, since a popup opens only within the gesture.
 
 The user approves the access key, so its limits may exceed the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling). The page must be on the redirect URI's origin, since the callback reaches only a page of that origin.
@@ -58,10 +56,10 @@ The `redirect` plugin sends the browser to Tempo ID's pages in the same window. 
 import { Accounts } from 'accounts'
 import { redirect } from 'accounts/plugins'
 
-const tempoId = Accounts.create({ plugins: [redirect()] })
+const accounts = Accounts.create({ plugins: [redirect()] })
 
-const session = await tempoId.session.get()
-if (!session) button.onclick = () => tempoId.redirect.signIn()
+const session = await accounts.session.get()
+if (!session) button.onclick = () => accounts.redirect.signIn()
 ```
 
 ### Return to a specific page
@@ -69,7 +67,7 @@ if (!session) button.onclick = () => tempoId.redirect.signIn()
 The browser returns to the instance's `redirectUri`, which defaults to the page's origin. Register the URI with the app first.
 
 ```ts
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: 'client_…',
   plugins: [redirect()],
   redirectUri: 'https://app.example/callback',
@@ -81,11 +79,11 @@ const tempoId = Accounts.create({
 `popup: true` runs the redirect sign-in in a popup window in place of the dialog's frame. Tempo ID's page in the popup posts the callback to the opening page, and closes the popup, so the popup never loads the redirect URI. A page that sends `Cross-Origin-Opener-Policy: same-origin` severs the popup's `window.opener`, so the popup returns to the redirect URI, whose page calls [`dialog.callback`](../api/plugins.dialog.md#dialogcallback) first.
 
 ```ts
-const tempoId = Accounts.create({ plugins: [dialog({ popup: true })] })
+const accounts = Accounts.create({ plugins: [dialog({ popup: true })] })
 
 // On the redirect URI's page, before any other work. A popup's callback
 // closes the popup, so the app starts only on any other load.
-if (!(await tempoId.dialog.callback())) startApp()
+if (!(await accounts.dialog.callback())) startApp()
 ```
 
 A popup that the user closes rejects the call with an `AbortError`. A cancel button or a timeout aborts `signal`, which closes the dialog or the popup.
@@ -93,15 +91,15 @@ A popup that the user closes rejects the call with an `AbortError`. A cancel but
 ```ts
 const controller = new AbortController()
 cancel.onclick = () => controller.abort()
-const session = await tempoId.dialog.signIn({ signal: controller.signal })
+const session = await accounts.dialog.signIn({ signal: controller.signal })
 ```
 
 ### Reuse a session from another app
 
-A first-party app on Tempo ID's site reuses the user's Tempo ID session with [`tempoId.authorize`](../api/Accounts.create.md#authorize), with no sign-in. It returns `undefined` for a visitor without one. The access key must fit the headless ceiling.
+A first-party app on Tempo ID's site reuses the user's Tempo ID session with [`accounts.authorize`](../api/Accounts.create.md#authorize), with no sign-in. It returns `undefined` for a visitor without one. The access key must fit the headless ceiling.
 
 ```ts
-const session = (await tempoId.session.get()) ?? (await tempoId.authorize())
+const session = (await accounts.session.get()) ?? (await accounts.authorize())
 if (!session) showSignInButton()
 ```
 
@@ -112,7 +110,7 @@ A page on Tempo ID's site, such as `app.tempo.xyz` for `id.tempo.xyz`, can prefe
 ```ts
 showSignInButton()
 // The prefetch never throws, and the sign-in works without it.
-void tempoId.redirect.prefetch()
+void accounts.redirect.prefetch()
 ```
 
 ### Keep the session elsewhere
@@ -123,7 +121,7 @@ void tempoId.redirect.prefetch()
 import { Accounts, Store } from 'accounts'
 import * as Idb from 'idb-keyval'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   plugins: [redirect()],
   store: Store.from({
     getItem: (key) => Idb.get(key),
@@ -138,7 +136,7 @@ const tempoId = Accounts.create({
 `id.tempo.xyz` and a deployment for local development, such as `pnpm dev`, accept the page's localhost origin as its client ID, such as `http://localhost:5173` or `https://app.localhost`, with no registration. The browser returns to any path on that origin, on the same port, such as `/auth/callback`.
 
 ```ts
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   dev: true,
   url: 'https://id.tempo.local',
 })

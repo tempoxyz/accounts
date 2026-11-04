@@ -13,7 +13,7 @@ The connector creates the instance on first use, with [`Accounts.create`](Accoun
 | Holds a session           | Returns the session's account, with no sign-in | Signs in again             |
 | Holds no session          | Signs in                                       | Signs in                   |
 
-A sign-in runs `signIn`, or the `signIn` of the first plugin of `plugins` that signs in without input: `device`, `dialog`, `passkey`, or `redirect`. An instance without a sign-in plugin holds [`dialog`](plugins.dialog.md). The `email` and `backend` plugins take input, so they need `signIn`. A session without an access key receives the Tempo Account that Tempo ID selects for the app, as [`tempoId.account.get`](Accounts.create.md#accountget) returns it.
+A sign-in runs `signIn`, or the `signIn` of the first plugin of `plugins` that signs in without input: `device`, `dialog`, `passkey`, or `redirect`. An instance without a sign-in plugin holds [`dialog`](plugins.dialog.md). The `email` and `backend` plugins take input, so they need `signIn`. A session without an access key receives the Tempo Account that Tempo ID selects for the app, as [`accounts.account.get`](Accounts.create.md#accountget) returns it.
 
 wagmi's actions use the instance's Viem client, so they sign as the [`viem`](plugins.viem.md) plugin does:
 
@@ -22,7 +22,7 @@ wagmi's actions use the instance's Viem client, so they sign as the [`viem`](plu
 | Transactions            | The access key                                                                                                                                               |
 | Messages and typed data | On a page, the account's owner until the chain holds the access key, then the access key. Elsewhere, the access key, and the owner for a session without one |
 
-`disconnect` signs the user out with [`tempoId.signOut`](Accounts.create.md#signout). A sign-out through the instance itself disconnects wagmi too.
+`disconnect` signs the user out with [`accounts.signOut`](Accounts.create.md#signout). A sign-out through the instance itself disconnects wagmi too.
 
 ## Usage
 
@@ -102,9 +102,8 @@ The connector takes the options of [`Accounts.create`](Accounts.create.md) but `
 ```ts
 const connector = tempoId({
   accessKey: () => ({
-    expiry: Expiry.days(1),
-    limits: [{ limit: 10_000_000n, token: ousd }],
-    scopes: [Scopes.tip20(ousd).transfer()],
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
   }),
   plugins: [passkey(), viem({ feeToken: ousd })],
 })

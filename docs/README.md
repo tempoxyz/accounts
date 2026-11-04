@@ -8,7 +8,7 @@ flowchart LR
   Instance --> Plugins[Plugins: dialog, redirect, email, passkey, device, backend]
   Plugins -->|sign-in| ID[Tempo ID]
   ID -->|tokens and access key| Instance
-  Instance -->|tempoId.viem| Chain[Tempo]
+  Instance -->|accounts.viem| Chain[Tempo]
 ```
 
 ## Install
@@ -17,16 +17,15 @@ flowchart LR
 npm i accounts viem
 ```
 
-| Entry                 | Holds                                                                                                                                                                                                                       |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `accounts`            | `Accounts`, `Permissions`, `Plugin`, `Session`, and `Store`                                                                                                                                                                 |
-| `accounts/internal`   | The low-level `Actions`, `AccessKey`, `AccessToken`, `ClientAssertion`, `Dpop`, `LogoutToken`, `TempoAccount`, `Tokens`, and the types that the actions build and return: `Authorization`, `Funding`, `Pending`, and `User` |
-| `accounts/plugins`    | The plugins: `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, and `viem`                                                                                                                             |
-| `accounts/react`      | `react`, the plugin that adds `tempoId.useSession()`                                                                                                                                                                        |
-| `accounts/expo`       | The `expo` preset of an Expo app                                                                                                                                                                                            |
-| `accounts/mpp`        | `mpp`, the plugin that pays MPP endpoints with the access key                                                                                                                                                               |
-| `accounts/cloudflare` | `DurableObject.sessions`, for a backend's sessions on Cloudflare Workers                                                                                                                                                    |
-| `accounts/wagmi`      | `tempoId`, a wagmi connector, and `wagmi`, the plugin of a wagmi config                                                                                                                                                     |
+| Entry                 | Holds                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| `accounts`            | `Accounts`, `Permissions`, `Plugin`, `Session`, and `Store`                                     |
+| `accounts/plugins`    | The plugins: `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, and `viem` |
+| `accounts/react`      | `react`, the plugin that adds `accounts.useSession()`                                           |
+| `accounts/expo`       | The `expo` preset of an Expo app                                                                |
+| `accounts/mpp`        | `mpp`, the plugin that pays MPP endpoints with the access key                                   |
+| `accounts/cloudflare` | `DurableObject.sessions`, for a backend's sessions on Cloudflare Workers                        |
+| `accounts/wagmi`      | `tempoId`, a wagmi connector, and `wagmi`, the plugin of a wagmi config                         |
 
 ## Quick start
 
@@ -35,10 +34,10 @@ An instance without a sign-in plugin signs in through Tempo ID's sign-in in a di
 ```ts
 import { Accounts } from 'accounts'
 
-const tempoId = Accounts.create()
+const accounts = Accounts.create()
 
 button.onclick = async () => {
-  const session = await tempoId.dialog.signIn()
+  const session = await accounts.dialog.signIn()
   console.log(`Signed in as ${session.user.email}`)
 }
 ```
@@ -57,11 +56,11 @@ The [guides](guides/README.md) cover each sign-in flow, from a dialog to a CLI, 
 
 ## API reference
 
-The [API reference](api/README.md) documents every export: `Accounts`, each plugin, `expo`, `DurableObject`, the `tempoId` connector, `Actions`, `Store`, and the types that each one takes or returns.
+The [API reference](api/README.md) documents every export: `Accounts`, each plugin, `expo`, `DurableObject`, the `tempoId` connector, `Store`, and the types that each one takes or returns.
 
 ## Limitations
 
-- The `email` and `passkey` plugins and `tempoId.authorize` serve only a first-party app's web page. Other apps, and every native app without a backend, sign in through a dialog or a redirect. A native app with a backend can use [backend sign-in](https://github.com/tempoxyz/id/blob/main/docs/backend-sign-in.md).
-- A passkey-owned account signs its access key headlessly only on a page that the passkey's relying party covers: in `passkey.signIn`, `email.signIn`, and `tempoId.authorize` with `passkey`. Elsewhere the call throws `webauthn_required`, and the approval page of a redirect signs the access key.
+- The `email` and `passkey` plugins and `accounts.authorize` serve only a first-party app's web page. Other apps, and every native app without a backend, sign in through a dialog or a redirect. A native app with a backend can use [backend sign-in](https://github.com/tempoxyz/id/blob/main/docs/backend-sign-in.md).
+- A passkey-owned account signs its access key headlessly only on a page that the passkey's relying party covers: in `passkey.signIn`, `email.signIn`, and `accounts.authorize` with `passkey`. Elsewhere the call throws `webauthn_required`, and the approval page of a redirect signs the access key.
 - A dialog sign-in with a [funding hint](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md) runs in a popup, since a frame cannot show the funding page.
 - Tempo ID offers no SSO connections, so no sign-in returns the `sso` step.

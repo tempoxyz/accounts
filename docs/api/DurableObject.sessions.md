@@ -31,7 +31,7 @@ export const SESSIONS = DurableObject.sessions((env: Env) => ({
 }))
 
 // In each request of the Worker:
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: env.CLIENT_ID,
   clientSecret: env.CLIENT_SECRET,
   plugins: [backend({ namespace: env.SESSIONS })],

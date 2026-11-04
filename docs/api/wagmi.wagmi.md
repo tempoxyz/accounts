@@ -2,15 +2,15 @@
 
 ## Overview
 
-A plugin, from `accounts/wagmi`, that adds `tempoId.wagmi`: a [wagmi](https://wagmi.sh) config whose one connector is the instance itself. The config holds Tempo's chains and the instance's chain, each from the options of the [`viem`](plugins.viem.md) plugin, with the instance's chain first. Without a `viem` plugin in `plugins`, the plugin adds the Viem client itself, as `viem()` does, so the instance holds `tempoId.viem` and its actions. An app that needs other options of the client, such as a `feeToken`, passes `viem({ … })` beside it. `@wagmi/core` is an optional peer dependency of `accounts`, so an app with wagmi installs it beside the package.
+A plugin, from `accounts/wagmi`, that adds `accounts.wagmi`: a [wagmi](https://wagmi.sh) config whose one connector is the instance itself. The config holds Tempo's chains and the instance's chain, each from the options of the [`viem`](plugins.viem.md) plugin, with the instance's chain first. Without a `viem` plugin in `plugins`, the plugin adds the Viem client itself, as `viem()` does, so the instance holds `accounts.viem` and its actions. An app that needs other options of the client, such as a `feeToken`, passes `viem({ … })` beside it. `@wagmi/core` is an optional peer dependency of `accounts`, so an app with wagmi installs it beside the package.
 
 The connector is the [`tempoId`](wagmi.tempoId.md) connector over the app's own instance. `connect` signs in with the first plugin that signs in without input, `disconnect` signs out, and a sign-in or sign-out through the instance connects or disconnects wagmi.
 
-| Member                 | Returns                                                                           |
-| ---------------------- | --------------------------------------------------------------------------------- |
-| `tempoId.wagmi`        | The default config, created at its first read. Each read returns the same config. |
-| `tempoId.wagmi()`      | The default config.                                                               |
-| `tempoId.wagmi({ … })` | A new config with the overrides, such as `ssr` or other connectors.               |
+| Member                  | Returns                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| `accounts.wagmi`        | The default config, created at its first read. Each read returns the same config. |
+| `accounts.wagmi()`      | The default config.                                                               |
+| `accounts.wagmi({ … })` | A new config with the overrides, such as `ssr` or other connectors.               |
 
 ## Usage
 
@@ -20,13 +20,13 @@ import { passkey } from 'accounts/plugins'
 import { wagmi } from 'accounts/wagmi'
 import { WagmiProvider } from 'wagmi'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   accessKey,
   plugins: [passkey(), wagmi()],
 })
 
 function App() {
-  return <WagmiProvider config={tempoId.wagmi}>…</WagmiProvider>
+  return <WagmiProvider config={accounts.wagmi}>…</WagmiProvider>
 }
 ```
 
@@ -43,7 +43,7 @@ The plugin adds one member to the instance:
 The default config, which a call configures. A call without overrides returns the default config. A call with overrides returns a new config, whose connector is a new connector over the same instance.
 
 ```ts
-const config = tempoId.wagmi({ ssr: true })
+const config = accounts.wagmi({ ssr: true })
 ```
 
 ## Parameters

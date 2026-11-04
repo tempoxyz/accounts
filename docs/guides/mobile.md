@@ -16,39 +16,37 @@ import { expo } from 'accounts/expo'
 import { viem } from 'accounts/plugins'
 import { react } from 'accounts/react'
 import { Button, Text } from 'react-native'
-import { Expiry, Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
 const ousd = Tokens.ousd(tempo.id).address
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   // The app's access key may transfer up to 100 OUSD for 30 days.
   accessKey: () => ({
-    expiry: Expiry.days(30),
-    limits: [{ limit: 100_000_000n, token: ousd }],
-    scopes: [Scopes.tip20(ousd).transfer()],
+    expiry: '30d',
+    limits: [{ limit: '100', token: 'ousd' }],
   }),
   clientId: 'client_…',
   plugins: [
     // 1. The secure store holds the session, and the sheet shows Tempo ID's pages.
     expo({ redirectUri: 'com.example.app:/callback' }),
-    // 2. `tempoId.useSession()` renders the session.
+    // 2. `accounts.useSession()` renders the session.
     react(),
     viem(),
   ],
 })
 
 export function App() {
-  const { session } = tempoId.useSession()
+  const { session } = accounts.useSession()
   if (!session)
-    return <Button onPress={() => tempoId.redirect.signIn()} title="Sign in" />
+    return <Button onPress={() => accounts.redirect.signIn()} title="Sign in" />
   return <Text>Signed in as {session.user.email}</Text>
 }
 ```
 
 1. [`redirect.signIn`](../api/plugins.redirect.md#redirectsignin) builds the URL, and the preset shows it in a sheet, such as `ASWebAuthenticationSession` on iOS. The sign-in then redeems the code, and sets the session. It returns `undefined` when the user dismisses the sheet. The access key is a secp256k1 private key, so the secure store holds the session.
-2. [`tempoId.useSession()`](../api/react.react.md) reads the saved session on the first render, as [React](react.md) describes.
+2. [`accounts.useSession()`](../api/react.react.md) reads the saved session on the first render, as [React](react.md) describes.
 
 [`examples/mobile`](../../examples/mobile/App.tsx) runs this flow, and sends OUSD with the session's access key. A React Native app without Expo uses [`redirect`](../api/plugins.redirect.md) with its own `open`, and a [`store`](../api/Accounts.from.md) of its own.
 
@@ -56,10 +54,10 @@ export function App() {
 
 ### Sign out
 
-A native app holds no Tempo ID session cookie, so the request that ends a browser's session ends none for it. [`tempoId.signOut`](../api/Accounts.create.md#signout) also revokes the saved refresh token at `POST /oauth2/revoke`, and empties the session at once. The sheet's browser keeps its own session.
+A native app holds no Tempo ID session cookie, so the request that ends a browser's session ends none for it. [`accounts.signOut`](../api/Accounts.create.md#signout) also revokes the saved refresh token at `POST /oauth2/revoke`, and empties the session at once. The sheet's browser keeps its own session.
 
 ```ts
-await tempoId.signOut()
+await accounts.signOut()
 ```
 
 > [!WARNING]

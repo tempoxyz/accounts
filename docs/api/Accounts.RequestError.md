@@ -10,7 +10,7 @@ The error that every action and every instance member throws when Tempo ID refus
 import { Accounts } from 'accounts'
 
 try {
-  await tempoId.authorize()
+  await accounts.authorize()
 } catch (error) {
   if (
     error instanceof Accounts.RequestError &&

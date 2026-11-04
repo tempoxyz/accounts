@@ -8,31 +8,31 @@ An instance holds the [session](../api/types.md#session) of its user: the tokens
 import { Accounts } from 'accounts'
 import { dialog } from 'accounts/plugins'
 
-const tempoId = Accounts.create({ plugins: [dialog()] })
+const accounts = Accounts.create({ plugins: [dialog()] })
 
 // 1. On every page load, restore the saved session.
-const session = await tempoId.session.get()
+const session = await accounts.session.get()
 
 // 2. Render it now, and again at each sign-in and sign-out.
 render(session)
-tempoId.session.subscribe((next) => render(next))
+accounts.session.subscribe((next) => render(next))
 
 // 3. Refresh the access token before a request that needs a fresh one.
 async function token() {
-  const current = await tempoId.session.get()
+  const current = await accounts.session.get()
   if (current && current.expiresAt - 30_000 < Date.now())
-    return (await tempoId.session.refresh())?.accessToken
+    return (await accounts.session.refresh())?.accessToken
   return current?.accessToken
 }
 
 // 4. Sign out of this app, and forget the saved session.
 async function signOut() {
-  await tempoId.signOut()
+  await accounts.signOut()
 }
 ```
 
 1. [`session.get`](../api/Accounts.create.md#sessionget) reads the saved session once, completes a redirect's callback with the `redirect` plugin, and returns `undefined` when the saved access key expired.
-2. [`session.subscribe`](../api/Accounts.create.md#sessionsubscribe) calls its listener with each new session and the one before it. [`session.status`](../api/Accounts.create.md#sessionstatus) returns the session's [status](../api/types.md#sessionstatus) with `get`, and calls a listener at each change with `subscribe`, such as `reauthorizing` while an authorization renews an expired session. In React, [`tempoId.useSession()`](../api/react.react.md) reads it, as [React](react.md) describes.
+2. [`session.subscribe`](../api/Accounts.create.md#sessionsubscribe) calls its listener with each new session and the one before it. [`session.status`](../api/Accounts.create.md#sessionstatus) returns the session's [status](../api/types.md#sessionstatus) with `get`, and calls a listener at each change with `subscribe`, such as `reauthorizing` while an authorization renews an expired session. In React, [`accounts.useSession()`](../api/react.react.md) reads it, as [React](react.md) describes.
 3. [`session.refresh`](../api/Accounts.create.md#sessionrefresh) exchanges the refresh token for new tokens, saves them, and returns the session. An access key past its expiry needs a new sign-in.
 4. [`signOut`](../api/Accounts.create.md#signout) empties the session at once, and revokes the refresh token. The user's Tempo ID session and the user's other apps stay signed in. With `everywhere: true`, a first-party app also ends the Tempo ID session for every app that relies on it. Any other app's `everywhere` throws. The access key works until its `expiry`, but the instance forgets it.
 
@@ -58,7 +58,7 @@ A session belongs to one deployment, one client ID, and one chain, so an instanc
 ```ts
 import { Accounts, Store } from 'accounts'
 
-const tempoId = Accounts.create({
+const accounts = Accounts.create({
   clientId: 'cli:acme-deploy',
   store: Store.file('~/.config/acme-deploy/session.json'),
 })
@@ -71,50 +71,19 @@ const tempoId = Accounts.create({
 ```ts
 import { Session } from 'accounts'
 
-const session = await tempoId.session.get()
-if (session && Session.expired(session)) await tempoId.dialog.signIn()
+const session = await accounts.session.get()
+if (session && Session.expired(session)) await accounts.dialog.signIn()
 ```
 
 ### Call a Tempo API
 
-Send the access token with [`Actions.fetch`](../api/Actions.fetch.md), which sends a Bearer token as one, and a DPoP token with its proof.
+Send the session's access token as a Bearer token.
 
 ```ts
-import { Actions } from 'accounts/internal'
-
-const session = await tempoId.session.get()
-const response = await Actions.fetch(tempoId.config, {
-  accessToken: session!.accessToken,
-  url: 'https://api.example/me',
+const session = await accounts.session.get()
+const response = await fetch('https://api.example/me', {
+  headers: { authorization: `Bearer ${session!.accessToken}` },
 })
-```
-
-### Bind the tokens to a key
-
-Pass a [`Dpop.create`](../api/Dpop.create.md) key as `dpop`, so each token request sends a [DPoP proof](https://github.com/tempoxyz/id/blob/main/docs/dpop.md), and a stolen token is of no use without the key. Keep the key beside the session, since each refresh needs a proof from the key that bound the tokens. [`Actions.fetch`](../api/Actions.fetch.md) sends the access token with the `DPoP` scheme and a new proof on each request.
-
-```ts
-import { Accounts } from 'accounts'
-import { Dpop } from 'accounts/internal'
-
-const dpop = (await keys.get('dpop')) ?? (await Dpop.create())
-await keys.set('dpop', dpop)
-const tempoId = Accounts.create({ dpop })
-```
-
-### Keep the state without an instance
-
-An app that keeps its state itself, such as in a sealed cookie, calls the low-level [`Actions`](../api/Actions.md) with [`Accounts.from`](../api/Accounts.from.md). Each sign-in action returns an [`Authorization`](../api/types.md#authorization), and [`Actions.refresh`](../api/Actions.refresh.md) returns new tokens. Refresh tokens rotate, so save the new tokens over the old ones.
-
-```ts
-import { Accounts } from 'accounts'
-import { Actions } from 'accounts/internal'
-
-const config = Accounts.from({ clientId: 'client_…' })
-const tokens = await Actions.refresh(config, {
-  refreshToken: saved.refreshToken!,
-})
-await save({ ...saved, ...tokens })
 ```
 
 ## Learn more

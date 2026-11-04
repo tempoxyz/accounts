@@ -2,15 +2,15 @@
 
 ## Overview
 
-A plugin, from `accounts/mpp`, that adds `tempoId.fetch` and `tempoId.mpp`, which pay the 402 challenges of Machine Payments Protocol (MPP) endpoints through [mppx](https://github.com/wevm/mppx). The access key of the instance's session signs every charge, proof, and voucher, so no payment reaches the account's owner. `mppx` is an optional peer dependency of `accounts`, so an app that pays MPP endpoints installs it beside the package.
+A plugin, from `accounts/mpp`, that adds `accounts.fetch` and `accounts.mpp`, which pay the 402 challenges of Machine Payments Protocol (MPP) endpoints through [mppx](https://github.com/wevm/mppx). The access key of the instance's session signs every charge, proof, and voucher, so no payment reaches the account's owner. `mppx` is an optional peer dependency of `accounts`, so an app that pays MPP endpoints installs it beside the package.
 
 The plugin reads the chain and transport of each chain ID from the [`viem`](plugins.viem.md) plugin. Without a `viem` plugin in `plugins`, it uses a `viem` plugin of its own, with Tempo's chains and their own RPC.
 
-| Member                  | Returns                                                                     |
-| ----------------------- | --------------------------------------------------------------------------- |
-| `tempoId.fetch`         | `fetch` that pays each charge with the access key of the instance's session |
-| `tempoId.mpp.session()` | A session manager, which pays each request of a channel with a voucher      |
-| `tempoId.mpp({ … })`    | A payer with overrides, such as a fixed `session` or a `maxAmount`          |
+| Member                   | Returns                                                                     |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `accounts.fetch`         | `fetch` that pays each charge with the access key of the instance's session |
+| `accounts.mpp.session()` | A session manager, which pays each request of a channel with a voucher      |
+| `accounts.mpp({ … })`    | A payer with overrides, such as a fixed `session` or a `maxAmount`          |
 
 ## Usage
 
@@ -19,10 +19,10 @@ import { Accounts } from 'accounts'
 import { mpp } from 'accounts/mpp'
 import { dialog } from 'accounts/plugins'
 
-const tempoId = Accounts.create({ accessKey, plugins: [dialog(), mpp()] })
+const accounts = Accounts.create({ accessKey, plugins: [dialog(), mpp()] })
 
-await tempoId.dialog.signIn()
-const response = await tempoId.fetch('https://api.example.com/fortune')
+await accounts.dialog.signIn()
+const response = await accounts.fetch('https://api.example.com/fortune')
 ```
 
 ## Return type
@@ -44,10 +44,10 @@ The `fetch` of the payer of the instance's session, as below.
 The `session` of the payer of the instance's session. A call returns a payer with overrides. Each payer has two members:
 
 - `fetch(input, init?)`: Sends the request. A 402 charge challenge starts a payment with the access key, and the retry returns the endpoint's response. A request without a session rejects with `Accounts.SignedOutError`, and a session without an access key with `Accounts.KeyRequiredError`.
-- `session(parameters?)`: Returns a session manager of mppx. Its first request opens a channel on the TIP-1034 channel reserve, each request pays with a voucher of the access key, and `close()` closes the channel. The manager holds the channel in memory, so close it before it is discarded. `parameters` takes the options of mppx's `tempo.session.manager` but the account and the client, such as `maxDeposit`. It reads the session without loading it, so read the session first after a reload or a restart, such as with `tempoId.session.get()`.
+- `session(parameters?)`: Returns a session manager of mppx. Its first request opens a channel on the TIP-1034 channel reserve, each request pays with a voucher of the access key, and `close()` closes the channel. The manager holds the channel in memory, so close it before it is discarded. `parameters` takes the options of mppx's `tempo.session.manager` but the account and the client, such as `maxDeposit`. It reads the session without loading it, so read the session first after a reload or a restart, such as with `accounts.session.get()`.
 
 ```ts
-const session = tempoId.mpp.session()
+const session = accounts.mpp.session()
 try {
   await session.fetch('https://api.example.com/content')
 } finally {
@@ -99,12 +99,12 @@ Who broadcasts a charge's transaction: the endpoint (`'pull'`) or the app (`'pus
 - **Type:** [`Session`](types.md#session)
 - **Default:** the instance's session, read at each payment
 
-A fixed session, such as one that `tempoId.backend.get` returns, whose access key pays.
+A fixed session, such as one that `accounts.backend.get` returns, whose access key pays.
 
 ```ts
 mpp({ maxAmount: '1', maxDeposit: '0.05' })
 
-await tempoId.mpp({ mode: 'push', session }).fetch(url)
+await accounts.mpp({ mode: 'push', session }).fetch(url)
 ```
 
 ## Errors

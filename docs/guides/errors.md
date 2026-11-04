@@ -9,7 +9,7 @@ import { Accounts } from 'accounts'
 
 async function verifyCode(address: string, code: string) {
   try {
-    return await tempoId.email.signIn({ code, email: address })
+    return await accounts.email.signIn({ code, email: address })
   } catch (error) {
     if (!(error instanceof Accounts.RequestError)) throw error
 
@@ -39,11 +39,10 @@ An access key over the [headless ceiling](https://github.com/tempoxyz/id/blob/ma
 
 ```ts
 try {
-  await tempoId.authorize({
+  await accounts.authorize({
     accessKey: {
-      expiry: Expiry.days(30),
-      limits: [{ limit: 5_000_000_000n, token: ousd }],
-      scopes: [Scopes.tip20(ousd).transfer()],
+      expiry: '30d',
+      limits: [{ limit: '5000', token: 'ousd' }],
     },
   })
 } catch (error) {
@@ -60,7 +59,7 @@ try {
 A sign-in that another sign-in or a sign-out overtook throws [`Accounts.SupersededError`](../api/errors.md#accountssupersedederror), such as a second click on a sign-in button. The instance keeps the newer session, so the app renders that one.
 
 ```ts
-await tempoId.dialog.signIn().catch((error: unknown) => {
+await accounts.dialog.signIn().catch((error: unknown) => {
   if (error instanceof Accounts.SupersededError) return
   throw error
 })

@@ -18,7 +18,7 @@ Every flow sets the same [session](../api/types.md#session) on the instance, and
 
 - [Access keys](access-keys.md): access key permissions, passkey-owned accounts, and challenges.
 - [Sessions](sessions.md): the saved session, token refresh, and sign-out.
-- [React](react.md): the session in a React render, with `tempoId.useSession()`.
+- [React](react.md): the session in a React render, with `accounts.useSession()`.
 - [MPP payments](mpp.md): charges and sessions of MPP endpoints, paid with the access key through the `mpp` plugin.
 - [Viem](viem.md): the client of the `viem` plugin, and its chains.
 - [wagmi](wagmi.md): the `wagmi` plugin and the `tempoId` connector, which connect a wagmi app through Tempo ID.
