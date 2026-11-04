@@ -12,7 +12,7 @@ runs:
     - name: Set up pnpm
       # The organization allows only GitHub-owned actions, so pnpm comes from npm at the pinned version.
       shell: bash
-      run: npm install --global "pnpm@$(node -p "require('./package.json').packageManager.split('@')[1]")"
+      run: npm install --global "pnpm@$(node -p "require('./package.json').packageManager.split('@')[1]")" # zizmor: ignore[adhoc-packages]
 
     - name: Locate pnpm store
       id: pnpm-store

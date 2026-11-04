@@ -44,7 +44,7 @@ jobs:
           token: ${{ steps.sts.outputs.token }}
 
       - name: Install dependencies
-        uses: ./.github/actions/install-dependencies
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository]
 
       - name: Version or publish
         # Version 1 of the action, since version 2 requires Changesets CLI 3 and the repository uses 2.
@@ -100,7 +100,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install dependencies
-        uses: ./.github/actions/install-dependencies
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository]
 
       - name: Pack
         env:
