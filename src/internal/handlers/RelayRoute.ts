@@ -1,11 +1,11 @@
 /**
- * The app's relay route, which pays the fees of its pages' transactions: its handler on the app's
- * server, which the `relay` plugin serves, and the page's transport, which the `viem` plugin's
- * `relay` option builds. The entries of the package do not export it.
+ * The app's relay route, which pays the fees of its pages' transactions, and which the `relay`
+ * plugin serves. The `viem` plugin's `relay` option sends a page's sponsorship requests to it. The
+ * entries of the package do not export it.
  * @module
  */
-import { http, type HttpTransportConfig, type Transport } from 'viem'
-import { Relay, withRelay } from 'viem/tempo'
+import { Relay } from 'viem/tempo'
+import * as Handler from '../Handler.js'
 
 /**
  * Returns the handler of the relay route. With `apiKey`, it forwards each request to the Tempo
@@ -13,7 +13,7 @@ import { Relay, withRelay } from 'viem/tempo'
  * of `Relay.create` with the options. The handler checks no caller, so any caller that reaches the
  * route spends the fee payer's balance, within the limits of the API key or of the relay's plugins.
  */
-export function handler(options: handler.Options): handler.ReturnType {
+export function create(options: create.Options): Handler.Handler {
   if (options.apiKey !== undefined) return tempoApi(options)
   const { apiKey: _apiKey, chainId, ...relayOptions } = options
   // `Relay.create` takes `client` and `getClient` in separate overloads, and no overload takes
@@ -22,10 +22,10 @@ export function handler(options: handler.Options): handler.ReturnType {
     relayOptions as Extract<Relay.create.Options, { client: unknown }>,
   )
   // Viem's fill names no chain, so each request relays on the route's chain.
-  return { fetch: (request) => relay.fetch(request, { chainId }) }
+  return Handler.from({ fetch: (request) => relay.fetch(request, { chainId }) })
 }
 
-export declare namespace handler {
+export declare namespace create {
   type Options = Options.TempoApi | Options.Viem
 
   namespace Options {
@@ -46,38 +46,13 @@ export declare namespace handler {
       chainId: number
     }
   }
-
-  /** The handler: a function of the Fetch API from a request to its response. */
-  type ReturnType = {
-    /** Serves `request`, and returns its response. */
-    fetch: (request: Request) => Promise<Response>
-  }
-}
-
-/**
- * Returns a transport that sends the sponsorship requests of a transaction to the relay route at
- * `url`, and every other request to `rpc`. Viem's `withRelay` selects the requests: a fill, and a
- * raw transaction without its fee payer's signature.
- */
-export function transport(options: transport.Options): Transport {
-  const { rpc = http(), url, ...httpOptions } = options
-  return withRelay(rpc, http(url, httpOptions))
-}
-
-export declare namespace transport {
-  type Options = HttpTransportConfig & {
-    /** The transport of every request but a sponsorship's. Defaults to `http()`, the chain's own RPC. */
-    rpc?: Transport | undefined
-    /** The URL of the app's relay route, such as `/api/relay`. */
-    url: string
-  }
 }
 
 /** Returns the handler of the Tempo API mode, which forwards each request with the API key. */
-function tempoApi(options: handler.Options.TempoApi): handler.ReturnType {
+function tempoApi(options: create.Options.TempoApi): Handler.Handler {
   const { apiKey, apiUrl = 'https://api.tempo.xyz', chainId } = options
 
-  return {
+  return Handler.from({
     async fetch(request) {
       if (request.method !== 'POST')
         return new Response(null, { headers: { allow: 'POST' }, status: 405 })
@@ -109,5 +84,5 @@ function tempoApi(options: handler.Options.TempoApi): handler.ReturnType {
         status: response.status,
       })
     },
-  }
+  })
 }

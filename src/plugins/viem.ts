@@ -12,7 +12,7 @@ import {
   type LocalAccount,
   type Transport,
 } from 'viem'
-import { type Account, Actions, createClient } from 'viem/tempo'
+import { type Account, Actions, createClient, withRelay } from 'viem/tempo'
 import {
   tempo,
   tempoDevnet,
@@ -27,7 +27,6 @@ import * as SignIn from '../internal/SignIn.js'
 import * as AccessKey from '../internal/viem/AccessKey.js'
 import * as Retry from '../internal/viem/Retry.js'
 import * as Signer from '../internal/Signer.js'
-import * as RelayRoute from '../internal/RelayRoute.js'
 import * as Verify from '../internal/viem/Verify.js'
 import * as Permissions from '../Permissions.js'
 import * as Plugin from '../Plugin.js'
@@ -157,7 +156,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             return chainId === target ? options : {}
           })()
           const rpc = transport ?? http()
-          return route ? RelayRoute.transport({ rpc, url: route }) : rpc
+          // Viem's `withRelay` sends a fill, and a raw transaction without its fee payer's signature, to
+          // the relay route, and every other request to `rpc`.
+          return route ? withRelay(rpc, http(route)) : rpc
         },
       } satisfies viem.Settings
 
