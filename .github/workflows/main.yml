@@ -131,17 +131,41 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      # "Re-run failed jobs" re-runs this job without Verify's tip check, so check again here:
+      # a re-run publishes only while its commit is still main's tip.
+      - name: Check main's tip
+        id: tip
+        env:
+          ATTEMPT: ${{ github.run_attempt }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ship=true
+          if [ "$ATTEMPT" != 1 ]; then
+            tip="$(gh api "repos/$REPO/commits/main" --jq .sha)"
+            if [ "$tip" != "$SHA" ]; then
+              ship=false
+              echo "::notice::Not publishing: main has moved past $SHA."
+            fi
+          fi
+          echo "ship=$ship" >> "$GITHUB_OUTPUT"
+
       - name: Clone repository
+        if: steps.tip.outputs.ship == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
       - name: Install dependencies
+        if: steps.tip.outputs.ship == 'true'
         uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
         with:
           skip-cache: 'true' # avoid cache poisoning attacks
 
       - name: Publish to npm
+        if: steps.tip.outputs.ship == 'true'
         uses: tempoxyz/gh-actions/vendor/changesets/action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
         env:
           NPM_CONFIG_IGNORE_SCRIPTS: 'true'
