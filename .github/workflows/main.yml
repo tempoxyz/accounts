@@ -57,7 +57,10 @@ jobs:
         run: |
           set -euo pipefail
           ship=true
-          if [ "$ATTEMPT" != 1 ] && [ "$(gh api "repos/$REPO/commits/main" --jq .sha)" != "$SHA" ]; then
+          if [ "$ATTEMPT" != 1 ]; then
+            tip="$(gh api "repos/$REPO/commits/main" --jq .sha)"
+          fi
+          if [ "$ATTEMPT" != 1 ] && [ "$tip" != "$SHA" ]; then
             ship=false
             echo "::notice::Not deploying or publishing: main has moved past $SHA."
           fi
