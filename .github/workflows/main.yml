@@ -3,13 +3,82 @@ on:
   push:
     branches: [main]
 
+# Pushes run in push order: a newer push replaces a waiting run, so the newest commit
+# is always the one that deploys and publishes next. Re-runs get their own group, so
+# re-running an older run never replaces the newest commit's waiting run, and a re-run
+# deploys or publishes only while its commit is still the tip of main (verify's ship).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_attempt == '1' && 'push' || github.sha }}
   cancel-in-progress: false
 
 permissions: {} # each job defines the minimum permissions it needs
 
 jobs:
+  # Verify runs on every push on its own (verify.yml); this waits for its result on
+  # this commit, so nothing reaches npm or production unless it passed.
+  verify:
+    name: Verify
+    permissions:
+      actions: read # to read this commit's Verify run
+      contents: read # to read main's tip
+    outputs:
+      ship: ${{ steps.tip.outputs.ship }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Wait for Verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          while :; do
+            run="$(gh run list --repo "$REPO" --workflow verify.yml --commit "$SHA" --event push --limit 1 \
+              --json status,conclusion,url --jq '.[0] // empty')" || run=''
+            if [ -n "$run" ] && [ "$(jq -r .status <<< "$run")" = completed ]; then
+              conclusion="$(jq -r .conclusion <<< "$run")"
+              [ "$conclusion" = success ] && exit 0
+              echo "::error::Verify $conclusion on $SHA: $(jq -r .url <<< "$run")"
+              exit 1
+            fi
+            sleep 30
+          done
+
+      # A re-run of an older run must not deploy or publish over newer commits, so a
+      # re-run ships only while its commit is still main's tip.
+      - name: Check main's tip
+        id: tip
+        env:
+          ATTEMPT: ${{ github.run_attempt }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ship=true
+          if [ "$ATTEMPT" != 1 ]; then
+            tip="$(gh api "repos/$REPO/commits/main" --jq .sha)"
+          fi
+          if [ "$ATTEMPT" != 1 ] && [ "$tip" != "$SHA" ]; then
+            ship=false
+            echo "::notice::Not deploying or publishing: main has moved past $SHA."
+          fi
+          echo "ship=$ship" >> "$GITHUB_OUTPUT"
+
+  deploy-workers:
+    name: Deploy Workers
+    if: needs.verify.outputs.ship == 'true'
+    needs: verify
+    permissions:
+      actions: read # to find the last successful deploy
+      contents: read
+      pull-requests: write # requested by the reusable workflow for preview comments
+    uses: ./.github/workflows/deploy-workers.yml # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
   version:
     name: Version
     outputs:
@@ -52,8 +121,10 @@ jobs:
 
   publish:
     name: Publish
+    # Not gated on Verify's ship output: its own version check below decides re-runs, so a
+    # failed or unverified release can still be published once main holds the same version.
     if: needs.version.outputs.hasChangesets == 'false'
-    needs: version
+    needs: [verify, version]
     permissions:
       contents: write # to create the GitHub release and tag
       id-token: write # to use npm trusted publishing through OIDC
@@ -62,6 +133,28 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      # "Re-run failed jobs" re-runs this job without Verify's tip check, so check here: a
+      # re-run of an older commit publishes only while main still holds the same version, so
+      # retrying a failed publish works but never publishes an older version over a newer one.
+      - name: Check main's version
+        env:
+          ATTEMPT: ${{ github.run_attempt }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [ "$ATTEMPT" != 1 ] || exit 0
+          tip="$(gh api "repos/$REPO/commits/main" --jq .sha)"
+          [ "$tip" != "$SHA" ] || exit 0
+          version() { gh api "repos/$REPO/contents/package.json?ref=$1" --jq '.content | @base64d | fromjson | .version'; }
+          old="$(version "$SHA")"
+          new="$(version "$tip")"
+          if [ "$old" != "$new" ]; then
+            echo "::error::Not publishing $old from $SHA: main ($tip) is at $new. Publish from main instead."
+            exit 1
+          fi
+
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

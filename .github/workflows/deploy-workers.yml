@@ -1,9 +1,15 @@
 name: Deploy Workers
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
+  # Main calls this for pushes to main once Verify passes, so production only
+  # gets commits whose checks and tests passed.
+  workflow_call:
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+      CLOUDFLARE_API_TOKEN:
+        required: true
 
 concurrency:
   group: deploy-workers-${{ github.event.pull_request.number || 'production' }}
@@ -48,12 +54,18 @@ jobs:
           key: turbo-deploy-${{ github.sha }}
           restore-keys: turbo-deploy-
 
-      # Pushes deploy what changed since the last successful deploy, so changes from a
-      # superseded or failed run are not skipped. Falls back to every worker.
+      # Pushes deploy what changed since the last push whose Deploy step succeeded, whatever
+      # its run's other jobs did, so changes from a superseded, failed or unverified run are
+      # not skipped. Before Main called this workflow, deploys were its own push runs.
+      # Falls back to every worker.
+      # A re-run of a commit that is no longer main's tip deploys nothing, so it cannot roll
+      # production back; first attempts already run in push order, and a push that moves
+      # main back still deploys.
       - name: Select affected workers
         if: github.event_name != 'workflow_dispatch'
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          ATTEMPT: ${{ github.run_attempt }}
           EVENT: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -61,8 +73,24 @@ jobs:
         run: |
           base="$BASE"
           if [ "$EVENT" = push ]; then
-            last="$(gh run list --repo "$REPO" --workflow deploy-workers.yml --branch main --status success --limit 20 --json event,headSha \
-              --jq 'map(select(.event != "pull_request" and .headSha != env.SHA))[0].headSha // empty')" || last=''
+            base=''
+            last=''
+            ids="$(gh run list --repo "$REPO" --workflow main.yml --branch main --event push --limit 20 --json databaseId,headSha \
+              --jq 'map(select(.headSha != env.SHA))[].databaseId')" || ids=''
+            for id in $ids; do
+              run="$(gh run view "$id" --repo "$REPO" --json headSha,jobs \
+                --jq '[.headSha, ([.jobs[] | select(.name | endswith("Deploy")) | .steps[] | select(.name == "Deploy") | .conclusion // "running"] | first // "none")] | @tsv')" || continue
+              read -r head deploy <<< "$run"
+              [ -n "$last" ] || [ "$deploy" != success ] || last="$head"
+            done
+            if [ -z "$last" ]; then
+              last="$(gh run list --repo "$REPO" --workflow deploy-workers.yml --branch main --event push --status success --limit 20 --json event,headSha \
+                --jq 'map(select(.event != "pull_request" and .headSha != env.SHA))[0].headSha // empty')" || last=''
+            fi
+            if [ "$ATTEMPT" != 1 ]; then
+              tip="$(gh api "repos/$REPO/commits/main" --jq .sha)" || exit 1
+              [ "$tip" = "$SHA" ] || echo "STALE=true" >> "$GITHUB_ENV"
+            fi
             base="${last:-$base}"
           fi
           if [ -n "${base//0/}" ] && git merge-base --is-ancestor "$base" HEAD 2> /dev/null; then
@@ -71,7 +99,7 @@ jobs:
           fi
 
       - name: Deploy
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && env.STALE != 'true'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

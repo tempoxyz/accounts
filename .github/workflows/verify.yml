@@ -5,8 +5,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Keyed by event too, so a manual run never cancels the push run that Main waits on
+# before publishing and deploying the same commit.
 concurrency:
-  group: verify-${{ github.event.pull_request.number || github.sha }}
+  group: verify-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 permissions:
@@ -37,6 +39,8 @@ jobs:
           restore-keys: turbo-checks-
 
       - name: Select affected packages
+        # Main publishes and deploys only commits whose push run checked every package.
+        if: github.event_name != 'push'
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
@@ -86,6 +90,8 @@ jobs:
           restore-keys: turbo-test-
 
       - name: Select affected packages
+        # Main publishes and deploys only commits whose push run checked every package.
+        if: github.event_name != 'push'
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
