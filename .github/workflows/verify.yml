@@ -5,12 +5,14 @@ on:
 
 permissions:
   contents: read
-  # The secure-runner action authenticates with an OIDC token.
-  id-token: write
 
 jobs:
   checks:
     name: Checks
+    # The secure-runner action authenticates with an OIDC token.
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -38,6 +40,10 @@ jobs:
 
   test:
     name: Test
+    # The secure-runner action authenticates with an OIDC token.
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

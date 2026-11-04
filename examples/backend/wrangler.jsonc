@@ -12,7 +12,7 @@
   "name": "tempo-id-example-backend",
   // Without a registration, the app's origin is its client ID.
   "vars": {
-    "APP_URL": "http://localhost:8787",
+    "APP_URL": "http://localhost:5191",
     "TEMPO_ID_URL": "http://localhost:5173",
   },
 }
