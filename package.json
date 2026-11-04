@@ -69,9 +69,9 @@
       "default": "./dist/expo/index.js"
     },
     "./internal": {
-      "src": "./src/internal.ts",
-      "types": "./dist/internal.d.ts",
-      "default": "./dist/internal.js"
+      "src": "./src/internal/index.ts",
+      "types": "./dist/internal/index.d.ts",
+      "default": "./dist/internal/index.js"
     },
     "./mpp": {
       "src": "./src/mpp/index.ts",
