@@ -2,11 +2,11 @@
 # "chore: version packages" pull request through Changesets, and pushes its branch. It replaces
 # `GITHUB_TOKEN`, which cannot create pull requests in this organization.
 # The job runs in the `npm-release` environment, which replaces the `ref` form of the subject.
-subject: repo:tempoxyz@211589300/accounts@1178309114:environment:npm-release
+subject: repo:tempoxyz@211589300/accounts2@1445468399:environment:npm-release
 claim_pattern:
   # The environment's branch policy lives outside the repository, so the ref is checked here too.
   ref: refs/heads/main
-  job_workflow_ref: tempoxyz/accounts/\.github/workflows/release\.yml@refs/heads/main
+  job_workflow_ref: tempoxyz/accounts2/\.github/workflows/release\.yml@refs/heads/main
 permissions:
   contents: write
   pull_requests: write
