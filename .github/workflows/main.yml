@@ -3,10 +3,12 @@ on:
   push:
     branches: [main]
 
-# Runs in push order: a newer push replaces a waiting run, so the newest commit is
-# always the one that deploys and publishes next, and an older one never runs after it.
+# Pushes run in push order: a newer push replaces a waiting run, so the newest commit
+# is always the one that deploys and publishes next. Re-runs get their own group, so
+# re-running an older run never replaces the newest commit's waiting run; its deploy
+# skips itself once a newer commit has been deployed (deploy-workers.yml).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_attempt == '1' && 'push' || github.sha }}
   cancel-in-progress: false
 
 permissions: {} # each job defines the minimum permissions it needs
