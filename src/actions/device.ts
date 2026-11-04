@@ -25,7 +25,6 @@ import type { WithAccount } from '../Permissions.js'
  *   accessKey: {
  *     expiry: '1d',
  *     limits: [{ limit: '10', token: 'ousd' }],
- *     scopes: [Scopes.tip20(ousd).transfer()],
  *   },
  * })
  * console.log(`Open ${device.verificationUriComplete}`)

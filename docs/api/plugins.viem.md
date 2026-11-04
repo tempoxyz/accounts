@@ -24,10 +24,8 @@ The access key attaches its key authorization to transactions until the chain re
 ```ts
 import { Accounts } from 'accounts'
 import { email, viem } from 'accounts/plugins'
+import { Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-const ousd = Tokens.ousd(tempo.id).address
 
 const accounts = Accounts.create({ plugins: [email(), viem()] })
 
@@ -35,7 +33,7 @@ await accounts.email.signIn({ code, email: address })
 const { receipt } = await accounts.token.transferSync({
   amount: 10_000n,
   to: '0x…',
-  token: ousd,
+  token: Addresses.ousd,
 })
 ```
 
@@ -52,10 +50,10 @@ The default client: the instance's chain, its transport, and an account that fol
 A call returns a client with the overrides of [`accounts.viem(overrides)`](#overrides). A call that names at most `chainId` returns one cached client for each chain.
 
 ```ts
-await accounts.token.transferSync({ amount, to, token: ousd })
+await accounts.token.transferSync({ amount, to, token: Addresses.ousd })
 await accounts
   .viem({ chainId: tempoTestnet.id })
-  .token.transferSync({ amount, to, token: ousd })
+  .token.transferSync({ amount, to, token: Addresses.ousd })
 ```
 
 ### viem.accessKey
@@ -68,7 +66,7 @@ Viem's `accessKey` actions that change an access key, through Tempo ID with the 
 await accounts.accessKey.updateLimitSync({
   accessKey,
   limit: 5_000_000n,
-  token: ousd,
+  token: Addresses.ousd,
 })
 const { receipt } = await accounts.accessKey.revokeSync({ accessKey })
 ```
@@ -204,7 +202,7 @@ Which refused transactions of the client retry, for one call. A boolean replaces
 const controller = new AbortController()
 await accounts
   .viem({ retry: { signal: controller.signal } })
-  .token.transferSync({ amount, to, token: ousd })
+  .token.transferSync({ amount, to, token: Addresses.ousd })
 ```
 
 #### session (optional)
@@ -218,7 +216,7 @@ const session = await accounts.backend.get({ id })
 if (session)
   await accounts
     .viem({ session })
-    .token.transferSync({ amount, to, token: ousd })
+    .token.transferSync({ amount, to, token: Addresses.ousd })
 ```
 
 > [!WARNING]

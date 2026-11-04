@@ -7,10 +7,8 @@ The [`viem`](../api/plugins.viem.md) plugin adds `accounts.viem`, a Tempo client
 ```ts
 import { Accounts } from 'accounts'
 import { dialog, viem } from 'accounts/plugins'
+import { Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-const ousd = Tokens.ousd(tempo.id).address
 
 // 1. The client uses the instance's chain, Tempo mainnet by default.
 const accounts = Accounts.create({
@@ -29,7 +27,7 @@ await accounts.dialog.signIn()
 const { receipt } = await accounts.token.transferSync({
   amount: 10_000n,
   to: '0x…',
-  token: ousd,
+  token: Addresses.ousd,
 })
 ```
 
@@ -55,7 +53,11 @@ const accounts = Accounts.create({ dev: true, plugins: [dialog(), viem()] })
 import { tempoTestnet } from 'viem/tempo/chains'
 
 const testnet = accounts.viem({ chainId: tempoTestnet.id })
-await testnet.token.transferSync({ amount: 10_000n, to: '0x…', token: ousd })
+await testnet.token.transferSync({
+  amount: 10_000n,
+  to: '0x…',
+  token: Addresses.ousd,
+})
 ```
 
 ### Send for one session on a backend
@@ -65,7 +67,9 @@ A backend's instance holds no session, so its default client signs nothing. `acc
 ```ts
 const session = await accounts.backend.get({ id })
 if (!session) return c.redirect('/auth/start')
-await accounts.viem({ session }).token.transferSync({ amount, to, token: ousd })
+await accounts
+  .viem({ session })
+  .token.transferSync({ amount, to, token: Addresses.ousd })
 ```
 
 ### Sponsor fees
@@ -104,7 +108,7 @@ if (!session) return c.redirect('/auth/start')
 await accounts.viem({ session }).token.transferSync({
   amount: 10_000n,
   to: '0x…',
-  token: ousd,
+  token: Addresses.ousd,
 })
 ```
 
@@ -123,7 +127,11 @@ const accounts = Accounts.create({
   plugins: [dialog(), viem({ relay: '/api/relay' })],
 })
 
-await accounts.token.transferSync({ amount: 10_000n, to: '0x…', token: ousd })
+await accounts.token.transferSync({
+  amount: 10_000n,
+  to: '0x…',
+  token: Addresses.ousd,
+})
 
 // The app's server.
 import { relay } from 'accounts/plugins'
@@ -177,7 +185,7 @@ const accounts = Accounts.create({
 })
 
 try {
-  await accounts.token.transferSync({ amount, to, token: ousd })
+  await accounts.token.transferSync({ amount, to, token: Addresses.ousd })
 } catch (error) {
   if ((error as Error).name === 'Plugins.viem.RetryClosedError')
     showMessage((error as Error).message)
@@ -193,7 +201,7 @@ try {
 await accounts.accessKey.updateLimitSync({
   accessKey,
   limit: 5_000_000n,
-  token: ousd,
+  token: Addresses.ousd,
 })
 const { receipt } = await accounts.accessKey.revokeSync({ accessKey })
 ```

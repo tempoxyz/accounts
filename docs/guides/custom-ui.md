@@ -8,9 +8,6 @@ A first-party browser app can render its own sign-in form, and call Tempo ID's h
 import { Accounts } from 'accounts'
 import { email } from 'accounts/plugins'
 import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-const ousd = Tokens.ousd(tempo.id).address
 
 const accounts = Accounts.create({
   // Each sign-in requests an access key that may transfer up to 10 OUSD for a day.

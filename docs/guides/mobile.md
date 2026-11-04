@@ -16,10 +16,6 @@ import { expo } from 'accounts/expo'
 import { viem } from 'accounts/plugins'
 import { react } from 'accounts/react'
 import { Button, Text } from 'react-native'
-import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-const ousd = Tokens.ousd(tempo.id).address
 
 const accounts = Accounts.create({
   // The app's access key may transfer up to 100 OUSD for 30 days.

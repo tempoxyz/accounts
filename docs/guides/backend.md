@@ -11,10 +11,8 @@ import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { csrf } from 'hono/csrf'
 import { Pool } from 'pg'
+import { Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-const ousd = Tokens.ousd(tempo.id).address
 
 // One instance for the process, so concurrent requests of a session share one refresh.
 const accounts = Accounts.create({
@@ -68,7 +66,7 @@ const app = new Hono()
     const { receipt } = await accounts.viem({ session }).token.transferSync({
       amount: 10_000n,
       to: '0x…',
-      token: ousd,
+      token: Addresses.ousd,
     })
     return c.json({ hash: receipt.transactionHash })
   })

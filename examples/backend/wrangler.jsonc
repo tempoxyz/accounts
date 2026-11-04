@@ -1,6 +1,8 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "compatibility_date": "2026-10-01",
+  // `process.env` holds the vars.
+  "compatibility_flags": ["nodejs_compat"],
   // One object for each session ID holds the session, so its refreshes share one instance.
   "durable_objects": {
     "bindings": [{ "class_name": "SESSIONS", "name": "SESSIONS" }],
@@ -8,6 +10,9 @@
   "main": "./worker.ts",
   "migrations": [{ "new_sqlite_classes": ["SESSIONS"], "tag": "v1" }],
   "name": "tempo-id-example-backend",
-  "secrets": { "required": ["CLIENT_ID", "CLIENT_SECRET"] },
-  "vars": { "TEMPO_ID_URL": "http://localhost:5173" },
+  // Without a registration, the app's origin is its client ID.
+  "vars": {
+    "APP_URL": "http://localhost:8787",
+    "TEMPO_ID_URL": "http://localhost:5173",
+  },
 }

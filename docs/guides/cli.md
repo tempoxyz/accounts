@@ -7,10 +7,8 @@ A command-line tool signs in through the device grant ([RFC 8628](https://www.rf
 ```ts
 import { Accounts, Store } from 'accounts'
 import { device, viem } from 'accounts/plugins'
+import { Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-const ousd = Tokens.ousd(tempo.id).address
 
 const accounts = Accounts.create({
   // The CLI's access key may transfer up to 1,000 OUSD for a year.
@@ -42,7 +40,7 @@ async function login() {
 // Any other command restores the session, and sends with its access key.
 async function send(to: `0x${string}`, amount: bigint) {
   if (!(await accounts.session.get())) throw new Error('Run `login` first.')
-  await accounts.token.transferSync({ amount, to, token: ousd })
+  await accounts.token.transferSync({ amount, to, token: Addresses.ousd })
 }
 ```
 

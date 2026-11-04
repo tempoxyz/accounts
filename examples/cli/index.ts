@@ -15,19 +15,14 @@
 import { Accounts, Store } from 'accounts'
 import { device, viem } from 'accounts/plugins'
 import { parseUnits } from 'viem'
-import { Scopes } from 'viem/tempo'
+import { Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-/** OUSD, at its mainnet address on every Tempo chain. */
-const ousd = Tokens.ousd(tempo.id).address
 
 /** The instance, on Tempo testnet. An unregistered CLI's key names its limits and scopes. */
 const accounts = Accounts.create({
   accessKey: () => ({
     expiry: '7d',
     limits: [{ limit: '100', token: 'ousd' }],
-    scopes: [Scopes.tip20(ousd).transfer()],
   }),
   clientId: 'cli:tempo-example',
   dev: true,
@@ -63,7 +58,7 @@ if (command === 'login') {
   const { receipt } = await accounts.token.transferSync({
     amount: parseUnits(amount, 6),
     to,
-    token: ousd,
+    token: Addresses.ousd,
   })
   console.log(`Sent in ${receipt.transactionHash}.`)
 } else {

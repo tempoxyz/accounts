@@ -15,9 +15,6 @@ An instance without a sign-in plugin receives `dialog`, so `Accounts.create()` a
 import { Accounts } from 'accounts'
 import { dialog } from 'accounts/plugins'
 import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-const ousd = Tokens.ousd(tempo.id).address
 
 // 1. The page loads the dialog's frame, hidden, as the instance is created.
 const accounts = Accounts.create({

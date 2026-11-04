@@ -8,10 +8,6 @@ A React app reads the instance's session with `accounts.useSession()`, which the
 import { Accounts } from 'accounts'
 import { dialog, viem } from 'accounts/plugins'
 import { react } from 'accounts/react'
-import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-const ousd = Tokens.ousd(tempo.id).address
 
 // 1. One instance for the page, outside any render.
 const accounts = Accounts.create({

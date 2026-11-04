@@ -29,6 +29,7 @@ wagmi's actions use the instance's Viem client, so they sign as the [`viem`](plu
 ```ts
 import { connect, createConfig, http, signMessage } from '@wagmi/core'
 import { tempoId } from 'accounts/wagmi'
+import { Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 
 const config = createConfig({
@@ -105,7 +106,7 @@ const connector = tempoId({
     expiry: '1d',
     limits: [{ limit: '10', token: 'ousd' }],
   }),
-  plugins: [passkey(), viem({ feeToken: ousd })],
+  plugins: [passkey(), viem({ feeToken: Addresses.ousd })],
 })
 ```
 

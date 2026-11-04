@@ -12,10 +12,8 @@ npm i accounts @wagmi/core viem
 import { tempoId } from 'accounts/wagmi'
 import { connect, createConfig, disconnect, http } from '@wagmi/core'
 import { Actions } from '@wagmi/core/tempo'
+import { Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-const ousd = Tokens.ousd(tempo.id).address
 
 // 1. The connector's instance uses the config's first chain.
 const config = createConfig({
@@ -40,7 +38,7 @@ button.onclick = async () => {
   await Actions.token.transferSync(config, {
     amount: 10_000n,
     to: '0x…',
-    token: ousd,
+    token: Addresses.ousd,
   })
 
   // 4. A disconnection signs the user out.

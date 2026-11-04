@@ -10,12 +10,8 @@ import { react } from 'accounts/react'
 import * as React from 'react'
 import { Button, SafeAreaView, Text } from 'react-native'
 import { parseUnits } from 'viem'
-import { Scopes } from 'viem/tempo'
+import { Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-/** OUSD, at its mainnet address on every Tempo chain. */
-const ousd = Tokens.ousd(tempo.id).address
 
 /**
  * The instance, on Tempo testnet. `expo` keeps the session in the secure store, and signs in on
@@ -26,7 +22,6 @@ const accounts = Accounts.create({
   accessKey: () => ({
     expiry: '1d',
     limits: [{ limit: '100', token: 'ousd' }],
-    scopes: [Scopes.tip20(ousd).transfer()],
   }),
   clientId: 'tempo-example-mobile',
   dev: true,
@@ -62,7 +57,7 @@ export function App() {
                 const { receipt } = await accounts.token.transferSync({
                   amount: parseUnits('0.01', 6),
                   to: '0x000000000000000000000000000000000000dEaD',
-                  token: ousd,
+                  token: Addresses.ousd,
                 })
                 return `Sent in ${receipt.transactionHash}.`
               })

@@ -12,9 +12,8 @@ import { wagmi } from 'accounts/wagmi'
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { parseUnits } from 'viem'
-import { Scopes } from 'viem/tempo'
+import { Addresses } from 'viem/tempo'
 import { tempo, tempoTestnet } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
 import {
   useConnect,
   useConnection,
@@ -24,9 +23,6 @@ import {
 } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
 
-/** OUSD, at its mainnet address on every Tempo chain. */
-const ousd = Tokens.ousd(tempo.id).address
-
 /**
  * The Tempo ID instance, on Tempo testnet. Each connection requests a key that sends up to 100 OUSD
  * for a day, and `accounts.wagmi` is its wagmi config.
@@ -35,7 +31,6 @@ const accounts = Accounts.create({
   accessKey: () => ({
     expiry: '1d',
     limits: [{ limit: '100', token: 'ousd' }],
-    scopes: [Scopes.tip20(ousd).transfer()],
   }),
   chainId: tempoTestnet.id,
   plugins: [viem(), wagmi()],
@@ -75,7 +70,7 @@ function App() {
           send.mutate({
             amount: parseUnits(String(form.get('amount')), 6),
             to: String(form.get('to')) as `0x${string}`,
-            token: ousd,
+            token: Addresses.ousd,
           })
         }}
       >

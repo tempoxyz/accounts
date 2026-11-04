@@ -9,19 +9,13 @@ import { react } from 'accounts/react'
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { parseUnits } from 'viem'
-import { Scopes } from 'viem/tempo'
-import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-/** OUSD, at its mainnet address on every Tempo chain. */
-const ousd = Tokens.ousd(tempo.id).address
+import { Addresses } from 'viem/tempo'
 
 /** The instance, on Tempo testnet. Each sign-in requests a key that sends up to 100 OUSD for a day. */
 const accounts = Accounts.create({
   accessKey: () => ({
     expiry: '1d',
     limits: [{ limit: '100', token: 'ousd' }],
-    scopes: [Scopes.tip20(ousd).transfer()],
   }),
   dev: true,
   plugins: [react(), viem()],
@@ -83,7 +77,7 @@ function App() {
             const { receipt } = await accounts.token.transferSync({
               amount: parseUnits(String(form.get('amount')), 6),
               to: String(form.get('to')) as `0x${string}`,
-              token: ousd,
+              token: Addresses.ousd,
             })
             return `Sent in ${receipt.transactionHash}.`
           })

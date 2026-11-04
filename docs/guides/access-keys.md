@@ -8,9 +8,6 @@ An access key is a key that the app holds, which acts for the user's Tempo Accou
 import { Accounts } from 'accounts'
 import { dialog, viem } from 'accounts/plugins'
 import { tempo } from 'viem/tempo/chains'
-import * as Tokens from 'viem/tokens'
-
-const ousd = Tokens.ousd(tempo.id).address
 
 const accounts = Accounts.create({
   // 1. Each sign-in requests an access key that may spend up to 10 OUSD for a day.
@@ -28,7 +25,7 @@ const session = await accounts.dialog.signIn()
 const { receipt } = await accounts.token.transferSync({
   amount: 10_000n,
   to: '0x…',
-  token: ousd,
+  token: Addresses.ousd,
 })
 ```
 
@@ -88,13 +85,13 @@ const session = await accounts.dialog.signIn({
 `scopes` replaces the scopes that the library fills from `limits`. Build them with Viem's `Scopes`.
 
 ```ts
-import { Scopes } from 'viem/tempo'
+import { Addresses, Scopes } from 'viem/tempo'
 
 const session = await accounts.dialog.signIn({
   accessKey: {
     expiry: '1d',
     limits: [{ limit: '10', token: 'ousd' }],
-    scopes: [Scopes.tip20(ousd).transfer({ recipients: ['0x…'] })],
+    scopes: [Scopes.tip20(Addresses.ousd).transfer({ recipients: ['0x…'] })],
   },
 })
 ```
