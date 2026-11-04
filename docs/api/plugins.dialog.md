@@ -107,7 +107,7 @@ const session = await tempoId.dialog.signIn({ challenge })
 
 - **Type:** [`Funding`](types.md#funding)
 
-The amount that the app needs in the user's Tempo Account. After the approval, an account that holds less opens Tempo ID's funding page before the callback, as [Funding hints](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md#popup-and-embedded-sign-in) describes. In the frame, the sign-in completes first, then the deposit page opens in a frame, as [`tempoId.funding.open`](plugins.funding.md) does, and the call resolves once that page returns or closes. On iOS and iPadOS, a sign-in with `funding` runs in a popup.
+The amount that the app needs in the user's Tempo Account. After the approval, an account that holds less opens Tempo ID's funding page before the callback, as [Funding hints](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md#popup-and-embedded-sign-in) describes. In the frame, the sign-in completes first, then the deposit page opens in a frame, as [`tempoId.funding.open`](plugins.funding.md) does, and the call resolves once that page returns or closes. A sign-in whose deposit page runs Coinflow where no frame can, for a hint of `MACH` on Tempo mainnet, on iOS, iPadOS, or for a third-party app, runs in a popup.
 
 ```ts
 const session = await tempoId.dialog.signIn({
@@ -120,7 +120,7 @@ const session = await tempoId.dialog.signIn({
 - **Type:** `'iframe' | 'popup'`
 - **Default:** `'popup'` with the plugin's `popup`, else `'iframe'`
 
-Whether the sign-in shows in a frame or in a popup window. Outside a secure context, for a pushed request, and with `funding` on iOS and iPadOS, `iframe` runs as `popup`.
+Whether the sign-in shows in a frame or in a popup window. Outside a secure context, for a pushed request, and with `funding` for a hint of `MACH` on Tempo mainnet, on iOS, iPadOS, or for a third-party app, `iframe` runs as `popup`.
 
 ```ts
 const session = await tempoId.dialog.signIn({ mode: 'popup' })

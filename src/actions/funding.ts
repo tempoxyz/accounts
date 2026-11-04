@@ -127,7 +127,9 @@ export declare namespace complete {
  * - `frame`, the default, opens the page in a frame in a dialog, and resolves when the user continues
  *   to the app or closes the dialog. The frame offers a popup when it cannot show the page. A
  *   third-party app's frame continues Buy MACH in a popup, which opens within the user's click in
- *   the frame, or from the dialog's offer when the browser blocks it.
+ *   the frame, or from the dialog's offer when the browser blocks it. A page that runs Coinflow
+ *   where no frame can, Buy MACH for a hint of `MACH` on Tempo mainnet on iOS, iPadOS, or for a
+ *   third-party app, opens in a popup at once, without the frame.
  * - `popup` opens the page in a popup window, and resolves when the user continues to
  *   the app or closes the popup. The page must be on the origin of the redirect URI, since Tempo ID
  *   posts the return only to that origin.
@@ -156,10 +158,19 @@ export async function open(
   options: open.Options,
 ): Promise<open.ReturnType> {
   const { amount, currency, signal, token } = options
-  // iOS and iPadOS open the deposit page in a popup, since Apple Pay pays there without a frame.
   const mode = (() => {
     const value = options.mode ?? 'frame'
-    if (value === 'frame' && Popup.apple()) return 'popup'
+    if (value !== 'frame') return value
+    // A page that runs Coinflow where no frame can opens in a popup at once, without the frame.
+    if (
+      Popup.coinflow({
+        amount,
+        chainId: options.chainId ?? auth.chainId,
+        clientId: auth.clientId,
+        token,
+      })
+    )
+      return 'popup'
     return value
   })()
   // A refusal below, such as of an aborted signal or another origin, leaves a promised address
@@ -388,7 +399,8 @@ export declare namespace open {
     /**
      * `frame` for a frame in a dialog on the page, `popup` for a popup window, or `redirect` for a
      * redirect of the page. Defaults to `frame`. Tempo ID frames the page at `/embed/deposit` for
-     * any enabled web app, from the origin of `redirectUri`. iOS and iPadOS open `frame` in a popup.
+     * any enabled web app, from the origin of `redirectUri`. A page that runs Coinflow where no frame
+     * can, Buy MACH on iOS, iPadOS, or for a third-party app, opens `frame` in a popup.
      * A frame that shows no deposit page, such as without a Tempo ID session in the frame, or one
      * that the app's page covers, offers a popup, which opens from the user's click.
      */

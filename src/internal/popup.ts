@@ -5,6 +5,9 @@
  * @module
  */
 /* istanbul ignore file -- The popup window exists only in a browser. */
+import * as Chains from './chains.js'
+import * as ClientId from './clientId.js'
+
 /**
  * Milliseconds that a closed popup has to deliver a callback that its page posted as it closed,
  * before the sign-in counts as closed.
@@ -90,13 +93,40 @@ export declare namespace watchPopup {
 }
 
 /**
- * Returns whether the page runs on iOS or iPadOS, whose deposit page opens in a popup in place of a
- * frame. iPadOS Safari reports a Mac, so a Mac with a touch screen counts as an iPad.
+ * Returns whether the page runs on iOS or iPadOS, whose Apple Pay runs only on a top-level page.
+ * iPadOS Safari reports a Mac, so a Mac with a touch screen counts as an iPad.
  */
 export function apple() {
   const agent = navigator.userAgent
   if (/iPad|iPhone|iPod/.test(agent)) return true
   return /Macintosh/.test(agent) && navigator.maxTouchPoints > 1
+}
+
+/**
+ * Returns whether the deposit page of a request runs Coinflow where no frame can, so the page opens
+ * in a popup. The page opens Buy MACH, which runs Coinflow, in place of the list for a hint of `MACH`
+ * on Tempo mainnet. Coinflow runs in no frame on iOS and iPadOS, whose Apple Pay needs a top-level
+ * page, nor in a third-party app's cross-site frame, where its purchase protection does not run.
+ * A deposit list runs no Coinflow, so it opens in the frame, which continues Buy MACH in a popup.
+ */
+export function coinflow(options: coinflow.Options) {
+  const { amount, chainId, clientId, token } = options
+  if (amount === undefined || token !== 'MACH') return false
+  if (chainId !== Chains.ids.mainnet) return false
+  return apple() || ClientId.thirdParty(clientId)
+}
+
+export declare namespace coinflow {
+  type Options = {
+    /** The hint's amount, which Buy MACH needs to open in place of the list. Absent for no hint. */
+    amount?: string | undefined
+    /** The chain of the deposit. */
+    chainId: number
+    /** The app's client ID. */
+    clientId: string
+    /** The hint's token, by symbol. Absent, the page lists every method. */
+    token?: string | undefined
+  }
 }
 
 /**

@@ -169,7 +169,7 @@ export declare namespace preload {
  * and Tempo ID reads a pushed request only from its push. A request with `funding` signs in in the
  * frame. If the account holds less than the hint, the call redeems the code, then opens the deposit
  * page as `Actions.funding.open` does in `frame` mode, and resolves once that page returns or closes.
- * On iOS and iPadOS, such a request signs in with `popup`, whose pages show the deposit page. The next call of the
+ * A request whose deposit page runs Coinflow where no frame can, such as Buy MACH on iOS and iPadOS, signs in with `popup`, whose pages show the deposit page. The next call of the
  * instance replaces a pending call in either mode, and rejects it with an `AbortError`. A popup that
  * the user closes rejects the call with an `AbortError` too. A page that sends
  * `Cross-Origin-Opener-Policy: same-origin` severs its handle to the popup, so a popup that the user
@@ -227,9 +227,9 @@ async function authorize<
   // ID lets only the redirect URI's origin frame the sign-in, and only in a secure context. A
   // browser without IntersectionObserver v2 cannot show that nothing covers the frame, so only a
   // frame that Tempo ID trusts, as its loaded page reports, signs in there. The frame takes the
-  // request's own parameters, so an instance that pushes them signs in with a popup. iOS and iPadOS
-  // open the deposit page in a popup, which only the gesture opens, so a request with a funding
-  // hint signs in with a popup there, whose own pages show the deposit page.
+  // request's own parameters, so an instance that pushes them signs in with a popup. A deposit page
+  // that runs Coinflow where no frame can opens in a popup, which only the gesture opens, so a
+  // request with such a funding hint signs in with a popup, whose own pages show the deposit page.
   const redirectUri =
     rest.redirectUri ?? auth.redirectUri ?? `${window.location.origin}/`
   // A popup's callback page posts on a channel of its own origin, which no page of another origin
@@ -243,7 +243,14 @@ async function authorize<
   const entry = machines.entry(actor.getSnapshot())
   const mode =
     requested === 'iframe' &&
-    !(rest.funding && Popup.apple()) &&
+    !(
+      rest.funding &&
+      Popup.coinflow({
+        ...rest.funding,
+        chainId: auth.chainId,
+        clientId: auth.clientId,
+      })
+    ) &&
     !pushes(auth) &&
     framed({ redirectUri }) &&
     (visibility() || entry?.sheet.trusted() === true)
@@ -503,7 +510,9 @@ export declare namespace signIn {
     /**
      * `iframe` to sign in in a dialog on the page, or `popup` for a popup window. Defaults to
      * `iframe`, which falls back to `popup` outside a secure context, for an instance that pushes
-     * its requests with `par`, and for a request with `funding` on iOS and iPadOS.
+     * its requests with `par`, and for a request with `funding` whose deposit page runs Coinflow where
+     * no frame can: Buy MACH for a hint of `MACH` on Tempo mainnet, on iOS, iPadOS, or for a
+     * third-party app.
      */
     mode?: 'iframe' | 'popup' | undefined
     /**
