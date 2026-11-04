@@ -54,9 +54,10 @@ jobs:
           key: turbo-deploy-${{ github.sha }}
           restore-keys: turbo-deploy-
 
-      # Pushes deploy what changed since the last push whose Deploy step succeeded, so
-      # changes from a superseded, failed or unverified run are not skipped. Before Main
-      # called this workflow, deploys were its own push runs. Falls back to every worker.
+      # Pushes deploy what changed since the last push whose Deploy step succeeded, whatever
+      # its run's other jobs did, so changes from a superseded, failed or unverified run are
+      # not skipped. Before Main called this workflow, deploys were its own push runs.
+      # Falls back to every worker.
       # A commit that an already deployed commit contains (such as a re-run of an older
       # Main run) deploys nothing, so it cannot roll production back.
       - name: Select affected workers
@@ -71,7 +72,7 @@ jobs:
           base="$BASE"
           if [ "$EVENT" = push ]; then
             last=''
-            ids="$(gh run list --repo "$REPO" --workflow main.yml --branch main --event push --status success --limit 20 --json databaseId,headSha \
+            ids="$(gh run list --repo "$REPO" --workflow main.yml --branch main --event push --limit 20 --json databaseId,headSha \
               --jq 'map(select(.headSha != env.SHA))[].databaseId')" || ids=''
             for id in $ids; do
               last="$(gh run view "$id" --repo "$REPO" --json headSha,jobs \

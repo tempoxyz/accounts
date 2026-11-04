@@ -3,29 +3,46 @@ on:
   push:
     branches: [main]
 
-# No workflow-level concurrency: every pushed commit gets its own Verify run, so
-# a newer push never cancels an older commit's checks. Only the jobs that release
-# or deploy are serialized.
+# Runs in push order: a newer push replaces a waiting run, so the newest commit is
+# always the one that deploys and publishes next, and an older one never runs after it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions: {} # each job defines the minimum permissions it needs
 
 jobs:
+  # Verify runs on every push on its own (verify.yml); this waits for its result on
+  # this commit, so nothing reaches npm or production unless it passed.
   verify:
     name: Verify
     permissions:
-      contents: read
-    uses: ./.github/workflows/verify.yml # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
-    with:
-      full: true
-    secrets:
-      VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
+      actions: read # to read this commit's Verify run
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Wait for Verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          while :; do
+            run="$(gh run list --repo "$REPO" --workflow verify.yml --commit "$SHA" --event push --limit 1 \
+              --json status,conclusion,url --jq '.[0] // empty')" || run=''
+            if [ -n "$run" ] && [ "$(jq -r .status <<< "$run")" = completed ]; then
+              conclusion="$(jq -r .conclusion <<< "$run")"
+              [ "$conclusion" = success ] && exit 0
+              echo "::error::Verify $conclusion on $SHA: $(jq -r .url <<< "$run")"
+              exit 1
+            fi
+            sleep 30
+          done
 
   deploy-workers:
     name: Deploy Workers
     needs: verify
-    concurrency:
-      group: main-deploy-workers
-      cancel-in-progress: false
     permissions:
       actions: read # to find the last successful deploy
       contents: read
@@ -37,9 +54,6 @@ jobs:
 
   version:
     name: Version
-    concurrency:
-      group: main-version
-      cancel-in-progress: false
     outputs:
       hasChangesets: ${{ steps.changesets.outputs['has-changesets'] }}
     # The release commits and pull request are created through the GitHub API
@@ -82,9 +96,6 @@ jobs:
     name: Publish
     if: needs.version.outputs.hasChangesets == 'false'
     needs: [verify, version]
-    concurrency:
-      group: main-publish
-      cancel-in-progress: false
     permissions:
       contents: write # to create the GitHub release and tag
       id-token: write # to use npm trusted publishing through OIDC
