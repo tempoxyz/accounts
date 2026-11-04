@@ -3,9 +3,9 @@ on:
   push:
     branches: [main]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+# No workflow-level concurrency: every pushed commit gets its own Verify run, so
+# a newer push never cancels an older commit's checks. Only the jobs that release
+# or deploy are serialized.
 
 permissions: {} # each job defines the minimum permissions it needs
 
@@ -23,6 +23,9 @@ jobs:
   deploy-workers:
     name: Deploy Workers
     needs: verify
+    concurrency:
+      group: main-deploy-workers
+      cancel-in-progress: false
     permissions:
       actions: read # to find the last successful deploy
       contents: read
@@ -34,6 +37,9 @@ jobs:
 
   version:
     name: Version
+    concurrency:
+      group: main-version
+      cancel-in-progress: false
     outputs:
       hasChangesets: ${{ steps.changesets.outputs['has-changesets'] }}
     # The release commits and pull request are created through the GitHub API
@@ -76,6 +82,9 @@ jobs:
     name: Publish
     if: needs.version.outputs.hasChangesets == 'false'
     needs: [verify, version]
+    concurrency:
+      group: main-publish
+      cancel-in-progress: false
     permissions:
       contents: write # to create the GitHub release and tag
       id-token: write # to use npm trusted publishing through OIDC
