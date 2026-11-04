@@ -25,6 +25,9 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
       - name: Fetch GitHub token
         id: sts
         uses: tempoxyz/gh-actions/actions/github-sts@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
@@ -67,6 +70,9 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
       # Runs before any of the commit's code, so the publish job trusts its outputs.
       - name: Resolve version
         id: version
@@ -127,6 +133,9 @@ jobs:
     timeout-minutes: 50
 
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
       # Pushes to main release one at a time, so a queued run can start after a newer commit. Only
       # the current commit of main moves the `main` dist-tag.
       - name: Check commit
