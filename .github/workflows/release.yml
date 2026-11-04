@@ -39,6 +39,8 @@ jobs:
         with:
           # Changesets reads the full history for the changelog.
           fetch-depth: 0
+          # The action writes its own credentials from `GITHUB_TOKEN` before it pushes.
+          persist-credentials: false
           token: ${{ steps.sts.outputs.token }}
 
       - name: Install dependencies
@@ -46,7 +48,7 @@ jobs:
 
       - name: Version or publish
         # Version 1 of the action, since version 2 requires Changesets CLI 3 and the repository uses 2.
-        uses: tempoxyz/gh-actions/vendor/changesets/action@ceeca6410d1dff0df9604780dac5936bf23f0f25 # changesets/action v1.9.0
+        uses: tempoxyz/gh-actions/vendor/changesets/action@ceeca6410d1dff0df9604780dac5936bf23f0f25 # 2026-09-02T21-06-38Z-ceeca641
         with:
           commit: 'chore: version packages'
           createGithubReleases: true
