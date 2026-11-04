@@ -11,7 +11,6 @@ import * as React from 'react'
 import { Button, SafeAreaView, Text } from 'react-native'
 import { parseUnits } from 'viem'
 import { Addresses } from 'viem/tempo'
-import { tempo } from 'viem/tempo/chains'
 
 /**
  * The instance, on Tempo testnet. `expo` keeps the session in the secure store, and signs in on

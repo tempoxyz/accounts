@@ -13,7 +13,7 @@ import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { parseUnits } from 'viem'
 import { Addresses } from 'viem/tempo'
-import { tempo, tempoTestnet } from 'viem/tempo/chains'
+import { tempoTestnet } from 'viem/tempo/chains'
 import {
   useConnect,
   useConnection,

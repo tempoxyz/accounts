@@ -16,7 +16,6 @@ import { Accounts, Store } from 'accounts'
 import { device, viem } from 'accounts/plugins'
 import { parseUnits } from 'viem'
 import { Addresses } from 'viem/tempo'
-import { tempo } from 'viem/tempo/chains'
 
 /** The instance, on Tempo testnet. An unregistered CLI's key names its limits and scopes. */
 const accounts = Accounts.create({
