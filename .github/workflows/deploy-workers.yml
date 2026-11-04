@@ -58,9 +58,8 @@ jobs:
       # its run's other jobs did, so changes from a superseded, failed or unverified run are
       # not skipped. Before Main called this workflow, deploys were its own push runs.
       # Falls back to every worker.
-      # A commit that any newer deploy attempt contains (a Main run whose Deploy step ran at
-      # all, even partly, or a manual deploy of main) deploys nothing, so a re-run of an
-      # older Main run cannot roll production back.
+      # A commit that is no longer main's tip deploys nothing, so a re-run of an older Main
+      # run cannot roll production back, while a push that moves main back still deploys.
       - name: Select affected workers
         if: github.event_name != 'workflow_dispatch'
         env:
@@ -74,31 +73,21 @@ jobs:
           if [ "$EVENT" = push ]; then
             base=''
             last=''
-            tried=''
             ids="$(gh run list --repo "$REPO" --workflow main.yml --branch main --event push --limit 20 --json databaseId,headSha \
               --jq 'map(select(.headSha != env.SHA))[].databaseId')" || ids=''
             for id in $ids; do
               run="$(gh run view "$id" --repo "$REPO" --json headSha,jobs \
                 --jq '[.headSha, ([.jobs[] | select(.name | endswith("Deploy")) | .steps[] | select(.name == "Deploy") | .conclusion // "running"] | first // "none")] | @tsv')" || continue
               read -r head deploy <<< "$run"
-              case "$deploy" in
-                none | skipped) ;;
-                *) tried="$tried $head" ;;
-              esac
               [ -n "$last" ] || [ "$deploy" != success ] || last="$head"
             done
-            tried="$tried $(gh run list --repo "$REPO" --workflow deploy-workers.yml --branch main --event workflow_dispatch --limit 20 --json headSha \
-              --jq '.[].headSha')" || true
             if [ -z "$last" ]; then
               last="$(gh run list --repo "$REPO" --workflow deploy-workers.yml --branch main --event push --status success --limit 20 --json event,headSha \
                 --jq 'map(select(.event != "pull_request" and .headSha != env.SHA))[0].headSha // empty')" || last=''
             fi
-            for head in $last $tried; do
-              if [ "$head" != "$SHA" ] && git merge-base --is-ancestor HEAD "$head" 2> /dev/null; then
-                echo "STALE=true" >> "$GITHUB_ENV"
-                break
-              fi
-            done
+            if [ "$(gh api "repos/$REPO/commits/main" --jq .sha)" != "$SHA" ]; then
+              echo "STALE=true" >> "$GITHUB_ENV"
+            fi
             base="${last:-$base}"
           fi
           if [ -n "${base//0/}" ] && git merge-base --is-ancestor "$base" HEAD 2> /dev/null; then
