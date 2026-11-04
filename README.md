@@ -60,20 +60,6 @@ Join the Telegram group to chat with the team and other devs: [@mpp_devs](https:
 | [fee-payer-and-webauthn](./examples/fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.       |
 | [mpp](./examples/mpp)                                         | Auto-pay HTTP `402` responses served by a Hono server using `mppx/hono`.         |
 
-### Tempo ID playgrounds
-
-The [Tempo ID repository](https://github.com/tempoxyz/id) holds one playground per sign-in flow, built on `accounts`.
-
-| Playground                                                                      | Description                                                                           |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [api](https://github.com/tempoxyz/id/tree/main/playgrounds/api)                 | Internal API that verifies Bearer tokens, allowlists apps, and serves MPP payments.   |
-| [backend](https://github.com/tempoxyz/id/tree/main/playgrounds/backend)         | Confidential client that redeems the code server-side and holds an opaque session.    |
-| [cli](https://github.com/tempoxyz/id/tree/main/playgrounds/cli)                 | CLI that signs in through the device grant and pays MPP endpoints with an access key. |
-| [mobile](https://github.com/tempoxyz/id/tree/main/playgrounds/mobile)           | Native Expo app that signs in on Tempo ID's pages in the system browser.              |
-| [third-party](https://github.com/tempoxyz/id/tree/main/playgrounds/third-party) | Unregistered third-party app with an access key that names its limits and scopes.     |
-| [wagmi](https://github.com/tempoxyz/id/tree/main/playgrounds/wagmi)             | Wagmi app with its own sign-in UI, using the Tempo ID instance as its connector.      |
-| [web](https://github.com/tempoxyz/id/tree/main/playgrounds/web)                 | Public client with its own sign-in UI and an access key for each sign-in.             |
-
 ## Development
 
 Requires [Docker](https://docs.docker.com/get-docker/) and [OrbStack](https://orbstack.dev/) (recommended on macOS for automatic HTTPS `.accounts.local` domains).
