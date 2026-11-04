@@ -70,7 +70,7 @@
 ## Module and Instance Conventions
 
 - One module is one namespace of types, constants, functions, and errors, read as `Module.operation(...)`.
-- Exported modules sit at the top of `src/`. Everything else goes in `src/internal/`.
+- The root entry exports only `Accounts`, `Permissions`, `Plugin`, `Session`, and `Store`, which sit at the top of `src/`. Every other module goes in `src/internal/`, and `accounts/internal` exports those that apps can use.
 - Prefer stateless functions. Create an instance only for dependencies or lifecycle state, through `Module.create(options)` returning a plain object.
 - `Accounts.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons.
 - Inject platform capabilities (fetch, storage, clock, `open`) through options. Keep them out of pure modules.
@@ -258,7 +258,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - Test behavior: API contracts, flows, security boundaries, errors.
 - `src/` holds machine tests and other tests that need no server.
 - Integration tests run the package against a real Tempo ID. They live in `tempoxyz/id` until a Tempo ID test image exists.
-- `.github/workflows/verify.yml` runs Tempo ID's `test/client/` and end-to-end suites against each commit, from a clone of `tempoxyz/id` at `vars.ID_REF`.
+- Develop a change in the `accounts` submodule of `tempoxyz/id`, whose integration and end-to-end suites run against it. CI here runs only the tests in `src/`.
 - No mocks, stubs, fakes, fake timers, stubbed globals, or MSW in `src/`.
 - Keep a module's tests in one `Module.test.ts` beside it. Never split into variant files.
 - Group tests in a `describe` named for the entrypoint.

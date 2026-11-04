@@ -13,9 +13,6 @@ jobs:
     name: Verify
     permissions:
       contents: read
-      id-token: write
-      packages: read
-    secrets: inherit
     uses: ./.github/workflows/verify.yml
 
   release:

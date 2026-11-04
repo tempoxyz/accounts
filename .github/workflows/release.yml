@@ -1,6 +1,6 @@
 # Releases the npm packages. On a push to main, Changesets opens the version pull request, or
-# publishes the versions that it holds once it merges. Each push to main also publishes `accounts`
-# and the CLI playground as `main` prereleases, and each pull request as `pr-<n>` prereleases. All
+# publishes the versions that it holds once it merges. Each push to main also publishes `accounts` as a
+# `main` prerelease, and each pull request as a `pr-<n>` prerelease. All
 # publish through npm trusted publishing. `prerelease-cleanup.yml` removes the `pr-<n>` dist-tags
 # once the pull request closes, and prunes every dist-tag but `alpha`, `latest`, `main`, and those
 # of open pull requests each day.
@@ -53,10 +53,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.sts.outputs.token }}
 
-  # Packs the prereleases, at `0.0.0-pr-<n>.sha-<commit>` on a pull request, or
+  # Packs the prerelease, at `0.0.0-pr-<n>.sha-<commit>` on a pull request, or
   # `0.0.0-main.sha-<commit>` on main. It runs the commit's code, so it holds no npm identity.
   pack:
-    name: Pack prereleases
+    name: Pack prerelease
     if: vars.NPM_TRUSTED_PUBLISHING == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     outputs:
       tag: ${{ steps.version.outputs.tag }}
@@ -98,18 +98,10 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           version="$VERSION"
-          # Every workspace takes the version first, so the CLI playground's `workspace:*` dependency
-          # on `accounts` packs as this version.
-          for directory in . playgrounds/cli; do
-            (cd "$directory" && npm version --no-git-tag-version "$version")
-          done
+          npm version --no-git-tag-version "$VERSION"
           pnpm changeset:prepublish
-          # The CLI playground is private, so a release never publishes it. Only its prereleases are
-          # public.
-          (cd playgrounds/cli && npm pkg delete private)
           mkdir -p "$RUNNER_TEMP/prereleases"
           pnpm pack --pack-destination "$RUNNER_TEMP/prereleases"
-          pnpm --dir playgrounds/cli pack --pack-destination "$RUNNER_TEMP/prereleases"
 
       - name: Upload prereleases
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -119,10 +111,10 @@ jobs:
           path: ${{ runner.temp }}/prereleases/*.tgz
           retention-days: 1
 
-  # Publishes the packs under the dist-tag `main` or `pr-<n>`. It alone holds the OIDC token that npm
+  # Publishes the pack under the dist-tag `main` or `pr-<n>`. It alone holds the OIDC token that npm
   # trusts, and runs no code of the commit. npm trusts `main.yml` only in `npm-release`.
   prerelease:
-    name: Publish prereleases
+    name: Publish prerelease
     environment: ${{ github.event_name == 'push' && 'npm-release' || 'npm-prerelease' }}
     needs: pack
     permissions:
@@ -131,8 +123,8 @@ jobs:
       id-token: write
       pull-requests: write
     runs-on: ubuntu-latest
-    # Each of the two packages waits up to 40 minutes until npm serves it.
-    timeout-minutes: 90
+    # The package waits up to 40 minutes until npm serves it.
+    timeout-minutes: 50
 
     steps:
       # Pushes to main release one at a time, so a queued run can start after a newer commit. Only
@@ -165,61 +157,57 @@ jobs:
           name: prereleases
           path: ${{ runner.temp }}/prereleases
 
-      - name: Publish prereleases
+      - name: Publish prerelease
         if: steps.current.outputs.publish == 'true'
         env:
           TAG: ${{ needs.pack.outputs.tag }}
           VERSION: ${{ needs.pack.outputs.version }}
         run: |
-          version="$VERSION"
-          # The CLI playground depends on `accounts`, so the package publishes first.
-          for name in accounts @tempoxyz/example-id-cli; do
-            pack="$RUNNER_TEMP/prereleases/$(echo "${name#@}" | tr / -)-$version.tgz"
-            # The pack comes from the commit's code, so its manifest must name this package
-            # and version before it publishes.
-            manifest="$(tar -xOzf "$pack" package/package.json)"
-            if [ "$(echo "$manifest" | node -p 'const pkg = JSON.parse(require("fs").readFileSync(0)); `${pkg.name}@${pkg.version}`')" != "$name@$version" ]; then
-              echo "::error::$pack does not hold $name@$version."
+          pack="$RUNNER_TEMP/prereleases/accounts-$VERSION.tgz"
+          # The pack comes from the commit's code, so its manifest must name this package and version
+          # before it publishes.
+          manifest="$(tar -xOzf "$pack" package/package.json)"
+          if [ "$(echo "$manifest" | node -p 'const pkg = JSON.parse(require("fs").readFileSync(0)); `${pkg.name}@${pkg.version}`')" != "accounts@$VERSION" ]; then
+            echo "::error::$pack does not hold accounts@$VERSION."
+            exit 1
+          fi
+          # A rerun or a reopened pull request keeps its head commit, whose version is already
+          # published. `npm view` prints nothing for a version that does not exist.
+          if [ -z "$(npm view "accounts@$VERSION" version 2> /dev/null)" ]; then
+            # npm stages a version while it processes it, and refuses to publish a staged version
+            # again, so a rerun in that time waits for the staged version.
+            status=0
+            npm publish "$pack" --access public --tag "$TAG" > "$RUNNER_TEMP/publish.log" 2>&1 || status=$?
+            cat "$RUNNER_TEMP/publish.log"
+            if [ "$status" != 0 ] && ! grep -q 'previously staged version' "$RUNNER_TEMP/publish.log"; then
               exit 1
             fi
-            # A rerun or a reopened pull request keeps its head commit, whose version is already
-            # published. `npm view` prints nothing for a version that does not exist.
-            if [ -z "$(npm view "$name@$version" version 2> /dev/null)" ]; then
-              # npm stages a version while it processes it, and refuses to publish a staged version
-              # again, so a rerun in that time waits for the staged version.
-              status=0
-              npm publish "$pack" --access public --tag "$TAG" > "$RUNNER_TEMP/publish.log" 2>&1 || status=$?
-              cat "$RUNNER_TEMP/publish.log"
-              if [ "$status" != 0 ] && ! grep -q 'previously staged version' "$RUNNER_TEMP/publish.log"; then
-                exit 1
-              fi
-            fi
-            # npm processes a new version for up to about half an hour before it installs. The CLI
-            # playground's install needs `accounts`, and the comment names both, so each waits until
-            # it installs. Main has no comment, and its wait would hold the release queue.
-            [ "$GITHUB_EVENT_NAME" = push ] && continue
-            for attempt in $(seq 1 240); do
-              [ -n "$(npm view "$name@$version" version 2> /dev/null)" ] && break
-              [ "$attempt" = 240 ] && { echo "::error::npm does not serve $name@$version after 40 minutes."; exit 1; }
-              sleep 10
-            done
+          fi
+          # npm processes a new version for up to about half an hour before it installs, and the
+          # comment names it, so a pull request waits until it installs. Main has no comment, and its
+          # wait would hold the release queue.
+          [ "$GITHUB_EVENT_NAME" = push ] && exit 0
+          for attempt in $(seq 1 240); do
+            [ -n "$(npm view "accounts@$VERSION" version 2> /dev/null)" ] && exit 0
+            sleep 10
           done
+          echo "::error::npm does not serve accounts@$VERSION after 40 minutes."
+          exit 1
 
-      # Keeps one comment that names the prereleases, once both are published.
-      - name: Comment prereleases
+      # Keeps one comment that names the prerelease, once it is published.
+      - name: Comment prerelease
         if: github.event_name == 'pull_request' && steps.current.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           VERSION: ${{ needs.pack.outputs.version }}
         run: |
-          marker='<!-- prereleases -->'
+          marker='<!-- prerelease -->'
           body="$marker
-          ### Prereleases
+          ### Prerelease
 
           \`\`\`sh
           pnpm add accounts@$VERSION
-          pnpx @tempoxyz/example-id-cli@$VERSION login
           \`\`\`"
           id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST/comments" --paginate \
             --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)"
