@@ -2,14 +2,14 @@
 
 ## Overview
 
-Returns a signer of [client assertions](https://github.com/tempoxyz/id/blob/main/docs/apps.md#client-assertions) with the app's private key, for [`Id.from`](Id.from.md)'s `clientAssertion`. The instance then signs a new assertion for each request that authenticates the app, in place of a client secret. Only the app's backend holds the key.
+Returns a signer of [client assertions](https://github.com/tempoxyz/id/blob/main/docs/apps.md#client-assertions) with the app's private key, for [`Accounts.from`](Accounts.from.md)'s `clientAssertion`. The instance then signs a new assertion for each request that authenticates the app, in place of a client secret. Only the app's backend holds the key.
 
 ## Usage
 
 ```ts
-import { ClientAssertion, Id } from 'accounts'
+import { Accounts, ClientAssertion } from 'accounts'
 
-const config = Id.from({
+const config = Accounts.from({
   clientAssertion: ClientAssertion.fromPrivateKey({
     privateKey: JSON.parse(process.env.TEMPO_ID_PRIVATE_KEY!),
   }),

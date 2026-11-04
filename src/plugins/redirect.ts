@@ -19,7 +19,7 @@ import type * as Session from '../Session.js'
  *
  * @example
  * ```ts
- * const tempoId = Id.create({
+ * const tempoId = Accounts.create({
  *   plugins: [
  *     redirect({
  *       open: async (url) => (await WebBrowser.openAuthSessionAsync(url, redirectUri)).url,

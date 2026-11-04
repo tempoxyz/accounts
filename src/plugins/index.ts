@@ -4,10 +4,10 @@
  *
  * @example
  * ```ts
- * import { Id } from 'accounts'
+ * import { Accounts } from 'accounts'
  * import { email, passkey, viem } from 'accounts/plugins'
  *
- * const tempoId = Id.create({ plugins: [email(), passkey(), viem({ chain: tempo })] })
+ * const tempoId = Accounts.create({ plugins: [email(), passkey(), viem({ chain: tempo })] })
  * ```
  * @module
  */

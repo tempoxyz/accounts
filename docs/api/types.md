@@ -2,7 +2,7 @@
 
 ## Overview
 
-Each type lives in its own module of `accounts`, named after it, such as `Permissions.Permissions`. `Authorization`, `Funding`, `Pending`, and `User` come from `accounts/internal`, since the actions build and return them. Each module has a `from`, which returns its value with the type. `Id.Config` is the exception: [`Id.from`](Id.from.md) returns it with its defaults.
+Each type lives in its own module of `accounts`, named after it, such as `Permissions.Permissions`. `Authorization`, `Funding`, `Pending`, and `User` come from `accounts/internal`, since the actions build and return them. Each module has a `from`, which returns its value with the type. `Accounts.Config` is the exception: [`Accounts.from`](Accounts.from.md) returns it with its defaults.
 
 ## Usage
 
@@ -113,7 +113,7 @@ The signed-in user.
 
 ## Config
 
-`Id.Config` is the configuration of an instance, `tempoId.config`, which every action of [`Actions`](Actions.md) takes. [`Id.from`](Id.from.md) returns it with its defaults, and [`Id.from`](Id.from.md#parameters) documents each option.
+`Accounts.Config` is the configuration of an instance, `tempoId.config`, which every action of [`Actions`](Actions.md) takes. [`Accounts.from`](Accounts.from.md) returns it with its defaults, and [`Accounts.from`](Accounts.from.md#parameters) documents each option.
 
 ### chainId
 
@@ -250,7 +250,7 @@ The PKCE verifier that redeems the code.
 
 ## Permissions
 
-`Permissions.Permissions` is what an app's access key may do. [`Id.create`](Id.create.md#accesskey-optional) takes it, or a function that returns it, for each sign-in, and each sign-in and `authorize` take it as `accessKey`, or `false` for no access key. Each low-level action takes a [`Permissions.WithAccount`](#permissionswithaccount) as `accessKey`. [`Permissions.resolve`](Permissions.resolve.md) turns it into the key authorization request at each call, so a duration expiry counts from that call. Without `expiry`, Tempo ID fills the [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry). Without `scopes`, the library fills them from `limits`. An access key that never expires (`expiry: false`), spends any amount (no `limits`), or makes any call (`scopes: 'any'`) is an [access key without bounds](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#access-keys-without-bounds), which only a headless sign-in of an app with `tempo-id:sign` may request. `from` keeps `chainId` as a literal type.
+`Permissions.Permissions` is what an app's access key may do. [`Accounts.create`](Accounts.create.md#accesskey-optional) takes it, or a function that returns it, for each sign-in, and each sign-in and `authorize` take it as `accessKey`, or `false` for no access key. Each low-level action takes a [`Permissions.WithAccount`](#permissionswithaccount) as `accessKey`. [`Permissions.resolve`](Permissions.resolve.md) turns it into the key authorization request at each call, so a duration expiry counts from that call. Without `expiry`, Tempo ID fills the [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry). Without `scopes`, the library fills them from `limits`. An access key that never expires (`expiry: false`), spends any amount (no `limits`), or makes any call (`scopes: 'any'`) is an [access key without bounds](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#access-keys-without-bounds), which only a headless sign-in of an app with `tempo-id:sign` may request. `from` keeps `chainId` as a literal type.
 
 ```ts
 const permissions = Permissions.from({
@@ -349,7 +349,7 @@ The signature type of the access key of `publicKey`. Only with `publicKey`.
 
 - **Type:** [`TempoAccount.TempoAccount`](#tempoaccount)
 
-The user's Tempo Account that Tempo ID selects for the app, on the instance's chain: the account that the user selected, else the oldest. Absent where the sign-in read no account, such as a sign-in through a redirect, a dialog, or a device. [`tempoId.account.get`](Id.create.md#accountget) reads it.
+The user's Tempo Account that Tempo ID selects for the app, on the instance's chain: the account that the user selected, else the oldest. Absent where the sign-in read no account, such as a sign-in through a redirect, a dialog, or a device. [`tempoId.account.get`](Accounts.create.md#accountget) reads it.
 
 ### accessToken
 
@@ -379,7 +379,7 @@ The app's access key, with its material. [`AccessKey.toAccount`](AccessKey.toAcc
 
 - **Type:** `string`
 
-Exchanges for new tokens through [`tempoId.session.refresh`](Id.create.md#sessionrefresh). It rotates on every refresh.
+Exchanges for new tokens through [`tempoId.session.refresh`](Accounts.create.md#sessionrefresh). It rotates on every refresh.
 
 ### user
 
@@ -389,7 +389,7 @@ The signed-in user, from the ID token.
 
 ## Session.Status
 
-`Session.Status` is the status of an instance's session, which [`tempoId.session.status`](Id.create.md#sessionstatus) and [`tempoId.useSession()`](react.react.md) return. An authorization of the browser's Tempo ID session, such as [`tempoId.authorize`](Id.create.md#authorize), holds it at `pending`, or at `reauthorizing` while it renews a saved session that expired.
+`Session.Status` is the status of an instance's session, which [`tempoId.session.status`](Accounts.create.md#sessionstatus) and [`tempoId.useSession()`](react.react.md) return. An authorization of the browser's Tempo ID session, such as [`tempoId.authorize`](Accounts.create.md#authorize), holds it at `pending`, or at `reauthorizing` while it renews a saved session that expired.
 
 | `status`        | `session`                 | When                                                                                                                |
 | --------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |

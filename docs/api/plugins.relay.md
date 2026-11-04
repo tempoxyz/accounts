@@ -37,18 +37,18 @@ In the Viem relay mode, the plugin builds Viem's relay over the chains and trans
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { relay } from 'accounts/plugins'
 import { privateKeyToAccount } from 'viem/accounts'
 
 // The Tempo API's sponsor pays the fees.
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: 'https://app.example',
   plugins: [relay({ apiKey: env.TEMPO_API_KEY })],
 })
 
 // The app's own fee payer pays the fees.
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: 'https://app.example',
   plugins: [relay({ account: privateKeyToAccount(env.FEE_PAYER_KEY) })],
 })
@@ -75,7 +75,7 @@ Serves a request to the relay route, and returns its JSON-RPC response. A method
 The fee payer, which signs for the fees of each transaction through Viem's `Relay.feePayer`, before `plugins`.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [relay({ account: privateKeyToAccount(env.FEE_PAYER_KEY) })],
 })
 ```
@@ -87,7 +87,7 @@ const tempoId = Id.create({
 The app's Tempo API key, with the `rpc-relay:sponsor` scope. With it, the plugin runs in the Tempo API mode, and the key's sponsor pays the fees.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [relay({ apiKey: env.TEMPO_API_KEY })],
 })
 ```
@@ -113,7 +113,7 @@ The chain whose transactions the route relays.
 Viem's relay plugins from `viem/tempo`, after `account`'s `Relay.feePayer`. The Viem relay mode also takes Viem's `resolveTokens` and `timeout`.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [
     relay({
       plugins: [

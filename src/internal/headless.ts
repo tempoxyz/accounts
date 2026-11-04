@@ -4,7 +4,7 @@
  * @module
  */
 import { Authentication, type Types } from 'ox/webauthn'
-import { type Config, RequestError } from '../Id.js'
+import { type Config, RequestError } from '../Accounts.js'
 import type { Authorization } from '../Authorization.js'
 import type { WithAccount } from '../Permissions.js'
 import * as AccessKey from './accessKey.js'

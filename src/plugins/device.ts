@@ -2,9 +2,9 @@
  * The plugin of sign-in with the device grant (RFC 8628), such as for a CLI.
  * @module
  */
+import { KeyRequiredError } from '../Accounts.js'
 import * as Actions from '../Actions.js'
 import type * as Funding from '../Funding.js'
-import { KeyRequiredError } from '../Id.js'
 import * as SignIn from '../internal/signIn.js'
 import * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
@@ -16,7 +16,7 @@ import type * as Session from '../Session.js'
  *
  * @example
  * ```ts
- * const tempoId = Id.create({
+ * const tempoId = Accounts.create({
  *   plugins: [device({ onCode: (code) => console.log(`Open ${code.verificationUriComplete}`) })],
  *   store: Store.file('~/.config/my-cli/session.json'),
  * })
@@ -31,7 +31,7 @@ export function device(options: device.Options) {
     actions: (context) => ({
       /**
        * Starts the device grant, passes its code to `onCode`, and resolves once the user approves it.
-       * The grant always requests an access key, so it throws `Id.KeyRequiredError` without an access key.
+       * The grant always requests an access key, so it throws `Accounts.KeyRequiredError` without an access key.
        */
       async signIn(
         parameters: device.signIn.Parameters = {},

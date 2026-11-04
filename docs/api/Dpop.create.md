@@ -2,19 +2,19 @@
 
 ## Overview
 
-Generates a [DPoP key](https://github.com/tempoxyz/id/blob/main/docs/dpop.md): an ECDSA P-256 key pair whose private key signs each proof with ES256. With the key as the instance's [`dpop`](Id.from.md#dpop-optional), each token request sends a proof, and Tempo ID issues `DPoP` tokens that work only with a proof from the same key.
+Generates a [DPoP key](https://github.com/tempoxyz/id/blob/main/docs/dpop.md): an ECDSA P-256 key pair whose private key signs each proof with ES256. With the key as the instance's [`dpop`](Accounts.from.md#dpop-optional), each token request sends a proof, and Tempo ID issues `DPoP` tokens that work only with a proof from the same key.
 
 The private key is non-extractable by default, so no script can read its bytes. A browser keeps it in IndexedDB, which stores a `CryptoKey` as it is.
 
 ## Usage
 
 ```ts
-import { Actions, Dpop, Id } from 'accounts'
+import { Accounts, Actions, Dpop } from 'accounts'
 
 const dpop = (await store.get('dpop')) ?? (await Dpop.create())
 await store.set('dpop', dpop)
 
-const config = Id.from({ clientId: 'tempo-cli', dpop })
+const config = Accounts.from({ clientId: 'tempo-cli', dpop })
 const tokens = await Actions.refresh(config, { refreshToken })
 ```
 

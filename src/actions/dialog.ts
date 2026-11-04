@@ -14,7 +14,7 @@ import {
   emit,
   setup,
 } from 'xstate'
-import type { Config } from '../Id.js'
+import type { Config } from '../Accounts.js'
 import type { Authorization } from '../Authorization.js'
 import type { Keyed, WithAccount } from '../Permissions.js'
 import * as Callback from '../internal/callback.js'

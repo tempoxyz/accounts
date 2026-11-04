@@ -4,7 +4,7 @@
  */
 /* istanbul ignore file -- The class runs only in workerd, which the suite reaches through a test Worker. */
 import * as Workers from 'cloudflare:workers'
-import * as Id from '../Id.js'
+import * as Accounts from '../Accounts.js'
 import * as BackendSessions from '../internal/backendSessions.js'
 import * as Rpc from '../internal/rpc.js'
 import type * as Session from '../Session.js'
@@ -80,7 +80,7 @@ export function sessions<env>(
       if (this.#instance) return this.#instance
       const { clientId } = Rpc.parseName(this.ctx.id.name)
       this.#instance = BackendSessions.create(
-        Id.create({
+        Accounts.create({
           ...config(this.env, { clientId }),
           clientId,
         }).config,
@@ -134,7 +134,7 @@ export declare namespace sessions {
 
   /** The app's configuration: the client authentication that only a backend holds, and its URLs. */
   type Config = Pick<
-    Id.create.Options,
+    Accounts.create.Options,
     'clientAssertion' | 'clientSecret' | 'dpop' | 'fetch' | 'scope' | 'url'
   >
 }

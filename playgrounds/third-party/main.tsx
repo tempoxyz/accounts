@@ -3,7 +3,7 @@
  * names its expiry, limits, and scopes, since Tempo ID refuses a third-party key without them.
  * @module
  */
-import { AccessKey, Actions, Id, Permissions, Session } from 'accounts'
+import { AccessKey, Accounts, Actions, Permissions, Session } from 'accounts'
 import type { Authorization, Funding } from 'accounts/internal'
 import {
   QueryClient,
@@ -119,7 +119,7 @@ function App() {
         // `start` always requests a key, so a sign-in without one is not this page's.
         return completed && 'key' in completed ? completed : null
       } catch (error) {
-        if (!(error instanceof Id.RequestError)) throw error
+        if (!(error instanceof Accounts.RequestError)) throw error
         setRefused(error.message)
         return null
       } finally {
@@ -144,7 +144,7 @@ function App() {
           accessKey: permissions(),
         })
       } catch (error) {
-        if (!(error instanceof Id.RequestError)) throw error
+        if (!(error instanceof Accounts.RequestError)) throw error
         setRefused(error.message)
         return null
       }

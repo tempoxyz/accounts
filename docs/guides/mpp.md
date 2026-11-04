@@ -5,11 +5,11 @@
 An endpoint of the Machine Payments Protocol (MPP) responds with a 402 challenge, and serves its content for a credential that pays it. A charge pays once, with a transfer. A session pays each request with a voucher from a channel that holds a deposit. The [`mpp`](../api/mpp.mpp.md) plugin pays both with the app's [access key](access-keys.md), through [mppx](https://github.com/wevm/mppx), which the app installs beside `accounts`.
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { mpp } from 'accounts/mpp'
 import { dialog } from 'accounts/plugins'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   // 1. The access key may spend 10 OUSD for a day, in charges and sessions.
   accessKey: { expiry: '1d', limits: [{ limit: '10', token: 'ousd' }] },
   // 2. The plugin pays with the access key of the instance's session.
@@ -54,7 +54,7 @@ A charge of `0` asks for a signed proof of the account, and moves no tokens. The
 A backend pays with the access key of a session that its [`backend`](backend.md) plugin holds, such as the session that `tempoId.backend.get` returns.
 
 ```ts
-const tempoId = Id.create({ plugins: [backend(), viem(), mpp()] })
+const tempoId = Accounts.create({ plugins: [backend(), viem(), mpp()] })
 
 const session = await tempoId.backend.get({ id })
 const response = await tempoId.mpp({ session }).fetch(url)

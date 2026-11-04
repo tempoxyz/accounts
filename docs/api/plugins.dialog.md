@@ -6,15 +6,15 @@ The plugin of sign-in on Tempo ID's pages without leaving the app's page. It add
 
 A browser page loads the dialog's frame, hidden, as the instance is created, so the first sign-in shows at once. The page must be on the redirect URI's origin, since the callback reaches only a page of that origin.
 
-An instance without a sign-in plugin receives this plugin with its default options. Its code then loads on demand, as [`Id.create`](Id.create.md) describes, so `Id.create()` alone offers `tempoId.dialog.signIn()`.
+An instance without a sign-in plugin receives this plugin with its default options. Its code then loads on demand, as [`Accounts.create`](Accounts.create.md) describes, so `Accounts.create()` alone offers `tempoId.dialog.signIn()`.
 
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { dialog } from 'accounts/plugins'
 
-const tempoId = Id.create({ plugins: [dialog()] })
+const tempoId = Accounts.create({ plugins: [dialog()] })
 
 button.onclick = () => tempoId.dialog.signIn()
 ```
@@ -37,7 +37,7 @@ if (await tempoId.dialog.callback()) return
 
 - **Type:** `(parameters?: dialog.signIn.Parameters) => Promise<Session>`
 
-Signs the user in, sets the instance's [session](types.md#session), and returns it, as [`Actions.dialog.signIn`](Actions.dialog.signIn.md) does. Call it in a click handler, before any `await`, since a popup opens only within the gesture. The session holds no Tempo Account, so read it with [`tempoId.account.get`](Id.create.md#accountget) if necessary.
+Signs the user in, sets the instance's [session](types.md#session), and returns it, as [`Actions.dialog.signIn`](Actions.dialog.signIn.md) does. Call it in a click handler, before any `await`, since a popup opens only within the gesture. The session holds no Tempo Account, so read it with [`tempoId.account.get`](Accounts.create.md#accountget) if necessary.
 
 ```ts
 button.onclick = async () => {
@@ -55,7 +55,7 @@ button.onclick = async () => {
 Whether each request goes to `POST /oauth2/par` first ([RFC 9126](https://www.rfc-editor.org/rfc/rfc9126)), as [Pushed authorization requests](https://github.com/tempoxyz/id/blob/main/docs/pushed-authorization-requests.md) describes. A pushed request signs in with a popup only.
 
 ```ts
-const tempoId = Id.create({ plugins: [dialog({ par: true })] })
+const tempoId = Accounts.create({ plugins: [dialog({ par: true })] })
 ```
 
 ### popup (optional)
@@ -66,7 +66,7 @@ const tempoId = Id.create({ plugins: [dialog({ par: true })] })
 Whether to sign in in a popup window in place of a frame. With it, the page preloads no frame.
 
 ```ts
-const tempoId = Id.create({ plugins: [dialog({ popup: true })] })
+const tempoId = Accounts.create({ plugins: [dialog({ popup: true })] })
 ```
 
 ### preload (optional)
@@ -77,7 +77,7 @@ const tempoId = Id.create({ plugins: [dialog({ popup: true })] })
 Whether a browser page loads the dialog's frame, hidden, as the instance is created, as [`Actions.dialog.preload`](Actions.dialog.preload.md) does.
 
 ```ts
-const tempoId = Id.create({ plugins: [dialog({ preload: false })] })
+const tempoId = Accounts.create({ plugins: [dialog({ preload: false })] })
 ```
 
 ### dialog.signIn parameters
@@ -140,7 +140,7 @@ const session = await tempoId.dialog.signIn({ signal: controller.signal })
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown for each refusal that [`Actions.dialog.signIn`](Actions.dialog.signIn.md#errors) lists, such as a denial.
 
@@ -156,10 +156,10 @@ Thrown when the browser blocks the popup, since the call ran outside a user gest
 
 Thrown when the redirect URI is on another origin than the page.
 
-### `Id.SupersededError`
+### `Accounts.SupersededError`
 
 Thrown when another sign-in or a sign-out completed while this sign-in was pending.
 
-### `Id.ChallengeWithoutKeyError`
+### `Accounts.ChallengeWithoutKeyError`
 
 Thrown before any request for `challenge` without `accessKey`.

@@ -18,7 +18,7 @@
  * })
  *
  * // Or the config of the app's own instance.
- * const instance = Id.create({ plugins: [viem(), wagmi()] })
+ * const instance = Accounts.create({ plugins: [viem(), wagmi()] })
  * instance.wagmi
  * ```
  * @module
@@ -33,7 +33,7 @@ import { Address, Hex, Provider } from 'ox'
 import { TransactionRequest } from 'ox/tempo'
 import type { Chain, Transport } from 'viem'
 import { waitFor } from 'xstate'
-import * as Id from '../Id.js'
+import * as Accounts from '../Accounts.js'
 import * as DefaultDialog from '../internal/defaultDialog.js'
 import type * as SignIn from '../internal/signIn.js'
 import * as Plugin from '../Plugin.js'
@@ -148,7 +148,7 @@ export function tempoId<const plugins extends readonly Plugin.Option[] = []>(
   return connector<plugins>({
     create(config) {
       let context: Plugin.Context | undefined
-      const instance = Id.create({
+      const instance = Accounts.create({
         ...rest,
         chainId: config.chains[0].id,
         plugins: [
@@ -244,11 +244,13 @@ export declare namespace tempoId {
   /** The connector's instance, with the `viem` plugin. */
   type Instance<
     plugins extends readonly Plugin.Option[] = readonly Plugin.Option[],
-  > = Id.Id<Plugin.Flatten<readonly [...plugins, ReturnType<typeof viem>]>>
+  > = Accounts.Accounts<
+    Plugin.Flatten<readonly [...plugins, ReturnType<typeof viem>]>
+  >
 
   type Options<
     plugins extends readonly Plugin.Option[] = readonly Plugin.Option[],
-  > = Omit<Id.create.Options<plugins>, 'chainId' | 'dev'>
+  > = Omit<Accounts.create.Options<plugins>, 'chainId' | 'dev'>
 
   /** The members that the connector adds to wagmi's. */
   type Properties<
@@ -286,7 +288,7 @@ export declare namespace tempoId {
  *
  * @example
  * ```tsx
- * const tempoId = Id.create({ accessKey, plugins: [passkey(), wagmi()] })
+ * const tempoId = Accounts.create({ accessKey, plugins: [passkey(), wagmi()] })
  *
  * <WagmiProvider config={tempoId.wagmi}>…</WagmiProvider>
  *
@@ -295,7 +297,7 @@ export declare namespace tempoId {
  */
 export function wagmi(options: wagmi.Options = {}) {
   return Plugin.from({
-    extend(instance: Id.Id, context: Plugin.Context) {
+    extend(instance: Accounts.Accounts, context: Plugin.Context) {
       // The instance's `viem` plugin, or one of the plugin's own, whose members the plugin adds.
       const held = (instance as unknown as { viem?: viem.Namespace }).viem
       const added = held ? undefined : viem()
@@ -429,7 +431,7 @@ type Settled =
 const defaultSignInIds = new Set(['device', 'dialog', 'passkey', 'redirect'])
 
 /** The members of every connector's instance, whatever its plugins. */
-type Base = Id.Id<readonly [ReturnType<typeof viem>]>
+type Base = Accounts.Accounts<readonly [ReturnType<typeof viem>]>
 
 /** The `signIn` of a sign-in plugin's namespace. */
 type SignInFn = {
@@ -713,7 +715,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       // A sign-in can complete while the session refreshes, so the account goes only to the
       // session that the instance holds. A sign-out ends the read.
       const current = context!.session.get()
-      if (!current) throw new Id.SupersededError()
+      if (!current) throw new Accounts.SupersededError()
       if (current !== session) return withAccount(current)
       const account = await getInstance().account.get({
         accessToken: session.accessToken,
@@ -725,11 +727,11 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       const result = await context!.session.exclusive<Settled>(async () => {
         // A sign-out in this instance while the read waited ends it, and the reload never takes in
         // another context's session over that sign-out.
-        if (!context!.session.get()) throw new Id.SupersededError()
+        if (!context!.session.get()) throw new Accounts.SupersededError()
         // The stored session can hold another context's later tokens, so the account applies to
         // those, never to this instance's earlier copy.
         const latest = await context!.session.reload()
-        if (!latest) throw new Id.SupersededError()
+        if (!latest) throw new Accounts.SupersededError()
         if (addressOf(latest)) return { session: latest }
         if (
           latest.user.id !== session.user.id ||

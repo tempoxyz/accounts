@@ -1,5 +1,5 @@
 /** A native Expo app, which signs in only on Tempo ID's pages in the system browser. @module */
-import { type AccessKey, Actions, Id, type Session } from 'accounts'
+import { type AccessKey, Accounts, Actions, type Session } from 'accounts'
 import {
   QueryClient,
   QueryClientProvider,
@@ -128,7 +128,7 @@ async function signIn(
     if (
       !options.fallback ||
       !options.key ||
-      !(error instanceof Id.RequestError) ||
+      !(error instanceof Accounts.RequestError) ||
       error.field !== 'code'
     )
       throw error

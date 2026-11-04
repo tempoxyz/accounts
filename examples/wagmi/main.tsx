@@ -6,7 +6,7 @@
  * @module
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { viem } from 'accounts/plugins'
 import { wagmi } from 'accounts/wagmi'
 import * as React from 'react'
@@ -31,7 +31,7 @@ const ousd = Tokens.ousd(tempo.id).address
  * The Tempo ID instance, on Tempo testnet. Each connection requests a key that sends up to 100 OUSD
  * for a day, and `tempoId.wagmi` is its wagmi config.
  */
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey: () => ({
     expiry: Expiry.days(1),
     limits: [{ limit: parseUnits('100', 6), token: ousd }],

@@ -7,7 +7,7 @@
  * ```ts
  * import { ClientAssertion } from 'accounts'
  *
- * const auth = Id.create({
+ * const auth = Accounts.create({
  *   clientAssertion: ClientAssertion.fromPrivateKey({ privateKey: JSON.parse(process.env.TEMPO_ID_PRIVATE_KEY!) }),
  *   clientId: 'DkqRtYbW…',
  * })

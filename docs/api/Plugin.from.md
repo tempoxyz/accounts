@@ -9,7 +9,7 @@ A plugin changes the session only through `context.session.change()`, which hold
 ## Usage
 
 ```ts
-import { Actions, Id, Plugin } from 'accounts'
+import { Accounts, Actions, Plugin } from 'accounts'
 
 function realms() {
   return Plugin.from({
@@ -23,7 +23,7 @@ function realms() {
   })
 }
 
-const tempoId = Id.create({ plugins: [realms()] })
+const tempoId = Accounts.create({ plugins: [realms()] })
 const list = await tempoId.realms.list()
 ```
 
@@ -39,7 +39,7 @@ The plugin, as it was given.
 
 - **Type:** `(context: Plugin.Context) => actions`
 
-Builds the plugin's namespace on the instance, once, at `Id.create`. Without it, the plugin adds no namespace.
+Builds the plugin's namespace on the instance, once, at `Accounts.create`. Without it, the plugin adds no namespace.
 
 ```ts
 const plugin = Plugin.from({
@@ -56,7 +56,7 @@ Returns the access key of a sign-in that names none, or `undefined` for a sign-i
 
 #### context.config
 
-- **Type:** [`Id.Config`](types.md#config)
+- **Type:** [`Accounts.Config`](types.md#config)
 
 The instance's configuration, which every action of `Actions` takes.
 
@@ -70,7 +70,7 @@ Runs `fn`, an authorization of the browser's Tempo ID session, and holds the ses
 
 - **Type:** `() => { check; commit; fail }`
 
-Begins a change to the session, the only way to change it. `commit(session)` sets the session, or empties it for `undefined`, and saves it. `fail(error)` rethrows a sign-in's error, and empties the session for an `Id.RequestError` marked `signedIn`. `check()` throws `Id.SupersededError` if a newer change completed. A newer change overtakes this one, and its `commit` then throws `Id.SupersededError`.
+Begins a change to the session, the only way to change it. `commit(session)` sets the session, or empties it for `undefined`, and saves it. `fail(error)` rethrows a sign-in's error, and empties the session for an `Accounts.RequestError` marked `signedIn`. `check()` throws `Accounts.SupersededError` if a newer change completed. A newer change overtakes this one, and its `commit` then throws `Accounts.SupersededError`.
 
 #### context.session.get
 
@@ -80,9 +80,9 @@ Returns the session, without a read of the store.
 
 ### config (optional)
 
-- **Type:** `() => Partial<Id.from.Options>`
+- **Type:** `() => Partial<Accounts.from.Options>`
 
-Returns options of `Id.create` that the plugin sets, such as a platform's `store`. The options that `Id.create` receives win over them, and a later plugin's options win over an earlier plugin's.
+Returns options of `Accounts.create` that the plugin sets, such as a platform's `store`. The options that `Accounts.create` receives win over them, and a later plugin's options win over an earlier plugin's.
 
 ```ts
 Plugin.from({ config: () => ({ store: Store.memory() }), id: 'memory' })
@@ -90,9 +90,9 @@ Plugin.from({ config: () => ({ store: Store.memory() }), id: 'memory' })
 
 ### extend (optional)
 
-- **Type:** `(instance: Id.Id, context: Plugin.Context) => members`
+- **Type:** `(instance: Accounts.Accounts, context: Plugin.Context) => members`
 
-Returns members that the plugin adds to the instance itself, such as the `react` plugin's `useSession`. It receives the instance that the core and the other plugins build, and the context that the plugin's actions receive. `Id.create` throws for a member whose name the instance holds.
+Returns members that the plugin adds to the instance itself, such as the `react` plugin's `useSession`. It receives the instance that the core and the other plugins build, and the context that the plugin's actions receive. `Accounts.create` throws for a member whose name the instance holds.
 
 ```ts
 Plugin.from({
@@ -152,7 +152,7 @@ const plugin = Plugin.from({ id: 'app' })
 
 - **Type:** `(context: Plugin.Context) => void`
 
-Runs once at `Id.create`, after the plugin's `actions`, such as to preload a frame.
+Runs once at `Accounts.create`, after the plugin's `actions`, such as to preload a frame.
 
 ```ts
 const plugin = Plugin.from({
@@ -163,7 +163,7 @@ const plugin = Plugin.from({
 
 ## Presets
 
-A preset is a function that returns a list of plugins, as Vite's plugins do. `Id.create`'s `plugins` flattens each list in order, and skips a falsy entry, such as `enabled && email()`. The [`expo`](plugins.expo.md) preset returns a plugin whose `config` sets the store and the redirect URI, and the `redirect` plugin.
+A preset is a function that returns a list of plugins, as Vite's plugins do. `Accounts.create`'s `plugins` flattens each list in order, and skips a falsy entry, such as `enabled && email()`. The [`expo`](plugins.expo.md) preset returns a plugin whose `config` sets the store and the redirect URI, and the `redirect` plugin.
 
 ```ts
 const preset = (options: { redirectUri: string }) => [
@@ -174,5 +174,5 @@ const preset = (options: { redirectUri: string }) => [
   redirect(),
 ]
 
-const tempoId = Id.create({ plugins: [preset({ redirectUri }), viem()] })
+const tempoId = Accounts.create({ plugins: [preset({ redirectUri }), viem()] })
 ```

@@ -1,10 +1,10 @@
 # Documentation
 
-`accounts` signs users in through Tempo ID, and keeps their session, their access key, and a Viem client that signs with it. An app creates one instance with `Id.create`, and adds a plugin for each sign-in method it offers. [Tempo ID's docs](https://github.com/tempoxyz/id/blob/main/docs/README.md) describe the service over HTTP.
+`accounts` signs users in through Tempo ID, and keeps their session, their access key, and a Viem client that signs with it. An app creates one instance with `Accounts.create`, and adds a plugin for each sign-in method it offers. [Tempo ID's docs](https://github.com/tempoxyz/id/blob/main/docs/README.md) describe the service over HTTP.
 
 ```mermaid
 flowchart LR
-  App[App] -->|Id.create| Instance[Instance: config, session]
+  App[App] -->|Accounts.create| Instance[Instance: config, session]
   Instance --> Plugins[Plugins: dialog, redirect, email, passkey, device, backend]
   Plugins -->|sign-in| ID[Tempo ID]
   ID -->|tokens and access key| Instance
@@ -19,7 +19,7 @@ npm i accounts viem
 
 | Entry                 | Holds                                                                                           |
 | --------------------- | ----------------------------------------------------------------------------------------------- |
-| `accounts`            | `Id`, `Actions`, `Store`, `Session`, `AccessKey`, `Permissions`, and the types                  |
+| `accounts`            | `Accounts`, `Actions`, `Store`, `Session`, `AccessKey`, `Permissions`, and the types            |
 | `accounts/internal`   | `Authorization`, `Funding`, `Pending`, and `User`, the types that the actions build and return  |
 | `accounts/plugins`    | The plugins: `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, and `viem` |
 | `accounts/react`      | `react`, the plugin that adds `tempoId.useSession()`                                            |
@@ -33,9 +33,9 @@ npm i accounts viem
 An instance without a sign-in plugin signs in through Tempo ID's sign-in in a dialog on the page. In a browser, the page's origin serves as the client ID, with no registration.
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 
-const tempoId = Id.create()
+const tempoId = Accounts.create()
 
 button.onclick = async () => {
   const session = await tempoId.dialog.signIn()
@@ -45,7 +45,7 @@ button.onclick = async () => {
 
 ## Setup
 
-1. Select the client ID. A web app can use its page's origin, and a CLI can use `cli:` and its name. Any other app registers as an OAuth app, with every redirect URI it uses, and passes its client ID as `clientId` to [`Id.create`](api/Id.create.md). A backend also receives a client secret.
+1. Select the client ID. A web app can use its page's origin, and a CLI can use `cli:` and its name. Any other app registers as an OAuth app, with every redirect URI it uses, and passes its client ID as `clientId` to [`Accounts.create`](api/Accounts.create.md). A backend also receives a client secret.
 2. Select the plugins of the app's sign-in. A sign-in form on the app's own page, with [`email`](api/plugins.email.md) or [`passkey`](api/plugins.passkey.md), needs a first-party app. Tempo ID accepts the page's calls only from the origin of one of its redirect URIs ([app registry](https://github.com/tempoxyz/id/blob/main/docs/apps.md#app-registry)). Other apps sign in on Tempo ID's pages, with [`dialog`](api/plugins.dialog.md) or [`redirect`](api/plugins.redirect.md).
 3. Select the deployment. An instance calls `https://id.tempo.xyz` by default. A self-hosted deployment passes its origin as `url`.
 
@@ -57,7 +57,7 @@ The [guides](guides/README.md) cover each sign-in flow, from a dialog to a CLI, 
 
 ## API reference
 
-The [API reference](api/README.md) documents every export: `Id`, each plugin, `expo`, `DurableObject`, the `tempoId` connector, `Actions`, `Store`, and the types that each one takes or returns.
+The [API reference](api/README.md) documents every export: `Accounts`, each plugin, `expo`, `DurableObject`, the `tempoId` connector, `Actions`, `Store`, and the types that each one takes or returns.
 
 ## Limitations
 

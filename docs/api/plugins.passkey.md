@@ -9,10 +9,10 @@ A wallet.tempo passkey that no account knows yet returns the email step. The [`e
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { email, passkey } from 'accounts/plugins'
 
-const tempoId = Id.create({ plugins: [passkey(), email()] })
+const tempoId = Accounts.create({ plugins: [passkey(), email()] })
 
 const result = await tempoId.passkey.signIn()
 if ('step' in result) showEmailForm({ link: result.step.link })
@@ -77,7 +77,7 @@ const result = await tempoId.passkey.signIn({ mediation: 'conditional' })
 Runs the passkey ceremony in place of `navigator.credentials.get`, such as on a device. Its assertion must report the page's origin.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [passkey({ getFn: (options) => Passkeys.get(options) })],
 })
 ```
@@ -142,14 +142,14 @@ const result = await tempoId.passkey.signIn({ select: true })
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown for each refusal that [`Actions.passkey.signIn`](Actions.passkey.signIn.md#errors) and [`Actions.passkey.register`](Actions.passkey.register.md#errors) list. A refusal after the sign-in has `signedIn: true`, and empties the session.
 
-### `Id.SupersededError`
+### `Accounts.SupersededError`
 
 Thrown when another sign-in or a sign-out completed while this sign-in was pending, also after the email step.
 
-### `Id.ChallengeWithoutKeyError`
+### `Accounts.ChallengeWithoutKeyError`
 
 Thrown before any request for `challenge` without `accessKey`.

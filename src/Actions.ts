@@ -1,9 +1,13 @@
 /**
- * Tempo ID's actions, each of which takes an instance from `Id.create`.
+ * Tempo ID's actions, each of which takes an instance from `Accounts.create`.
  * @module
  */
 import type { Authentication } from 'ox/webauthn'
-import { type Config, ChallengeWithoutKeyError, RequestError } from './Id.js'
+import {
+  type Config,
+  ChallengeWithoutKeyError,
+  RequestError,
+} from './Accounts.js'
 import type { Authorization } from './Authorization.js'
 import * as AccessKey from './internal/accessKey.js'
 import * as Api from './internal/api.js'

@@ -1,5 +1,5 @@
 /** The third-party playground's Tempo ID configuration and Viem client. @module */
-import { Id, Store } from 'accounts'
+import { Accounts, Store } from 'accounts'
 import { mpp } from 'accounts/mpp'
 import { viem } from 'accounts/plugins'
 import { type Chain, custom, http } from 'viem'
@@ -48,7 +48,7 @@ export const tempoIdUrl =
  * The configuration of the actions, on the page's chain. The page holds its sign-in itself, so it
  * calls the actions without an instance.
  */
-export const auth = Id.from({
+export const auth = Accounts.from({
   chainId: chain.id,
   clientId,
   url: tempoIdUrl,
@@ -58,7 +58,7 @@ export const auth = Id.from({
  * The instance that pays MPP endpoints, through each chain's client of {@link on}. The page holds its
  * sign-in itself, so each payment names the page's session, and the instance keeps none.
  */
-export const payments = Id.create({
+export const payments = Accounts.create({
   chainId: chain.id,
   clientId,
   plugins: [viem((chainId) => ({ transport: custom(on(chainId)) })), mpp()],

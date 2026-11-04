@@ -10,7 +10,7 @@ import {
   type Config,
   ChallengeWithoutKeyError,
   RequestError,
-} from '../../Id.js'
+} from '../../Accounts.js'
 import type { Authorization } from '../../Authorization.js'
 import * as AccessKey from '../../internal/accessKey.js'
 import * as Api from '../../internal/api.js'
@@ -28,7 +28,7 @@ const grantType = 'urn:tempo:params:oauth:grant-type:email-code'
  *
  * @example
  * ```ts
- * const auth = Id.create({ clientId, clientSecret, url: 'https://id.tempo.xyz' })
+ * const auth = Accounts.create({ clientId, clientSecret, url: 'https://id.tempo.xyz' })
  * await Actions.backend.email.sendCode(auth, { email, userIp })
  * ```
  */

@@ -6,7 +6,7 @@
  * @module
  */
 /* istanbul ignore file -- Each action needs a browser window, for the popup or the redirect. */
-import type { Config } from '../Id.js'
+import type { Config } from '../Accounts.js'
 import * as Chains from '../internal/chains.js'
 import * as Popup from '../internal/popup.js'
 import type * as Sheet from '../internal/sheet.js'

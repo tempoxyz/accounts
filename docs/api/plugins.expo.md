@@ -7,15 +7,15 @@ The preset of an Expo app, from `accounts/expo`. The preset has an entry of its 
 - One that sets the instance's `store`, the device's secure store from `expo-secure-store`, and its `redirectUri`. The secure store holds the session, with its keys encoded to the characters that it accepts, and each value as ox's `Json`, which keeps a `bigint`.
 - [`redirect`](plugins.redirect.md), whose `signIn` opens Tempo ID's pages in the system browser with `expo-web-browser`, and resolves with the session.
 
-`expo-secure-store`, `expo-web-browser`, and `react-native-get-random-values` are optional peer dependencies of `accounts`, which an Expo app installs. Any React Native app installs `react-native-get-random-values`, since React Native links only the native modules that the app's own `package.json` names. Options that `Id.create` receives win over the preset's.
+`expo-secure-store`, `expo-web-browser`, and `react-native-get-random-values` are optional peer dependencies of `accounts`, which an Expo app installs. Any React Native app installs `react-native-get-random-values`, since React Native links only the native modules that the app's own `package.json` names. Options that `Accounts.create` receives win over the preset's.
 
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { expo } from 'accounts/expo'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: 'client_…',
   plugins: [expo({ redirectUri: 'com.example.app:/callback' })],
 })

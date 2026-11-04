@@ -3,7 +3,7 @@
  * Its client ID is its origin, so it needs no registration.
  * @module
  */
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { viem } from 'accounts/plugins'
 import { react } from 'accounts/react'
 import * as React from 'react'
@@ -17,7 +17,7 @@ import * as Tokens from 'viem/tokens'
 const ousd = Tokens.ousd(tempo.id).address
 
 /** The instance, on Tempo testnet. Each sign-in requests a key that sends up to 100 OUSD for a day. */
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey: () => ({
     expiry: Expiry.days(1),
     limits: [{ limit: parseUnits('100', 6), token: ousd }],

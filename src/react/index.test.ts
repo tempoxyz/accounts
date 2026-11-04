@@ -13,7 +13,7 @@ import {
   waitFor,
 } from 'xstate'
 import { getShortestPaths } from 'xstate/graph'
-import * as Id from '../Id.js'
+import * as Accounts from '../Accounts.js'
 import { machines } from './index.js'
 
 describe('machines.restore', () => {
@@ -319,10 +319,10 @@ describe('machines.restore', () => {
 
   /** Returns a refusal of Tempo ID with `status`, and `reason` when it names one. */
   function refusal(options: {
-    reason?: Id.RequestError.Reason | undefined
+    reason?: Accounts.RequestError.Reason | undefined
     status: number
   }) {
-    return new Id.RequestError({
+    return new Accounts.RequestError({
       code: 'invalid_request',
       message: 'Refused.',
       reason: options.reason,

@@ -11,7 +11,7 @@ npx expo install accounts expo-secure-store expo-web-browser react-native-get-ra
 In React Native, `accounts`, `accounts/plugins`, and `accounts/expo` import `react-native-get-random-values`, so an app installs it as a dependency of its own, with or without Expo. It is a native module, and React Native links only the native modules that the app's own `package.json` names.
 
 ```tsx
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { expo } from 'accounts/expo'
 import { viem } from 'accounts/plugins'
 import { react } from 'accounts/react'
@@ -22,7 +22,7 @@ import * as Tokens from 'viem/tokens'
 
 const ousd = Tokens.ousd(tempo.id).address
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   // The app's access key may transfer up to 100 OUSD for 30 days.
   accessKey: () => ({
     expiry: Expiry.days(30),
@@ -50,13 +50,13 @@ export function App() {
 1. [`redirect.signIn`](../api/plugins.redirect.md#redirectsignin) builds the URL, and the preset shows it in a sheet, such as `ASWebAuthenticationSession` on iOS. The sign-in then redeems the code, and sets the session. It returns `undefined` when the user dismisses the sheet. The access key is a secp256k1 private key, so the secure store holds the session.
 2. [`tempoId.useSession()`](../api/react.react.md) reads the saved session on the first render, as [React](react.md) describes.
 
-[`examples/mobile`](../../examples/mobile/App.tsx) runs this flow, and sends OUSD with the session's access key. A React Native app without Expo uses [`redirect`](../api/plugins.redirect.md) with its own `open`, and a [`store`](../api/Id.from.md) of its own.
+[`examples/mobile`](../../examples/mobile/App.tsx) runs this flow, and sends OUSD with the session's access key. A React Native app without Expo uses [`redirect`](../api/plugins.redirect.md) with its own `open`, and a [`store`](../api/Accounts.from.md) of its own.
 
 ## Recipes
 
 ### Sign out
 
-A native app holds no Tempo ID session cookie, so the request that ends a browser's session ends none for it. [`tempoId.signOut`](../api/Id.create.md#signout) also revokes the saved refresh token at `POST /oauth2/revoke`, and empties the session at once. The sheet's browser keeps its own session.
+A native app holds no Tempo ID session cookie, so the request that ends a browser's session ends none for it. [`tempoId.signOut`](../api/Accounts.create.md#signout) also revokes the saved refresh token at `POST /oauth2/revoke`, and empties the session at once. The sheet's browser keeps its own session.
 
 ```ts
 await tempoId.signOut()

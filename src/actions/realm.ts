@@ -2,7 +2,7 @@
  * Lists the realms that the app reaches.
  * @module
  */
-import type { Config } from '../Id.js'
+import type { Config } from '../Accounts.js'
 import * as Api from '../internal/api.js'
 
 /**

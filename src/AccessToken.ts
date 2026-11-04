@@ -11,7 +11,7 @@ import {
   jwtVerify,
 } from 'jose'
 import { Address } from 'ox'
-import { type Config, RequestError } from './Id.js'
+import { type Config, RequestError } from './Accounts.js'
 
 /** An access token that does not verify, or names an app that the verifier does not allow. */
 export class InvalidError extends Error {
@@ -59,7 +59,7 @@ const refusals = [
  *
  * @example
  * ```ts
- * const verifier = AccessToken.create(Id.from({ clientId: 'tempo-wallet' }))
+ * const verifier = AccessToken.create(Accounts.from({ clientId: 'tempo-wallet' }))
  * const token = await verifier.verify({ accessToken })
  * // { accessKeys: [{ account: '0x…', address: '0x…', chainId: 4217 }], accounts: ['0x…'], clientId: 'tempo-wallet', expiresAt: 1767225600000, scope: ['openid', 'email'], userId: 'user_…' }
  * ```
@@ -139,7 +139,7 @@ export declare namespace create {
     maxAge?: number | undefined
     /**
      * How long a fetch of the key set may take, in milliseconds. A slower fetch throws
-     * `Id.RequestError` with status 0. Defaults to 5 seconds.
+     * `Accounts.RequestError` with status 0. Defaults to 5 seconds.
      */
     timeout?: number | undefined
   }
@@ -150,7 +150,7 @@ export declare namespace create {
      * Verifies an access token: its RS256 signature over the issuer's keys, `typ: at+jwt`, `iss`
      * and `aud` of the issuer, an `exp` that has not passed, and a `client_id` of `clientIds`.
      * @throws {InvalidError} For a token that does not verify, or another app's token.
-     * @throws {Id.RequestError} With status 0, when the key set cannot be fetched or imported, such
+     * @throws {Accounts.RequestError} With status 0, when the key set cannot be fetched or imported, such
      *   as during an issuer outage.
      */
     verify: (options: VerifyOptions) => Promise<Token>

@@ -10,10 +10,10 @@ Starts the device grant ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)) for
 ## Usage
 
 ```ts
-import { Actions, Id } from 'accounts'
+import { Accounts, Actions } from 'accounts'
 import { Expiry, Scopes } from 'viem/tempo'
 
-const config = Id.from({ clientId: 'tempo-cli' })
+const config = Accounts.from({ clientId: 'tempo-cli' })
 // An access key that may transfer up to 100 OUSD for 30 days.
 const accessKey = {
   expiry: Expiry.days(30),
@@ -122,7 +122,7 @@ const device = await Actions.device.authorize(config, {
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses the code request, or by `wait`, with one of these `reason` values, or one of these `code` values from the token endpoint.
 

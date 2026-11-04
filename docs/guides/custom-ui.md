@@ -5,7 +5,7 @@
 A first-party browser app can render its own sign-in form, and call Tempo ID's headless API from the page with the [`email`](../api/plugins.email.md) and [`passkey`](../api/plugins.passkey.md) plugins. The page sends the Tempo ID session cookie, so a user signed in from any app on the site needs no form. Any other app signs in on Tempo ID's pages, as [Redirect sign-in](redirect.md) describes.
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { email } from 'accounts/plugins'
 import { Expiry, Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
@@ -13,7 +13,7 @@ import * as Tokens from 'viem/tokens'
 
 const ousd = Tokens.ousd(tempo.id).address
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   // Each sign-in requests an access key that may transfer up to 10 OUSD for a day.
   accessKey: () => ({
     expiry: Expiry.days(1),
@@ -45,10 +45,10 @@ async function signOut() {
 }
 ```
 
-1. [`tempoId.session.get`](../api/Id.create.md#sessionget) reads the session that the instance saved in IndexedDB. [`tempoId.authorize`](../api/Id.create.md#authorize) returns `undefined` for a visitor without a Tempo ID session.
+1. [`tempoId.session.get`](../api/Accounts.create.md#sessionget) reads the session that the instance saved in IndexedDB. [`tempoId.authorize`](../api/Accounts.create.md#authorize) returns `undefined` for a visitor without a Tempo ID session.
 2. [`email.sendCode`](../api/plugins.email.md#emailsendcode) emails a 6-digit code, with the same response for every address.
 3. [`email.signIn`](../api/plugins.email.md#emailsignin) verifies the code, authorizes the access key, and sets the session with the user's Tempo Account. If the authorization fails, the user is signed in, the error's `signedIn` is `true`, and the instance empties its session.
-4. [`tempoId.signOut`](../api/Id.create.md#signout) empties the session. With `everywhere: true`, it also ends the Tempo ID session.
+4. [`tempoId.signOut`](../api/Accounts.create.md#signout) empties the session. With `everywhere: true`, it also ends the Tempo ID session.
 
 The page's origin must be the origin of one of the app's redirect URIs ([CORS](https://github.com/tempoxyz/id/blob/main/docs/apps.md#app-registry)). No page shows the access key, so its [`accessKey`](access-keys.md) names its limits and scopes, and fits the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling), unless the app holds `tempo-id:sign`. Without `expiry`, Tempo ID fills the [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry). A sign-in with `accessKey: false` signs in without an access key.
 
@@ -61,10 +61,10 @@ The page's origin must be the origin of one of the app's redirect URIs ([CORS](h
 A wallet.tempo passkey without an email returns the email step. The emailed-code sign-in with its `link` asks the passkey to sign again, then links it. An emailed-code sign-in without `link` asks the passkey that owns the account to sign the access key. If that passkey's relying party does not cover the page, either call throws `webauthn_required`, so finish through a redirect.
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { email, passkey, redirect } from 'accounts/plugins'
 
-const tempoId = Id.create({ plugins: [passkey(), email(), redirect()] })
+const tempoId = Accounts.create({ plugins: [passkey(), email(), redirect()] })
 
 const result = await tempoId.passkey.signIn().catch(approveOnPage)
 if (result && 'step' in result) showEmailForm({ link: result.step.link })
@@ -75,7 +75,10 @@ const linked = await tempoId.email
   .catch(approveOnPage)
 
 function approveOnPage(error: unknown) {
-  if (error instanceof Id.RequestError && error.reason === 'webauthn_required')
+  if (
+    error instanceof Accounts.RequestError &&
+    error.reason === 'webauthn_required'
+  )
     return tempoId.redirect.signIn()
   throw error
 }

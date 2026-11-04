@@ -2,7 +2,7 @@
  * Reads the authorization response that Tempo ID adds to a redirect URI.
  * @module
  */
-import { RequestError } from '../Id.js'
+import { RequestError } from '../Accounts.js'
 
 /** Rejects a callback whose final `state` does not match the pending sign-in. */
 export function checkState(url: URL, options: checkState.Options) {

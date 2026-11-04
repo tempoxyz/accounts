@@ -4,8 +4,8 @@
  *
  * @example
  * ```ts
- * import { Id, Plugin } from 'accounts'
- * const tempoId = Id.create({
+ * import { Accounts, Plugin } from 'accounts'
+ * const tempoId = Accounts.create({
  *   accessKey: {
  *     expiry: '1d',
  *     limits: [{ limit: '10', token: 'ousd' }],
@@ -35,7 +35,7 @@ import type * as TempoAccount from './TempoAccount.js'
 
 /** Tempo ID lists no chain with the access key's chain ID, so the client's account signs no message on it. */
 export class ChainUnavailableError extends Error {
-  override readonly name = 'Id.ChainUnavailableError'
+  override readonly name = 'Accounts.ChainUnavailableError'
 
   constructor(options: ChainUnavailableError.Options) {
     super(
@@ -53,7 +53,7 @@ export declare namespace ChainUnavailableError {
 
 /** An action received a `challenge` without `accessKey`. A challenge rides in an access key. */
 export class ChallengeWithoutKeyError extends Error {
-  override readonly name = 'Id.ChallengeWithoutKeyError'
+  override readonly name = 'Accounts.ChallengeWithoutKeyError'
 
   constructor() {
     super(
@@ -62,9 +62,9 @@ export class ChallengeWithoutKeyError extends Error {
   }
 }
 
-/** `Id.create` received no `clientId` outside a browser, where no page's origin can serve as one. */
+/** `Accounts.create` received no `clientId` outside a browser, where no page's origin can serve as one. */
 export class ClientIdRequiredError extends Error {
-  override readonly name = 'Id.ClientIdRequiredError'
+  override readonly name = 'Accounts.ClientIdRequiredError'
 
   constructor() {
     super(
@@ -78,7 +78,7 @@ export class ClientIdRequiredError extends Error {
  * the user's Tempo ID session for.
  */
 export class EverywhereNotAllowedError extends Error {
-  override readonly name = 'Id.EverywhereNotAllowedError'
+  override readonly name = 'Accounts.EverywhereNotAllowedError'
 
   constructor() {
     super(
@@ -92,7 +92,7 @@ export class EverywhereNotAllowedError extends Error {
  * it sends no transaction.
  */
 export class KeyRequiredError extends Error {
-  override readonly name = 'Id.KeyRequiredError'
+  override readonly name = 'Accounts.KeyRequiredError'
 
   constructor() {
     super(
@@ -106,7 +106,7 @@ export class KeyRequiredError extends Error {
  * that arrived twice, or after 10 minutes.
  */
 export class PendingNotFoundError extends Error {
-  override readonly name = 'Id.PendingNotFoundError'
+  override readonly name = 'Accounts.PendingNotFoundError'
 
   constructor() {
     super(
@@ -117,7 +117,7 @@ export class PendingNotFoundError extends Error {
 
 /** A request that Tempo ID refused. */
 export class RequestError extends Error {
-  override readonly name = 'Id.RequestError'
+  override readonly name = 'Accounts.RequestError'
   /** The OAuth error code, such as `invalid_authorization_details`. */
   readonly code: string
   /** The request field at fault, as a dotted path. */
@@ -264,7 +264,7 @@ export declare namespace RequestError {
 
 /** A revocation of an access key that the chain holds revoked already. */
 export class RevokedError extends Error {
-  override readonly name = 'Id.RevokedError'
+  override readonly name = 'Accounts.RevokedError'
 
   constructor(options: RevokedError.Options) {
     super(`The access key ${options.accessKey} is already revoked.`)
@@ -280,7 +280,7 @@ export declare namespace RevokedError {
 
 /** A Viem client's account read while the instance holds no session. */
 export class SignedOutError extends Error {
-  override readonly name = 'Id.SignedOutError'
+  override readonly name = 'Accounts.SignedOutError'
 
   constructor() {
     super("The client's account is signed out. Sign in before sending.")
@@ -292,7 +292,7 @@ export class SignedOutError extends Error {
  * the overtaken result is never returned.
  */
 export class SupersededError extends Error {
-  override readonly name = 'Id.SupersededError'
+  override readonly name = 'Accounts.SupersededError'
 
   constructor() {
     super(
@@ -356,7 +356,7 @@ export type Config = {
  * without a sign-in plugin holds the `dialog` plugin, and an instance without the `funding` plugin
  * holds it with its default options.
  */
-export type Id<
+export type Accounts<
   plugins extends readonly Plugin.Plugin[] = readonly Plugin.Plugin[],
 > = Plugin.Namespaces<WithFunding<WithSignIn<plugins>>> &
   Plugin.Members<plugins> & {
@@ -442,12 +442,12 @@ export type Id<
 
 /**
  * Returns the configuration that every action of `Actions` takes, with its defaults, and no session
- * or plugin. `Id.create` builds its own with it. Throws {@link ClientIdRequiredError} outside a
+ * or plugin. `Accounts.create` builds its own with it. Throws {@link ClientIdRequiredError} outside a
  * browser without `clientId`.
  *
  * @example
  * ```ts
- * const config = Id.from({ clientId: 'client_…', clientSecret })
+ * const config = Accounts.from({ clientId: 'client_…', clientSecret })
  * const tokens = await Actions.refresh(config, { refreshToken })
  * ```
  */
@@ -495,12 +495,12 @@ export declare namespace from {
  *
  * @example
  * ```ts
- * const tempoId = Id.create({ plugins: [dialog()] })
+ * const tempoId = Accounts.create({ plugins: [dialog()] })
  * ```
  */
 export function create<const plugins extends readonly Plugin.Option[] = []>(
   options: create.Options<plugins> = {},
-): Id<Plugin.Flatten<plugins>> {
+): Accounts<Plugin.Flatten<plugins>> {
   const {
     accessKey: accessKey_option,
     plugins: entries = [],
@@ -668,7 +668,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       status: session.status,
       subscribe: session.subscribe,
     },
-    async signOut(parameters: NonNullable<Parameters<Id['signOut']>[0]> = {}) {
+    async signOut(
+      parameters: NonNullable<Parameters<Accounts['signOut']>[0]> = {},
+    ) {
       // Tempo ID refuses the logout from any other app's origin. The check runs first, so a refused
       // call ends no session.
       if (parameters.everywhere && ClientId.thirdParty(config.clientId))
@@ -694,7 +696,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
 
   for (const plugin of plugins) {
     if (!plugin.extend) continue
-    const members = plugin.extend(instance as Id, context) as Record<
+    const members = plugin.extend(instance as Accounts, context) as Record<
       string,
       unknown
     >
@@ -708,7 +710,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     Object.defineProperties(instance, Object.getOwnPropertyDescriptors(members))
   }
 
-  return instance as Id<Plugin.Flatten<plugins>>
+  return instance as Accounts<Plugin.Flatten<plugins>>
 }
 
 export declare namespace create {

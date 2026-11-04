@@ -4,7 +4,7 @@
 
 Returns the sign-in URL and the `pending` state to keep until the callback, for a backend or a native app. A sign-in with `accessKey` requests an access key, and always shows Tempo ID's approval page, even for an app that skips consent. [`Actions.redirect.handleCallback`](Actions.redirect.handleCallback.md) redeems the code that the callback carries.
 
-An instance with a client secret, a client assertion, or [`par`](Id.from.md#par-optional) first pushes the request to `POST /oauth2/par`, as [Pushed authorization requests](https://github.com/tempoxyz/id/blob/main/docs/pushed-authorization-requests.md) describes. The URL then holds only `client_id` and `request_uri`, so no one between the app and Tempo ID can change the access key's limits.
+An instance with a client secret, a client assertion, or [`par`](Accounts.from.md#par-optional) first pushes the request to `POST /oauth2/par`, as [Pushed authorization requests](https://github.com/tempoxyz/id/blob/main/docs/pushed-authorization-requests.md) describes. The URL then holds only `client_id` and `request_uri`, so no one between the app and Tempo ID can change the access key's limits.
 
 ## Usage
 
@@ -113,10 +113,10 @@ const { pending, url } = await Actions.redirect.createUrl(config, {
 
 ## Errors
 
-### `Id.ChallengeWithoutKeyError`
+### `Accounts.ChallengeWithoutKeyError`
 
 Thrown when the call receives `challenge` without `accessKey`. Remove `challenge`, or request an access key.
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when `POST /oauth2/par` refuses a pushed request, with its `reason`: [`invalid_client`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_client), [`rejected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rejected), [`invalid_field`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_field), [`body_too_large`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#body_too_large), [`rate_limited`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rate_limited), or a [key rule](https://github.com/tempoxyz/id/blob/main/docs/errors.md#access-key-rules)'s reason.

@@ -5,7 +5,7 @@
  * @module
  */
 import type { Account } from 'viem/tempo'
-import { type Config, RequestError } from '../Id.js'
+import { type Config, RequestError } from '../Accounts.js'
 import type { Authorization } from '../Authorization.js'
 import type * as Funding from '../Funding.js'
 import * as AccessKey from '../internal/accessKey.js'
@@ -169,7 +169,7 @@ export declare namespace createUrl {
     accessKey?: accessKey
     /**
      * A message whose EIP-191 hash the key authorization binds as its `witness`. Needs the
-     * `tempo-id:sign` scope. Without `accessKey`, the call throws `Id.ChallengeWithoutKeyError`.
+     * `tempo-id:sign` scope. Without `accessKey`, the call throws `Accounts.ChallengeWithoutKeyError`.
      */
     challenge?: ([accessKey] extends [undefined] ? never : string) | undefined
     /**

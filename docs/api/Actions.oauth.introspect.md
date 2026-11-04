@@ -7,9 +7,9 @@ Checks whether a token is active, at `POST /oauth2/introspect` (RFC 7662). Verif
 ## Usage
 
 ```ts
-import { Actions, Id } from 'accounts'
+import { Accounts, Actions } from 'accounts'
 
-const config = Id.from({
+const config = Accounts.from({
   clientId: env.CLIENT_ID,
   clientSecret: env.CLIENT_SECRET,
 })
@@ -87,7 +87,7 @@ const result = await Actions.oauth.introspect(config, {
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when the introspection endpoint refuses the request:
 

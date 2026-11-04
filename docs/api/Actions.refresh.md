@@ -2,7 +2,7 @@
 
 ## Overview
 
-Exchanges a refresh token for new tokens at Tempo ID's token endpoint. Refresh tokens rotate, so store the new one in place of the old. A backend's `clientSecret` authenticates the request, and an instance with a [`dpop`](Id.from.md#dpop-optional) key sends a proof from it.
+Exchanges a refresh token for new tokens at Tempo ID's token endpoint. Refresh tokens rotate, so store the new one in place of the old. A backend's `clientSecret` authenticates the request, and an instance with a [`dpop`](Accounts.from.md#dpop-optional) key sends a proof from it.
 
 Two refreshes with one refresh token within 30 seconds return the same tokens, as [Concurrent refreshes](https://github.com/tempoxyz/id/blob/main/docs/access-tokens.md#concurrent-refreshes) describes. If Tempo ID refuses the refresh with `invalid_grant`, the action sends it once more after one second, so a refresh that overlaps another one returns the other's tokens.
 
@@ -39,7 +39,7 @@ const tokens = await Actions.refresh(config, {
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when the token endpoint refuses the request:
 

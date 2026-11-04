@@ -68,7 +68,7 @@ await Actions.account.signMessage(config, {
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses the request, with one of these `reason` values:
 

@@ -2,16 +2,16 @@
 
 ## Overview
 
-Every request that Tempo ID refuses throws an [`Id.RequestError`](../api/Id.RequestError.md), whose fields an app branches on. A sign-in that fails after Tempo ID signed the user in has `signedIn: true`, and the instance empties its session.
+Every request that Tempo ID refuses throws an [`Accounts.RequestError`](../api/Accounts.RequestError.md), whose fields an app branches on. A sign-in that fails after Tempo ID signed the user in has `signedIn: true`, and the instance empties its session.
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 
 async function verifyCode(address: string, code: string) {
   try {
     return await tempoId.email.signIn({ code, email: address })
   } catch (error) {
-    if (!(error instanceof Id.RequestError)) throw error
+    if (!(error instanceof Accounts.RequestError)) throw error
 
     // 1. Branch on the refusal's `reason`.
     if (error.reason === 'invalid_code')
@@ -29,7 +29,7 @@ async function verifyCode(address: string, code: string) {
 2. `code` is the OAuth error code. `rate_limited` and `upstream_unavailable` share `temporarily_unavailable`.
 3. `message` states the fault and its fix. `field` names the request field at fault, and `meta` holds the values that the refusal compared.
 
-Each API page lists, under Errors, the reasons that its function throws and its own error classes, such as `Id.KeyRequiredError`. [Error classes](../api/errors.md) lists every class.
+Each API page lists, under Errors, the reasons that its function throws and its own error classes, such as `Accounts.KeyRequiredError`. [Error classes](../api/errors.md) lists every class.
 
 ## Recipes
 
@@ -48,7 +48,7 @@ try {
   })
 } catch (error) {
   if (
-    error instanceof Id.RequestError &&
+    error instanceof Accounts.RequestError &&
     error.reason === 'limit_exceeds_maximum'
   )
     showMaximum(error.meta?.maximum)
@@ -57,11 +57,11 @@ try {
 
 ### Ignore an overtaken sign-in
 
-A sign-in that another sign-in or a sign-out overtook throws [`Id.SupersededError`](../api/errors.md#idsupersedederror), such as a second click on a sign-in button. The instance keeps the newer session, so the app renders that one.
+A sign-in that another sign-in or a sign-out overtook throws [`Accounts.SupersededError`](../api/errors.md#accountssupersedederror), such as a second click on a sign-in button. The instance keeps the newer session, so the app renders that one.
 
 ```ts
 await tempoId.dialog.signIn().catch((error: unknown) => {
-  if (error instanceof Id.SupersededError) return
+  if (error instanceof Accounts.SupersededError) return
   throw error
 })
 ```
@@ -69,5 +69,5 @@ await tempoId.dialog.signIn().catch((error: unknown) => {
 ## Learn more
 
 - [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md)
-- [`Id.RequestError`](../api/Id.RequestError.md)
+- [`Accounts.RequestError`](../api/Accounts.RequestError.md)
 - [Error classes](../api/errors.md)

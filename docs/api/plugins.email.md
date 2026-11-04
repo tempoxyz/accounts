@@ -9,10 +9,10 @@ On an instance with `clientSecret` or `clientAssertion`, which only a backend ho
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { email } from 'accounts/plugins'
 
-const tempoId = Id.create({ plugins: [email()] })
+const tempoId = Accounts.create({ plugins: [email()] })
 
 await tempoId.email.sendCode({ email: 'user@example.com' })
 const session = await tempoId.email.signIn({
@@ -39,7 +39,7 @@ await tempoId.email.sendCode({ email: 'user@example.com' })
 
 - **Type:** `(parameters: email.signIn.Parameters) => Promise<Session & { upgradeAvailable: boolean }>`
 
-Signs the user in with the emailed code, sets the instance's [session](types.md#session), and returns it, as [`Actions.email.signIn`](Actions.email.signIn.md) does. With `accessKey`, the session holds an access key. On a page, the session holds the user's Tempo Account from the sign-in's own response, with no request after it. A chain that Tempo ID does not list leaves the account out. `upgradeAvailable` is `true` for a wallet.tempo passkey's account that waits for its [upgrade](Id.create.md#accountupgrade).
+Signs the user in with the emailed code, sets the instance's [session](types.md#session), and returns it, as [`Actions.email.signIn`](Actions.email.signIn.md) does. With `accessKey`, the session holds an access key. On a page, the session holds the user's Tempo Account from the sign-in's own response, with no request after it. A chain that Tempo ID does not list leaves the account out. `upgradeAvailable` is `true` for a wallet.tempo passkey's account that waits for its [upgrade](Accounts.create.md#accountupgrade).
 
 ```ts
 const session = await tempoId.email.signIn({ code, email: address })
@@ -55,7 +55,7 @@ const session = await tempoId.email.signIn({ code, email: address })
 Runs the ceremony of the passkey that a sign-in's `link` names, or of the passkey that owns the account, in place of `navigator.credentials.get`.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [email({ getFn: (options) => Passkeys.get(options) })],
 })
 ```
@@ -137,14 +137,14 @@ const session = await tempoId.email.signIn({
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown for each refusal that [`Actions.email.sendCode`](Actions.email.sendCode.md#errors) and [`Actions.email.signIn`](Actions.email.signIn.md#errors) list, or on a backend, that [`Actions.backend.email.signIn`](Actions.backend.email.signIn.md#errors) lists. A refusal after the sign-in has `signedIn: true`, and empties the session.
 
-### `Id.SupersededError`
+### `Accounts.SupersededError`
 
 Thrown when another sign-in or a sign-out completed while this sign-in was pending.
 
-### `Id.ChallengeWithoutKeyError`
+### `Accounts.ChallengeWithoutKeyError`
 
 Thrown before any request for `challenge` without `accessKey`.

@@ -5,10 +5,10 @@
  */
 export * as AccessKey from './AccessKey.js'
 export * as AccessToken from './AccessToken.js'
+export * as Accounts from './Accounts.js'
 export * as Actions from './Actions.js'
 export * as ClientAssertion from './ClientAssertion.js'
 export * as Dpop from './Dpop.js'
-export * as Id from './Id.js'
 export * as LogoutToken from './LogoutToken.js'
 export * as Permissions from './Permissions.js'
 export * as Plugin from './Plugin.js'

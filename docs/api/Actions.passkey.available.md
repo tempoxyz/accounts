@@ -22,7 +22,7 @@ if (await Actions.passkey.available(config)) showPasskeyButton()
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses the request, with one of these `reason` values:
 

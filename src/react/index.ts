@@ -20,7 +20,7 @@ import {
   stateIn,
   waitFor,
 } from 'xstate'
-import type * as Id from '../Id.js'
+import type * as Accounts from '../Accounts.js'
 import * as ClientId from '../internal/clientId.js'
 import type * as Core from '../internal/core.js'
 import * as Plugin from '../Plugin.js'
@@ -31,7 +31,7 @@ import type * as Session from '../Session.js'
  *
  * @example
  * ```tsx
- * const tempoId = Id.create({ plugins: [react()] })
+ * const tempoId = Accounts.create({ plugins: [react()] })
  *
  * function Account() {
  *   const { isPending, session } = tempoId.useSession()
@@ -43,7 +43,7 @@ import type * as Session from '../Session.js'
  */
 export function react(options: react.Options = {}) {
   return Plugin.from({
-    extend: (instance: Id.Id, context: Plugin.Context) => {
+    extend: (instance: Accounts.Accounts, context: Plugin.Context) => {
       // Only a first-party app's page holds a Tempo ID session that it may read. A third-party app
       // has no CORS grant for it, and a native app holds no browser session.
       const defaulted =
@@ -88,11 +88,11 @@ export function react(options: react.Options = {}) {
                 .get(args.input.reauthorize ? { reauthorize } : {})
                 .catch((error: unknown) => {
                   // A sign-out or a newer sign-in overtook the restore, and the status shows it.
-                  // The class lives in `Id.js`, which this entry does not load, so its name
+                  // The class lives in `Accounts.js`, which this entry does not load, so its name
                   // identifies it.
                   if (
                     error instanceof Error &&
-                    error.name === 'Id.SupersededError'
+                    error.name === 'Accounts.SupersededError'
                   )
                     return undefined
                   throw error
@@ -415,7 +415,7 @@ export namespace machines {
    * error class, so the error's name and fields identify a `RequestError`.
    */
   export function transient(error: unknown) {
-    if (!(error instanceof Error) || error.name !== 'Id.RequestError')
+    if (!(error instanceof Error) || error.name !== 'Accounts.RequestError')
       return true
     const { reason, status } = error as Error & {
       reason?: string | undefined

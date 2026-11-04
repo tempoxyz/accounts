@@ -14,7 +14,7 @@ import type * as Session from '../Session.js'
  *
  * @example
  * ```ts
- * const tempoId = Id.create({ plugins: [email()] })
+ * const tempoId = Accounts.create({ plugins: [email()] })
  *
  * await tempoId.email.sendCode({ email })
  * const session = await tempoId.email.signIn({ code, email })

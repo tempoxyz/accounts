@@ -24,7 +24,7 @@
 - Use static imports. Use dynamic imports only at a real runtime or bundle boundary, such as `Store.file`'s Node modules.
 - Use `import type` and `export type` for type-only imports and exports.
 - Use functions and plain data. Classes are only for errors and framework entrypoints such as Durable Objects.
-- Put error classes at the top of the module, after imports, in alphabetical order. Name them in namespaced form, such as `Id.RequestError`.
+- Put error classes at the top of the module, after imports, in alphabetical order. Name them in namespaced form, such as `Accounts.RequestError`.
 - Use unions or `as const` objects, not enums.
 - Use `camelCase` constants, unless the name mirrors an external protocol.
 - Use `const` generics when callers keep literal or tuple types.
@@ -72,7 +72,7 @@
 - One module is one namespace of types, constants, functions, and errors, read as `Module.operation(...)`.
 - Exported modules sit at the top of `src/`. Everything else goes in `src/internal/`.
 - Prefer stateless functions. Create an instance only for dependencies or lifecycle state, through `Module.create(options)` returning a plain object.
-- `Id.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons.
+- `Accounts.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons.
 - Inject platform capabilities (fetch, storage, clock, `open`) through options. Keep them out of pure modules.
 - Type dependencies by the smallest capability used.
 - Factory operations close over state. Never depend on `this`.
@@ -193,7 +193,7 @@ Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustan
 
 ## Errors
 
-- Each refusal from Tempo ID surfaces as `Id.RequestError`, with its `reason`.
+- Each refusal from Tempo ID surfaces as `Accounts.RequestError`, with its `reason`.
 - Mirror each `reason` of Tempo ID's OpenAPI document in `RequestError.Reason`.
 - List each action's `reason` values in its API page.
 - Write messages as the fault, then the fix. No product or library names.
@@ -236,8 +236,8 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 **Structure**
 
 - `docs/README.md`: overview, install, entries, quick start, and links to every guide and API page.
-- `docs/guides/`: one guide per flow or task, with **Overview**, **Recipes**, and **Learn more**. The Overview opens with one complete numbered example from `Id.create`. Import plugins from `accounts/plugins`.
-- `docs/api/`: one page per function, plugin, or hook, such as `Id.create.md`, `plugins.email.md`, `Actions.email.signIn.md`.
+- `docs/guides/`: one guide per flow or task, with **Overview**, **Recipes**, and **Learn more**. The Overview opens with one complete numbered example from `Accounts.create`. Import plugins from `accounts/plugins`.
+- `docs/api/`: one page per function, plugin, or hook, such as `Accounts.create.md`, `plugins.email.md`, `Actions.email.signIn.md`.
   - Sections: **Overview**, **Usage**, **Return type**, **Parameters**, **Errors**.
   - Each item is a subsection with a **Type** bullet and an optional **Default** bullet. No tables.
   - Parameters use bare names, mark `(optional)`, and end with a `ts` example. Omit `config`.
@@ -293,7 +293,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - If a PR changes the public API, add an **API changes** section before **How to test**. The public API is the exports of `accounts` and its entries.
 - Show each change in its own `ts` fence, as used, not as a `diff`. Follow with one sentence.
 - Mark breaking changes with **Breaking**, with the old shape and migration.
-- End with one `ts` fence that uses the change from `Id.create`.
+- End with one `ts` fence that uses the change from `Accounts.create`.
 
 ## Repository Layout
 

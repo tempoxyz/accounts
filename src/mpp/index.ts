@@ -5,11 +5,11 @@
  *
  * @example
  * ```ts
- * import { Id } from 'accounts'
+ * import { Accounts } from 'accounts'
  * import { mpp } from 'accounts/mpp'
  * import { dialog } from 'accounts/plugins'
  *
- * const tempoId = Id.create({ accessKey, plugins: [dialog(), mpp()] })
+ * const tempoId = Accounts.create({ accessKey, plugins: [dialog(), mpp()] })
  *
  * await tempoId.dialog.signIn()
  * const response = await tempoId.fetch('https://api.example.com/fortune')
@@ -21,7 +21,7 @@ import type { Chain, Client, Transport } from 'viem'
 import { createClient, formatUnits, parseUnits } from 'viem'
 import type { Account } from 'viem/tempo'
 import * as AccessKey from '../AccessKey.js'
-import * as Id from '../Id.js'
+import * as Accounts from '../Accounts.js'
 import * as Plugin from '../Plugin.js'
 import { settings, viem } from '../plugins/viem.js'
 import type * as Session from '../Session.js'
@@ -77,7 +77,7 @@ export declare namespace MaxAmountPrecisionError {
  *
  * @example
  * ```ts
- * const tempoId = Id.create({ accessKey, plugins: [dialog(), mpp()] })
+ * const tempoId = Accounts.create({ accessKey, plugins: [dialog(), mpp()] })
  *
  * const response = await tempoId.fetch('https://api.example.com/fortune')
  *
@@ -90,10 +90,10 @@ export function mpp(options: mpp.Options = {}) {
   const { fetch } = options
   // The context of each instance, by its configuration, since an app can pass one plugin to
   // several instances.
-  const contexts = new WeakMap<Id.Config, Plugin.Context>()
+  const contexts = new WeakMap<Accounts.Config, Plugin.Context>()
 
   return Plugin.from({
-    extend(instance: Id.Id) {
+    extend(instance: Accounts.Accounts) {
       const context = contexts.get(instance.config)!
       const held = (instance as unknown as { viem?: viem.Namespace }).viem
       const namespace = held ?? (viem().actions!(context) as viem.Namespace)
@@ -131,8 +131,8 @@ export function mpp(options: mpp.Options = {}) {
        */
       function payer(overrides: mpp.Overrides) {
         const current = overrides.session ?? context.session.get()
-        if (!current) throw new Id.SignedOutError()
-        if (!current.key) throw new Id.KeyRequiredError()
+        if (!current) throw new Accounts.SignedOutError()
+        if (!current.key) throw new Accounts.KeyRequiredError()
         const maxAmount = overrides.maxAmount ?? options.maxAmount
         const maxDeposit = overrides.maxDeposit ?? options.maxDeposit
         const mode = overrides.mode ?? options.mode
@@ -249,8 +249,8 @@ export declare namespace mpp {
     /**
      * Sends a request, and pays a 402 charge challenge with the access key, then returns the
      * endpoint's response to the paid retry. Without a fixed `session`, it loads the instance's
-     * stored session first. Throws `Id.SignedOutError` without a session, and
-     * `Id.KeyRequiredError` for a session without an access key.
+     * stored session first. Throws `Accounts.SignedOutError` without a session, and
+     * `Accounts.KeyRequiredError` for a session without an access key.
      */
     fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
     /**

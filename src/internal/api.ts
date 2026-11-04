@@ -5,8 +5,8 @@
 import { Address, Base64, PublicKey } from 'ox'
 import type { KeyAuthorization } from 'ox/tempo'
 import { Account } from 'viem/tempo'
-import type * as Id from '../Id.js'
-import { RequestError } from '../Id.js'
+import type * as Accounts from '../Accounts.js'
+import { RequestError } from '../Accounts.js'
 import type { Authorization } from '../Authorization.js'
 import * as Dpop from '../Dpop.js'
 import * as AccessKey from '../AccessKey.js'
@@ -115,7 +115,7 @@ export function error(body: Partial<ErrorBody>, options: { status: number }) {
  * needs, since its CORS response admits any origin without credentials.
  */
 export function post(
-  auth: Id.Config,
+  auth: Accounts.Config,
   path: string,
   options: {
     credentials?: 'include' | 'omit' | undefined
@@ -137,7 +137,7 @@ export function post(
  * every endpoint accepts.
  */
 export async function clientAuthentication(
-  auth: Id.Config,
+  auth: Accounts.Config,
 ): Promise<Record<string, string>> {
   if (auth.clientAssertion)
     return {
@@ -153,7 +153,7 @@ export async function clientAuthentication(
 
 /** Revokes a refresh token at `/oauth2/revoke` (RFC 7009), with the app's client authentication. */
 export async function revoke(
-  auth: Id.Config,
+  auth: Accounts.Config,
   options: { refreshToken: string },
 ): Promise<void> {
   const response = await (auth.fetch ?? fetch)(
@@ -187,7 +187,7 @@ const clientAssertionType =
  * token's own `cnf` decides, so a Bearer token from before the instance held a key still works.
  */
 export async function tokenHeaders(
-  auth: Id.Config,
+  auth: Accounts.Config,
   options: { accessToken: string; method: string; url: string | URL },
 ): Promise<Record<string, string>> {
   const { accessToken, method, url } = options
@@ -217,7 +217,7 @@ export function bound(token: string) {
  * without one.
  */
 export async function dpop(
-  auth: Id.Config,
+  auth: Accounts.Config,
   options: { accessToken?: string | undefined; method: string; path: string },
 ): Promise<Record<string, string>> {
   if (!auth.dpop) return {}
@@ -234,7 +234,7 @@ export async function dpop(
  * Pushes the authorization request `parameters` to `/oauth2/par` (RFC 9126), with any client
  * authentication, and returns the `request_uri` that `/oauth2/authorize` takes in their place.
  */
-export async function par(auth: Id.Config, parameters: URLSearchParams) {
+export async function par(auth: Accounts.Config, parameters: URLSearchParams) {
   const body = new URLSearchParams(parameters)
   for (const [name, value] of Object.entries(await clientAuthentication(auth)))
     body.set(name, value)
@@ -251,7 +251,10 @@ export async function par(auth: Id.Config, parameters: URLSearchParams) {
  * when
  * the instance holds a key.
  */
-export async function token(auth: Id.Config, body: Record<string, string>) {
+export async function token(
+  auth: Accounts.Config,
+  body: Record<string, string>,
+) {
   return json<TokenResponse>(
     await (auth.fetch ?? fetch)(new URL('/oauth2/token', auth.url), {
       body: new URLSearchParams({

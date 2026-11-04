@@ -41,13 +41,13 @@ bun i accounts@alpha viem
 
 ## Usage
 
-Create an instance with `Id.create`, and add a plugin from `accounts/plugins` for each sign-in method. Without a sign-in plugin, users sign in through Tempo ID in a dialog on the page:
+Create an instance with `Accounts.create`, and add a plugin from `accounts/plugins` for each sign-in method. Without a sign-in plugin, users sign in through Tempo ID in a dialog on the page:
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { viem } from 'accounts/plugins'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   // Each sign-in requests an access key that may spend up to 10 OUSD for a day.
   accessKey: {
     expiry: '1d',

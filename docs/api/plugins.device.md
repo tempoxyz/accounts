@@ -9,10 +9,10 @@ The grant always requests an access key. The user approves its limits, so they m
 ## Usage
 
 ```ts
-import { Id, Store } from 'accounts'
+import { Accounts, Store } from 'accounts'
 import { device } from 'accounts/plugins'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey: () => ({
     expiry: Expiry.days(7),
     limits: [{ limit: 100_000_000n, token: ousd }],
@@ -56,7 +56,7 @@ const { user } = await tempoId.device.signIn()
 Shows the user code and the page to approve it on, such as in a terminal.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [device({ onCode: (code) => open(code.verificationUriComplete) })],
 })
 ```
@@ -130,14 +130,14 @@ const session = await tempoId.device.signIn({ funding: { amount: '10' } })
 
 ## Errors
 
-### `Id.KeyRequiredError`
+### `Accounts.KeyRequiredError`
 
 Thrown before any request when neither the call nor the instance names an access key, or when the call passes `accessKey: false`.
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown for each refusal that [`Actions.device.authorize`](Actions.device.authorize.md#errors) lists, such as when the user denies the code, or the code expires.
 
-### `Id.SupersededError`
+### `Accounts.SupersededError`
 
 Thrown when another sign-in or a sign-out completed while this sign-in was pending.

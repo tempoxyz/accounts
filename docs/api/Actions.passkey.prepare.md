@@ -117,4 +117,4 @@ const result = await Actions.passkey.prepare(config, { select: true })
 
 ## Errors
 
-The action throws nothing. The handle's `signIn` throws the errors of [`Actions.passkey.signIn`](Actions.passkey.signIn.md#errors), such as [`passkey_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#passkey_not_permitted) and [`invalid_origin`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_origin), and `Id.ChallengeWithoutKeyError` for a `challenge` without `accessKey`.
+The action throws nothing. The handle's `signIn` throws the errors of [`Actions.passkey.signIn`](Actions.passkey.signIn.md#errors), such as [`passkey_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#passkey_not_permitted) and [`invalid_origin`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_origin), and `Accounts.ChallengeWithoutKeyError` for a `challenge` without `accessKey`.

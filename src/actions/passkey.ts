@@ -11,7 +11,11 @@ import {
   Registration,
   type Types,
 } from 'ox/webauthn'
-import { type Config, ChallengeWithoutKeyError, RequestError } from '../Id.js'
+import {
+  type Config,
+  ChallengeWithoutKeyError,
+  RequestError,
+} from '../Accounts.js'
 import type { Authorization } from '../Authorization.js'
 import type * as AccessKey_public from '../AccessKey.js'
 import type * as AccessKey from '../internal/accessKey.js'

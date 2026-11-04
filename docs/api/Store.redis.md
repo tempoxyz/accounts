@@ -7,12 +7,12 @@ Returns a [`Store`](types.md#store) in Redis. Each value is stored as ox's `Json
 ## Usage
 
 ```ts
-import { Id, Store } from 'accounts'
+import { Accounts, Store } from 'accounts'
 import { backend } from 'accounts/plugins'
 import { createClient } from 'redis'
 
 const redis = await createClient({ url: process.env.REDIS_URL }).connect()
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
   plugins: [backend({ store: Store.redis(redis) })],

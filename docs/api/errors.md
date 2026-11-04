@@ -2,53 +2,53 @@
 
 ## Overview
 
-Each module throws its own error classes beside [`Id.RequestError`](Id.RequestError.md), the error of every refused request. Each class's `name` is its namespaced form, such as `Id.KeyRequiredError`, and its `message` states the fault and the fix. Each API page lists, under Errors, the classes that its function throws.
+Each module throws its own error classes beside [`Accounts.RequestError`](Accounts.RequestError.md), the error of every refused request. Each class's `name` is its namespaced form, such as `Accounts.KeyRequiredError`, and its `message` states the fault and the fix. Each API page lists, under Errors, the classes that its function throws.
 
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 
 const session = await tempoId.email
   .signIn({ code, email: address })
   .catch((error: unknown) => {
     // A newer sign-in or a sign-out completed first, and the instance kept its result.
-    if (error instanceof Id.SupersededError) return undefined
+    if (error instanceof Accounts.SupersededError) return undefined
     throw error
   })
 ```
 
-## Id
+## Accounts
 
-### `Id.ChainUnavailableError`
+### `Accounts.ChainUnavailableError`
 
 Thrown when the account of a [`viem`](plugins.viem.md) client signs a message or typed data on a chain that Tempo ID does not list. Sign in with an access key on a listed chain.
 
-### `Id.ChallengeWithoutKeyError`
+### `Accounts.ChallengeWithoutKeyError`
 
 Thrown before any request when a sign-in receives `challenge` without `accessKey`. A challenge rides in the key authorization, so a sign-in without an access key takes none.
 
-### `Id.ClientIdRequiredError`
+### `Accounts.ClientIdRequiredError`
 
-Thrown by [`Id.create`](Id.create.md) and [`Id.from`](Id.from.md) outside a browser without `clientId`, where no page's origin can serve as one.
+Thrown by [`Accounts.create`](Accounts.create.md) and [`Accounts.from`](Accounts.from.md) outside a browser without `clientId`, where no page's origin can serve as one.
 
-### `Id.EverywhereNotAllowedError`
+### `Accounts.EverywhereNotAllowedError`
 
-Thrown by [`signOut`](Id.create.md#signout) with `everywhere` from an app that is not first-party, such as an app whose client ID is an origin, a metadata document's URL, an `app_` ID, or a `cli:` name. The call signs nothing out. Sign out without `everywhere`.
+Thrown by [`signOut`](Accounts.create.md#signout) with `everywhere` from an app that is not first-party, such as an app whose client ID is an origin, a metadata document's URL, an `app_` ID, or a `cli:` name. The call signs nothing out. Sign out without `everywhere`.
 
-### `Id.KeyRequiredError`
+### `Accounts.KeyRequiredError`
 
 Thrown when a sign-in without an access key cannot serve the call: [`device.signIn`](plugins.device.md) without `accessKey`, since the device grant always requests an access key, a transaction from the account of a [`viem`](plugins.viem.md) client whose session holds no access key, and `tempoId.viem({ session })` for a session without an access key.
 
-### `Id.PendingNotFoundError`
+### `Accounts.PendingNotFoundError`
 
 Thrown by [`backend.complete`](plugins.backend.md#backendcomplete) without a redirect in progress for the session ID, such as for a callback that arrived twice, or more than 10 minutes after `start`. Start the sign-in again.
 
-### `Id.SignedOutError`
+### `Accounts.SignedOutError`
 
 Thrown when the account of a [`viem`](plugins.viem.md) client is read while the instance holds no session, such as by a transaction before the sign-in. Sign in before sending.
 
-### `Id.SupersededError`
+### `Accounts.SupersededError`
 
 Thrown by a sign-in that another sign-in or a sign-out overtook. The instance keeps the newer session, and never returns the overtaken result. A sign-in that a sign-out overtook ends the Tempo ID session that it set again.
 

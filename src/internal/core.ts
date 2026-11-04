@@ -5,7 +5,7 @@
  * @module
  */
 import * as Actions from '../Actions.js'
-import { RequestError, SupersededError } from '../Id.js'
+import { RequestError, SupersededError } from '../Accounts.js'
 import * as AccessKey from '../AccessKey.js'
 import type * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'

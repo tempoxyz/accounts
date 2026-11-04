@@ -40,10 +40,10 @@ describe('Plugin', () => {
     "bundles none of another plugin's modules for an app of %s",
     async (name) => {
       const { entry: included } = await bundle(
-        `import { Id, Store } from '${Path.join(source, 'index.ts')}'
+        `import { Accounts, Store } from '${Path.join(source, 'index.ts')}'
         import { ${name} } from '${Path.join(source, 'plugins', 'index.ts')}'
         import { tempo } from 'viem/tempo/chains'
-        export const tempoId = Id.create({
+        export const tempoId = Accounts.create({
           clientId: 'client_test',
           plugins: [${name}(${options[name] ?? ''})],
         })`,
@@ -76,11 +76,11 @@ describe('Plugin', () => {
 
   test("bundles the default funding plugin with the instance, without the dialog's modules", async () => {
     const { chunks } = await bundle(
-      `import { Id } from '${Path.join(source, 'index.ts')}'
+      `import { Accounts } from '${Path.join(source, 'index.ts')}'
       import { email } from '${Path.join(source, 'plugins/index.ts')}'
-      export const tempoId = Id.create({ clientId: 'client_test', plugins: [email()] })`,
+      export const tempoId = Accounts.create({ clientId: 'client_test', plugins: [email()] })`,
     )
-    const instance = chunks.find((files) => files.includes('Id.ts')) ?? []
+    const instance = chunks.find((files) => files.includes('Accounts.ts')) ?? []
 
     expect(instance).toContain('plugins/funding.ts')
     expect(modules.dialog.filter((file) => instance.includes(file))).toEqual([])
@@ -88,8 +88,8 @@ describe('Plugin', () => {
 
   test('loads the default dialog of an instance without a sign-in plugin from a chunk of its own', async () => {
     const { entry, lazy } = await bundle(
-      `import { Id } from '${Path.join(source, 'index.ts')}'
-      export const tempoId = Id.create({ clientId: 'client_test' })`,
+      `import { Accounts } from '${Path.join(source, 'index.ts')}'
+      export const tempoId = Accounts.create({ clientId: 'client_test' })`,
     )
 
     expect(modules.dialog.filter((file) => entry.includes(file))).toEqual([])

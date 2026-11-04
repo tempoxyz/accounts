@@ -34,7 +34,7 @@ const authorization = await Actions.redirect.complete(config, { accessKey })
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown for a callback with a `code`, with the [errors of `Actions.redirect.handleCallback`](Actions.redirect.handleCallback.md#errors).
 

@@ -5,7 +5,7 @@
 An app with a client secret or a [client assertion key](https://github.com/tempoxyz/id/blob/main/docs/apps.md#client-assertions) runs the sign-in on its server with the [`backend`](../api/plugins.backend.md) plugin. The plugin keeps the tokens and the access key on the server, and the browser holds only an opaque session ID in an `HttpOnly` cookie. No token reaches the browser, so an XSS on the app's pages cannot copy one.
 
 ```ts
-import { Id, Store } from 'accounts'
+import { Accounts, Store } from 'accounts'
 import { backend, viem } from 'accounts/plugins'
 import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
@@ -18,7 +18,7 @@ import * as Tokens from 'viem/tokens'
 const ousd = Tokens.ousd(tempo.id).address
 
 // One instance for the process, so concurrent requests of a session share one refresh.
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   // The app's access key may transfer up to 100 OUSD for 30 days.
   accessKey: () => ({
     expiry: Expiry.days(30),
@@ -114,7 +114,7 @@ sequenceDiagram
 > Serve every request of a session from one instance. A reused refresh token fails with `invalid_grant`, and revokes every refresh token of the app for the user, on every device. Several processes or replicas that share a store need session affinity. On Cloudflare Workers, run sessions in a Durable Object, as [Run sessions in a Durable Object](#run-sessions-in-a-durable-object) describes.
 
 > [!WARNING]
-> Never sign with the default `tempoId.viem` client on a server. The instance holds no session, so its account throws `Id.SignedOutError`. Pass each request's `session` to `tempoId.viem({ session })`.
+> Never sign with the default `tempoId.viem` client on a server. The instance holds no session, so its account throws `Accounts.SignedOutError`. Pass each request's `session` to `tempoId.viem({ session })`.
 
 [`examples/backend`](../../examples/backend/worker.ts) runs this flow in a Worker, and [`playgrounds/backend`](../../playgrounds/backend/app.ts) runs it on Node and in a Durable Object.
 
@@ -136,7 +136,7 @@ const response = await tempoId.backend.fetch({
 })
 
 // In the API.
-const verifier = AccessToken.create(Id.from({ clientId: 'tempo-api' }), {
+const verifier = AccessToken.create(Accounts.from({ clientId: 'tempo-api' }), {
   clientIds: ['tempo-cash', 'tempo-console'],
 })
 const token = await verifier.verify({
@@ -164,7 +164,7 @@ Each one deletes an abandoned sign-in after its `expiresAt`. A store with eventu
 On Cloudflare Workers, each isolate holds its own instance, so two requests of one session can refresh at once. [`DurableObject.sessions`](../api/DurableObject.sessions.md) returns a class with one object for each session ID, which serves every request of that session. Its storage holds the session. The plugin takes the class's binding as `namespace`, so the Worker creates the instance in each request.
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { DurableObject } from 'accounts/cloudflare'
 import { backend } from 'accounts/plugins'
 
@@ -173,7 +173,7 @@ export const SESSIONS = DurableObject.sessions((env: Env) => ({
 }))
 
 function create(env: Env) {
-  return Id.create({
+  return Accounts.create({
     clientId: env.CLIENT_ID,
     clientSecret: env.CLIENT_SECRET,
     plugins: [backend({ namespace: env.SESSIONS })],
@@ -196,14 +196,16 @@ const { id, url } = await tempoId.backend.start({
 
 ### Handle a denied request
 
-`complete` throws an [`Id.RequestError`](../api/Id.RequestError.md) when the state does not match, or the user denied the request. It throws [`Id.PendingNotFoundError`](../api/errors.md#idpendingnotfounderror) without a sign-in in progress for the session ID.
+`complete` throws an [`Accounts.RequestError`](../api/Accounts.RequestError.md) when the state does not match, or the user denied the request. It throws [`Accounts.PendingNotFoundError`](../api/errors.md#accountspendingnotfounderror) without a sign-in in progress for the session ID.
 
 ```ts
 const session = await tempoId.backend
   .complete({ id, url: c.req.url })
   .catch((error: unknown) => error)
-if (session instanceof Id.PendingNotFoundError) return c.redirect('/auth/start')
-if (session instanceof Id.RequestError) return c.text(session.message, 400)
+if (session instanceof Accounts.PendingNotFoundError)
+  return c.redirect('/auth/start')
+if (session instanceof Accounts.RequestError)
+  return c.text(session.message, 400)
 ```
 
 ### Sign in from the app's own UI
@@ -213,7 +215,7 @@ An app with [backend sign-in](https://github.com/tempoxyz/id/blob/main/docs/back
 ```ts
 import { backend, email } from 'accounts/plugins'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey: () => ({
     expiry: Expiry.days(30),
     limits: [{ limit: 100_000_000n, token: ousd }],
@@ -251,9 +253,9 @@ Forward the user's IP address as `userIp`, so rate limits count each user, not t
 An app that registers [public keys](https://github.com/tempoxyz/id/blob/main/docs/apps.md#client-assertions) holds a private key in place of a client secret. The instance signs a new client assertion for each request, so no value that the backend sends authenticates a second request.
 
 ```ts
-import { ClientAssertion, Id } from 'accounts'
+import { Accounts, ClientAssertion } from 'accounts'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientAssertion: ClientAssertion.fromPrivateKey({
     privateKey: JSON.parse(process.env.TEMPO_ID_PRIVATE_KEY!),
   }),
@@ -290,7 +292,8 @@ if (!sealed) return c.redirect('/auth/start')
 const authorization = await Actions.redirect
   .handleCallback(tempoId.config, { pending: sealed, url: c.req.url })
   .catch((error: unknown) => error)
-if (authorization instanceof Id.RequestError) return c.redirect('/auth/start')
+if (authorization instanceof Accounts.RequestError)
+  return c.redirect('/auth/start')
 if (authorization instanceof Error) throw authorization
 const { accessKey, idToken, ...session } = authorization
 await seal(c, 'session', session)
@@ -304,11 +307,11 @@ await seal(c, 'session', session)
 An app with a [back-channel logout URI](https://github.com/tempoxyz/id/blob/main/docs/authentication.md#back-channel-logout) receives a logout token when a session that signed the user in to it ends, such as a sign-out on another app. The backend verifies the token, ends its own sessions that the token names, and responds with 204.
 
 ```ts
-import { Id, LogoutToken } from 'accounts'
+import { Accounts, LogoutToken } from 'accounts'
 import { Hono } from 'hono'
 
 const verifier = LogoutToken.create(
-  Id.from({ clientId: process.env.CLIENT_ID! }),
+  Accounts.from({ clientId: process.env.CLIENT_ID! }),
 )
 
 const app = new Hono().post('/logout', async (c) => {

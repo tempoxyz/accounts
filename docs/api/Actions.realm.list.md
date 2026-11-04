@@ -31,7 +31,7 @@ The realm's display name, such as `Tempo Cash`.
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses the request, with one of these `reason` values:
 

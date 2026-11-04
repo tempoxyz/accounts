@@ -158,13 +158,13 @@ Thrown in `popup` mode when the browser blocks the popup, such as for a call out
 
 Thrown before any popup opens when the redirect URI is not on the page's origin. Call `signIn` on a page of the redirect URI's origin, or sign in through [`Actions.redirect.start`](Actions.redirect.start.md).
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown for a callback with a `code`, with the [errors of `Actions.redirect.handleCallback`](Actions.redirect.handleCallback.md#errors).
 
 Thrown for a callback that denies the sign-in, such as when the user denies the approval page. Its `code` is the callback's `error`, such as `access_denied`, its `message` is the `error_description`, and its `status` is 0.
 
-### `Id.ChallengeWithoutKeyError`
+### `Accounts.ChallengeWithoutKeyError`
 
 Thrown when the call receives `challenge` without `accessKey`. Remove `challenge`, or request an access key.
 

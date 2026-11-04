@@ -25,7 +25,7 @@ export class SignedOutError extends Error {
  *
  * @example
  * ```ts
- * const tempoId = Id.create({ plugins: [funding({ mode: 'redirect' })] })
+ * const tempoId = Accounts.create({ plugins: [funding({ mode: 'redirect' })] })
  *
  * const result = await tempoId.funding.open({ amount: '10' })
  * ```

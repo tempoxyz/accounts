@@ -12,7 +12,7 @@
  * ```
  * @module
  */
-import { Id, Store } from 'accounts'
+import { Accounts, Store } from 'accounts'
 import { device, viem } from 'accounts/plugins'
 import { parseUnits } from 'viem'
 import { Expiry, Scopes } from 'viem/tempo'
@@ -23,7 +23,7 @@ import * as Tokens from 'viem/tokens'
 const ousd = Tokens.ousd(tempo.id).address
 
 /** The instance, on Tempo testnet. An unregistered CLI's key names its limits and scopes. */
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey: () => ({
     expiry: Expiry.days(7),
     limits: [{ limit: parseUnits('100', 6), token: ousd }],

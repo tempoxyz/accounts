@@ -17,9 +17,9 @@ Each fetch of the keys ends within `timeout`. Concurrent verifications share one
 ## Usage
 
 ```ts
-import { AccessToken, Id } from 'accounts'
+import { AccessToken, Accounts } from 'accounts'
 
-const config = Id.from({ clientId: 'tempo-wallet' })
+const config = Accounts.from({ clientId: 'tempo-wallet' })
 const verifier = AccessToken.create(config)
 
 const token = await verifier.verify({ accessToken })
@@ -95,7 +95,7 @@ Tempo ID's public origin, which every token names as `iss` and `aud`. Set it whe
 
 ```ts
 const verifier = AccessToken.create(
-  Id.from({ clientId, url: 'http://id.internal' }),
+  Accounts.from({ clientId, url: 'http://id.internal' }),
   {
     clientIds: ['tempo-wallet'],
     issuer: 'https://id.tempo.xyz',
@@ -122,7 +122,7 @@ const verifier = AccessToken.create(config, {
 - **Type:** `number`
 - **Default:** `5000` (5 seconds)
 
-How long a fetch of the key set may take, in milliseconds, as jose's `timeoutDuration`. A slower fetch throws `Id.RequestError` with status `0`, so a stalled Tempo ID fails the verifications that wait on it instead of holding them.
+How long a fetch of the key set may take, in milliseconds, as jose's `timeoutDuration`. A slower fetch throws `Accounts.RequestError` with status `0`, so a stalled Tempo ID fails the verifications that wait on it instead of holding them.
 
 ```ts
 const verifier = AccessToken.create(config, {
@@ -137,6 +137,6 @@ const verifier = AccessToken.create(config, {
 
 Thrown by `verify` for a token that does not verify, has expired, or names an app outside `clientIds`. Its `cause` holds the failed check, such as jose's `JWTExpired`. Respond with 401.
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown by `verify`, with `status` `0` and `code` `temporarily_unavailable`, when the keys cannot be fetched or imported: a response other than 200, a request without a response, a fetch slower than `timeout`, or a key that does not import. Its `cause` holds jose's error, such as `JWKSTimeout`. Respond with 503, not 401, since the token can still be valid.

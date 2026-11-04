@@ -212,7 +212,7 @@ const { registration } = await Actions.email.signIn(config, {
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses a request, with one of these `reason` values.
 
@@ -229,7 +229,7 @@ After a refusal of a `link`, the code stays valid, so call again without `link`.
 
 #### Authorization request
 
-Tempo ID checks the authorization request before the code, so the code stays valid, and the error's [`signedIn`](Id.RequestError.md#signedin) is `false`.
+Tempo ID checks the authorization request before the code, so the code stays valid, and the error's [`signedIn`](Accounts.RequestError.md#signedin) is `false`.
 
 - [`invalid_origin`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_origin): The request came from an origin other than the redirect URI's.
 - [`rejected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rejected): Tempo ID refused the app or its request.
@@ -239,7 +239,7 @@ Tempo ID checks the authorization request before the code, so the code stays val
 
 #### Authorization
 
-The user is signed in, and the error's [`signedIn`](Id.RequestError.md#signedin) is `true`.
+The user is signed in, and the error's [`signedIn`](Accounts.RequestError.md#signedin) is `true`.
 
 - [`foreign_account`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#foreign_account): The access key names a Tempo Account that is not the user's.
 - [`rejected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rejected): The user holds no Tempo Account, and the app's first realm creates none.
@@ -256,6 +256,6 @@ The user is signed in, and the error's [`signedIn`](Id.RequestError.md#signedin)
 
 Thrown, from `ox/webauthn`, when the ceremony of the passkey that `link` names fails. The code stays valid. A failed ceremony of the passkey step comes after the sign-in, so it throws `webauthn_required` with `signedIn: true` instead, with the ceremony's error as `cause`.
 
-### `Id.ChallengeWithoutKeyError`
+### `Accounts.ChallengeWithoutKeyError`
 
 Thrown before any request when the call receives `challenge` without `accessKey`.

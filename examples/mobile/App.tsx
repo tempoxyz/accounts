@@ -3,7 +3,7 @@
  * secure store, and sends OUSD with the access key of the sign-in.
  * @module
  */
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { expo } from 'accounts/expo'
 import { viem } from 'accounts/plugins'
 import { react } from 'accounts/react'
@@ -22,7 +22,7 @@ const ousd = Tokens.ousd(tempo.id).address
  * Tempo ID's pages in the system browser, which returns to the app's scheme from `app.json`. Each
  * sign-in requests a key that sends up to 100 OUSD for a day.
  */
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey: () => ({
     expiry: Expiry.days(1),
     limits: [{ limit: parseUnits('100', 6), token: ousd }],

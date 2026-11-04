@@ -20,7 +20,7 @@ import { redirect } from './redirect.js'
  * ```ts
  * import { expo } from 'accounts/expo'
  *
- * const tempoId = Id.create({
+ * const tempoId = Accounts.create({
  *   clientId: 'client_…',
  *   plugins: [expo({ redirectUri: 'myapp:/callback' })],
  * })

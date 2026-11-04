@@ -14,9 +14,9 @@ Each fetch of the keys ends within `timeout`. Create one verifier for each Worke
 ## Usage
 
 ```ts
-import { LogoutToken, Id } from 'accounts'
+import { Accounts, LogoutToken } from 'accounts'
 
-const verifier = LogoutToken.create(Id.from({ clientId: 'tempo-wallet' }))
+const verifier = LogoutToken.create(Accounts.from({ clientId: 'tempo-wallet' }))
 
 export async function backchannelLogout(request: Request) {
   const form = await request.formData()
@@ -89,7 +89,7 @@ Tempo ID's public origin, which every token names as `iss`. Set it when the inst
 
 ```ts
 const verifier = LogoutToken.create(
-  Id.from({ clientId, url: 'http://id.internal' }),
+  Accounts.from({ clientId, url: 'http://id.internal' }),
   { issuer: 'https://id.tempo.xyz' },
 )
 ```
@@ -110,7 +110,7 @@ const verifier = LogoutToken.create(config, { maxAge: 60_000 })
 - **Type:** `number`
 - **Default:** `5000` (5 seconds)
 
-How long a fetch of the key set may take, in milliseconds. A slower fetch throws `Id.RequestError` with status `0`.
+How long a fetch of the key set may take, in milliseconds. A slower fetch throws `Accounts.RequestError` with status `0`.
 
 ```ts
 const verifier = LogoutToken.create(config, { timeout: 2_000 })
@@ -122,6 +122,6 @@ const verifier = LogoutToken.create(config, { timeout: 2_000 })
 
 Thrown by `verify` for a token that does not verify, has expired, is no logout token, or names an app outside `clientIds`. Its `cause` holds the failed check, such as jose's `JWTExpired`. Respond with 400, as Back-Channel Logout §2.8 requires.
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown by `verify`, with `status` `0` and `code` `temporarily_unavailable`, when the keys cannot be fetched or imported. Respond with 503, so Tempo ID retries the post once.

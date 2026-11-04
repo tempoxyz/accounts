@@ -7,9 +7,9 @@ Emails the user a 6-digit sign-in code from the app's backend, with `POST /v1/au
 ## Usage
 
 ```ts
-import { Actions, Id } from 'accounts'
+import { Accounts, Actions } from 'accounts'
 
-const config = Id.from({
+const config = Accounts.from({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
 })
@@ -51,7 +51,7 @@ await Actions.backend.email.sendCode(config, {
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses the request, with one of these `reason` values:
 

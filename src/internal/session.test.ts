@@ -1,7 +1,7 @@
 /**
  * Runs the session's machine on its own, with no I/O: the statuses that its events reach, the
  * counters of the race guard, the sign-outs in progress, the writes that it requests, and the pure
- * decisions of the runner. `Id.test.ts` runs the same machine through the instance, against the harness.
+ * decisions of the runner. `Accounts.test.ts` runs the same machine through the instance, against the harness.
  * @module
  */
 import * as Session from '../Session.js'

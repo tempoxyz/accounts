@@ -5,10 +5,10 @@
 An instance holds the [session](../api/types.md#session) of its user: the tokens, the user, the app's access key, and the user's Tempo Account. Each sign-in sets it, and the instance saves it to its `store`, so a reload or a new run restores it. In a browser, the store defaults to IndexedDB. Elsewhere, the instance holds a session only with a `store`, such as [`Store.file`](../api/Store.file.md).
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { dialog } from 'accounts/plugins'
 
-const tempoId = Id.create({ plugins: [dialog()] })
+const tempoId = Accounts.create({ plugins: [dialog()] })
 
 // 1. On every page load, restore the saved session.
 const session = await tempoId.session.get()
@@ -31,10 +31,10 @@ async function signOut() {
 }
 ```
 
-1. [`session.get`](../api/Id.create.md#sessionget) reads the saved session once, completes a redirect's callback with the `redirect` plugin, and returns `undefined` when the saved access key expired.
-2. [`session.subscribe`](../api/Id.create.md#sessionsubscribe) calls its listener with each new session and the one before it. [`session.status`](../api/Id.create.md#sessionstatus) returns the session's [status](../api/types.md#sessionstatus) with `get`, and calls a listener at each change with `subscribe`, such as `reauthorizing` while an authorization renews an expired session. In React, [`tempoId.useSession()`](../api/react.react.md) reads it, as [React](react.md) describes.
-3. [`session.refresh`](../api/Id.create.md#sessionrefresh) exchanges the refresh token for new tokens, saves them, and returns the session. An access key past its expiry needs a new sign-in.
-4. [`signOut`](../api/Id.create.md#signout) empties the session at once, and revokes the refresh token. The user's Tempo ID session and the user's other apps stay signed in. With `everywhere: true`, a first-party app also ends the Tempo ID session for every app that relies on it. Any other app's `everywhere` throws. The access key works until its `expiry`, but the instance forgets it.
+1. [`session.get`](../api/Accounts.create.md#sessionget) reads the saved session once, completes a redirect's callback with the `redirect` plugin, and returns `undefined` when the saved access key expired.
+2. [`session.subscribe`](../api/Accounts.create.md#sessionsubscribe) calls its listener with each new session and the one before it. [`session.status`](../api/Accounts.create.md#sessionstatus) returns the session's [status](../api/types.md#sessionstatus) with `get`, and calls a listener at each change with `subscribe`, such as `reauthorizing` while an authorization renews an expired session. In React, [`tempoId.useSession()`](../api/react.react.md) reads it, as [React](react.md) describes.
+3. [`session.refresh`](../api/Accounts.create.md#sessionrefresh) exchanges the refresh token for new tokens, saves them, and returns the session. An access key past its expiry needs a new sign-in.
+4. [`signOut`](../api/Accounts.create.md#signout) empties the session at once, and revokes the refresh token. The user's Tempo ID session and the user's other apps stay signed in. With `everywhere: true`, a first-party app also ends the Tempo ID session for every app that relies on it. Any other app's `everywhere` throws. The access key works until its `expiry`, but the instance forgets it.
 
 | Field          | Lifetime                                                |
 | -------------- | ------------------------------------------------------- |
@@ -44,7 +44,7 @@ async function signOut() {
 
 After a sign-out with `everywhere`, introspection reports the access tokens inactive. After any other sign-out, the Tempo ID session lives on, so introspection, and an API that verifies them locally, accept them until they expire.
 
-A session belongs to one deployment, one client ID, and one chain, so an instance with another `url`, `clientId`, or `chainId` restores none of it. A sign-in that another sign-in or a sign-out overtakes throws [`Id.SupersededError`](../api/errors.md#idsupersedederror), and the instance keeps the newer session.
+A session belongs to one deployment, one client ID, and one chain, so an instance with another `url`, `clientId`, or `chainId` restores none of it. A sign-in that another sign-in or a sign-out overtakes throws [`Accounts.SupersededError`](../api/errors.md#accountssupersedederror), and the instance keeps the newer session.
 
 ## Recipes
 
@@ -56,9 +56,9 @@ A session belongs to one deployment, one client ID, and one chain, so an instanc
 - **Backend:** an instance holds no session. The [`backend`](../api/plugins.backend.md) plugin keeps one for each user, as [Backends](backend.md) describes.
 
 ```ts
-import { Id, Store } from 'accounts'
+import { Accounts, Store } from 'accounts'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: 'cli:acme-deploy',
   store: Store.file('~/.config/acme-deploy/session.json'),
 })
@@ -94,21 +94,21 @@ const response = await Actions.fetch(tempoId.config, {
 Pass a [`Dpop.create`](../api/Dpop.create.md) key as `dpop`, so each token request sends a [DPoP proof](https://github.com/tempoxyz/id/blob/main/docs/dpop.md), and a stolen token is of no use without the key. Keep the key beside the session, since each refresh needs a proof from the key that bound the tokens. [`Actions.fetch`](../api/Actions.fetch.md) sends the access token with the `DPoP` scheme and a new proof on each request.
 
 ```ts
-import { Dpop, Id } from 'accounts'
+import { Accounts, Dpop } from 'accounts'
 
 const dpop = (await keys.get('dpop')) ?? (await Dpop.create())
 await keys.set('dpop', dpop)
-const tempoId = Id.create({ dpop })
+const tempoId = Accounts.create({ dpop })
 ```
 
 ### Keep the state without an instance
 
-An app that keeps its state itself, such as in a sealed cookie, calls the low-level [`Actions`](../api/Actions.md) with [`Id.from`](../api/Id.from.md). Each sign-in action returns an [`Authorization`](../api/types.md#authorization), and [`Actions.refresh`](../api/Actions.refresh.md) returns new tokens. Refresh tokens rotate, so save the new tokens over the old ones.
+An app that keeps its state itself, such as in a sealed cookie, calls the low-level [`Actions`](../api/Actions.md) with [`Accounts.from`](../api/Accounts.from.md). Each sign-in action returns an [`Authorization`](../api/types.md#authorization), and [`Actions.refresh`](../api/Actions.refresh.md) returns new tokens. Refresh tokens rotate, so save the new tokens over the old ones.
 
 ```ts
-import { Actions, Id } from 'accounts'
+import { Accounts, Actions } from 'accounts'
 
-const config = Id.from({ clientId: 'client_…' })
+const config = Accounts.from({ clientId: 'client_…' })
 const tokens = await Actions.refresh(config, {
   refreshToken: saved.refreshToken!,
 })
@@ -119,5 +119,5 @@ await save({ ...saved, ...tokens })
 
 - [React](react.md)
 - [Access keys](access-keys.md)
-- [`Id.create`](../api/Id.create.md)
+- [`Accounts.create`](../api/Accounts.create.md)
 - [Access tokens](https://github.com/tempoxyz/id/blob/main/docs/access-tokens.md)

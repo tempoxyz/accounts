@@ -9,9 +9,9 @@ The plugin needs a browser page, for the popup or the redirect.
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 
-const tempoId = Id.create({ redirectUri: 'https://app.example/' })
+const tempoId = Accounts.create({ redirectUri: 'https://app.example/' })
 
 button.addEventListener('click', async () => {
   const result = await tempoId.funding.open({ amount: '10', currency: 'USD' })
@@ -55,7 +55,7 @@ Where every `open` opens the deposit page, unless the call passes `mode`.
 ```ts
 import { funding } from 'accounts/plugins'
 
-const tempoId = Id.create({ plugins: [funding({ mode: 'redirect' })] })
+const tempoId = Accounts.create({ plugins: [funding({ mode: 'redirect' })] })
 ```
 
 ### redirectUri (optional)
@@ -66,7 +66,7 @@ const tempoId = Id.create({ plugins: [funding({ mode: 'redirect' })] })
 The registered redirect URI that the deposit page returns to, unless the call passes `redirectUri`.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [funding({ redirectUri: 'https://app.example/wallet' })],
 })
 ```

@@ -3,7 +3,7 @@
  * method. An app bundles only the plugins that it imports.
  * @module
  */
-import type * as Id from './Id.js'
+import type * as Accounts from './Accounts.js'
 import type { Change, ChangeOptions } from './internal/session.js'
 import type { Permissions } from './Permissions.js'
 import type * as Session from './Session.js'
@@ -17,16 +17,18 @@ export type Plugin<
   /** Builds the plugin's namespace on the instance. Absent, the plugin adds no namespace. */
   actions?: ((context: Context) => actions) | undefined
   /**
-   * Returns options of `Id.create` that the plugin sets, such as a platform's `store`. The options
-   * that `Id.create` receives win over them, and a later plugin's win over an earlier one's.
+   * Returns options of `Accounts.create` that the plugin sets, such as a platform's `store`. The options
+   * that `Accounts.create` receives win over them, and a later plugin's win over an earlier one's.
    */
-  config?: (() => Partial<Id.from.Options>) | undefined
+  config?: (() => Partial<Accounts.from.Options>) | undefined
   /**
    * Returns members that the plugin adds to the instance itself, such as React hooks, from the
    * instance that the other plugins and the core build, and the context that its actions receive.
    * A member may not take an existing name.
    */
-  extend?: ((instance: Id.Id, context: Context) => members) | undefined
+  extend?:
+    | ((instance: Accounts.Accounts, context: Context) => members)
+    | undefined
   /** Runs at the points of the instance's lifecycle. */
   hooks?:
     | {
@@ -60,7 +62,7 @@ export type Plugin<
     | undefined
   /** The name of the plugin's namespace on the instance, such as `email`. */
   id: id
-  /** Runs once at `Id.create`, such as to preload a frame. */
+  /** Runs once at `Accounts.create`, such as to preload a frame. */
   setup?: ((context: Context) => void) | undefined
 }
 
@@ -72,7 +74,7 @@ export type Context = {
    */
   accessKey: () => Permissions | undefined
   /** The instance's configuration, which every action of `Actions` takes. */
-  config: Id.Config
+  config: Accounts.Config
   /** The instance's session. */
   session: {
     /**
@@ -159,7 +161,7 @@ type Intersection<union> = [union] extends [never]
     : never
 
 /**
- * An entry of `Id.create`'s `plugins`: a plugin, a list of entries, such as a preset that combines
+ * An entry of `Accounts.create`'s `plugins`: a plugin, a list of entries, such as a preset that combines
  * plugins, or a falsy value, which adds nothing, as `enabled && email()` returns.
  */
 export type Option = Plugin | false | null | undefined | readonly Option[]

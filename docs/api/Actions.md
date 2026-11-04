@@ -2,7 +2,7 @@
 
 ## Overview
 
-`Actions` holds the low-level actions, one for each request or flow of Tempo ID. Each takes the configuration of an instance, `tempoId.config`, or the value of [`Id.from`](Id.from.md) without an instance, then an options object. An action keeps no session. It returns its result, and the app keeps it.
+`Actions` holds the low-level actions, one for each request or flow of Tempo ID. Each takes the configuration of an instance, `tempoId.config`, or the value of [`Accounts.from`](Accounts.from.md) without an instance, then an options object. An action keeps no session. It returns its result, and the app keeps it.
 
 The instance and its plugins call these actions, and keep the session. An app calls them directly when it keeps its state itself, such as a backend that seals the session into a cookie, or for a request that no plugin sends, such as introspection.
 
@@ -43,13 +43,13 @@ The actions without an instance member:
 ## Usage
 
 ```ts
-import { Actions, Id } from 'accounts'
+import { Accounts, Actions } from 'accounts'
 
 // With an instance, the actions take its configuration.
 const active = await Actions.oauth.introspect(tempoId.config, { token })
 
-// Without an instance, `Id.from` returns the configuration.
-const config = Id.from({
+// Without an instance, `Accounts.from` returns the configuration.
+const config = Accounts.from({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
 })
@@ -64,9 +64,9 @@ Each action returns its own result, as its page documents. A sign-in action retu
 
 ### config
 
-- **Type:** [`Id.Config`](types.md#config)
+- **Type:** [`Accounts.Config`](types.md#config)
 
-The configuration: `tempoId.config`, or the value of [`Id.from`](Id.from.md).
+The configuration: `tempoId.config`, or the value of [`Accounts.from`](Accounts.from.md).
 
 ```ts
 await Actions.signOut(tempoId.config)
@@ -84,4 +84,4 @@ await Actions.email.sendCode(config, { email: 'user@example.com' })
 
 ## Errors
 
-Each action throws [`Id.RequestError`](Id.RequestError.md) for each refusal that its page lists. The errors leave out `body_too_large`, `cross_site_request`, and `malformed_body`, which the package's own requests do not cause.
+Each action throws [`Accounts.RequestError`](Accounts.RequestError.md) for each refusal that its page lists. The errors leave out `body_too_large`, `cross_site_request`, and `malformed_body`, which the package's own requests do not cause.

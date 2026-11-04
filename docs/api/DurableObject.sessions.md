@@ -8,7 +8,7 @@ An object's name holds the app's client ID beside the session ID, so one class s
 
 ```mermaid
 flowchart LR
-  W[Worker: Id.create with backend namespace] -->|start, complete, get, save, end| O[Object named by client ID and session ID]
+  W[Worker: Accounts.create with backend namespace] -->|start, complete, get, save, end| O[Object named by client ID and session ID]
   O -->|refresh, revoke| ID[Tempo ID]
   O -->|session, pending redirect| S[(Object storage)]
 ```
@@ -16,7 +16,7 @@ flowchart LR
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { DurableObject } from 'accounts/cloudflare'
 import { backend } from 'accounts/plugins'
 
@@ -31,7 +31,7 @@ export const SESSIONS = DurableObject.sessions((env: Env) => ({
 }))
 
 // In each request of the Worker:
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: env.CLIENT_ID,
   clientSecret: env.CLIENT_SECRET,
   plugins: [backend({ namespace: env.SESSIONS })],
@@ -59,7 +59,7 @@ A Durable Object class, whose objects serve the RPC methods that the `backend` p
 
 ### config
 
-- **Type:** `(env: env, options: { clientId: string }) => Pick<Id.create.Options, 'clientAssertion' | 'clientSecret' | 'dpop' | 'fetch' | 'scope' | 'url'>`
+- **Type:** `(env: env, options: { clientId: string }) => Pick<Accounts.create.Options, 'clientAssertion' | 'clientSecret' | 'dpop' | 'fetch' | 'scope' | 'url'>`
 
 Returns the configuration of the app `clientId` from the Worker's bindings: its client authentication, which only a backend holds, and its URLs. It throws for an app that the Worker does not serve. The object passes `clientId` itself.
 
@@ -74,4 +74,4 @@ export const SESSIONS = DurableObject.sessions(
 
 ## Errors
 
-The objects throw the errors of the [`backend`](plugins.backend.md#errors) plugin's actions, which reach the Worker's call: [`Id.PendingNotFoundError`](errors.md#idpendingnotfounderror) and [`Id.RequestError`](Id.RequestError.md).
+The objects throw the errors of the [`backend`](plugins.backend.md#errors) plugin's actions, which reach the Worker's call: [`Accounts.PendingNotFoundError`](errors.md#accountspendingnotfounderror) and [`Accounts.RequestError`](Accounts.RequestError.md).

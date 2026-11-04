@@ -2,7 +2,7 @@
 
 ## Overview
 
-Returns the user that an access token names, from Tempo ID's UserInfo endpoint (OIDC Core §5.3). Access tokens carry no email, so an API that needs it calls this once per user. An instance with a [`dpop`](Id.from.md#dpop-optional) key sends a DPoP token, one whose `cnf` names a key, with the `DPoP` scheme and a proof over it. It sends a Bearer token as a Bearer token.
+Returns the user that an access token names, from Tempo ID's UserInfo endpoint (OIDC Core §5.3). Access tokens carry no email, so an API that needs it calls this once per user. An instance with a [`dpop`](Accounts.from.md#dpop-optional) key sends a DPoP token, one whose `cnf` names a key, with the `DPoP` scheme and a proof over it. It sends a Bearer token as a Bearer token.
 
 ## Usage
 
@@ -33,7 +33,7 @@ const user = await Actions.oauth.userInfo(config, {
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when the UserInfo endpoint refuses the request:
 

@@ -50,10 +50,10 @@ button.onclick = async () => {
 }
 ```
 
-1. [`tempoId`](../api/wagmi.tempoId.md) takes the options of [`Id.create`](../api/Id.create.md) but `chainId`, and adds the `viem` plugin over the config's `chains` and `transports`. A `viem` plugin in `plugins`, such as `viem({ feeToken })`, sets that plugin's other options. In a browser, the page's origin serves as the client ID.
+1. [`tempoId`](../api/wagmi.tempoId.md) takes the options of [`Accounts.create`](../api/Accounts.create.md) but `chainId`, and adds the `viem` plugin over the config's `chains` and `transports`. A `viem` plugin in `plugins`, such as `viem({ feeToken })`, sets that plugin's other options. In a browser, the page's origin serves as the client ID.
 2. Without a sign-in plugin, the instance holds [`dialog`](../api/plugins.dialog.md), so `connect` runs `dialog.signIn`. Call it in a click handler. The connector's `accessKey` requests the access key.
 3. wagmi's actions use the instance's Viem client. Send tokens with the token actions of `@wagmi/core/tempo`, or the `Hooks.token` hooks of `wagmi/tempo`, not with a hand-built ABI call. The access key attaches its key authorization to the first transaction, which registers the access key.
-4. `disconnect` calls [`tempoId.signOut`](../api/Id.create.md#signout).
+4. `disconnect` calls [`tempoId.signOut`](../api/Accounts.create.md#signout).
 
 ## Recipes
 
@@ -62,12 +62,12 @@ button.onclick = async () => {
 The [`wagmi`](../api/wagmi.wagmi.md) plugin adds `tempoId.wagmi`, a config whose one connector is the app's own instance. The config holds Tempo's chains and the instance's chain, each with the chain and transport of the Viem client's options, with the instance's chain first. The plugin adds the Viem client itself, as `viem()` does, unless `plugins` holds a `viem` plugin, such as one with a `feeToken`. A call returns a config with overrides, as `tempoId.viem` does for a client.
 
 ```tsx
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { passkey, viem } from 'accounts/plugins'
 import { wagmi } from 'accounts/wagmi'
 import { WagmiProvider } from 'wagmi'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey,
   // `viem()` is optional. `wagmi()` adds one with its defaults.
   plugins: [passkey(), viem(), wagmi()],
@@ -124,7 +124,7 @@ A form on the app's own page needs a first-party app, as [Custom sign-in UI](cus
 
 ### Connect without an access key
 
-`accessKey: false` connects without an access key. On a page, the account's owner signs messages and typed data, and a transaction throws [`Id.KeyRequiredError`](../api/errors.md#idkeyrequirederror). `connect` reads the Tempo Account that Tempo ID selects for the app, since a session without an access key holds no address.
+`accessKey: false` connects without an access key. On a page, the account's owner signs messages and typed data, and a transaction throws [`Accounts.KeyRequiredError`](../api/errors.md#accountskeyrequirederror). `connect` reads the Tempo Account that Tempo ID selects for the app, since a session without an access key holds no address.
 
 ```ts
 await connect(config, { accessKey: false, connector })

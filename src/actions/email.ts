@@ -3,7 +3,7 @@
  * @module
  */
 import { Authentication, type Types } from 'ox/webauthn'
-import { type Config, ChallengeWithoutKeyError } from '../Id.js'
+import { type Config, ChallengeWithoutKeyError } from '../Accounts.js'
 import type { Authorization } from '../Authorization.js'
 import * as Api from '../internal/api.js'
 import * as Headless from '../internal/headless.js'

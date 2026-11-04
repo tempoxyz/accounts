@@ -1,5 +1,5 @@
 /** The web playground's Tempo ID instance. @module */
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { mpp } from 'accounts/mpp'
 import { dialog, email, passkey, redirect, viem } from 'accounts/plugins'
 import { http } from 'viem'
@@ -34,7 +34,7 @@ export const tempoIdUrl =
  * hidden with the page, so "Sign in via dialog" shows a ready sign-in. `VITE_PAR`: `true` pushes each
  * authorization request to `/oauth2/par`. `VITE_PRELOAD`: `false` loads the frame only at the click.
  */
-export const tempoId = Id.create({
+export const tempoId = Accounts.create({
   chainId: Chain.chain.id,
   // The app that `scripts/seed.ts` registers. `web-cash` and `web-shared` set their own.
   clientId,

@@ -342,7 +342,7 @@ export declare namespace durableObject {
  *
  * @example
  * ```ts
- * const tempoId = Id.create({ clientSecret, plugins: [backend({ store: Store.memory() })] })
+ * const tempoId = Accounts.create({ clientSecret, plugins: [backend({ store: Store.memory() })] })
  * ```
  */
 export function memory(): Store {

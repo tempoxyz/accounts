@@ -15,12 +15,12 @@ The connector is the [`tempoId`](wagmi.tempoId.md) connector over the app's own 
 ## Usage
 
 ```tsx
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { passkey } from 'accounts/plugins'
 import { wagmi } from 'accounts/wagmi'
 import { WagmiProvider } from 'wagmi'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey,
   plugins: [passkey(), wagmi()],
 })
@@ -77,6 +77,6 @@ wagmi({ connectors: [injected()], ssr: true })
 
 ### `Error`
 
-`Id.create` throws when the instance's `chainId` is not a Tempo chain and the Viem client's options name no `chain` of that ID.
+`Accounts.create` throws when the instance's `chainId` is not a Tempo chain and the Viem client's options name no `chain` of that ID.
 
 The connector throws the errors of [`tempoId`](wagmi.tempoId.md#errors).

@@ -4,7 +4,7 @@
  * session ID in an HttpOnly cookie.
  * @module
  */
-import { Actions, Id } from 'accounts'
+import { Accounts, Actions } from 'accounts'
 import { mpp } from 'accounts/mpp'
 import { type Context, Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
@@ -344,10 +344,10 @@ ${Json.stringify(
             redirectUri: redirectUri(c),
           })
           .catch((error: unknown) => {
-            if (error instanceof Id.RequestError) return error
+            if (error instanceof Accounts.RequestError) return error
             throw error
           })
-        if (started instanceof Id.RequestError)
+        if (started instanceof Accounts.RequestError)
           return c.text('Sign-in failed. Start again.', 400)
 
         setCookie(c, 'backend-pending', started.id, {
@@ -385,8 +385,9 @@ ${Json.stringify(
           })
         // A stale or duplicate callback must not clear a newer sign-in's cookies.
         if (
-          (session instanceof Id.RequestError && session.field === 'state') ||
-          session instanceof Id.PendingNotFoundError
+          (session instanceof Accounts.RequestError &&
+            session.field === 'state') ||
+          session instanceof Accounts.PendingNotFoundError
         )
           return c.text('Sign-in failed. Start again.', 400)
 
@@ -395,7 +396,10 @@ ${Json.stringify(
         // on `code`. The sign-in sets no session, so the page shows the sign-in, or the earlier
         // session that requested a key. A callback without the state, such as a forged link, fails
         // instead.
-        if (session instanceof Id.RequestError && session.field === 'code')
+        if (
+          session instanceof Accounts.RequestError &&
+          session.field === 'code'
+        )
           return c.redirect('/?refused=true', 302)
         if (session instanceof Error)
           return c.text('Sign-in failed. Start again.', 400)
@@ -602,7 +606,7 @@ export function instance(
   options: { backend: backend.Options; clientId: string },
 ) {
   const { TEMPO_RPC_URL } = config(env)
-  return Id.create({
+  return Accounts.create({
     ...settings(env, { clientId: options.clientId }),
     // A local node, or Tempo testnet without a URL.
     chainId: TEMPO_RPC_URL ? tempoLocalnet.id : tempoTestnet.id,

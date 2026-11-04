@@ -18,6 +18,6 @@ await Actions.signOut(config)
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown with [`unexpected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unexpected) when Tempo ID fails. Retry the request.

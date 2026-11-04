@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sends a request with an access token, such as to the app's API. A [DPoP token](https://github.com/tempoxyz/id/blob/main/docs/dpop.md) from an instance with a [`dpop`](Id.from.md#dpop-optional) key goes with `Authorization: DPoP <token>` and a new proof for the request's method and URL. Any other token goes as `Authorization: Bearer <token>`. The request goes through the instance's `fetch`.
+Sends a request with an access token, such as to the app's API. A [DPoP token](https://github.com/tempoxyz/id/blob/main/docs/dpop.md) from an instance with a [`dpop`](Accounts.from.md#dpop-optional) key goes with `Authorization: DPoP <token>` and a new proof for the request's method and URL. Any other token goes as `Authorization: Bearer <token>`. The request goes through the instance's `fetch`.
 
 An API that receives DPoP tokens accepts the `DPoP` scheme, and checks the proof as [Resource requests](https://github.com/tempoxyz/id/blob/main/docs/dpop.md#resource-requests) describes.
 

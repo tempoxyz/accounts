@@ -4,7 +4,7 @@
  * @module
  */
 import { createRemoteJWKSet, customFetch, errors, jwtVerify } from 'jose'
-import { type Config, RequestError } from './Id.js'
+import { type Config, RequestError } from './Accounts.js'
 
 /** A logout token that does not verify, or names an app that the verifier does not allow. */
 export class InvalidError extends Error {
@@ -56,7 +56,7 @@ const refusals = [
  *
  * @example
  * ```ts
- * const verifier = LogoutToken.create(Id.from({ clientId: 'tempo-wallet' }))
+ * const verifier = LogoutToken.create(Accounts.from({ clientId: 'tempo-wallet' }))
  * const form = await request.formData()
  * const token = await verifier.verify({ logoutToken: String(form.get('logout_token')) })
  * // { clientId: 'tempo-wallet', id: 'Xk2…', sessionId: '0f9c…', userId: 'user_…' }
@@ -140,7 +140,7 @@ export declare namespace create {
     maxAge?: number | undefined
     /**
      * How long a fetch of the key set may take, in milliseconds. A slower fetch throws
-     * `Id.RequestError` with status 0. Defaults to 5 seconds.
+     * `Accounts.RequestError` with status 0. Defaults to 5 seconds.
      */
     timeout?: number | undefined
   }
@@ -152,7 +152,7 @@ export declare namespace create {
      * of the issuer, an `aud` of `clientIds`, an `exp` that has not passed, the logout event, a
      * `sid`, a `sub`, a `jti`, and no `nonce`.
      * @throws {InvalidError} For a token that does not verify, or another app's token.
-     * @throws {Id.RequestError} With status 0, when the key set cannot be fetched or imported.
+     * @throws {Accounts.RequestError} With status 0, when the key set cannot be fetched or imported.
      */
     verify: (options: VerifyOptions) => Promise<Token>
   }

@@ -4,7 +4,7 @@
 
 A [wagmi](https://wagmi.sh) connector, from `accounts/wagmi`, whose wallet is a Tempo ID instance. The instance's [session](types.md#session) is the connection: a sign-in connects, and a sign-out disconnects. `@wagmi/core` is an optional peer dependency of `accounts`, so an app with wagmi installs it beside the package.
 
-The connector creates the instance on first use, with [`Id.create`](Id.create.md), from its options and the config's first chain. It adds the [`viem`](plugins.viem.md) plugin over the config's `chains` and `transports`. In a browser, it creates the instance as the config is created, so the dialog's frame preloads.
+The connector creates the instance on first use, with [`Accounts.create`](Accounts.create.md), from its options and the config's first chain. It adds the [`viem`](plugins.viem.md) plugin over the config's `chains` and `transports`. In a browser, it creates the instance as the config is created, so the dialog's frame preloads.
 
 `connect` signs in as the table shows:
 
@@ -13,7 +13,7 @@ The connector creates the instance on first use, with [`Id.create`](Id.create.md
 | Holds a session           | Returns the session's account, with no sign-in | Signs in again             |
 | Holds no session          | Signs in                                       | Signs in                   |
 
-A sign-in runs `signIn`, or the `signIn` of the first plugin of `plugins` that signs in without input: `device`, `dialog`, `passkey`, or `redirect`. An instance without a sign-in plugin holds [`dialog`](plugins.dialog.md). The `email` and `backend` plugins take input, so they need `signIn`. A session without an access key receives the Tempo Account that Tempo ID selects for the app, as [`tempoId.account.get`](Id.create.md#accountget) returns it.
+A sign-in runs `signIn`, or the `signIn` of the first plugin of `plugins` that signs in without input: `device`, `dialog`, `passkey`, or `redirect`. An instance without a sign-in plugin holds [`dialog`](plugins.dialog.md). The `email` and `backend` plugins take input, so they need `signIn`. A session without an access key receives the Tempo Account that Tempo ID selects for the app, as [`tempoId.account.get`](Accounts.create.md#accountget) returns it.
 
 wagmi's actions use the instance's Viem client, so they sign as the [`viem`](plugins.viem.md) plugin does:
 
@@ -22,7 +22,7 @@ wagmi's actions use the instance's Viem client, so they sign as the [`viem`](plu
 | Transactions            | The access key                                                                                                                                               |
 | Messages and typed data | On a page, the account's owner until the chain holds the access key, then the access key. Elsewhere, the access key, and the owner for a session without one |
 
-`disconnect` signs the user out with [`tempoId.signOut`](Id.create.md#signout). A sign-out through the instance itself disconnects wagmi too.
+`disconnect` signs the user out with [`tempoId.signOut`](Accounts.create.md#signout). A sign-out through the instance itself disconnects wagmi too.
 
 ## Usage
 
@@ -61,7 +61,7 @@ await connect(config, { accessKey: false, connector })
 
 ### getInstance
 
-- **Type:** `() => Promise<Id.Id>`
+- **Type:** `() => Promise<Accounts.Accounts>`
 
 Returns the connector's instance, and creates it on the first call. The instance holds the namespace of each plugin, such as `instance.email`, and the `viem` plugin's client.
 
@@ -97,7 +97,7 @@ const signature = await provider.request({
 
 ## Parameters
 
-The connector takes the options of [`Id.create`](Id.create.md) but `chainId` and `dev`, since the config's first chain sets the chain. The connector adds the [`viem`](plugins.viem.md) plugin over the config's `chains` and `transports`. A `viem` plugin in `plugins` gives its other options to that plugin, such as a `feeToken`.
+The connector takes the options of [`Accounts.create`](Accounts.create.md) but `chainId` and `dev`, since the config's first chain sets the chain. The connector adds the [`viem`](plugins.viem.md) plugin over the config's `chains` and `transports`. A `viem` plugin in `plugins` gives its other options to that plugin, such as a `feeToken`.
 
 ```ts
 const connector = tempoId({
@@ -162,8 +162,8 @@ Thrown by `switchChain`, and by `connect` with `chainId`, for a chain other than
 
 Thrown by the provider's `personal_sign`, `eth_signTypedData_v4`, and `eth_sendTransaction` for an address other than the session's account.
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses the sign-in, or the read of the Tempo Account, as each plugin's page lists.
 
-The client's account throws [`Id.KeyRequiredError`](errors.md#idkeyrequirederror) for a transaction of a session without an access key, as [`viem`](plugins.viem.md#errors) lists.
+The client's account throws [`Accounts.KeyRequiredError`](errors.md#accountskeyrequirederror) for a transaction of a session without an access key, as [`viem`](plugins.viem.md#errors) lists.

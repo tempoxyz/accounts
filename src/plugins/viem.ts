@@ -20,8 +20,8 @@ import {
   tempoTestnet,
 } from 'viem/tempo/chains'
 import * as AccessToken from '../AccessToken.js'
-import type * as Id from '../Id.js'
-import { KeyRequiredError } from '../Id.js'
+import type * as Accounts from '../Accounts.js'
+import { KeyRequiredError } from '../Accounts.js'
 import * as Core from '../internal/core.js'
 import * as SignIn from '../internal/signIn.js'
 import * as AccessKey from '../internal/viem/accessKey.js'
@@ -89,7 +89,7 @@ export class RetryClosedError extends Error {
  *
  * @example
  * ```ts
- * const tempoId = Id.create({
+ * const tempoId = Accounts.create({
  *   plugins: [email(), viem()],
  * })
  *
@@ -460,7 +460,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
     // The default client's actions, also on the instance itself. They read the default client,
     // whose account follows the session, so `tempoId.token.transferSync()` sends as
     // `tempoId.viem.token.transferSync()` does.
-    extend: (instance: Id.Id) => {
+    extend: (instance: Accounts.Accounts) => {
       const namespace = (
         instance as unknown as {
           viem: viem.Namespace & { [settings]: viem.Settings }
@@ -565,7 +565,7 @@ export declare namespace viem {
     retry?: RetryOptions | undefined
     /**
      * A fixed session, such as one that `tempoId.backend.get` returns, whose access key signs. A
-     * client of a session without an access key throws `Id.KeyRequiredError`.
+     * client of a session without an access key throws `Accounts.KeyRequiredError`.
      */
     session?: Session.Session | undefined
   }

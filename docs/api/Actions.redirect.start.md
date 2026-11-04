@@ -74,10 +74,10 @@ await Actions.redirect.start(config, {
 
 ## Errors
 
-### `Id.ChallengeWithoutKeyError`
+### `Accounts.ChallengeWithoutKeyError`
 
 Thrown when the call receives `challenge` without `accessKey`. Remove `challenge`, or request an access key.
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown before the navigation when `par` is `true` and `POST /oauth2/par` refuses a pushed request, with its `reason`: [`invalid_client`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_client), [`rejected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rejected), [`invalid_field`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_field), [`body_too_large`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#body_too_large), [`rate_limited`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rate_limited), or a [key rule](https://github.com/tempoxyz/id/blob/main/docs/errors.md#access-key-rules)'s reason.

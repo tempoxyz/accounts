@@ -75,7 +75,7 @@ const account = await Actions.account.get(config, { chainId: 31318, getFn })
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses a request, with one of these `reason` values:
 

@@ -5,9 +5,9 @@
  *
  * @example
  * ```ts
- * import { Dpop, Id } from 'accounts'
+ * import { Accounts, Dpop } from 'accounts'
  *
- * const tempoId = Id.create({ clientId: 'tempo-cli', dpop: await Dpop.create() })
+ * const tempoId = Accounts.create({ clientId: 'tempo-cli', dpop: await Dpop.create() })
  * await tempoId.session.refresh()
  * ```
  * @module
@@ -91,7 +91,7 @@ export function from(value: Dpop): Dpop {
  * @example
  * ```ts
  * const keyPair = await WebCryptoP256.createKeyPair()
- * const auth = Id.create({ clientId: 'client_…', dpop: Dpop.fromKeyPair(keyPair) })
+ * const auth = Accounts.create({ clientId: 'client_…', dpop: Dpop.fromKeyPair(keyPair) })
  * await Actions.email.signIn(auth, { accessKey: Account.fromWebCryptoP256(keyPair), code, email })
  * ```
  */

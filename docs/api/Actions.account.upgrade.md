@@ -2,7 +2,7 @@
 
 ## Overview
 
-Upgrades a wallet.tempo passkey's Tempo Account in place to a configurable account, from the app's page, with no redirect. Call it when a sign-in or `Actions.authorize` returns `upgradeAvailable: true`. An instance's [`tempoId.account.upgrade()`](Id.create.md#accountupgrade) passes the access key of its session, and sets the session's account to the upgraded account. The account keeps its address. The passkey stays its only owner, unless `addOwner` adds the user's Privy wallet in the same transaction. The passkey signs once. The action sends these requests:
+Upgrades a wallet.tempo passkey's Tempo Account in place to a configurable account, from the app's page, with no redirect. Call it when a sign-in or `Actions.authorize` returns `upgradeAvailable: true`. An instance's [`tempoId.account.upgrade()`](Accounts.create.md#accountupgrade) passes the access key of its session, and sets the session's account to the upgraded account. The account keeps its address. The passkey stays its only owner, unless `addOwner` adds the user's Privy wallet in the same transaction. The passkey signs once. The action sends these requests:
 
 1. `POST /v1/account/upgrade` returns the passkey step. With `key`, the step also holds the digest of the access key's registration.
 2. The passkey signs the step's challenge. The access key signs the registration's digest raw, with no prompt.
@@ -110,7 +110,7 @@ await Actions.account.upgrade(config, { key: authorization.key })
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses a request, with one of these `reason` values:
 

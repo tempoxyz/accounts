@@ -16,10 +16,10 @@ A backend's instance holds no session of its own, since it serves many users. Wi
 ## Usage
 
 ```ts
-import { Id, Store } from 'accounts'
+import { Accounts, Store } from 'accounts'
 import { backend } from 'accounts/plugins'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
   plugins: [backend({ store: Store.redis(redis) })],
@@ -119,7 +119,7 @@ The plugin takes one of `store` and `namespace`.
 The Durable Object namespace of [`DurableObject.sessions`](DurableObject.sessions.md), which holds each session in the object that its ID names. The object's name holds the app's client ID beside the session ID, so one class serves several apps.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: env.CLIENT_ID,
   clientSecret: env.CLIENT_SECRET,
   plugins: [backend({ namespace: env.SESSIONS })],
@@ -133,7 +133,7 @@ const tempoId = Id.create({
 Where the sessions and the redirects in progress live, such as [`Store.postgres`](Store.postgres.md) or [`Store.redis`](Store.redis.md). Keys start with `tempo-id:session:` and `tempo-id:pending:`. A pending entry passes `expiresAt` to `setItem`, so the store deletes an abandoned sign-in.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
   plugins: [backend({ store: Store.postgres(pool) })],
@@ -192,10 +192,10 @@ const { id, url } = await tempoId.backend.start({
 
 ## Errors
 
-### `Id.PendingNotFoundError`
+### `Accounts.PendingNotFoundError`
 
 Thrown by `complete` without a redirect in progress for the session ID. This happens for a callback that arrives twice, even at the same time, or more than 10 minutes after `start`. Start the sign-in again.
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown by `complete` for a forged `state` or a refused code, as [`Actions.redirect.handleCallback`](Actions.redirect.handleCallback.md#errors) lists. Thrown by `get` and `fetch` when a refresh fails for a reason other than `invalid_grant`. A refusal with a 4xx status keeps the session for the next request. A failure without a response, or with a 5xx status, ends the session, since Tempo ID may have rotated the refresh token. Thrown by `end` when the revocation fails. The session stays, so a later `end` revokes it again.

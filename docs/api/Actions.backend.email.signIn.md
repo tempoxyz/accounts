@@ -9,10 +9,10 @@ The first sign-in of an address creates the user. Each sign-in, with or without 
 ## Usage
 
 ```ts
-import { Actions, Id } from 'accounts'
+import { Accounts, Actions } from 'accounts'
 import { Expiry, Scopes } from 'viem/tempo'
 
-const config = Id.from({
+const config = Accounts.from({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
 })
@@ -107,11 +107,11 @@ await Actions.backend.email.signIn(config, { code, email, userIp })
 
 ## Errors
 
-### `Id.ChallengeWithoutKeyError`
+### `Accounts.ChallengeWithoutKeyError`
 
 Thrown before any request for `challenge` without `accessKey`.
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses the request, with one of these `reason` values.
 

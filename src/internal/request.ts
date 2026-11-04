@@ -4,7 +4,7 @@
  */
 import { Base64, Bytes, Hash, Hex } from 'ox'
 import type { Account } from 'viem/tempo'
-import { type Config, ChallengeWithoutKeyError } from '../Id.js'
+import { type Config, ChallengeWithoutKeyError } from '../Accounts.js'
 import type * as Funding from '../Funding.js'
 import * as Pending from '../Pending.js'
 import * as Permissions from '../Permissions.js'
@@ -18,7 +18,7 @@ const base64url = { pad: false, url: true } as const
  * Returns the authorization URL, `/oauth2/authorize`, and the `Pending` state to keep until the
  * callback, as `Actions.redirect.createUrl` returns them. If the instance {@link pushes} its
  * requests, the request goes to `/oauth2/par` first, and the URL holds only `client_id` and
- * `request_uri`, with a popup's `display` and `redirect_uri`. Throws `Id.ChallengeWithoutKeyError`
+ * `request_uri`, with a popup's `display` and `redirect_uri`. Throws `Accounts.ChallengeWithoutKeyError`
  * for a challenge without `accessKey`.
  */
 export async function authorizeUrl(

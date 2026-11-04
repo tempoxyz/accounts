@@ -127,7 +127,7 @@ const result = await Actions.passkey.signIn(config, { select: true })
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses a request, with one of these `reason` values.
 
@@ -141,7 +141,7 @@ Thrown when Tempo ID refuses a request, with one of these `reason` values.
 
 #### Authorization
 
-The user is signed in, and the error's [`signedIn`](Id.RequestError.md#signedin) is `true`.
+The user is signed in, and the error's [`signedIn`](Accounts.RequestError.md#signedin) is `true`.
 
 - [`foreign_account`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#foreign_account): The access key names a Tempo Account that is not the user's.
 - [`invalid_origin`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_origin): The request came from an origin other than the redirect URI's.
@@ -162,6 +162,6 @@ The user is signed in, and the error's [`signedIn`](Id.RequestError.md#signedin)
 
 Thrown, from `ox/webauthn`, when the ceremony fails, such as when the user dismisses it.
 
-### `Id.ChallengeWithoutKeyError`
+### `Accounts.ChallengeWithoutKeyError`
 
 Thrown before any request when the call receives `challenge` without `accessKey`.

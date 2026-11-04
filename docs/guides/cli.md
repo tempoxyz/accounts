@@ -5,7 +5,7 @@
 A command-line tool signs in through the device grant ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)) with the [`device`](../api/plugins.device.md) plugin. The user approves a code in any browser, and the CLI polls until they do. No redirect URI or local server is involved. [`Store.file`](../api/Store.file.md) saves the session, so each later run restores it.
 
 ```ts
-import { Id, Store } from 'accounts'
+import { Accounts, Store } from 'accounts'
 import { device, viem } from 'accounts/plugins'
 import { Expiry, Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
@@ -13,7 +13,7 @@ import * as Tokens from 'viem/tokens'
 
 const ousd = Tokens.ousd(tempo.id).address
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   // The CLI's access key may transfer up to 1,000 OUSD for a year.
   accessKey: () => ({
     expiry: Expiry.days(365),
@@ -51,7 +51,7 @@ async function send(to: `0x${string}`, amount: bigint) {
 1. `clientId` names the app, whose realms the sign-in uses. An unregistered CLI sends `cli:` and its name, and the device page shows the name as an unverified app's, as [Unregistered CLIs](https://github.com/tempoxyz/id/blob/main/docs/apps.md#unregistered-clis) describes. Tempo ID's registered `tempo-cli` app serves any CLI, and a CLI for other realms names its own, such as `tempo-cli-cash`.
 2. [`device.signIn`](../api/plugins.device.md#devicesignin) requests a code with the device's name and the access key, and passes it to `onCode`. `accessKey` names `expiry`, `limits`, and `scopes`, which may exceed the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling).
 3. The user opens `verificationUriComplete`, and signs in on the page that shows the code beside the access key's limits, which approves it. The code is 8 consonants in two groups of four, such as `BCDF-GHJK`, and expires after 10 minutes. The sign-in polls at the interval that Tempo ID sets, then sets the session.
-4. The access key is a secp256k1 private key, so the file has mode `0600`. [`session.get`](../api/Id.create.md#sessionget) reads it in each later run, and empties a session whose access key expired.
+4. The access key is a secp256k1 private key, so the file has mode `0600`. [`session.get`](../api/Accounts.create.md#sessionget) reads it in each later run, and empties a session whose access key expired.
 
 [`examples/cli`](../../examples/cli/index.ts) runs this flow with `login`, `whoami`, `send`, and `logout` commands.
 
@@ -59,7 +59,7 @@ async function send(to: `0x${string}`, amount: bigint) {
 
 ### Sign out
 
-[`tempoId.signOut`](../api/Id.create.md#signout) empties the saved session, and revokes its refresh token. The CLI holds no Tempo ID session cookie, so the revocation ends its session.
+[`tempoId.signOut`](../api/Accounts.create.md#signout) empties the saved session, and revokes its refresh token. The CLI holds no Tempo ID session cookie, so the revocation ends its session.
 
 ```ts
 await tempoId.signOut()
@@ -67,11 +67,11 @@ await tempoId.signOut()
 
 ### Handle a denial or an expired code
 
-`device.signIn` throws an [`Id.RequestError`](../api/Id.RequestError.md) when the user denies the code, or it expires.
+`device.signIn` throws an [`Accounts.RequestError`](../api/Accounts.RequestError.md) when the user denies the code, or it expires.
 
 ```ts
 const session = await tempoId.device.signIn().catch((error: unknown) => error)
-if (session instanceof Id.RequestError) console.error(session.message)
+if (session instanceof Accounts.RequestError) console.error(session.message)
 ```
 
 ### Name the device
@@ -123,7 +123,7 @@ const dpop = await (async () => {
   return created
 })()
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: 'tempo-cli',
   dpop,
   plugins: [device({ onCode })],

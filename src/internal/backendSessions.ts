@@ -7,7 +7,7 @@
 import { Base64, Bytes } from 'ox'
 import * as Actions from '../Actions.js'
 import type * as Funding from '../Funding.js'
-import { type Config, PendingNotFoundError, RequestError } from '../Id.js'
+import { type Config, PendingNotFoundError, RequestError } from '../Accounts.js'
 import type * as Pending from '../Pending.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Session from '../Session.js'
@@ -323,13 +323,13 @@ export declare namespace create {
   type ReturnType = {
     /**
      * Redeems the callback of `start` for the session `id`, and stores its tokens and access key. Throws
-     * {@link PendingNotFoundError} without a redirect in progress, and `Id.RequestError` for a
+     * {@link PendingNotFoundError} without a redirect in progress, and `Accounts.RequestError` for a
      * forged `state` or a refused code.
      */
     complete: (options: complete.Options) => Promise<BackendSession>
     /**
      * Revokes the session's refresh token at Tempo ID, then deletes the session. Throws
-     * `Id.RequestError` and keeps the session if the revocation fails.
+     * `Accounts.RequestError` and keeps the session if the revocation fails.
      */
     end: (options: { id: string }) => Promise<void>
     /**

@@ -22,14 +22,14 @@ The access key attaches its key authorization to transactions until the chain re
 ## Usage
 
 ```ts
-import { Id } from '`tempoxyz/id'
-import { email, viem } from '`tempoxyz/id/plugins'
+import { Accounts } from 'accounts'
+import { email, viem } from 'accounts/plugins'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
 const ousd = Tokens.ousd(tempo.id).address
 
-const tempoId = Id.create({ plugins: [email(), viem()] })
+const tempoId = Accounts.create({ plugins: [email(), viem()] })
 
 await tempoId.email.signIn({ code, email: address })
 const { receipt } = await tempoId.token.transferSync({
@@ -47,7 +47,7 @@ const { receipt } = await tempoId.token.transferSync({
 
 - **Type:** `viem.Client & ((overrides?: viem.Overrides) => viem.Client)`
 
-The default client: the instance's chain, its transport, and an account that follows the instance's session. A read of the account while the instance holds no session throws [`Id.SignedOutError`](errors.md#idsignedouterror). Each Viem action of `viem/tempo` is a member, such as `tempoId.token.transferSync`.
+The default client: the instance's chain, its transport, and an account that follows the instance's session. A read of the account while the instance holds no session throws [`Accounts.SignedOutError`](errors.md#accountssignedouterror). Each Viem action of `viem/tempo` is a member, such as `tempoId.token.transferSync`.
 
 A call returns a client with the overrides of [`tempoId.viem(overrides)`](#overrides). A call that names at most `chainId` returns one cached client for each chain.
 
@@ -78,7 +78,7 @@ const { receipt } = await tempoId.accessKey.revokeSync({ accessKey })
 The plugin takes options, or a function that returns the options of a chain by its ID. The options are those of `createClient` from `viem/tempo` but `account`, `chain`, and `testnet`, such as `feeToken` and `transport`, and these. A chain ID is valid when it names a Tempo chain, or when its options name a `chain` of that ID.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [
     viem((chainId) => ({ transport: http(`https://rpc.example/${chainId}`) })),
   ],
@@ -93,7 +93,7 @@ const tempoId = Id.create({
 The options of the verifier that `verifyHash`, `verifyMessage`, and `verifyTypedData` read `accessToken` with, as [`AccessToken.create`](AccessToken.create.md) takes them. Set `issuer` for a backend that reaches Tempo ID at an internal `url`, and `clientIds` for one that accepts the tokens of several apps.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId,
   plugins: [viem({ accessTokens: { issuer: 'https://id.tempo.xyz' } })],
   url: 'http://id.internal',
@@ -108,7 +108,7 @@ const tempoId = Id.create({
 The chain of the options' chain ID, such as one with a `feeToken` or another RPC URL. A chain of another ID does not apply, so the object form names one chain. A chain ID that is not Tempo's needs a `chain`, or a read of its client throws.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   chainId: tempoLocalnet.id,
   plugins: [viem({ chain: tempoLocalnet.extend({ feeToken: pathUsd }) })],
 })
@@ -134,12 +134,12 @@ A retry covers only the actions that send a transaction from the client's accoun
 - Actions that send nothing, such as `estimateGas`, `fillTransaction`, `prepareTransactionRequest`, `simulateContract`, and an action's own `estimateGas` or `simulate`.
 - Calls that name their own `account`, such as the account's root key.
 
-Each screen shows without a click: the deposit page at `/embed/deposit`, and the sign-in at `/embed`. Where only a popup can show it, such as Buy MACH for a hint of `MACH` on Tempo mainnet, on iOS, iPadOS, or for a third-party app, or the sign-in of an app without `tempo-id:iframe` in a browser without IntersectionObserver v2, a dialog offers **Continue**, whose click opens the popup. The new access key keeps the old one's expiry while it is in the future. An expired access key's replacement takes the expiry of the instance's [`accessKey`](Id.create.md), or the one that Tempo ID fills. A sign-in that returns another user or Tempo Account sets no session, and the call rejects with [`Plugins.viem.RetryAccountError`](#pluginsviemretryaccounterror). A fixed `session`, and a client outside a page, never retry. A retry covers the client's own actions, also on a client that `extend` returns, such as `tempoId.token.transferSync()`. It does not cover Viem's standalone actions that take the client.
+Each screen shows without a click: the deposit page at `/embed/deposit`, and the sign-in at `/embed`. Where only a popup can show it, such as Buy MACH for a hint of `MACH` on Tempo mainnet, on iOS, iPadOS, or for a third-party app, or the sign-in of an app without `tempo-id:iframe` in a browser without IntersectionObserver v2, a dialog offers **Continue**, whose click opens the popup. The new access key keeps the old one's expiry while it is in the future. An expired access key's replacement takes the expiry of the instance's [`accessKey`](Accounts.create.md), or the one that Tempo ID fills. A sign-in that returns another user or Tempo Account sets no session, and the call rejects with [`Plugins.viem.RetryAccountError`](#pluginsviemretryaccounterror). A fixed `session`, and a client outside a page, never retry. A retry covers the client's own actions, also on a client that `extend` returns, such as `tempoId.token.transferSync()`. It does not cover Viem's standalone actions that take the client.
 
 `signal` rejects the call with the signal's reason, and closes the screen that the call opened. A call that waits on a screen that another call opened stops its own wait.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [viem({ retry: { limit: false } })],
 })
 ```
@@ -151,7 +151,7 @@ const tempoId = Id.create({
 The URL of the app's relay route, which the [`relay`](plugins.relay.md) plugin serves. The chain's transport then sends each fill, and each raw transaction without its fee payer's signature, to the route, and every other request over `transport`. The relay's fee payer pays the fees of each transaction. In the object form, it applies to the same chain as `transport`, and other chains pay their own fees. A call's `transport` override sends without it.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [dialog(), viem({ relay: '/api/relay' })],
 })
 ```
@@ -164,7 +164,7 @@ const tempoId = Id.create({
 The transport of the chain's clients. In the object form, it applies to the options' `chain`, or to the instance's chain without one, and other chains use `http()`. A function of the plugin returns a transport for each chain. A transport to a sponsor relay, such as the Tempo API's `/rpc/relay`, lets the relay's fee payer pay for each transaction, as [Sponsor fees](../guides/viem.md#sponsor-fees) describes.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [viem({ transport: http('https://rpc.example') })],
 })
 ```
@@ -178,7 +178,7 @@ const tempoId = Id.create({
 - **Type:** `number`
 - **Default:** The instance's `chainId`
 
-The chain ID: a Tempo chain, or one whose options name its `chain`. The session's access key authorizes one chain. On another chain, the client's account keeps the address of the access key's account, `session.key.account`, and a transaction throws `Id.KeyRequiredError`.
+The chain ID: a Tempo chain, or one whose options name its `chain`. The session's access key authorizes one chain. On another chain, the client's account keeps the address of the access key's account, `session.key.account`, and a transaction throws `Accounts.KeyRequiredError`.
 
 Configurable accounts (TIP-1107) are enabled per chain, and they change the account's address:
 
@@ -230,15 +230,15 @@ if (session)
 
 Thrown when `chainId`, or the instance's `chainId`, is not a Tempo chain and its options name no `chain`. Return the chain's definition as `chain`.
 
-### `Id.KeyRequiredError`
+### `Accounts.KeyRequiredError`
 
 Thrown by a transaction of an account whose session holds no access key, and by `tempoId.viem({ session })` for a session without an access key.
 
-### `Id.SignedOutError`
+### `Accounts.SignedOutError`
 
 Thrown when an action reads the account while the instance holds no session.
 
-### `Id.ChainUnavailableError`
+### `Accounts.ChainUnavailableError`
 
 Thrown when the account's owner signs on a chain that Tempo ID does not list.
 
@@ -250,10 +250,10 @@ Thrown by a transaction whose retry signed in for a new access key, when the sig
 
 Thrown by a transaction whose retry the user ended: a close of the deposit page before a deposit, **Continue to** the app without one, or a close of the sign-in for a new access key. Its `kind` is `balance`, `key`, or `limit`, and its `cause` is the transaction's error. The transaction did not send. Send it again to retry.
 
-### `Id.RevokedError`
+### `Accounts.RevokedError`
 
 Thrown by `accessKey.revoke` and `accessKey.revokeSync` without `account` for an access key that the chain holds revoked already.
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses a signature or an access key change, as [`Actions.account.signMessage`](Actions.account.signMessage.md#errors), [`Actions.account.revokeAccessKey`](Actions.account.revokeAccessKey.md#errors), and [`Actions.account.updateAccessKey`](Actions.account.updateAccessKey.md#errors) list.

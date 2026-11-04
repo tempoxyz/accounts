@@ -7,11 +7,11 @@ Returns a [`Store`](types.md#store) in a Postgres table, which it creates on fir
 ## Usage
 
 ```ts
-import { Id, Store } from 'accounts'
+import { Accounts, Store } from 'accounts'
 import { backend } from 'accounts/plugins'
 import { Pool } from 'pg'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
   plugins: [

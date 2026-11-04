@@ -3,7 +3,7 @@
  * class or fields, and no function, such as a `TempoAccount`'s.
  * @module
  */
-import { PendingNotFoundError, RequestError } from '../Id.js'
+import { PendingNotFoundError, RequestError } from '../Accounts.js'
 import type * as Session from '../Session.js'
 import * as TempoAccount from '../TempoAccount.js'
 
@@ -14,8 +14,8 @@ export type Result<value> =
 
 /** A refusal that a method returns in place of throwing it. */
 export type Refusal =
-  | { name: 'Id.PendingNotFoundError' }
-  | { name: 'Id.RequestError'; options: RequestError.Options }
+  | { name: 'Accounts.PendingNotFoundError' }
+  | { name: 'Accounts.RequestError'; options: RequestError.Options }
 
 /** A session as it crosses RPC: its account as `TempoAccount.serialize` writes it. */
 export type Wire<session extends { account?: unknown }> = Omit<
@@ -34,11 +34,11 @@ export async function wrap<value>(
     return { ok: true, value: await fn() }
   } catch (error) {
     if (error instanceof PendingNotFoundError)
-      return { error: { name: 'Id.PendingNotFoundError' }, ok: false }
+      return { error: { name: 'Accounts.PendingNotFoundError' }, ok: false }
     if (error instanceof RequestError)
       return {
         error: {
-          name: 'Id.RequestError',
+          name: 'Accounts.RequestError',
           options: {
             code: error.code,
             field: error.field,
@@ -59,7 +59,7 @@ export async function wrap<value>(
 /** Returns a result's value, or throws its refusal as its class. */
 export function unwrap<value>(result: Result<value>): value {
   if (result.ok) return result.value
-  if (result.error.name === 'Id.RequestError')
+  if (result.error.name === 'Accounts.RequestError')
     throw new RequestError(result.error.options)
   throw new PendingNotFoundError()
 }

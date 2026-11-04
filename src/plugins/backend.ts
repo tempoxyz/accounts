@@ -24,7 +24,7 @@ import type { Store } from '../Store.js'
  *
  * @example
  * ```ts
- * const tempoId = Id.create({
+ * const tempoId = Accounts.create({
  *   clientId,
  *   clientSecret,
  *   plugins: [email(), backend({ store: Store.redis(redis) })],
@@ -46,7 +46,7 @@ export function backend(options: backend.Options) {
       return {
         /**
          * Redeems the callback of `start` for the session `id`, and stores the session. Throws
-         * `Id.PendingNotFoundError` without a redirect in progress.
+         * `Accounts.PendingNotFoundError` without a redirect in progress.
          */
         complete: (
           parameters: backend.complete.Parameters,
@@ -54,7 +54,7 @@ export function backend(options: backend.Options) {
           sessions.complete(parameters),
         /**
          * Revokes the session's refresh token at Tempo ID, then deletes the session. Throws
-         * `Id.RequestError`, and keeps the session, when the revocation fails.
+         * `Accounts.RequestError`, and keeps the session, when the revocation fails.
          */
         end: (parameters: { id: string }): Promise<void> =>
           sessions.end(parameters),

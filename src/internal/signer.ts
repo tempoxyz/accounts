@@ -20,7 +20,7 @@ import {
   KeyRequiredError,
   RequestError,
   SignedOutError,
-} from '../Id.js'
+} from '../Accounts.js'
 import * as AccessKey from '../AccessKey.js'
 import type * as Session from '../Session.js'
 import type * as TempoAccount from '../TempoAccount.js'
@@ -30,7 +30,7 @@ import type * as TempoAccount from '../TempoAccount.js'
  * and `signer` decides who signs messages and typed data. The account's owner signs them as the
  * cloud wallet through Tempo ID, or as the account's passkey. A session without an access key, or
  * with an access key of another chain, signs only through its owner, and a transaction throws
- * `Id.KeyRequiredError`. Returns `undefined` for a session without an access key that can sign
+ * `Accounts.KeyRequiredError`. Returns `undefined` for a session without an access key that can sign
  * nothing.
  */
 export function fromSession(
@@ -108,7 +108,7 @@ export declare namespace fromSession {
 
 /**
  * Returns an account that reads through to `get()` at each use, so it follows a session that changes.
- * While `get()` returns `undefined`, a read throws `Id.SignedOutError`.
+ * While `get()` returns `undefined`, a read throws `Accounts.SignedOutError`.
  */
 export function live(get: () => LocalAccount | undefined): LocalAccount {
   // Viem reads a client's account when an action runs, through property reads, `in` checks, and
@@ -194,7 +194,7 @@ function ownerSigners(
 /**
  * Returns signers that read the session's account at the first signature, and then sign as
  * `ownerSigners` does for it. A failed read throws, and the next signature reads again. When no
- * owner signs alone, the access key signs, or a signature throws `Id.KeyRequiredError` without one.
+ * owner signs alone, the access key signs, or a signature throws `Accounts.KeyRequiredError` without one.
  */
 function deferred(
   config: Config,
@@ -300,7 +300,7 @@ function untilRegistered(options: {
 
 /**
  * Returns signers that sign as the account `address` on the chain `chainId` with the user's cloud
- * wallet, through Tempo ID. A chain that Tempo ID does not list throws `Id.ChainUnavailableError`, so
+ * wallet, through Tempo ID. A chain that Tempo ID does not list throws `Accounts.ChainUnavailableError`, so
  * a signature never falls back to another chain's configuration.
  */
 function tempoId(

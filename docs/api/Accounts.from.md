@@ -1,17 +1,17 @@
-# Id.from
+# Accounts.from
 
 ## Overview
 
-Returns the configuration that every low-level action of [`Actions`](Actions.md) takes, with its defaults, and no session or plugin. [`Id.create`](Id.create.md) builds its own with it, as `tempoId.config`. An app that keeps its state itself, such as a backend that seals the session into a cookie, calls the actions with this value and no instance.
+Returns the configuration that every low-level action of [`Actions`](Actions.md) takes, with its defaults, and no session or plugin. [`Accounts.create`](Accounts.create.md) builds its own with it, as `tempoId.config`. An app that keeps its state itself, such as a backend that seals the session into a cookie, calls the actions with this value and no instance.
 
 The scope always holds `openid` and `email`, since every authorization reads the user from the ID token.
 
 ## Usage
 
 ```ts
-import { Actions, Id } from 'accounts'
+import { Accounts, Actions } from 'accounts'
 
-const config = Id.from({
+const config = Accounts.from({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
 })
@@ -20,7 +20,7 @@ const tokens = await Actions.refresh(config, { refreshToken })
 
 ## Return type
 
-[`Id.Config`](types.md#config)
+[`Accounts.Config`](types.md#config)
 
 The configuration, with `chainId`, `clientId`, `scope`, and `url` filled in.
 
@@ -36,7 +36,7 @@ The chain that the app's access keys act on, unless a sign-in's `accessKey.chain
 ```ts
 import { tempoTestnet } from 'viem/tempo/chains'
 
-const config = Id.from({ chainId: tempoTestnet.id })
+const config = Accounts.from({ chainId: tempoTestnet.id })
 ```
 
 ### clientAssertion (optional)
@@ -46,7 +46,7 @@ const config = Id.from({ chainId: tempoTestnet.id })
 Signs a new [client assertion](https://github.com/tempoxyz/id/blob/main/docs/apps.md#client-assertions) for each request that authenticates the app, for an app with `private_key_jwt`. Only a backend holds one. Leave out `clientSecret` with it.
 
 ```ts
-const config = Id.from({
+const config = Accounts.from({
   clientAssertion: ClientAssertion.fromPrivateKey({ privateKey: jwk }),
   clientId: env.CLIENT_ID,
 })
@@ -69,7 +69,7 @@ The app's client ID. It is one of these:
 Outside a browser, the call needs it.
 
 ```ts
-const config = Id.from({ clientId: 'client_…' })
+const config = Accounts.from({ clientId: 'client_…' })
 ```
 
 ### clientSecret (optional)
@@ -79,7 +79,7 @@ const config = Id.from({ clientId: 'client_…' })
 The app's client secret, which each request that authenticates the app sends. Only a backend holds one.
 
 ```ts
-const config = Id.from({
+const config = Accounts.from({
   clientId: env.CLIENT_ID,
   clientSecret: env.CLIENT_SECRET,
 })
@@ -93,7 +93,7 @@ const config = Id.from({
 Whether the app's access keys act on Tempo testnet, unless `chainId` names another chain.
 
 ```ts
-const config = Id.from({ dev: true })
+const config = Accounts.from({ dev: true })
 ```
 
 ### dpop (optional)
@@ -103,7 +103,10 @@ const config = Id.from({ dev: true })
 The key that binds the app's tokens ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449)). Each token request sends a proof from it, and Tempo ID issues `DPoP` tokens. Without it, the tokens are Bearer tokens, and an app with [`dpop`](https://github.com/tempoxyz/id/blob/main/docs/dpop.md#required-proofs) cannot redeem a code.
 
 ```ts
-const config = Id.from({ clientId: 'tempo-cli', dpop: await Dpop.create() })
+const config = Accounts.from({
+  clientId: 'tempo-cli',
+  dpop: await Dpop.create(),
+})
 ```
 
 ### fetch (optional)
@@ -114,7 +117,7 @@ const config = Id.from({ clientId: 'tempo-cli', dpop: await Dpop.create() })
 Calls Tempo ID.
 
 ```ts
-const config = Id.from({ fetch: loggedFetch })
+const config = Accounts.from({ fetch: loggedFetch })
 ```
 
 ### par (optional)
@@ -122,10 +125,10 @@ const config = Id.from({ fetch: loggedFetch })
 - **Type:** `boolean`
 - **Default:** `true` with `clientSecret` or `clientAssertion`, and `false` otherwise
 
-Whether a redirect or a dialog pushes each authorization request to `POST /oauth2/par` ([RFC 9126](https://www.rfc-editor.org/rfc/rfc9126)), so the browser's URL holds only `client_id` and `request_uri`. [`Actions.dialog.signIn`](Actions.dialog.signIn.md) pushes it too, and then signs in with a popup. An app that [requires pushed requests](https://github.com/tempoxyz/id/blob/main/docs/pushed-authorization-requests.md#required-pushed-requests) sets it, or holds a client secret or a client assertion. [`Id.create`](Id.create.md) takes no `par`. The [`dialog`](plugins.dialog.md#par-optional) and [`redirect`](plugins.redirect.md#par-optional) plugins take it instead.
+Whether a redirect or a dialog pushes each authorization request to `POST /oauth2/par` ([RFC 9126](https://www.rfc-editor.org/rfc/rfc9126)), so the browser's URL holds only `client_id` and `request_uri`. [`Actions.dialog.signIn`](Actions.dialog.signIn.md) pushes it too, and then signs in with a popup. An app that [requires pushed requests](https://github.com/tempoxyz/id/blob/main/docs/pushed-authorization-requests.md#required-pushed-requests) sets it, or holds a client secret or a client assertion. [`Accounts.create`](Accounts.create.md) takes no `par`. The [`dialog`](plugins.dialog.md#par-optional) and [`redirect`](plugins.redirect.md#par-optional) plugins take it instead.
 
 ```ts
-const config = Id.from({ clientId: 'client_…', par: true })
+const config = Accounts.from({ clientId: 'client_…', par: true })
 ```
 
 ### redirectUri (optional)
@@ -136,7 +139,7 @@ const config = Id.from({ clientId: 'client_…', par: true })
 Where Tempo ID redirects back to, such as a mobile app's custom scheme. Register it with the app first.
 
 ```ts
-const config = Id.from({
+const config = Accounts.from({
   clientId: 'client_…',
   redirectUri: 'com.example.app:/callback',
 })
@@ -150,7 +153,7 @@ const config = Id.from({
 The space-separated scopes of the app's tokens beyond `openid` and `email`.
 
 ```ts
-const config = Id.from({ scope: 'offline_access profile' })
+const config = Accounts.from({ scope: 'offline_access profile' })
 ```
 
 ### store (optional)
@@ -161,7 +164,7 @@ const config = Id.from({ scope: 'offline_access profile' })
 Where an instance keeps its session, and where a redirect or a popup keeps its state until Tempo ID redirects back. It must store values without serializing them, since a browser access key is a non-extractable `CryptoKey`. With the default, [`Actions.redirect.start`](Actions.redirect.start.md) also keeps the PKCE verifier, without the access key, in the tab's `sessionStorage`. A custom `store` holds the whole state alone.
 
 ```ts
-const config = Id.from({
+const config = Accounts.from({
   clientId: 'client_…',
   store: Store.from({ getItem, removeItem, setItem }),
 })
@@ -175,11 +178,11 @@ const config = Id.from({
 Where Tempo ID runs, such as a self-hosted deployment. The actions call its JSON API under `/v1` and its OAuth endpoints under `/oauth2`.
 
 ```ts
-const config = Id.from({ url: 'https://id.example.com' })
+const config = Accounts.from({ url: 'https://id.example.com' })
 ```
 
 ## Errors
 
-### `Id.ClientIdRequiredError`
+### `Accounts.ClientIdRequiredError`
 
 Thrown outside a browser without `clientId`, where no page's origin can serve as one.

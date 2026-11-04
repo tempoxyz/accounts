@@ -4,7 +4,7 @@
  * @module
  */
 import type { Types } from 'ox/webauthn'
-import type { Config } from '../Id.js'
+import type { Config } from '../Accounts.js'
 import * as Api from './api.js'
 
 /** The options of a registration, which one registration uses. */

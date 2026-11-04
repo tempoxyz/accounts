@@ -123,7 +123,7 @@ await Actions.passkey.register(config, {
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses a request, with one of these `reason` values:
 

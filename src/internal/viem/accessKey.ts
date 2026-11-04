@@ -16,7 +16,7 @@ import type {
 } from 'viem'
 import { Actions as ViemActions } from 'viem/tempo'
 import * as Actions from '../../Actions.js'
-import { type Config, RevokedError, SignedOutError } from '../../Id.js'
+import { type Config, RevokedError, SignedOutError } from '../../Accounts.js'
 
 /** A revocation of an access key that the chain holds revoked already, which sends no transaction. */
 /**
@@ -192,7 +192,7 @@ async function updateLimit_remote(
   })
 }
 
-/** Returns the client's account address. Throws `Id.SignedOutError` while signed out. */
+/** Returns the client's account address. Throws `Accounts.SignedOutError` while signed out. */
 function account(client: Client<Transport, Chain, Account>) {
   const { address } = client.account
   if (!address) throw new SignedOutError()

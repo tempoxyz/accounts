@@ -3,7 +3,7 @@
  * @module
  */
 import { Base64 } from 'ox'
-import { type Config, RequestError } from '../Id.js'
+import { type Config, RequestError } from '../Accounts.js'
 import type { Authorization } from '../Authorization.js'
 import type * as Funding from '../Funding.js'
 import * as AccessKey from '../internal/accessKey.js'
@@ -20,7 +20,7 @@ import type { WithAccount } from '../Permissions.js'
  *
  * @example
  * ```ts
- * const auth = Id.create({ clientId: 'tempo-cli' })
+ * const auth = Accounts.create({ clientId: 'tempo-cli' })
  * const device = await Actions.device.authorize(auth, {
  *   accessKey: {
  *     expiry: Expiry.days(1),

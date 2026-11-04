@@ -5,14 +5,14 @@
 An access key is a key that the app holds, which acts for the user's Tempo Account within its limits until it expires. Each sign-in with `accessKey` authorizes one, and the session holds it as `key`. The [`viem`](../api/plugins.viem.md) plugin's client signs transactions with it.
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { dialog, viem } from 'accounts/plugins'
 import { tempo } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
 
 const ousd = Tokens.ousd(tempo.id).address
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   // 1. Each sign-in requests an access key that may spend up to 10 OUSD for a day.
   accessKey: {
     expiry: '1d',
@@ -121,7 +121,7 @@ button.onclick = async () => {
     .authorize({ passkey: true })
     .catch((error: unknown) => {
       if (
-        error instanceof Id.RequestError &&
+        error instanceof Accounts.RequestError &&
         error.reason === 'webauthn_required'
       )
         return tempoId.dialog.signIn()
@@ -132,7 +132,7 @@ button.onclick = async () => {
 
 ### Bind a challenge to the access key's signature
 
-An app with the `tempo-id:sign` scope can pass a [challenge](https://github.com/tempoxyz/id/blob/main/docs/challenges.md), such as a sign-in message from its backend. Tempo ID binds its hash as the key authorization's witness, so the owner's signature proves the Tempo Account to the backend. A sign-in without `accessKey` takes no challenge, and throws [`Id.ChallengeWithoutKeyError`](../api/errors.md#idchallengewithoutkeyerror).
+An app with the `tempo-id:sign` scope can pass a [challenge](https://github.com/tempoxyz/id/blob/main/docs/challenges.md), such as a sign-in message from its backend. Tempo ID binds its hash as the key authorization's witness, so the owner's signature proves the Tempo Account to the backend. A sign-in without `accessKey` takes no challenge, and throws [`Accounts.ChallengeWithoutKeyError`](../api/errors.md#accountschallengewithoutkeyerror).
 
 ```ts
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'

@@ -1,4 +1,4 @@
-# Id.create
+# Accounts.create
 
 ## Overview
 
@@ -21,7 +21,7 @@ Every instance holds the [`funding`](plugins.funding.md) plugin, which opens Tem
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { email, viem } from 'accounts/plugins'
 import { Expiry, Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
@@ -29,7 +29,7 @@ import * as Tokens from 'viem/tokens'
 
 const ousd = Tokens.ousd(tempo.id).address
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   // Each sign-in requests an access key that may transfer up to 10 OUSD for a day.
   accessKey: {
     expiry: '1d',
@@ -44,16 +44,16 @@ const session = await tempoId.session.get()
 With no options, the instance signs in through the dialog, with the page's origin as its client ID:
 
 ```ts
-const tempoId = Id.create()
+const tempoId = Accounts.create()
 
 button.onclick = () => tempoId.dialog.signIn()
 ```
 
 ## Return type
 
-`Id.Id<plugins>`
+`Accounts.Accounts<plugins>`
 
-The instance. Each plugin's namespace sits beside these members, under the plugin's `id`. No plugin may take the name of a member, or `Id.create` throws.
+The instance. Each plugin's namespace sits beside these members, under the plugin's `id`. No plugin may take the name of a member, or `Accounts.create` throws.
 
 ### account.get
 
@@ -92,7 +92,7 @@ const session = await tempoId.session.get({ reauthorize: true })
 
 ### config
 
-- **Type:** [`Id.Config`](types.md#config)
+- **Type:** [`Accounts.Config`](types.md#config)
 
 The instance's configuration, with its defaults. Every low-level action of [`Actions`](Actions.md) takes it.
 
@@ -189,7 +189,7 @@ const unsubscribe = tempoId.session.subscribe((session) => render(session))
 
 Empties the session at once, also when a request fails, and deletes the saved session. It then revokes the session's refresh token at `POST /oauth2/revoke`. The user's Tempo ID session, and every other app's session, stay signed in. The instance saves a signed-out mark, so [`session.get`](#sessionget) with `reauthorize`, and the [`react`](react.react.md) plugin's first render, sign the user in again only after the next sign-in, such as through [`authorize`](#authorize). Access tokens work until they expire, at most 5 minutes, and the access key until its `expiry`, but the instance forgets both.
 
-With `everywhere: true`, a first-party app also ends the user's Tempo ID session with `POST /v1/auth/logout`, which signs the user out of every app that relies on it, as [`Actions.signOut`](Actions.signOut.md) does. Tempo ID accepts that request only from an enabled first-party app's origin, or from its own. The logout ends only the session whose cookie the instance's requests send, so a native app's sign-out with the [`redirect`](plugins.redirect.md) plugin and `open` leaves the system browser's session. Any other app's `everywhere` throws [`Id.EverywhereNotAllowedError`](errors.md#ideverywherenotallowederror), and signs nothing out.
+With `everywhere: true`, a first-party app also ends the user's Tempo ID session with `POST /v1/auth/logout`, which signs the user out of every app that relies on it, as [`Actions.signOut`](Actions.signOut.md) does. Tempo ID accepts that request only from an enabled first-party app's origin, or from its own. The logout ends only the session whose cookie the instance's requests send, so a native app's sign-out with the [`redirect`](plugins.redirect.md) plugin and `open` leaves the system browser's session. Any other app's `everywhere` throws [`Accounts.EverywhereNotAllowedError`](errors.md#accountseverywherenotallowederror), and signs nothing out.
 
 Outside a page, the sign-out rejects with the request's error when Tempo ID does not answer the revocation. It also rejects when a refresh in progress had an attempt that received no answer, since that refresh may have rotated the token, so the sign-out does not revoke it. On a page, both reject only when no logout runs. The session stays empty in both cases.
 
@@ -203,7 +203,7 @@ await tempoId.signOut({ everywhere: true })
 
 ## Parameters
 
-`Id.create` takes the options of [`Id.from`](Id.from.md) but `par`, which each plugin of a redirect or a dialog sets, and these:
+`Accounts.create` takes the options of [`Accounts.from`](Accounts.from.md) but `par`, which each plugin of a redirect or a dialog sets, and these:
 
 ### accessKey (optional)
 
@@ -212,7 +212,7 @@ await tempoId.signOut({ everywhere: true })
 The access key of each sign-in that names none, as [`Permissions`](types.md#permissions), or a function that the instance calls at each sign-in to return it. A duration expiry, such as `'7d'`, counts from the sign-in. Without an expiry, Tempo ID fills the app's refresh token lifetime, as [Default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry) describes. Without this option, a sign-in without `accessKey` requests no access key.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey: {
     expiry: '7d',
     limits: [{ limit: '100', token: 'ousd' }],
@@ -230,7 +230,7 @@ The plugins, each of which adds a namespace with its `id`. The built-in plugins 
 ```ts
 import { email, passkey, viem } from 'accounts/plugins'
 
-const tempoId = Id.create({ plugins: [passkey(), email(), viem()] })
+const tempoId = Accounts.create({ plugins: [passkey(), email(), viem()] })
 ```
 
 | Plugin                            | Namespace          | For                                         |
@@ -246,10 +246,10 @@ const tempoId = Id.create({ plugins: [passkey(), email(), viem()] })
 
 ### Configuration
 
-`chainId`, `clientAssertion`, `clientId`, `clientSecret`, `dev`, `dpop`, `fetch`, `redirectUri`, `scope`, `store`, and `url`, as [`Id.from`](Id.from.md#parameters) documents them. `store` also decides whether the instance holds a session outside a browser.
+`chainId`, `clientAssertion`, `clientId`, `clientSecret`, `dev`, `dpop`, `fetch`, `redirectUri`, `scope`, `store`, and `url`, as [`Accounts.from`](Accounts.from.md#parameters) documents them. `store` also decides whether the instance holds a session outside a browser.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: 'cli:acme-deploy',
   plugins: [device({ onCode })],
   store: Store.file('~/.config/acme-deploy/session.json'),
@@ -258,11 +258,11 @@ const tempoId = Id.create({
 
 ## Errors
 
-### `Id.ClientIdRequiredError`
+### `Accounts.ClientIdRequiredError`
 
 Thrown outside a browser without `clientId`, where no page's origin can serve as one.
 
-### `Id.EverywhereNotAllowedError`
+### `Accounts.EverywhereNotAllowedError`
 
 Thrown by `signOut` with `everywhere` from an app that is not first-party.
 
@@ -272,4 +272,4 @@ Thrown for a plugin whose `id` is a member of every instance: `account`, `author
 
 ### Action errors
 
-The members and the plugins' actions throw [`Id.RequestError`](Id.RequestError.md) for each refusal, and the classes that [Error classes](errors.md) lists, such as [`Id.SupersededError`](errors.md#idsupersedederror) for a sign-in that another sign-in or a sign-out overtook.
+The members and the plugins' actions throw [`Accounts.RequestError`](Accounts.RequestError.md) for each refusal, and the classes that [Error classes](errors.md) lists, such as [`Accounts.SupersededError`](errors.md#accountssupersedederror) for a sign-in that another sign-in or a sign-out overtook.

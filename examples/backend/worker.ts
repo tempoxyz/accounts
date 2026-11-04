@@ -4,7 +4,7 @@
  * `HttpOnly` cookie. The tokens and the key stay on the server.
  * @module
  */
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { DurableObject } from 'accounts/cloudflare'
 import { backend, viem } from 'accounts/plugins'
 import { Hono } from 'hono'
@@ -39,7 +39,7 @@ export const SESSIONS = DurableObject.sessions((env: Env) => ({
 
 /** Returns the request's instance, on Tempo testnet. Each sign-in requests a key for a day. */
 function create(env: Env) {
-  return Id.create({
+  return Accounts.create({
     accessKey: () => ({
       expiry: Expiry.days(1),
       limits: [{ limit: parseUnits('100', 6), token: ousd }],

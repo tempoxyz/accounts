@@ -1,4 +1,4 @@
-# Id.RequestError
+# Accounts.RequestError
 
 ## Overview
 
@@ -7,13 +7,13 @@ The error that every action and every instance member throws when Tempo ID refus
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 
 try {
   await tempoId.authorize()
 } catch (error) {
   if (
-    error instanceof Id.RequestError &&
+    error instanceof Accounts.RequestError &&
     error.reason === 'limit_exceeds_maximum'
   )
     showMaximum(error.meta?.maximum)
@@ -48,11 +48,11 @@ The values that the refusal compared, such as `limit` and `maximum`. Base units 
 
 ### name
 
-- **Type:** `'Id.RequestError'`
+- **Type:** `'Accounts.RequestError'`
 
 ### reason
 
-- **Type:** `Id.RequestError.Reason | undefined`
+- **Type:** `Accounts.RequestError.Reason | undefined`
 
 A stable name for the refusal, to branch on, as [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md#reasons) lists. Errors from the OAuth endpoints at `/oauth2/*` carry none.
 

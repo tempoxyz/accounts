@@ -54,6 +54,6 @@ The key set, in RFC 7517's format, which JWT libraries read as is.
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown with [`unexpected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unexpected) when Tempo ID fails. Retry the request.

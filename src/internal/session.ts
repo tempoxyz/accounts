@@ -12,7 +12,7 @@ import {
   createActor,
   setup,
 } from 'xstate'
-import { RequestError, SupersededError } from '../Id.js'
+import { RequestError, SupersededError } from '../Accounts.js'
 import * as Session from '../Session.js'
 import type { Store } from '../Store.js'
 import * as TempoAccount from '../TempoAccount.js'

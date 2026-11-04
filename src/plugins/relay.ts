@@ -5,7 +5,7 @@
  */
 import { createClient, type LocalAccount } from 'viem'
 import { Relay } from 'viem/tempo'
-import type * as Id from '../Id.js'
+import type * as Accounts from '../Accounts.js'
 import * as RelayRoute from '../internal/relayRoute.js'
 import * as Plugin from '../Plugin.js'
 import { settings, viem } from './viem.js'
@@ -24,7 +24,7 @@ import { settings, viem } from './viem.js'
  *
  * @example
  * ```ts
- * const tempoId = Id.create({
+ * const tempoId = Accounts.create({
  *   clientId: 'https://app.example',
  *   plugins: [relay({ account: privateKeyToAccount(env.FEE_PAYER_KEY) })],
  * })
@@ -34,7 +34,7 @@ import { settings, viem } from './viem.js'
  */
 export function relay(options: relay.Options) {
   return Plugin.from({
-    extend(instance: Id.Id, context: Plugin.Context) {
+    extend(instance: Accounts.Accounts, context: Plugin.Context) {
       // The instance's `viem` plugin, or one of the plugin's own, whose members the plugin adds.
       const held = (instance as unknown as { viem?: viem.Namespace }).viem
       const added = held ? undefined : viem()

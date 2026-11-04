@@ -5,7 +5,7 @@
 The [`viem`](../api/plugins.viem.md) plugin adds `tempoId.viem`, a Tempo client from `viem/tempo` whose account follows the instance's session. Each sign-in sets the account to the session's access key, and a sign-out empties it, so no Viem action passes `account`.
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { dialog, viem } from 'accounts/plugins'
 import { Expiry, Scopes } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
@@ -14,7 +14,7 @@ import * as Tokens from 'viem/tokens'
 const ousd = Tokens.ousd(tempo.id).address
 
 // 1. The client uses the instance's chain, Tempo mainnet by default.
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey: () => ({
     expiry: Expiry.days(1),
     limits: [{ limit: 10_000_000n, token: ousd }],
@@ -36,7 +36,7 @@ const { receipt } = await tempoId.token.transferSync({
 ```
 
 1. The plugin takes the options of `createClient` from `viem/tempo`, such as `feeToken`. Each client uses the chain's own RPC over HTTP, unless `transport` names another. A function in place of the options returns the options of each chain, such as `viem((chainId) => ({ transport: http(`/rpc/${chainId}`) }))`.
-2. A read of the account before the sign-in throws [`Id.SignedOutError`](../api/errors.md#idsignedouterror). A later sign-in replaces the account.
+2. A read of the account before the sign-in throws [`Accounts.SignedOutError`](../api/errors.md#accountssignedouterror). A later sign-in replaces the account.
 3. Viem's wallet actions read the client's account.
 
 ## Recipes
@@ -46,7 +46,7 @@ const { receipt } = await tempoId.token.transferSync({
 `dev: true` selects Tempo testnet for the instance's access keys and the default client.
 
 ```ts
-const tempoId = Id.create({ dev: true, plugins: [dialog(), viem()] })
+const tempoId = Accounts.create({ dev: true, plugins: [dialog(), viem()] })
 ```
 
 ### Send on another chain
@@ -77,12 +77,12 @@ A sponsor pays the fees of a transaction through a relay, such as the Tempo API'
 On a server, such as a backend that holds the user's session, the transport sends the API key itself. The `store` is the session store of [Backend](backend.md).
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { backend, viem } from 'accounts/plugins'
 import { http } from 'viem'
 import { Expiry, Scopes } from 'viem/tempo'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   clientId: process.env.CLIENT_ID!,
   clientSecret: process.env.CLIENT_SECRET!,
   accessKey: () => ({
@@ -119,10 +119,10 @@ A page holds no key that pays, so it sends through the app's own relay route. Th
 
 ```ts
 // The page.
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { dialog, viem } from 'accounts/plugins'
 
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey,
   plugins: [dialog(), viem({ relay: '/api/relay' })],
 })
@@ -133,7 +133,7 @@ await tempoId.token.transferSync({ amount: 10_000n, to: '0x…', token: ousd })
 import { relay } from 'accounts/plugins'
 import { privateKeyToAccount } from 'viem/accounts'
 
-const server = Id.create({
+const server = Accounts.create({
   clientId: 'https://app.example',
   plugins: [
     relay({ apiKey: process.env.TEMPO_API_KEY! }),
@@ -169,14 +169,14 @@ const valid = await tempoId.verifyMessage({
 
 Without `accessToken`, an access key's signature does not count, and the owner's signature verifies as usual. A `mode` in the call, such as Viem's `allowAccessKey`, verifies the signature with Viem alone, without the app's check. A token that does not verify throws [`AccessToken.InvalidError`](../api/errors.md#accesstokeninvaliderror).
 
-An access key signs nothing that verifies before its first transaction registers it on the chain. On a page, the account's owner signs until then, for an app with the `tempo-id:sign` scope on a chain with configurable accounts. For another app, the access key signs, and its signature verifies after the registration. Outside a page, and for a fixed `session`, the access key signs at once, so send its first transaction before a signature that a verifier checks. A session without an access key on the chain signs through the account's owner, on a page or not, such as after `email.signIn` with `accessKey: false`. A transaction then throws [`Id.KeyRequiredError`](../api/errors.md#idkeyrequirederror). To sign as the user's [configurable account](https://github.com/tempoxyz/id/blob/main/docs/configurable-accounts.md#message-signing) with an access key in the session, an app with the `tempo-id:sign` scope calls [`Actions.account.signMessage`](../api/Actions.account.signMessage.md) or [`signTypedData`](../api/Actions.account.signTypedData.md).
+An access key signs nothing that verifies before its first transaction registers it on the chain. On a page, the account's owner signs until then, for an app with the `tempo-id:sign` scope on a chain with configurable accounts. For another app, the access key signs, and its signature verifies after the registration. Outside a page, and for a fixed `session`, the access key signs at once, so send its first transaction before a signature that a verifier checks. A session without an access key on the chain signs through the account's owner, on a page or not, such as after `email.signIn` with `accessKey: false`. A transaction then throws [`Accounts.KeyRequiredError`](../api/errors.md#accountskeyrequirederror). To sign as the user's [configurable account](https://github.com/tempoxyz/id/blob/main/docs/configurable-accounts.md#message-signing) with an access key in the session, an app with the `tempo-id:sign` scope calls [`Actions.account.signMessage`](../api/Actions.account.signMessage.md) or [`signTypedData`](../api/Actions.account.signTypedData.md).
 
 ### Retry a refused transaction
 
 On a page, a transaction of the session's access key that the node refuses for a low balance, a spent limit, or an access key that the chain does not hold retries. Tempo ID's deposit page or sign-in shows in a frame, and the transaction sends again once the user finishes it. A user who closes the screen receives [`Plugins.viem.RetryClosedError`](../api/plugins.viem.md#pluginsviemretryclosederror). [`retry`](../api/plugins.viem.md#retry-optional) lists the failures and turns them off.
 
 ```ts
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [dialog(), viem({ retry: { limit: false } })],
 })
 

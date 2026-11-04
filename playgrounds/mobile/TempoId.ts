@@ -3,7 +3,7 @@
  * session in the device's secure store, and sends with Viem.
  * @module
  */
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { http } from 'viem'
 import { tempo, tempoLocalnet, tempoTestnet } from 'viem/tempo/chains'
 import * as Tokens from 'viem/tokens'
@@ -28,7 +28,7 @@ const rpcUrl = process.env.EXPO_PUBLIC_TEMPO_RPC_URL
 /** The app's registered redirect URI, which the sign-in and the deposit page return to. */
 export const redirectUri = 'xyz.tempo.example.mobile:/callback'
 
-export const tempoId = Id.create({
+export const tempoId = Accounts.create({
   accessKey: { expiry: '1d', limits: [{ limit: '1000', token: 'ousd' }] },
   // A local node, or Tempo testnet without a URL.
   chainId: rpcUrl ? tempoLocalnet.id : tempoTestnet.id,

@@ -13,7 +13,7 @@ import {
   type TypedData,
   type TypedDataDefinition,
 } from 'viem'
-import type { Config } from '../Id.js'
+import type { Config } from '../Accounts.js'
 import * as Api from '../internal/api.js'
 import * as AccessKey from '../AccessKey.js'
 import type { Permissions } from '../Permissions.js'

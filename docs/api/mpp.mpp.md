@@ -15,11 +15,11 @@ The plugin reads the chain and transport of each chain ID from the [`viem`](plug
 ## Usage
 
 ```ts
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { mpp } from 'accounts/mpp'
 import { dialog } from 'accounts/plugins'
 
-const tempoId = Id.create({ accessKey, plugins: [dialog(), mpp()] })
+const tempoId = Accounts.create({ accessKey, plugins: [dialog(), mpp()] })
 
 await tempoId.dialog.signIn()
 const response = await tempoId.fetch('https://api.example.com/fortune')
@@ -43,7 +43,7 @@ The `fetch` of the payer of the instance's session, as below.
 
 The `session` of the payer of the instance's session. A call returns a payer with overrides. Each payer has two members:
 
-- `fetch(input, init?)`: Sends the request. A 402 charge challenge starts a payment with the access key, and the retry returns the endpoint's response. A request without a session rejects with `Id.SignedOutError`, and a session without an access key with `Id.KeyRequiredError`.
+- `fetch(input, init?)`: Sends the request. A 402 charge challenge starts a payment with the access key, and the retry returns the endpoint's response. A request without a session rejects with `Accounts.SignedOutError`, and a session without an access key with `Accounts.KeyRequiredError`.
 - `session(parameters?)`: Returns a session manager of mppx. Its first request opens a channel on the TIP-1034 channel reserve, each request pays with a voucher of the access key, and `close()` closes the channel. The manager holds the channel in memory, so close it before it is discarded. `parameters` takes the options of mppx's `tempo.session.manager` but the account and the client, such as `maxDeposit`. It reads the session without loading it, so read the session first after a reload or a restart, such as with `tempoId.session.get()`.
 
 ```ts
@@ -117,11 +117,11 @@ A charge costs more than `maxAmount`, so the payer signs nothing.
 
 `maxAmount` names more than 6 decimals, which a TIP-20 token cannot hold, so the payer signs nothing.
 
-### `Id.SignedOutError`
+### `Accounts.SignedOutError`
 
 A payment of the instance's session while it holds none.
 
-### `Id.KeyRequiredError`
+### `Accounts.KeyRequiredError`
 
 A payment of a session without an access key.
 

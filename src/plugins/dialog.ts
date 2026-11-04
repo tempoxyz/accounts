@@ -16,7 +16,7 @@ import type * as Session from '../Session.js'
  *
  * @example
  * ```ts
- * const tempoId = Id.create({ plugins: [dialog()] })
+ * const tempoId = Accounts.create({ plugins: [dialog()] })
  *
  * button.onclick = () => tempoId.dialog.signIn()
  * ```

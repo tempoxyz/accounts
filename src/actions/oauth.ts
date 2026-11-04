@@ -2,7 +2,7 @@
  * Calls Tempo ID's standard OAuth endpoints for tokens that an app holds.
  * @module
  */
-import type { Config } from '../Id.js'
+import type { Config } from '../Accounts.js'
 import * as Api from '../internal/api.js'
 import type { User } from '../User.js'
 

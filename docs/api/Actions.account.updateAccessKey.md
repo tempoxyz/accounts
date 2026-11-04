@@ -109,7 +109,7 @@ With `redirect`, one of the app's redirect URIs, which the approval page returns
 
 - **Type:** `Permissions['scopes']`
 
-The calls that the access key can make after the change, as [`Id.create`](Id.create.md#permissions-optional)'s `permissions` name them. They replace the access key's scopes. Absent, the scopes stay.
+The calls that the access key can make after the change, as [`Accounts.create`](Accounts.create.md#permissions-optional)'s `permissions` name them. They replace the access key's scopes. Absent, the scopes stay.
 
 ```ts
 await Actions.account.updateAccessKey(config, {
@@ -128,7 +128,7 @@ With `redirect`, an opaque value that the approval page returns as it is.
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when Tempo ID refuses the request without `redirect`, with one of these `reason` values. The approval page returns the same reasons to the redirect URI as `error_description`, and a visitor without a session as `error=login_required`.
 

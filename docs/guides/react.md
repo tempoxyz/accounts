@@ -5,7 +5,7 @@
 A React app reads the instance's session with `tempoId.useSession()`, which the [`react`](../api/react.react.md) plugin adds. The hook returns the session's [status](../api/types.md#sessionstatus), `pending`, `reauthorizing`, `signedIn`, or `signedOut`, with the session to show. It renders again at each change, and its first render restores the saved session. The instance lives at module scope, so every component reads the same session.
 
 ```tsx
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { dialog, viem } from 'accounts/plugins'
 import { react } from 'accounts/react'
 import { Expiry, Scopes } from 'viem/tempo'
@@ -15,7 +15,7 @@ import * as Tokens from 'viem/tokens'
 const ousd = Tokens.ousd(tempo.id).address
 
 // 1. One instance for the page, outside any render.
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   accessKey: () => ({
     expiry: Expiry.days(1),
     limits: [{ limit: 10_000_000n, token: ousd }],
@@ -43,10 +43,10 @@ function App() {
 }
 ```
 
-1. [`Id.create`](../api/Id.create.md) at module scope creates one session for the page. In a browser, the instance preloads the dialog's frame as it is created.
+1. [`Accounts.create`](../api/Accounts.create.md) at module scope creates one session for the page. In a browser, the instance preloads the dialog's frame as it is created.
 2. [`tempoId.useSession()`](../api/react.react.md) reads the status store with `useSyncExternalStore`. The status is `pending` until the saved session loads, and on a server render.
 3. [`dialog.signIn`](../api/plugins.dialog.md#dialogsignin) sets the session, and every component that calls the hook renders it.
-4. [`tempoId.signOut`](../api/Id.create.md#signout) empties the session at once.
+4. [`tempoId.signOut`](../api/Accounts.create.md#signout) empties the session at once.
 
 [`examples/web`](../../examples/web/main.tsx) runs this flow, and sends OUSD with `tempoId.viem`.
 
@@ -71,7 +71,7 @@ createRoot(root).render(
 On a page of a first-party app, the first render authorizes the browser's Tempo ID session when the saved session's access key expired. While it runs, the status is `reauthorizing`, and `session` holds the expired session, so the page shows the account. The expired access key signs nothing, so the page disables its sends. If Tempo ID holds no session, the status becomes `signedOut`.
 
 ```tsx
-const tempoId = Id.create({
+const tempoId = Accounts.create({
   plugins: [react(), viem()],
 })
 
@@ -90,7 +90,7 @@ function Account() {
 
 ### Show the pending state of a sign-in
 
-A sign-in is a promise, so the component keeps its own state while it is pending. [`Id.SupersededError`](../api/errors.md#idsupersedederror) marks a sign-in that a newer one overtook, whose session the hook already renders.
+A sign-in is a promise, so the component keeps its own state while it is pending. [`Accounts.SupersededError`](../api/errors.md#accountssupersedederror) marks a sign-in that a newer one overtook, whose session the hook already renders.
 
 ```tsx
 function SignIn() {
@@ -103,7 +103,7 @@ function SignIn() {
         tempoId.dialog
           .signIn()
           .catch((error: unknown) => {
-            if (!(error instanceof Id.SupersededError)) throw error
+            if (!(error instanceof Accounts.SupersededError)) throw error
           })
           .finally(() => setPending(false))
       }}
@@ -116,7 +116,7 @@ function SignIn() {
 
 ### Select one value of the session
 
-[`tempoId.session.actor`](../api/Id.create.md#sessionactor) is an XState actor, so `useSelector` from `@xstate/react` selects one value, and renders again only when that value changes.
+[`tempoId.session.actor`](../api/Accounts.create.md#sessionactor) is an XState actor, so `useSelector` from `@xstate/react` selects one value, and renders again only when that value changes.
 
 ```tsx
 import { useSelector } from '@xstate/react'

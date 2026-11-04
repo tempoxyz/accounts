@@ -3,7 +3,7 @@
  * connector is the instance itself, so each sign-in through the instance connects wagmi.
  * @module
  */
-import { Id } from 'accounts'
+import { Accounts } from 'accounts'
 import { mpp } from 'accounts/mpp'
 import { dialog, email, passkey, redirect, viem } from 'accounts/plugins'
 import { wagmi } from 'accounts/wagmi'
@@ -40,7 +40,7 @@ export const tempoIdUrl =
  * authorization request to `/oauth2/par`. `VITE_PRELOAD`: `false` loads the frame only at the click.
  * The `wagmi` plugin reads the chains and transports of the `viem` plugin.
  */
-export const tempoId = Id.create({
+export const tempoId = Accounts.create({
   chainId: Chain.chain.id,
   // The app that `scripts/seed.ts` registers.
   clientId,

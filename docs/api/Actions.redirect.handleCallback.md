@@ -65,7 +65,7 @@ const authorization = await Actions.redirect.handleCallback(config, {
 
 ## Errors
 
-### `Id.RequestError`
+### `Accounts.RequestError`
 
 Thrown when the callback carries no valid code, or the token endpoint refuses the code.
 

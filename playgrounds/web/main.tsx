@@ -1,5 +1,5 @@
 /** A public client with its own sign-in UI and an access key for each sign-in. @module */
-import { AccessKey, Id, Permissions, type Session } from 'accounts'
+import { AccessKey, Accounts, Permissions, type Session } from 'accounts'
 import type { Funding } from 'accounts/internal'
 import {
   QueryClient,
@@ -171,14 +171,14 @@ function App() {
       // A wallet that waits for its upgrade signs a key only through its passkey, which needs a
       // click, so the page shows the sign-in.
       if (
-        error instanceof Id.RequestError &&
+        error instanceof Accounts.RequestError &&
         error.reason === 'upgrade_required'
       )
         return null
       // An SSO sign-in returns here signed in, and the passkey it linked can own the account. That
       // passkey signs only on a click, so the page signs in without a key and offers one.
       if (
-        error instanceof Id.RequestError &&
+        error instanceof Accounts.RequestError &&
         error.reason === 'webauthn_required'
       )
         return (await tempoId.authorize({ accessKey: false })) ?? null
@@ -252,13 +252,13 @@ function App() {
         // Only an account of another passkey refuses it. The session stays, so the page signs in
         // without a key and offers one.
         if (
-          error instanceof Id.RequestError &&
+          error instanceof Accounts.RequestError &&
           error.reason === 'webauthn_required'
         )
           return await tempoId.authorize({ accessKey: false })
         // No realm of the app holds passkeys for this page's origin, such as Tempo Cash's.
         if (
-          error instanceof Id.RequestError &&
+          error instanceof Accounts.RequestError &&
           error.reason === 'passkey_not_permitted'
         ) {
           setPasskeys(false)
@@ -300,7 +300,7 @@ function App() {
         // account. Only an account of another passkey refuses it. The session stays, so the page
         // signs in without a key and offers one.
         if (
-          error instanceof Id.RequestError &&
+          error instanceof Accounts.RequestError &&
           error.reason === 'webauthn_required'
         )
           return await tempoId.authorize({ accessKey: false })
@@ -1427,7 +1427,9 @@ async function withAccount<result>(fn: () => Promise<result>) {
   try {
     return await fn()
   } catch (error) {
-    if (!(error instanceof Id.RequestError && error.reason === 'rejected'))
+    if (
+      !(error instanceof Accounts.RequestError && error.reason === 'rejected')
+    )
       throw error
     // No account to create, such as in a realm without a Privy app, leaves the refusal as it was.
     if (!(await tempoId.account.get())) throw error

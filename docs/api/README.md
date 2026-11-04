@@ -1,24 +1,24 @@
 # API reference
 
-Each page documents one export of `accounts` or one of its entries. An app creates an instance with [`Id.create`](Id.create.md), and each plugin adds a namespace of actions to it. The low-level [`Actions`](Actions.md) take the instance's configuration, for an app that keeps its state itself. The errors leave out `body_too_large`, `cross_site_request`, and `malformed_body`, which the package's own requests do not cause.
+Each page documents one export of `accounts` or one of its entries. An app creates an instance with [`Accounts.create`](Accounts.create.md), and each plugin adds a namespace of actions to it. The low-level [`Actions`](Actions.md) take the instance's configuration, for an app that keeps its state itself. The errors leave out `body_too_large`, `cross_site_request`, and `malformed_body`, which the package's own requests do not cause.
 
-| Entry                 | Exports                                                                                                                                                      |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `accounts`            | `AccessKey`, `AccessToken`, `Actions`, `ClientAssertion`, `Dpop`, `Id`, `LogoutToken`, `Permissions`, `Plugin`, `Session`, `Store`, `TempoAccount`, `Tokens` |
-| `accounts/internal`   | `Authorization`, `Funding`, `Pending`, `User`, the types that the actions build and return                                                                   |
-| `accounts/plugins`    | `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, `viem`                                                                               |
-| `accounts/react`      | `react`                                                                                                                                                      |
-| `accounts/expo`       | `expo`                                                                                                                                                       |
-| `accounts/mpp`        | `mpp` and `mpp.MaxAmountError`                                                                                                                               |
-| `accounts/cloudflare` | `DurableObject`, `Id`, `Plugin`, `Store`                                                                                                                     |
-| `accounts/wagmi`      | `tempoId`, `wagmi`, and their error classes                                                                                                                  |
+| Entry                 | Exports                                                                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `accounts`            | `AccessKey`, `AccessToken`, `Accounts`, `Actions`, `ClientAssertion`, `Dpop`, `LogoutToken`, `Permissions`, `Plugin`, `Session`, `Store`, `TempoAccount`, `Tokens` |
+| `accounts/internal`   | `Authorization`, `Funding`, `Pending`, `User`, the types that the actions build and return                                                                         |
+| `accounts/plugins`    | `backend`, `device`, `dialog`, `email`, `passkey`, `redirect`, `relay`, `viem`                                                                                     |
+| `accounts/react`      | `react`                                                                                                                                                            |
+| `accounts/expo`       | `expo`                                                                                                                                                             |
+| `accounts/mpp`        | `mpp` and `mpp.MaxAmountError`                                                                                                                                     |
+| `accounts/cloudflare` | `Accounts`, `DurableObject`, `Plugin`, `Store`                                                                                                                     |
+| `accounts/wagmi`      | `tempoId`, `wagmi`, and their error classes                                                                                                                        |
 
-## Id
+## Accounts
 
-- [`Id.create`](Id.create.md): Creates an instance: its configuration, its session, and the namespace of each plugin.
-- [`Id.from`](Id.from.md): Returns the configuration that every action of `Actions` takes, without an instance.
-- [`Id.RequestError`](Id.RequestError.md): The error of every refused request.
-- [Error classes](errors.md): The other errors of each module, such as `Id.SupersededError`.
+- [`Accounts.create`](Accounts.create.md): Creates an instance: its configuration, its session, and the namespace of each plugin.
+- [`Accounts.from`](Accounts.from.md): Returns the configuration that every action of `Actions` takes, without an instance.
+- [`Accounts.RequestError`](Accounts.RequestError.md): The error of every refused request.
+- [Error classes](errors.md): The other errors of each module, such as `Accounts.SupersededError`.
 
 ## Plugins
 

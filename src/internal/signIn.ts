@@ -3,7 +3,7 @@
  * becomes, and the read of the account that Tempo ID selects for the app.
  * @module
  */
-import { RequestError } from '../Id.js'
+import { RequestError } from '../Accounts.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
@@ -58,7 +58,7 @@ export function toSession(
  * Returns the user's Tempo Account that `GET /v1/account` lists first for the app, on the
  * instance's chain: the account that the user selected, else the oldest. Returns `undefined` when
  * Tempo ID lists no such chain, the session belongs to another user than `userId`, or the user has
- * no account. It creates no account. A failed read throws `Id.RequestError` marked `signedIn`, since
+ * no account. It creates no account. A failed read throws `Accounts.RequestError` marked `signedIn`, since
  * it follows a sign-in.
  */
 export async function account(
