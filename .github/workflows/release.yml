@@ -59,7 +59,8 @@ jobs:
           GITHUB_TOKEN: ${{ steps.sts.outputs.token }}
 
   # Packs the prerelease, at `0.0.0-pr-<n>.sha-<commit>` on a pull request, or
-  # `0.0.0-main.sha-<commit>` on main. It runs the commit's code, so it holds no npm identity.
+  # `0.0.0-main.sha-<commit>` on main. It runs the commit's code. The secure-runner action needs its
+  # OIDC token, but npm trusts only a token from `main.yml` in `npm-release`, so the job cannot publish.
   pack:
     name: Pack prerelease
     if: vars.NPM_TRUSTED_PUBLISHING == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
@@ -119,8 +120,8 @@ jobs:
           path: ${{ runner.temp }}/prereleases/*.tgz
           retention-days: 1
 
-  # Publishes the pack under the dist-tag `main` or `pr-<n>`. It alone holds the OIDC token that npm
-  # trusts, and runs no code of the commit. npm trusts `main.yml` only in `npm-release`.
+  # Publishes the pack under the dist-tag `main` or `pr-<n>`, and runs no code of the commit. On main,
+  # it alone holds an OIDC token that npm trusts, since npm trusts `main.yml` only in `npm-release`.
   prerelease:
     name: Publish prerelease
     environment: ${{ github.event_name == 'push' && 'npm-release' || 'npm-prerelease' }}
