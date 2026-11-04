@@ -1,6 +1,7 @@
 import * as Http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Json } from 'ox'
+import { describe, expect, it } from 'vitest'
 
 import * as Storage from '../src/core/Storage.js'
 
@@ -56,3 +57,33 @@ export declare namespace createServer {
     port?: number | undefined
   }
 }
+
+describe('createJsonStorage', () => {
+  it('should correctly set, get, and remove items', () => {
+    const storage = createJsonStorage()
+    const testData = { key: 'tempo', value: 123 }
+
+    storage.setItem('test_key', testData)
+    expect(storage.getItem('test_key')).toEqual(testData)
+
+    storage.removeItem('test_key')
+    expect(storage.getItem('test_key')).toBeNull()
+  })
+
+  it('should return null for non-existent items', () => {
+    const storage = createJsonStorage()
+    expect(storage.getItem('non_existent')).toBeNull()
+  })
+
+  it('should correctly handle complex nested JSON objects and primitives', () => {
+    const storage = createJsonStorage()
+
+    storage.setItem('number', 42)
+    storage.setItem('boolean', true)
+    storage.setItem('array', [1, 2, 3])
+
+    expect(storage.getItem('number')).toBe(42)
+    expect(storage.getItem('boolean')).toBe(true)
+    expect(storage.getItem('array')).toEqual([1, 2, 3])
+  })
+})
