@@ -1,3 +1,8 @@
+# Checks the package, then runs Tempo ID's integration and end-to-end suites against it. Those suites
+# live in `tempoxyz/id`, so each job clones Tempo ID at `vars.ID_REF` (default `main`), and places this
+# commit at its `accounts` submodule path in place of the commit that Tempo ID pins. Each job that
+# clones Tempo ID exchanges its OIDC token for a token that reads it, through `github-sts` and Tempo
+# ID's `.github/sts/accounts-read.sts.yaml`.
 name: Verify
 on:
   workflow_call:
@@ -10,53 +15,197 @@ jobs:
   checks:
     name: Checks
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
+    timeout-minutes: 15
 
     steps:
-      - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
-
       - name: Clone repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install dependencies
-        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
-
-      - name: Audit dependencies
-        run: pnpm audit
+        uses: ./.github/actions/install-dependencies
 
       - name: Check code
-        run: pnpm -w check
+        run: pnpm check
 
-      - name: Check build
-        run: pnpm -w build
+      # `pnpm check` applies its fixes, so any change means the committed code fails it.
+      - name: Check for fixes
+        run: git diff --exit-code
 
       - name: Check types
         run: pnpm check:types
+
+      - name: Build
+        run: pnpm build
 
   test:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
-      id-token: write
 
     steps:
-      - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
-
       - name: Clone repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install dependencies
-        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
+        uses: ./.github/actions/install-dependencies
 
       - name: Run tests
         run: pnpm test
+
+  integration:
+    name: Integration (${{ matrix.shard }}/2)
+    # `tempoxyz/id` is internal, and a fork's pull request holds no OIDC token to read it.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # `github-sts` exchanges the OIDC token for a token that reads `tempoxyz/id`, which its
+    # `.github/sts/accounts-read.sts.yaml` authorizes. The Viem plugin's tests pull the Tempo API's
+    # private dev image from GHCR.
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    timeout-minutes: 15
+
+    steps:
+      - name: Fetch Tempo ID token
+        id: sts
+        uses: tempoxyz/gh-actions/actions/github-sts@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+        with:
+          policy: accounts-read
+          scope: tempoxyz/id
+
+      - name: Clone Tempo ID
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ vars.ID_REF || 'main' }}
+          repository: tempoxyz/id
+          token: ${{ steps.sts.outputs.token }}
+
+      - name: Clone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: accounts
+          persist-credentials: false
+
+      # Tempo ID's action, from its clone. Its `postinstall` installs `accounts` with its own lockfile.
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      # `test/client/` holds the integration tests of `accounts`, which need no Privy app. Global setup
+      # starts Postgres in a container, builds Tempo ID, and migrates.
+      - name: Run tests
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: pnpm exec vp test --project integration --shard="$SHARD/2" test/client
+
+  e2e:
+    name: ${{ matrix.shard == 'configurable' && 'Test (e2e configurable accounts)' || format('Test (e2e {0}/8)', matrix.shard) }}
+    # The Privy and realm specs create users in the test Privy app, whose values Tempo ID's previews
+    # also use. Tempo ID's own `Sweep` job deletes its stale users. The jobs only read the values, so
+    # they create no deployment.
+    environment:
+      deployment: false
+      name: preview
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Global setup pulls the Tempo API's private dev image from GHCR.
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    # Each runner runs one test at a time, since the playgrounds listen on fixed ports. The
+    # `@configurable` tests start a chain stack of their own, so they run alone on a ninth runner, as
+    # in Tempo ID.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, configurable]
+    timeout-minutes: 15
+
+    steps:
+      - name: Fetch Tempo ID token
+        id: sts
+        uses: tempoxyz/gh-actions/actions/github-sts@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+        with:
+          policy: accounts-read
+          scope: tempoxyz/id
+
+      - name: Clone Tempo ID
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ vars.ID_REF || 'main' }}
+          repository: tempoxyz/id
+          token: ${{ steps.sts.outputs.token }}
+
+      - name: Clone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: accounts
+          persist-credentials: false
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Get Playwright version
+        id: playwright
+        run: echo "version=$(pnpm exec playwright --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install chromium
+
+      # The runner image already holds Chromium's libraries, so apt runs only when Chromium does not
+      # start.
+      - name: Install Playwright system dependencies
+        run: |
+          if ! node -e "require('@playwright/test').chromium.launch().then((browser) => browser.close())"; then
+            pnpm exec playwright install-deps chromium
+          fi
+
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      # The suite runs the playgrounds of this commit, from `accounts/playgrounds/`.
+      - name: Run tests
+        env:
+          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+          PRIVY_JWT_PRIVATE_KEY: ${{ secrets.PRIVY_JWT_PRIVATE_KEY }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          if [ "$SHARD" = configurable ]; then
+            pnpm test:e2e --grep @configurable
+          else
+            pnpm test:e2e --grep-invert @configurable --shard="$SHARD/8"
+          fi
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-traces-${{ matrix.shard }}
+          path: test-results
+          retention-days: 7

@@ -1,11 +1,12 @@
-# Allow the release workflow (push to main) to mint a short-lived token
-# that opens and updates the "chore: version packages" release PR through
-# changesets/action, and pushes its version branch. Replaces the built-in
-# GITHUB_TOKEN so the org can turn off "Allow GitHub Actions to create and
-# approve pull requests".
-subject: repo:tempoxyz@211589300/accounts@1178309114:ref:refs/heads/main
+# Lets the release workflow, on a push to main, mint a short-lived token that opens and updates the
+# "chore: version packages" pull request through Changesets, and pushes its branch. It replaces
+# `GITHUB_TOKEN`, which cannot create pull requests in this organization.
+# The job runs in the `npm-release` environment, which replaces the `ref` form of the subject.
+subject: repo:tempoxyz@211589300/accounts@1178309114:environment:npm-release
 claim_pattern:
-  job_workflow_ref: tempoxyz/accounts/\.github/workflows/main\.yml@refs/heads/main
+  # The environment's branch policy lives outside the repository, so the ref is checked here too.
+  ref: refs/heads/main
+  job_workflow_ref: tempoxyz/accounts/\.github/workflows/release\.yml@refs/heads/main
 permissions:
   contents: write
   pull_requests: write

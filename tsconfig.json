@@ -22,13 +22,12 @@
     "types": ["node"],
     "verbatimModuleSyntax": true
   },
-  // The examples and playgrounds check their own types. `scripts/publish.mjs` is the release script.
+  // The examples and playgrounds check their own types.
   "exclude": [
     "**/dist",
     "**/node_modules",
     ".claude",
     "examples",
-    "playgrounds",
-    "scripts"
+    "playgrounds"
   ]
 }

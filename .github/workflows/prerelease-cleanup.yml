@@ -1,0 +1,105 @@
+# Removes the `pr-<n>` dist-tags of `accounts` and the CLI playground once a pull request closes,
+# merged or not. Each day, and on a manual run, it also prunes every dist-tag but `alpha`, `latest`, `main`,
+# and the `pr-<n>` of each open pull request, such as one whose cleanup failed. The prerelease
+# versions stay, since npm keeps a published version.
+name: Prerelease cleanup
+on:
+  # `pull_request_target` runs this file from the base branch, never the pull request's copy, and the
+  # job checks out no code, so no branch reaches the token.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [closed]
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  untag:
+    name: Remove prerelease dist-tags
+    # npm trusted publishing authorizes only `npm publish`, so the job reads `NPM_DIST_TAG_TOKEN`, a
+    # granular npm token with write access to both packages. It lives in `npm-dist-tag`, an
+    # environment that admits only `main`, apart from `npm-prerelease`, which every pull request
+    # reaches.
+    environment: npm-dist-tag
+    # Only a branch of this repository publishes prereleases.
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && vars.NPM_TRUSTED_PUBLISHING == 'true'
+    permissions: {}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Remove dist-tags
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::warning::Set NPM_DIST_TAG_TOKEN in the npm-dist-tag environment to remove the pr-$PULL_REQUEST dist-tags."
+            exit 0
+          fi
+          failed=0
+          for name in accounts @tempoxyz/example-id-cli; do
+            # A failed lookup fails the job, so it never reads as a missing tag.
+            if ! tag="$(npm view "$name" "dist-tags.pr-$PULL_REQUEST")"; then
+              failed=1
+              continue
+            fi
+            # A pull request that never published a prerelease has no dist-tag to remove.
+            if [ -z "$tag" ]; then
+              echo "$name has no pr-$PULL_REQUEST dist-tag."
+              continue
+            fi
+            npm dist-tag rm "$name" "pr-$PULL_REQUEST" || failed=1
+          done
+          exit "$failed"
+
+  prune:
+    name: Prune stale dist-tags
+    # Reads `NPM_DIST_TAG_TOKEN` from `npm-dist-tag`, as `untag` does. A schedule and a manual run of
+    # main both reach the environment.
+    environment: npm-dist-tag
+    if: github.event_name != 'pull_request_target' && vars.NPM_TRUSTED_PUBLISHING == 'true'
+    permissions:
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Prune dist-tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::warning::Set NPM_DIST_TAG_TOKEN in the npm-dist-tag environment to prune the dist-tags."
+            exit 0
+          fi
+          # A failed lookup fails the job, so it never prunes the tag of an open pull request.
+          open="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].number')"
+          keep="$(printf 'alpha\nlatest\nmain\n%s\n' "$(echo "$open" | sed 's/^/pr-/')")"
+          failed=0
+          for name in accounts @tempoxyz/example-id-cli; do
+            if ! tags="$(npm view "$name" dist-tags --json)"; then
+              failed=1
+              continue
+            fi
+            for tag in $(echo "$tags" | node -p 'Object.keys(JSON.parse(require("fs").readFileSync(0))).join("\n")'); do
+              grep -qxF "$tag" <<< "$keep" && continue
+              echo "Removing $name@$tag."
+              npm dist-tag rm "$name" "$tag" || failed=1
+            done
+          done
+          exit "$failed"
+
+permissions: {}

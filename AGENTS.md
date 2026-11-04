@@ -18,7 +18,7 @@
 - Use `readonly T[]`, unless mutation is part of the contract.
 - Use `type`. Use `interface` only for declaration merging, such as `cloudflare:workers` in `src/cloudflare/workers.d.ts`.
 - Use `.js` extensions on relative imports.
-- Write everything in TypeScript. `.js` files are banned. Run scripts with `node script.ts`. `scripts/publish.mjs` is the one exception.
+- Write everything in TypeScript. `.js` files are banned. Run scripts with `node script.ts`.
 - Import internal modules as namespaces (`import * as Session from './Session.js'`). Named imports are fine for types, leaf helpers, and third-party APIs.
 - Import Node built-ins as namespaces, unless a named import is clearer.
 - Use static imports. Use dynamic imports only at a real runtime or bundle boundary, such as `Store.file`'s Node modules.
@@ -258,6 +258,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - Test behavior: API contracts, flows, security boundaries, errors.
 - `src/` holds machine tests and other tests that need no server.
 - Integration tests run the package against a real Tempo ID. They live in `tempoxyz/id` until a Tempo ID test image exists.
+- `.github/workflows/verify.yml` runs Tempo ID's `test/client/` and end-to-end suites against each commit, from a clone of `tempoxyz/id` at `vars.ID_REF`.
 - No mocks, stubs, fakes, fake timers, stubbed globals, or MSW in `src/`.
 - Keep a module's tests in one `Module.test.ts` beside it. Never split into variant files.
 - Group tests in a `describe` named for the entrypoint.
@@ -303,7 +304,6 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - `examples/` holds one small app per platform (`backend`, `cli`, `mobile`, `wagmi`, `web`). Each names a published range, so a copy installs as it is. CI type-checks them.
 - `playgrounds/` holds one app per flow (`api`, `backend`, `cli`, `mobile`, `third-party`, `wagmi`, `web`). They use client IDs that `tempoxyz/id` registers in its seed. Its end-to-end suite drives them.
 - Keep the playgrounds' names, client IDs, environment variables, ports, and page labels stable. `tempoxyz/id`'s end-to-end suite depends on them.
-- `scripts/` holds the release script.
 
 ## Tooling
 
@@ -320,7 +320,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 | `pnpm build`       | Builds the package. Run `pnpm exec zile dev` after.           |
 | `pnpm check`       | Formats and lints with fixes.                                 |
 | `pnpm check:types` | Runs `tsc` on the package, the examples, and the playgrounds. |
-| `pnpm test`        | Runs the tests in `src/` and `scripts/`.                      |
+| `pnpm test`        | Runs the tests in `src/`.                                     |
 
 ## Friction Logging
 

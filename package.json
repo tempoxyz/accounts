@@ -1,7 +1,8 @@
 {
   "scripts": {
     "build": "zile --project tsconfig.build.json",
-    "changeset:publish": "zile publish:prepare --project tsconfig.build.json && node scripts/publish.mjs && changeset git-tag && zile publish:post",
+    "changeset:prepublish": "zile publish:prepare --project tsconfig.build.json",
+    "changeset:publish": "pnpm changeset:prepublish && changeset publish && zile publish:post",
     "changeset:version": "changeset version && pnpm check",
     "check": "vp check --fix",
     "check:types": "tsc && pnpm --filter './examples/*' --filter './playgrounds/*' check:types",
@@ -16,7 +17,6 @@
     "expo-secure-store": "catalog:",
     "expo-web-browser": "catalog:",
     "mppx": "catalog:",
-    "pkg-pr-new": "catalog:",
     "react": "catalog:",
     "react-native-get-random-values": "catalog:",
     "typescript": "catalog:",
@@ -32,7 +32,7 @@
   "[!start-pkg]": "",
   "name": "accounts",
   "version": "0.21.1",
-  "description": "Sign-in, sessions, and access keys for Tempo apps.",
+  "description": "Accounts SDK for Tempo Apps",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "sideEffects": [

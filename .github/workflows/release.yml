@@ -1,0 +1,232 @@
+# Releases the npm packages. On a push to main, Changesets opens the version pull request, or
+# publishes the versions that it holds once it merges. Each push to main also publishes `accounts`
+# and the CLI playground as `main` prereleases, and each pull request as `pr-<n>` prereleases. All
+# publish through npm trusted publishing. `prerelease-cleanup.yml` removes the `pr-<n>` dist-tags
+# once the pull request closes, and prunes every dist-tag but `alpha`, `latest`, `main`, and those
+# of open pull requests each day.
+name: Release
+
+on:
+  workflow_call:
+
+jobs:
+  changesets:
+    name: Changesets
+    # npm trusts `main.yml` only in this environment, which deploys only from `main`, so a branch's
+    # copy of the workflow cannot publish.
+    environment: npm-release
+    if: github.event_name == 'push'
+    # The version pull request and its branch use a GitHub App token from `github-sts`, which
+    # `.github/sts/changesets.sts.yaml` authorizes, since `GITHUB_TOKEN` cannot create pull requests.
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Fetch GitHub token
+        id: sts
+        uses: tempoxyz/gh-actions/actions/github-sts@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+        with:
+          policy: changesets
+
+      - name: Clone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Changesets reads the full history for the changelog.
+          fetch-depth: 0
+          token: ${{ steps.sts.outputs.token }}
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Version or publish
+        # Version 1 of the action, since version 2 requires Changesets CLI 3 and the repository uses 2.
+        uses: tempoxyz/gh-actions/vendor/changesets/action@ceeca6410d1dff0df9604780dac5936bf23f0f25 # changesets/action v1.9.0
+        with:
+          commit: 'chore: version packages'
+          createGithubReleases: true
+          publish: pnpm changeset:publish
+          title: 'chore: version packages'
+          version: pnpm changeset:version
+        env:
+          GITHUB_TOKEN: ${{ steps.sts.outputs.token }}
+
+  # Packs the prereleases, at `0.0.0-pr-<n>.sha-<commit>` on a pull request, or
+  # `0.0.0-main.sha-<commit>` on main. It runs the commit's code, so it holds no npm identity.
+  pack:
+    name: Pack prereleases
+    if: vars.NPM_TRUSTED_PUBLISHING == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # Runs before any of the commit's code, so the publish job trusts its outputs.
+      - name: Resolve version
+        id: version
+        env:
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            echo "tag=pr-$PULL_REQUEST" >> "$GITHUB_OUTPUT"
+            echo "version=0.0.0-pr-$PULL_REQUEST.sha-${SHA:0:7}" >> "$GITHUB_OUTPUT"
+          else
+            # A short SHA can repeat across the history of main, and npm never publishes a version
+            # twice, so main takes the full SHA.
+            echo "tag=main" >> "$GITHUB_OUTPUT"
+            echo "version=0.0.0-main.sha-$SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Clone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Pack
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          version="$VERSION"
+          # Every workspace takes the version first, so the CLI playground's `workspace:*` dependency
+          # on `accounts` packs as this version.
+          for directory in . playgrounds/cli; do
+            (cd "$directory" && npm version --no-git-tag-version "$version")
+          done
+          pnpm changeset:prepublish
+          # The CLI playground is private, so a release never publishes it. Only its prereleases are
+          # public.
+          (cd playgrounds/cli && npm pkg delete private)
+          mkdir -p "$RUNNER_TEMP/prereleases"
+          pnpm pack --pack-destination "$RUNNER_TEMP/prereleases"
+          pnpm --dir playgrounds/cli pack --pack-destination "$RUNNER_TEMP/prereleases"
+
+      - name: Upload prereleases
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          name: prereleases
+          path: ${{ runner.temp }}/prereleases/*.tgz
+          retention-days: 1
+
+  # Publishes the packs under the dist-tag `main` or `pr-<n>`. It alone holds the OIDC token that npm
+  # trusts, and runs no code of the commit. npm trusts `main.yml` only in `npm-release`.
+  prerelease:
+    name: Publish prereleases
+    environment: ${{ github.event_name == 'push' && 'npm-release' || 'npm-prerelease' }}
+    needs: pack
+    permissions:
+      # The check of the commit reads the current commit of main.
+      contents: read
+      id-token: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    # Each of the two packages waits up to 40 minutes until npm serves it.
+    timeout-minutes: 90
+
+    steps:
+      # Pushes to main release one at a time, so a queued run can start after a newer commit. Only
+      # the current commit of main moves the `main` dist-tag.
+      - name: Check commit
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            current="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq ".sha == \"$GITHUB_SHA\"")"
+          else
+            current=true
+          fi
+          echo "publish=$current" >> "$GITHUB_OUTPUT"
+          if [ "$current" != true ]; then
+            echo "Skipped \`$GITHUB_SHA\`, which is not the current commit of main." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Set up Node
+        if: steps.current.outputs.publish == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Download prereleases
+        if: steps.current.outputs.publish == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: prereleases
+          path: ${{ runner.temp }}/prereleases
+
+      - name: Publish prereleases
+        if: steps.current.outputs.publish == 'true'
+        env:
+          TAG: ${{ needs.pack.outputs.tag }}
+          VERSION: ${{ needs.pack.outputs.version }}
+        run: |
+          version="$VERSION"
+          # The CLI playground depends on `accounts`, so the package publishes first.
+          for name in accounts @tempoxyz/example-id-cli; do
+            pack="$RUNNER_TEMP/prereleases/$(echo "${name#@}" | tr / -)-$version.tgz"
+            # The pack comes from the commit's code, so its manifest must name this package
+            # and version before it publishes.
+            manifest="$(tar -xOzf "$pack" package/package.json)"
+            if [ "$(echo "$manifest" | node -p 'const pkg = JSON.parse(require("fs").readFileSync(0)); `${pkg.name}@${pkg.version}`')" != "$name@$version" ]; then
+              echo "::error::$pack does not hold $name@$version."
+              exit 1
+            fi
+            # A rerun or a reopened pull request keeps its head commit, whose version is already
+            # published. `npm view` prints nothing for a version that does not exist.
+            if [ -z "$(npm view "$name@$version" version 2> /dev/null)" ]; then
+              # npm stages a version while it processes it, and refuses to publish a staged version
+              # again, so a rerun in that time waits for the staged version.
+              status=0
+              npm publish "$pack" --access public --tag "$TAG" > "$RUNNER_TEMP/publish.log" 2>&1 || status=$?
+              cat "$RUNNER_TEMP/publish.log"
+              if [ "$status" != 0 ] && ! grep -q 'previously staged version' "$RUNNER_TEMP/publish.log"; then
+                exit 1
+              fi
+            fi
+            # npm processes a new version for up to about half an hour before it installs. The CLI
+            # playground's install needs `accounts`, and the comment names both, so each waits until
+            # it installs. Main has no comment, and its wait would hold the release queue.
+            [ "$GITHUB_EVENT_NAME" = push ] && continue
+            for attempt in $(seq 1 240); do
+              [ -n "$(npm view "$name@$version" version 2> /dev/null)" ] && break
+              [ "$attempt" = 240 ] && { echo "::error::npm does not serve $name@$version after 40 minutes."; exit 1; }
+              sleep 10
+            done
+          done
+
+      # Keeps one comment that names the prereleases, once both are published.
+      - name: Comment prereleases
+        if: github.event_name == 'pull_request' && steps.current.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          VERSION: ${{ needs.pack.outputs.version }}
+        run: |
+          marker='<!-- prereleases -->'
+          body="$marker
+          ### Prereleases
+
+          \`\`\`sh
+          pnpm add accounts@$VERSION
+          pnpx @tempoxyz/example-id-cli@$VERSION login
+          \`\`\`"
+          id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)"
+          if [ -z "$id" ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST/comments" -f body="$body" > /dev/null
+          else
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" > /dev/null
+          fi
+
+permissions: {}

@@ -1,13 +1,12 @@
+# Verifies each pull request, and publishes its prereleases once the package checks pass.
 name: Pull Request
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
-
-permissions: {}
+    types: [opened, ready_for_review, reopened, synchronize]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
 
 jobs:
   verify:
@@ -15,4 +14,17 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/verify.yml # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
+      packages: read
+    secrets: inherit
+    uses: ./.github/workflows/verify.yml
+
+  release:
+    name: Release
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    secrets: inherit
+    uses: ./.github/workflows/release.yml
+
+permissions: {}
