@@ -13,6 +13,7 @@ const sandbox =
 
 /** Renders the section with the sandbox's frame. */
 export function Section(props: Section.Props) {
+  const [loaded, setLoaded] = useState(false)
   const [merchant, setMerchant] = useState('')
   const [payment, setPayment] = useState(true)
   const [sandboxed, setSandboxed] = useState(true)
@@ -50,15 +51,25 @@ export function Section(props: Section.Props) {
           sandbox
         </label>
       </Layout.Row>
-      <iframe
-        // A change of an attribute applies only to a new document, so each change loads the frame again.
-        key={`${src}:${payment}:${sandboxed}`}
-        src={src.href}
-        style={{ border: 0, height: 720, width: '100%' }}
-        title="Coinflow sandbox"
-        {...(payment ? { allow: 'payment' } : {})}
-        {...(sandboxed ? { sandbox } : {})}
-      />
+      {/* The frame loads on a click, so Coinflow's and Google Pay's console errors stay out of
+          every other flow on the page. */}
+      {loaded ? (
+        <iframe
+          // A change of an attribute applies only to a new document, so each change loads the frame again.
+          key={`${src}:${payment}:${sandboxed}`}
+          src={src.href}
+          style={{ border: 0, height: 720, width: '100%' }}
+          title="Coinflow sandbox"
+          {...(payment ? { allow: 'payment' } : {})}
+          {...(sandboxed ? { sandbox } : {})}
+        />
+      ) : (
+        <Layout.Row>
+          <button onClick={() => setLoaded(true)} type="button">
+            Load the sandbox
+          </button>
+        </Layout.Row>
+      )}
       <p className="muted">
         <a href={src.href} rel="noreferrer" target="_blank">
           Open the sandbox at the top level

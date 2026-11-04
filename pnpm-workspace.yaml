@@ -38,7 +38,7 @@ catalog:
   hono: 4.13.13
   incur: 0.7.0
   jose: 6.2.12
-  mppx: 0.12.0
+  mppx: 0.17.1
   ox: 0.14.59
   pkg-pr-new: 0.0.70
   react: 19.3.0
@@ -67,6 +67,8 @@ catalogs:
     react: 19.2.3
 
 minimumReleaseAgeExclude:
+  # mppx 0.17.1 signs a session's close authorization raw with an access key.
+  - mppx@0.17.1
   # Viem 2.57.16 derives configurable account addresses from the initial config hash, and pins ox 0.14.59.
   # The examples install it. Viem's main snapshot omits the access key from `eth_call` requests (wevm/viem#5409).
   - ox@0.14.59

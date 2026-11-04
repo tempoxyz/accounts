@@ -182,9 +182,10 @@ export async function open(
     options.redirectUri ?? auth.redirectUri ?? `${window.location.origin}/`
   /** Returns the deposit page's URL for the account at `address`. */
   const toUrl = (address: string, entry: toUrl.Options = { mode }) => {
-    // A frame loads the deposit pages at `/embed/deposit`, the path that Tempo ID frames.
+    // A frame and a popup load the deposit pages at `/embed/deposit`, the path of an app's pages.
+    // A redirect loads Tempo ID's own deposit pages.
     const url = new URL(
-      entry.mode === 'frame' ? '/embed/deposit' : '/deposit',
+      entry.mode === 'redirect' ? '/deposit' : '/embed/deposit',
       auth.url,
     )
     url.search = new URLSearchParams({

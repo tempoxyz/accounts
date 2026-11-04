@@ -6,7 +6,7 @@ Opens Tempo ID's deposit page for one of the signed-in user's Tempo Accounts, fr
 
 | `mode`           | Where                                                                                                                         | Result                                                                                                                             |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `popup`          | A popup window, with `display=popup`                                                                                          | Resolves when the user continues to the app, or closes the popup                                                                   |
+| `popup`          | A popup window of `/embed/deposit`, with `display=popup`                                                                      | Resolves when the user continues to the app, or closes the popup                                                                   |
 | `frame`, default | A frame of `/embed/deposit` in a dialog on the app's page. A page that runs Coinflow where no frame can opens a popup instead | Resolves when the user continues to the app, or closes the dialog                                                                  |
 | `redirect`       | The same tab, which returns to the app                                                                                        | Resolves with `undefined`. The redirect URI's page reads the result with [`Actions.funding.complete`](Actions.funding.complete.md) |
 

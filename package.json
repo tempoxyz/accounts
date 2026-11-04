@@ -118,7 +118,7 @@
     "@wagmi/core": "^3.6.7",
     "expo-secure-store": ">=14",
     "expo-web-browser": ">=14",
-    "mppx": ">=0.12",
+    "mppx": ">=0.17.1",
     "react": ">=18",
     "react-native-get-random-values": ">=1",
     "viem": "^2.57.12"

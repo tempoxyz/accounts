@@ -187,6 +187,8 @@ function create(env: Env | undefined) {
       Secp256k1.randomPrivateKey(),
   )
   const store = env?.MPP_STORE ?? Store.memory()
+  // Without `realm`, each challenge names the request's hostname. A client signs a zero-amount proof
+  // only for the realm of the origin that sent the challenge.
   const payment = Mppx.create({
     methods: [
       tempo.charge({
@@ -207,7 +209,6 @@ function create(env: Env | undefined) {
         store,
       }),
     ],
-    realm: 'id-playground-api',
     secretKey: env?.MPP_SECRET_KEY || crypto.randomUUID(),
   })
 
