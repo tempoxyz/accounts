@@ -1,0 +1,5 @@
+# actionlint does not know the `queue` key of `concurrency`, which keeps every pending release.
+paths:
+  .github/workflows/main.yml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'
