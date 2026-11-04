@@ -227,8 +227,8 @@ async function authorize<
   // ID lets only the redirect URI's origin frame the sign-in, and only in a secure context. A
   // browser without IntersectionObserver v2 cannot show that nothing covers the frame, so only a
   // frame that Tempo ID trusts, as its loaded page reports, signs in there. The frame takes the
-  // request's own parameters, so an instance that pushes them signs in with a popup. A deposit page
-  // that runs Coinflow where no frame can opens in a popup, which only the gesture opens, so a
+  // request's own parameters, so an instance that pushes them signs in with a popup. Buy MACH on iOS
+  // and iPadOS runs Apple Pay, which no frame runs, and a popup opens only within the gesture, so a
   // request with such a funding hint signs in with a popup, whose own pages show the deposit page.
   const redirectUri =
     rest.redirectUri ?? auth.redirectUri ?? `${window.location.origin}/`
@@ -248,7 +248,6 @@ async function authorize<
       Popup.coinflow({
         ...rest.funding,
         chainId: auth.chainId,
-        clientId: auth.clientId,
       })
     ) &&
     !pushes(auth) &&
@@ -511,8 +510,7 @@ export declare namespace signIn {
      * `iframe` to sign in in a dialog on the page, or `popup` for a popup window. Defaults to
      * `iframe`, which falls back to `popup` outside a secure context, for an instance that pushes
      * its requests with `par`, and for a request with `funding` whose deposit page runs Coinflow where
-     * no frame can: Buy MACH for a hint of `MACH` on Tempo mainnet, on iOS, iPadOS, or for a
-     * third-party app.
+     * no frame can: Buy MACH for a hint of `MACH` on Tempo mainnet, on iOS and iPadOS.
      */
     mode?: 'iframe' | 'popup' | undefined
     /**

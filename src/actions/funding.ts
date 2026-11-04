@@ -126,10 +126,10 @@ export declare namespace complete {
  *
  * - `frame`, the default, opens the page in a frame in a dialog, and resolves when the user continues
  *   to the app or closes the dialog. The frame offers a popup when it cannot show the page. A
- *   third-party app's frame continues Buy MACH in a popup, which opens within the user's click in
- *   the frame, or from the dialog's offer when the browser blocks it. A page that runs Coinflow
- *   where no frame can, Buy MACH for a hint of `MACH` on Tempo mainnet on iOS, iPadOS, or for a
- *   third-party app, opens in a popup at once, without the frame.
+ *   third-party app's frame shows Buy MACH's amount step, and its Pay by card continues in a popup,
+ *   which opens within the user's click in the frame, or from the dialog's offer when the browser
+ *   blocks it. On iOS and iPadOS, Buy MACH for a hint of `MACH` on Tempo mainnet opens in a popup at
+ *   once, without the frame.
  * - `popup` opens the page in a popup window, and resolves when the user continues to
  *   the app or closes the popup. The page must be on the origin of the redirect URI, since Tempo ID
  *   posts the return only to that origin.
@@ -166,7 +166,6 @@ export async function open(
       Popup.coinflow({
         amount,
         chainId: options.chainId ?? auth.chainId,
-        clientId: auth.clientId,
         token,
       })
     )
@@ -401,7 +400,7 @@ export declare namespace open {
      * `frame` for a frame in a dialog on the page, `popup` for a popup window, or `redirect` for a
      * redirect of the page. Defaults to `frame`. Tempo ID frames the page at `/embed/deposit` for
      * any enabled web app, from the origin of `redirectUri`. A page that runs Coinflow where no frame
-     * can, Buy MACH on iOS, iPadOS, or for a third-party app, opens `frame` in a popup.
+     * can, Buy MACH on iOS and iPadOS, opens `frame` in a popup.
      * A frame that shows no deposit page, such as without a Tempo ID session in the frame, or one
      * that the app's page covers, offers a popup, which opens from the user's click.
      */

@@ -6,7 +6,6 @@
  */
 /* istanbul ignore file -- The popup window exists only in a browser. */
 import * as Chains from './chains.js'
-import * as ClientId from './clientId.js'
 
 /**
  * Milliseconds that a closed popup has to deliver a callback that its page posted as it closed,
@@ -105,15 +104,14 @@ export function apple() {
 /**
  * Returns whether the deposit page of a request runs Coinflow where no frame can, so the page opens
  * in a popup. The page opens Buy MACH, which runs Coinflow, in place of the list for a hint of `MACH`
- * on Tempo mainnet. Coinflow runs in no frame on iOS and iPadOS, whose Apple Pay needs a top-level
- * page, nor in a third-party app's cross-site frame, where its purchase protection does not run.
- * A deposit list runs no Coinflow, so it opens in the frame, which continues Buy MACH in a popup.
+ * on Tempo mainnet. Apple Pay runs only on a top-level page, so on iOS and iPadOS no frame runs it.
+ * Elsewhere, a frame shows Buy MACH's amount step, and its Pay by card continues in a popup.
  */
 export function coinflow(options: coinflow.Options) {
-  const { amount, chainId, clientId, token } = options
+  const { amount, chainId, token } = options
   if (amount === undefined || token !== 'MACH') return false
   if (chainId !== Chains.ids.mainnet) return false
-  return apple() || ClientId.thirdParty(clientId)
+  return apple()
 }
 
 export declare namespace coinflow {
@@ -122,8 +120,6 @@ export declare namespace coinflow {
     amount?: string | undefined
     /** The chain of the deposit. */
     chainId: number
-    /** The app's client ID. */
-    clientId: string
     /** The hint's token, by symbol. Absent, the page lists every method. */
     token?: string | undefined
   }

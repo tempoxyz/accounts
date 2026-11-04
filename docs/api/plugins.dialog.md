@@ -107,7 +107,7 @@ const session = await tempoId.dialog.signIn({ challenge })
 
 - **Type:** [`Funding`](types.md#funding)
 
-The amount that the app needs in the user's Tempo Account. After the approval, an account that holds less opens Tempo ID's funding page before the callback, as [Funding hints](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md#popup-and-embedded-sign-in) describes. In the frame, the sign-in completes first, then the deposit page opens in a frame, as [`tempoId.funding.open`](plugins.funding.md) does, and the call resolves once that page returns or closes. A sign-in whose deposit page runs Coinflow where no frame can, for a hint of `MACH` on Tempo mainnet, on iOS, iPadOS, or for a third-party app, runs in a popup.
+The amount that the app needs in the user's Tempo Account. After the approval, an account that holds less opens Tempo ID's funding page before the callback, as [Funding hints](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md#popup-and-embedded-sign-in) describes. In the frame, the sign-in completes first, then the deposit page opens in a frame, as [`tempoId.funding.open`](plugins.funding.md) does, and the call resolves once that page returns or closes. For a hint of `MACH` on Tempo mainnet, the frame shows Buy MACH's amount step, and **Pay by card** continues in a popup from that click. On iOS and iPadOS, whose Apple Pay runs only on a top-level page, the sign-in runs in a popup.
 
 ```ts
 const session = await tempoId.dialog.signIn({

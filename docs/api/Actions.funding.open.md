@@ -107,7 +107,7 @@ const result = await Actions.funding.open(config, {
 - **Type:** `'frame' | 'popup' | 'redirect'`
 - **Default:** `'frame'`
 
-Where the deposit page opens: a frame in a dialog on the page, a popup window, or the same tab through a redirect. A page that runs Coinflow where no frame can opens `frame` in a popup: Buy MACH for a hint of `MACH` on Tempo mainnet, on iOS, iPadOS, or for a third-party app. Apple Pay runs only on a top-level page, and Coinflow's purchase protection does not run in a cross-site frame. A deposit list runs no Coinflow, so it opens in the frame, which continues Buy MACH in a popup.
+Where the deposit page opens: a frame in a dialog on the page, a popup window, or the same tab through a redirect. A page that runs Coinflow where no frame can opens `frame` in a popup: Buy MACH for a hint of `MACH` on Tempo mainnet, on iOS and iPadOS, since Apple Pay runs only on a top-level page. Coinflow's purchase protection does not run in a cross-site frame, so a third-party app's frame shows Buy MACH's amount step, and **Pay by card** continues in a popup from that click.
 
 ```ts
 await Actions.funding.open(config, { address, mode: 'redirect' })
