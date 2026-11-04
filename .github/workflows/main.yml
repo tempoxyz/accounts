@@ -5,8 +5,8 @@ on:
 
 # Pushes run in push order: a newer push replaces a waiting run, so the newest commit
 # is always the one that deploys and publishes next. Re-runs get their own group, so
-# re-running an older run never replaces the newest commit's waiting run; its deploy
-# skips itself once a newer commit has been deployed (deploy-workers.yml).
+# re-running an older run never replaces the newest commit's waiting run, and a re-run
+# deploys or publishes only while its commit is still the tip of main (verify's ship).
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_attempt == '1' && 'push' || github.sha }}
   cancel-in-progress: false
@@ -20,6 +20,9 @@ jobs:
     name: Verify
     permissions:
       actions: read # to read this commit's Verify run
+      contents: read # to read main's tip
+    outputs:
+      ship: ${{ steps.tip.outputs.ship }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -42,8 +45,27 @@ jobs:
             sleep 30
           done
 
+      # A re-run of an older run must not deploy or publish over newer commits, so a
+      # re-run ships only while its commit is still main's tip.
+      - name: Check main's tip
+        id: tip
+        env:
+          ATTEMPT: ${{ github.run_attempt }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ship=true
+          if [ "$ATTEMPT" != 1 ] && [ "$(gh api "repos/$REPO/commits/main" --jq .sha)" != "$SHA" ]; then
+            ship=false
+            echo "::notice::Not deploying or publishing: main has moved past $SHA."
+          fi
+          echo "ship=$ship" >> "$GITHUB_OUTPUT"
+
   deploy-workers:
     name: Deploy Workers
+    if: needs.verify.outputs.ship == 'true'
     needs: verify
     permissions:
       actions: read # to find the last successful deploy
@@ -96,7 +118,7 @@ jobs:
 
   publish:
     name: Publish
-    if: needs.version.outputs.hasChangesets == 'false'
+    if: needs.verify.outputs.ship == 'true' && needs.version.outputs.hasChangesets == 'false'
     needs: [verify, version]
     permissions:
       contents: write # to create the GitHub release and tag

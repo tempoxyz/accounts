@@ -11,10 +11,8 @@ on:
       CLOUDFLARE_API_TOKEN:
         required: true
 
-# A re-run of an older Main run gets its own group, so it never replaces the newest
-# commit's waiting deploy (it skips itself when a newer commit was deployed).
 concurrency:
-  group: deploy-workers-${{ github.event.pull_request.number || (github.run_attempt == '1' && 'production' || github.sha) }}
+  group: deploy-workers-${{ github.event.pull_request.number || 'production' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
@@ -74,6 +72,7 @@ jobs:
         run: |
           base="$BASE"
           if [ "$EVENT" = push ]; then
+            base=''
             last=''
             tried=''
             ids="$(gh run list --repo "$REPO" --workflow main.yml --branch main --event push --limit 20 --json databaseId,headSha \
@@ -91,7 +90,7 @@ jobs:
             tried="$tried $(gh run list --repo "$REPO" --workflow deploy-workers.yml --branch main --event workflow_dispatch --limit 20 --json headSha \
               --jq '.[].headSha')" || true
             if [ -z "$last" ]; then
-              last="$(gh run list --repo "$REPO" --workflow deploy-workers.yml --branch main --status success --limit 20 --json event,headSha \
+              last="$(gh run list --repo "$REPO" --workflow deploy-workers.yml --branch main --event push --status success --limit 20 --json event,headSha \
                 --jq 'map(select(.event != "pull_request" and .headSha != env.SHA))[0].headSha // empty')" || last=''
             fi
             for head in $last $tried; do
