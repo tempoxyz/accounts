@@ -121,7 +121,9 @@ jobs:
 
   publish:
     name: Publish
-    if: needs.verify.outputs.ship == 'true' && needs.version.outputs.hasChangesets == 'false'
+    # Not gated on Verify's ship output: its own version check below decides re-runs, so a
+    # failed or unverified release can still be published once main holds the same version.
+    if: needs.version.outputs.hasChangesets == 'false'
     needs: [verify, version]
     permissions:
       contents: write # to create the GitHub release and tag
