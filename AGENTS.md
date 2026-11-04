@@ -302,7 +302,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - `src/` is the published package `accounts`. Its entries are in `package.json` `exports`: `.`, `./cloudflare`, `./expo`, `./internal`, `./mpp`, `./plugins`, `./react`, and `./wagmi`.
 - `src/actions/` holds the actions that `Actions` exports. `src/plugins/` holds the plugins.
 - `src/stores/` holds each store that `Store` exports, such as `Store.memory`. `Store.ts` holds only the `Store` type and `Store.from`.
-- `src/internal/handlers/` holds each route handler, such as the relay route. `src/internal/Handler.ts` holds the `Handler` type that each returns.
+- `src/internal/handlers/` holds each route handler, such as `Relay.ts`, the relay route. `src/internal/Handler.ts` holds the `Handler` type that each returns.
 - `docs/` documents the package.
 - `examples/` holds one small app per platform (`backend`, `cli`, `mobile`, `wagmi`, `web`). Each names a published range, so a copy installs as it is. CI type-checks them.
 

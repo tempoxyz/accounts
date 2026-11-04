@@ -7,7 +7,7 @@ import { createClient, type LocalAccount } from 'viem'
 import { Relay } from 'viem/tempo'
 import type * as Accounts from '../Accounts.js'
 import type * as Handler from '../internal/Handler.js'
-import * as RelayRoute from '../internal/handlers/RelayRoute.js'
+import * as RelayHandler from '../internal/handlers/Relay.js'
 import * as Plugin from '../Plugin.js'
 import { settings, viem } from './viem.js'
 
@@ -47,13 +47,13 @@ export function relay(options: relay.Options) {
 
       const route = (() => {
         if (options.apiKey !== undefined)
-          return RelayRoute.create({
+          return RelayHandler.create({
             apiKey: options.apiKey,
             chainId,
             ...(options.apiUrl ? { apiUrl: options.apiUrl } : {}),
           })
         const { account, plugins = [], ...relayOptions } = options
-        return RelayRoute.create({
+        return RelayHandler.create({
           ...relayOptions,
           chainId,
           getClient: (clientOptions: { chainId: number }) => {
