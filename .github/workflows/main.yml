@@ -10,6 +10,28 @@ concurrency:
 permissions: {} # each job defines the minimum permissions it needs
 
 jobs:
+  verify:
+    name: Verify
+    permissions:
+      contents: read
+    uses: ./.github/workflows/verify.yml # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
+    with:
+      full: true
+    secrets:
+      VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
+
+  deploy-workers:
+    name: Deploy Workers
+    needs: verify
+    permissions:
+      actions: read # to find the last successful deploy
+      contents: read
+      pull-requests: write # requested by the reusable workflow for preview comments
+    uses: ./.github/workflows/deploy-workers.yml # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
   version:
     name: Version
     outputs:
@@ -53,7 +75,7 @@ jobs:
   publish:
     name: Publish
     if: needs.version.outputs.hasChangesets == 'false'
-    needs: version
+    needs: [verify, version]
     permissions:
       contents: write # to create the GitHub release and tag
       id-token: write # to use npm trusted publishing through OIDC

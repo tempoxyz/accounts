@@ -1,9 +1,18 @@
 name: Verify
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
+  # Main calls this before publishing to npm or deploying workers, so pushes to
+  # main run it from there rather than on their own.
+  workflow_call:
+    inputs:
+      full:
+        description: Check every package instead of only those affected since the previous commit.
+        type: boolean
+        default: false
+    secrets:
+      VITE_RPC_CREDENTIALS:
+        required: false
 
 concurrency:
   group: verify-${{ github.event.pull_request.number || github.sha }}
@@ -37,6 +46,7 @@ jobs:
           restore-keys: turbo-checks-
 
       - name: Select affected packages
+        if: ${{ !inputs.full }}
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
@@ -86,6 +96,7 @@ jobs:
           restore-keys: turbo-test-
 
       - name: Select affected packages
+        if: ${{ !inputs.full }}
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |

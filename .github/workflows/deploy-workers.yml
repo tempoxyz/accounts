@@ -1,9 +1,15 @@
 name: Deploy Workers
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
+  # Main calls this for pushes to main once Verify passes, so production only
+  # gets commits whose checks and tests passed.
+  workflow_call:
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+      CLOUDFLARE_API_TOKEN:
+        required: true
 
 concurrency:
   group: deploy-workers-${{ github.event.pull_request.number || 'production' }}
@@ -48,8 +54,8 @@ jobs:
           key: turbo-deploy-${{ github.sha }}
           restore-keys: turbo-deploy-
 
-      # Pushes deploy what changed since the last successful deploy, so changes from a
-      # superseded or failed run are not skipped. Falls back to every worker.
+      # Pushes deploy what changed since the last successful Main run, so changes from a
+      # superseded, failed or unverified run are not skipped. Falls back to every worker.
       - name: Select affected workers
         if: github.event_name != 'workflow_dispatch'
         env:
@@ -61,7 +67,7 @@ jobs:
         run: |
           base="$BASE"
           if [ "$EVENT" = push ]; then
-            last="$(gh run list --repo "$REPO" --workflow deploy-workers.yml --branch main --status success --limit 20 --json event,headSha \
+            last="$(gh run list --repo "$REPO" --workflow main.yml --branch main --status success --limit 20 --json event,headSha \
               --jq 'map(select(.event != "pull_request" and .headSha != env.SHA))[0].headSha // empty')" || last=''
             base="${last:-$base}"
           fi
