@@ -7,7 +7,13 @@
  * @module
  */
 /* istanbul ignore file -- Each action needs a browser window, for the dialog or the popup. */
-import { createActor } from 'xstate'
+import {
+  type Actor as XStateActor,
+  assign,
+  createActor,
+  emit,
+  setup,
+} from 'xstate'
 import type { Config } from '../Id.js'
 import type { Authorization } from '../Authorization.js'
 import type { Keyed, WithAccount } from '../Permissions.js'
@@ -16,7 +22,7 @@ import * as DefaultStore from '../internal/defaultStore.js'
 import { authorizeUrl, pushes } from '../internal/request.js'
 import * as Popup from '../internal/popup.js'
 import * as Sheet from '../internal/sheet.js'
-import * as DialogMachine from './dialog.machine.js'
+import * as Funding from './funding.js'
 import * as redirect from './redirect.js'
 
 /** The browser blocked the popup, since `signIn` ran outside a user gesture such as a click. */
@@ -160,8 +166,10 @@ export declare namespace preload {
  * The page must be on the origin of the redirect URI, since the callback reaches the page only on
  * that origin. Outside a secure context, `iframe` signs in with `popup`. An instance that pushes its
  * requests with `par` signs in with `popup` too, since the frame takes the request's own parameters,
- * and Tempo ID reads a pushed request only from its push. A request with `funding` signs in with
- * `popup` as well, since a frame cannot show the funding page. The next call of the
+ * and Tempo ID reads a pushed request only from its push. A request with `funding` signs in in the
+ * frame. If the account holds less than the hint, the call redeems the code, then opens the deposit
+ * page as `Actions.funding.open` does in `frame` mode, and resolves once that page returns or closes.
+ * On iOS and iPadOS, such a request signs in with `popup`, whose pages show the deposit page. The next call of the
  * instance replaces a pending call in either mode, and rejects it with an `AbortError`. A popup that
  * the user closes rejects the call with an `AbortError` too. A page that sends
  * `Cross-Origin-Opener-Policy: same-origin` severs its handle to the popup, so a popup that the user
@@ -180,6 +188,33 @@ export async function signIn<
   auth: Config,
   options: signIn.Options<accessKey> = {},
 ): Promise<signIn.ReturnType<Keyed<accessKey>>> {
+  // `authorize` chooses the mode before its first `await`, so a popup still opens within the gesture.
+  const { authorization, funding } = await authorize(auth, options)
+  if (!funding || !options.funding) return authorization
+
+  // The sign-in already succeeded, so a deposit page that fails rejects nothing but the signal.
+  await Funding.open(auth, {
+    ...options.funding,
+    address: funding.address,
+    mode: 'frame',
+    redirectUri:
+      options.redirectUri ?? auth.redirectUri ?? `${window.location.origin}/`,
+    signal: options.signal,
+  }).catch(() => undefined)
+  options.signal?.throwIfAborted()
+  return authorization
+}
+
+/**
+ * Signs the user in, as {@link signIn} describes, and resolves with the authorization and the deposit
+ * page that the frame's sign-in leaves to the app.
+ */
+async function authorize<
+  const accessKey extends WithAccount | undefined = undefined,
+>(
+  auth: Config,
+  options: signIn.Options<accessKey>,
+): Promise<authorize.ReturnType<Keyed<accessKey>>> {
   const {
     mode: requested = 'iframe',
     signal,
@@ -192,9 +227,9 @@ export async function signIn<
   // ID lets only the redirect URI's origin frame the sign-in, and only in a secure context. A
   // browser without IntersectionObserver v2 cannot show that nothing covers the frame, so only a
   // frame that Tempo ID trusts, as its loaded page reports, signs in there. The frame takes the
-  // request's own parameters, so an instance that pushes them signs in with a popup. The frame
-  // cannot show the funding page, and the popup that it then opens repeats a request that the
-  // frame's sign-in already spent, so a request with a funding hint signs in with a popup too.
+  // request's own parameters, so an instance that pushes them signs in with a popup. iOS and iPadOS
+  // open the deposit page in a popup, which only the gesture opens, so a request with a funding
+  // hint signs in with a popup there, whose own pages show the deposit page.
   const redirectUri =
     rest.redirectUri ?? auth.redirectUri ?? `${window.location.origin}/`
   // A popup's callback page posts on a channel of its own origin, which no page of another origin
@@ -205,15 +240,59 @@ export async function signIn<
   // either mode ends when the next one starts.
   const actor = slot(auth)
   actor.send({ type: 'replace' })
-  const entry = DialogMachine.entry(actor.getSnapshot())
+  const entry = machines.entry(actor.getSnapshot())
   const mode =
     requested === 'iframe' &&
-    !rest.funding &&
+    !(rest.funding && Popup.apple()) &&
     !pushes(auth) &&
     framed({ redirectUri }) &&
     (visibility() || entry?.sheet.trusted() === true)
       ? 'iframe'
       : 'popup'
+
+  // Outside a gesture, such as after a failed transaction, a popup blocker refuses the popup that
+  // `iframe` falls back to, so a dialog offers it, and the user's click on Continue starts the
+  // sign-in again. The offer holds the dialog's token, so a later sign-in replaces it.
+  if (requested !== 'popup' && mode === 'popup' && !Popup.activated())
+    return await new Promise((resolve, reject) => {
+      actor.send({ type: 'start' })
+      const call = actor.getSnapshot().context.call ?? 0
+      const settle = (fn: () => void) => {
+        close()
+        subscription.unsubscribe()
+        signal?.removeEventListener('abort', abort)
+        actor.send({ call, kept: undefined, type: 'end' })
+        fn()
+      }
+      const abort = () => settle(() => reject(signal?.reason))
+      const subscription = actor.on('replaced', (event) => {
+        if (event.call !== call) return
+        settle(() =>
+          reject(
+            new DOMException(
+              'A later sign-in replaced this one.',
+              'AbortError',
+            ),
+          ),
+        )
+      })
+      const close = Sheet.prompt({
+        label: 'Continue with Tempo',
+        onCancel: () =>
+          settle(() =>
+            reject(
+              new DOMException('The user closed the sign-in.', 'AbortError'),
+            ),
+          ),
+        // The sign-in in the popup replaces the offer, and holds the dialog's next token.
+        onContinue: () =>
+          settle(() => {
+            authorize(auth, { ...options, mode: 'popup' }).then(resolve, reject)
+          }),
+        text: 'Continue in a Tempo ID window to finish signing in.',
+      })
+      signal?.addEventListener('abort', abort, { once: true })
+    })
 
   // A popup blocker accepts `window.open` only within the gesture, so the popup opens blank before
   // the first `await`, and navigates once the URL is ready.
@@ -314,23 +393,26 @@ export async function signIn<
     // popup returns.
     const listener = new BroadcastChannel(name)
     broadcast = listener
-    const received = new Promise<string>((resolve, reject) => {
+    const received = new Promise<{
+      funding?: Sheet.machines.sheet.Funding | undefined
+      url: string
+    }>((resolve, reject) => {
       listener.onmessage = (event: MessageEvent<Message>) =>
-        resolve(event.data.url)
+        resolve({ url: event.data.url })
       aborted.catch(reject)
       closed.catch(reject)
       replaced.catch(reject)
       // The popup's page posts the callback here, and a user who closes the popup closes the sign-in.
       if (popup)
         unwatch = Popup.watchPopup(popup, {
-          onCallback: resolve,
+          onCallback: (url) => resolve({ url }),
           onClose: () => close?.(),
           // The page takes input again once the popup closes, while a late callback can still arrive.
           onClosed: () => unblock?.(),
           origin: new URL(auth.url).origin,
         })
       sheet?.show({
-        onCallback: resolve,
+        onCallback: (url, funding) => resolve({ funding, url }),
         onClose: () => close?.(),
         popupUrl,
         request,
@@ -338,7 +420,8 @@ export async function signIn<
       })
     })
     if (popup) popup.location.href = popupUrl
-    const callbackUrl = new URL(await received)
+    const { funding, url } = await received
+    const callbackUrl = new URL(url)
     // The callback page closes its popup once it delivers the callback, so a popup's close after the
     // callback ends nothing. A close of the dialog still ends the call while its code redeems.
     unwatch?.()
@@ -367,7 +450,7 @@ export async function signIn<
     ])) as signIn.ReturnType<Keyed<accessKey>>
     // A signal that aborts as the redemption settles still rejects the call.
     signal?.throwIfAborted()
-    return authorization
+    return { authorization, funding }
   } finally {
     if (abort) signal?.removeEventListener('abort', abort)
     broadcast?.close()
@@ -377,7 +460,7 @@ export async function signIn<
     // signs in, so this one keeps no frame and preloads none. The frame takes the next sign-in's
     // request too, whether it preloaded or not, unless it failed and the dialog offers a popup in
     // its place, or another preload replaced it.
-    const { keep, owned } = DialogMachine.ending(actor.getSnapshot(), {
+    const { keep, owned } = machines.ending(actor.getSnapshot(), {
       call,
       framed: sheet !== undefined,
     })
@@ -395,7 +478,7 @@ export async function signIn<
       // A browser without IntersectionObserver v2 signs in to an app that Tempo ID does not trust
       // through a popup, so it preloads no frame for that app again.
       const usable = visibility() || entry?.sheet.trusted() !== false
-      if (owned && entry && usable && !DialogMachine.entry(actor.getSnapshot()))
+      if (owned && entry && usable && !machines.entry(actor.getSnapshot()))
         preload(auth, entry.options)
     }
     unblock?.()
@@ -420,7 +503,7 @@ export declare namespace signIn {
     /**
      * `iframe` to sign in in a dialog on the page, or `popup` for a popup window. Defaults to
      * `iframe`, which falls back to `popup` outside a secure context, for an instance that pushes
-     * its requests with `par`, and for a request with `funding`.
+     * its requests with `par`, and for a request with `funding` on iOS and iPadOS.
      */
     mode?: 'iframe' | 'popup' | undefined
     /**
@@ -442,6 +525,15 @@ export declare namespace signIn {
     : Authorization
 }
 
+declare namespace authorize {
+  type ReturnType<key extends boolean = false> = {
+    /** The authorization. */
+    authorization: signIn.ReturnType<key>
+    /** The deposit page that the app opens after the sign-in. Absent for none. */
+    funding?: Sheet.machines.sheet.Funding | undefined
+  }
+}
+
 /** What {@link callback} posts to the opening page. */
 type Message = {
   /** The callback URL, with its `code` and `state`, or its `error`. */
@@ -461,14 +553,14 @@ declare namespace channel {
 }
 
 /** Each instance's dialog, which only `preload` and `signIn` read and send to. */
-const slots = new WeakMap<Config, DialogMachine.Actor>()
+const slots = new WeakMap<Config, machines.dialog.Actor>()
 
 /** Returns the instance's dialog, which the instance's first `preload` or `signIn` creates. */
 function slot(auth: Config) {
   const existing = slots.get(auth)
   if (existing) return existing
   const actor = createActor(
-    DialogMachine.machine.provide({
+    machines.dialog.provide({
       actions: { close: ({ context }) => context.entry?.sheet.close() },
     }),
   ).start()
@@ -510,4 +602,222 @@ function visibility() {
     typeof IntersectionObserverEntry !== 'undefined' &&
     'isVisible' in IntersectionObserverEntry.prototype
   )
+}
+
+/** The state machines that this module runs. */
+export namespace machines {
+  /**
+   * The machine. Two regions run in parallel: `frame`, the preloaded frame, and `call`, the sign-in
+   * that holds the dialog.
+   *
+   * | State               | Meaning                                                              |
+   * | ------------------- | -------------------------------------------------------------------- |
+   * | `frame.empty`       | No frame is preloaded. A sign-in that holds one owns it.             |
+   * | `frame.preloaded`   | A hidden frame waits for the next sign-in, in `context.entry`.       |
+   * | `call.idle`         | No sign-in holds the dialog.                                         |
+   * | `call.running`      | The sign-in of `context.call` holds the dialog.                      |
+   */
+  export const dialog = setup({
+    actions: {
+      /** Closes the preloaded frame. `dialog.ts` provides it. */
+      close: () => {},
+      /** Ends the sign-in that holds the dialog. */
+      finish: assign({ call: undefined }),
+      /** Holds the frame that the sign-in kept, or the new preload. */
+      hold: assign(({ event }) => {
+        if (event.type === 'preload') return { entry: event.entry }
+        if (event.type === 'end') return { entry: event.kept }
+        return {}
+      }),
+      /** Emits `replaced` for the sign-in that holds the dialog. */
+      replace: emit(({ context }) => ({
+        call: context.call ?? 0,
+        type: 'replaced' as const,
+      })),
+      /** Gives the sign-in that starts the next token. */
+      start: assign(({ context }) => ({
+        call: context.calls + 1,
+        calls: context.calls + 1,
+      })),
+      /** Releases the preloaded frame, which a sign-in owns or closed. */
+      take: assign({ entry: undefined }),
+    },
+    guards: {
+      /** Whether the sign-in that ended kept its frame loaded for the next one. */
+      kept: ({ event }) => event.type === 'end' && event.kept !== undefined,
+      /** Whether the sign-in that ended still holds the dialog. */
+      owned: ({ context, event }) =>
+        event.type === 'end' && event.call === context.call,
+      /** Whether the sign-in shows the preloaded frame. */
+      reuse: ({ event }) => event.type === 'take' && event.reuse,
+    },
+    types: {
+      context: {} as machines.dialog.Context,
+      emitted: {} as machines.dialog.Emitted,
+      events: {} as machines.dialog.Event,
+    },
+  }).createMachine({
+    context: { call: undefined, calls: 0, entry: undefined },
+    id: 'dialog',
+    states: {
+      call: {
+        initial: 'idle',
+        states: {
+          idle: {
+            on: { start: { actions: 'start', target: 'running' } },
+          },
+          running: {
+            on: {
+              end: { actions: 'finish', guard: 'owned', target: 'idle' },
+              replace: { actions: 'replace' },
+              // A sign-in that the browser's popup blocker refused never starts, so the sign-in that
+              // it replaced still holds the dialog.
+              start: { actions: 'start', reenter: true, target: 'running' },
+            },
+          },
+        },
+      },
+      frame: {
+        initial: 'empty',
+        states: {
+          empty: {
+            on: {
+              end: { actions: 'hold', guard: 'kept', target: 'preloaded' },
+              preload: { actions: 'hold', target: 'preloaded' },
+            },
+          },
+          preloaded: {
+            on: {
+              discard: { actions: ['close', 'take'], target: 'empty' },
+              preload: {
+                actions: ['close', 'hold'],
+                reenter: true,
+                target: 'preloaded',
+              },
+              take: [
+                { actions: 'take', guard: 'reuse', target: 'empty' },
+                { actions: ['close', 'take'], target: 'empty' },
+              ],
+            },
+          },
+        },
+      },
+    },
+    type: 'parallel',
+  })
+
+  /** The types of {@link dialog}. */
+  export namespace dialog {
+    /** A frame that the instance preloaded, which the next sign-in of the same redirect URI takes. */
+    export type Entry = {
+      /** The options of the preload, which the next one reuses. */
+      options: {
+        /** The redirect URI that the preload named, if any. */
+        redirectUri?: string | undefined
+      }
+      /** The redirect URI of the frame, with the default filled. */
+      redirectUri: string
+      /** The hidden dialog that frames the sign-in. */
+      sheet: Sheet.create.ReturnType
+    }
+
+    /** The context of the machine. */
+    export type Context = {
+      /** The token of the sign-in that holds the dialog, which the next sign-in replaces. */
+      call: number | undefined
+      /** The number of sign-ins that started, which gives each one its token. */
+      calls: number
+      /** The preloaded frame, while `frame` is `preloaded`. */
+      entry: Entry | undefined
+    }
+
+    /** An event of the machine. */
+    export type Event =
+      | {
+          /** The preloaded frame closes, such as for a new preload. */
+          type: 'discard'
+        }
+      | {
+          /** The token of the sign-in that ended. */
+          call: number
+          /** The frame that the sign-in kept loaded for the next one, which it hid, if any. */
+          kept: Entry | undefined
+          /** A sign-in ended. */
+          type: 'end'
+        }
+      | {
+          /** The frame that loads hidden for the next sign-in. */
+          entry: Entry
+          /** The instance preloaded a frame. */
+          type: 'preload'
+        }
+      | {
+          /** A sign-in starts, which replaces the one that holds the dialog, if any. */
+          type: 'replace'
+        }
+      | {
+          /** The replacing sign-in holds the dialog, and takes the next token. */
+          type: 'start'
+        }
+      | {
+          /** Whether the sign-in shows the preloaded frame, which it then owns, or closes it. */
+          reuse: boolean
+          /** A sign-in takes the preloaded frame. */
+          type: 'take'
+        }
+
+    /** An event that the machine emits. */
+    export type Emitted = {
+      /** The token of the sign-in that the next one replaced. */
+      call: number
+      /** A later sign-in replaced the sign-in of `call`, which rejects. */
+      type: 'replaced'
+    }
+
+    /** A running instance of {@link machine}. */
+    export type Actor = XStateActor<typeof dialog>
+
+    /** A snapshot of {@link machine}. */
+    export type Snapshot = ReturnType<Actor['getSnapshot']>
+  }
+
+  /**
+   * Returns what an ending sign-in of `call` does with its frame:
+   *
+   * - `owned`: whether it still holds the dialog, so no later sign-in replaced it.
+   * - `keep`: whether it hides its frame and keeps it for the next sign-in, which it does while it
+   *   holds the dialog and no other preload took the instance's place. `dialog.ts` then hides the
+   *   frame, which a failed frame refuses.
+   */
+  export function ending(
+    snapshot: machines.dialog.Snapshot,
+    options: machines.ending.Options,
+  ): machines.ending.ReturnType {
+    const owned = options.call === snapshot.context.call
+    return {
+      keep: owned && options.framed && snapshot.matches({ frame: 'empty' }),
+      owned,
+    }
+  }
+
+  export declare namespace ending {
+    type Options = {
+      /** The token of the sign-in that ends. */
+      call: number
+      /** Whether the sign-in holds a frame. */
+      framed: boolean
+    }
+
+    type ReturnType = {
+      /** Whether the sign-in hides its frame and keeps it for the next one. */
+      keep: boolean
+      /** Whether the sign-in still holds the dialog. */
+      owned: boolean
+    }
+  }
+
+  /** Returns the preloaded frame, or `undefined` without one. */
+  export function entry(snapshot: machines.dialog.Snapshot) {
+    return snapshot.context.entry
+  }
 }

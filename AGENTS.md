@@ -96,15 +96,31 @@
 
 ## State Machines
 
-Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustand, Redux, and `let`-flag stores are banned. `src/internal/session.machine.ts` is the reference.
+Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustand, Redux, and `let`-flag stores are banned. `machines.session` in `src/internal/session.ts` is the reference.
 
 | State                                                      | Model                                |
 | ---------------------------------------------------------- | ------------------------------------ |
 | One value with two or three cases                          | A union `let`                        |
 | Several values that change together, with no states        | An `@xstate/store` store             |
 | A lifecycle with async events, timers, overlaps, or guards | An XState machine                    |
+| A value that combines two or more flags or statuses        | A state of an XState machine         |
 | Server data in an app                                      | TanStack Query, in the app, not here |
 
+- A compound conditional over state is an unnamed state. Lift it into a machine:
+  - A value that combines flags with `&&`, `||`, or a ternary, such as `restoring = status === 'pending' || (status === 'idle' && stored)`.
+  - A guard that combines flags, such as `if (!session || closing || closed) return`.
+- State is a value that changes over time: `let`, `useState`, `useRef`, and snapshot reads.
+- Rate a conditional by its state operands, the reads of state that it combines. Count a read once, however often it repeats:
+
+  | Complexity | The conditional                                                                         | Model                          |
+  | ---------- | --------------------------------------------------------------------------------------- | ------------------------------ |
+  | Low        | Reads one or two state operands with one operator, such as `closed \|\| !session`       | Inline                         |
+  | Medium     | Reads three state operands, or mixes `&&` and `\|\|`, or reads another derived flag     | A machine state, tag, or guard |
+  | High       | Reads four or more state operands, nests a ternary, or repeats across several functions | A machine state, tag, or guard |
+
+- If a conditional rates medium or high, use a machine. If a low conditional grows, rate it again.
+- Name each combination as a state or tag. Read it with a selector, such as `machines.status(snapshot)`.
+- Input validation, type guards, and checks of request fields are not state. Compound conditionals there are acceptable.
 - Do not write a machine for a linear async function, such as a retry loop.
 - Replace `let` flags with one machine. The snapshot is the only source of state.
 - Never hold one value in both a store and a machine.
@@ -117,7 +133,12 @@ Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustan
 
 **Structure**
 
-- Put each machine in `<module>.machine.ts` beside its runner. Import it as a namespace (`SessionMachine`).
+- Put each machine in `export namespace machines` at the bottom of the module that runs it.
+- Define each machine as `export const <name> = setup(...).createMachine(...)` in `machines`, read as `machines.session`.
+- Merge a type-only `export namespace <name>` with it for `Context`, `Event`, `Actor`, and `Snapshot`, read as `machines.session.Snapshot`. Derive `Actor` from `typeof <name>`.
+- Put readers and pure decisions beside the machine, as `export function`s of `machines`, such as `machines.status(snapshot)`.
+- Inside `machines`, refer to a machine's types through its namespace, such as `session.Event`. A bare `Event` names the DOM's.
+- Module-scope code above `machines` runs before it, so it never reads `machines`. Keep a constant it needs at the top of the module.
 - Keep machines pure: no I/O, clock, or bindings. The runner provides effects with `machine.provide({ actions })`.
 - Define with `setup({ actions, guards, types }).createMachine({...})`. Name every action and guard, including `assign`s.
 - Callbacks take one parameter, `args`, and narrow with `assertEvent(args.event, type)`.
@@ -146,7 +167,7 @@ Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustan
 
 **Testing**
 
-- Test each `<module>.machine.ts` in `<module>.machine.test.ts`, without I/O or a harness.
+- Test a module's machines in its `<module>.test.ts`, in a `describe('machines.<name>')` per machine, without I/O or a harness.
 - Arrange, act, assert: start the actor, send a flow's events, assert `snapshot.value` and changed `context`.
 - Assert effects by recording provided actions' arguments in an array. No `vi.fn`. Never replace a guard.
 - Provide invoked actors with scripted `fromPromise` results, and assert their inputs.
@@ -235,7 +256,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 ## Testing Conventions
 
 - Test behavior: API contracts, flows, security boundaries, errors.
-- `src/` holds `<module>.machine.test.ts` files and other tests that need no server.
+- `src/` holds machine tests and other tests that need no server.
 - Integration tests run the package against a real Tempo ID. They live in `tempoxyz/id` until a Tempo ID test image exists.
 - No mocks, stubs, fakes, fake timers, stubbed globals, or MSW in `src/`.
 - Keep a module's tests in one `Module.test.ts` beside it. Never split into variant files.
@@ -263,7 +284,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 
 **State machine**
 
-- If a PR adds or alters a `*.machine.ts`, add a **State machine** section before **API changes**, one subsection per file.
+- If a PR adds or alters a machine in a `machines` namespace, add a **State machine** section before **API changes**, one subsection per machine.
 - Show a `stateDiagram-v2` with event names on arrows and guards in brackets (`set [renewing]`).
 - For a changed machine, add a table of changed states, events, and transitions, and of new or changed context properties.
 

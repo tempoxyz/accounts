@@ -98,8 +98,8 @@ export declare namespace dialog {
       /** A message whose EIP-191 hash the key authorization binds as its `witness`. */
       challenge?: string | undefined
       /**
-       * The amount that the app needs in the user's account. A frame cannot show the funding page,
-       * so a sign-in with it runs in a popup.
+       * The amount that the app needs in the user's account. If the account holds less, a sign-in in
+       * the frame then opens the deposit page in a frame, as `funding.open` does, before it resolves.
        */
       funding?: Funding.Funding | undefined
       /**

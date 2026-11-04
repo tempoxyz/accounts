@@ -11,7 +11,7 @@ The plugin runs in one of two modes:
 | Without `open` | Leaves the page for Tempo ID's sign-in                 | `tempoId.session.get()` on the redirect URI's page          |
 | With `open`    | Shows the URL, such as in a system browser on a device | `signIn` itself, when `open` resolves with the callback URL |
 
-With `open`, the system browser keeps its Tempo ID session after the app signs out. The plugin then sets a flag at the start of `signOut`, in the instance's `store`, and the next `signIn` requests `prompt=login`, so Tempo ID shows its sign-in page before it returns to the app. A sign-in without a sign-out before it, such as after the session expires, reuses the browser's session.
+With `open`, the system browser keeps its Tempo ID session after the app signs out, also with `everywhere`, since the logout sends the app's cookies, not the browser's. The plugin then sets a flag at the start of `signOut`, in the instance's `store`, and the next `signIn` requests `prompt=login`, so Tempo ID shows its sign-in page before it returns to the app. A sign-in without a sign-out before it, such as after the session expires, reuses the browser's session.
 
 Without `open`, the plugin's `restore` hook completes the redirect at the first `session.get()` of a page load: it checks the callback's state, redeems its code once, and removes `code` and `state` from the address bar. Call `session.get()` before any routing that reads the URL.
 

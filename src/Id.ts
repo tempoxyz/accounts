@@ -26,7 +26,6 @@ import * as Core from './internal/core.js'
 import * as DefaultDialog from './internal/defaultDialog.js'
 import * as DefaultStore from './internal/defaultStore.js'
 import * as InternalSession from './internal/session.js'
-import type * as SessionMachine from './internal/session.machine.js'
 import type { Permissions } from './Permissions.js'
 import * as Plugin from './Plugin.js'
 import { funding } from './plugins/funding.js'
@@ -70,6 +69,20 @@ export class ClientIdRequiredError extends Error {
   constructor() {
     super(
       "Missing client ID: outside a browser, no page origin can serve as the client ID. Pass `clientId`, from the app's registration.",
+    )
+  }
+}
+
+/**
+ * A `signOut` with `everywhere` from an app that is not first-party, which Tempo ID refuses to end
+ * the user's Tempo ID session for.
+ */
+export class EverywhereNotAllowedError extends Error {
+  override readonly name = 'Id.EverywhereNotAllowedError'
+
+  constructor() {
+    super(
+      "Invalid sign-out: only a first-party app ends the user's Tempo ID session for every app. Sign out without `everywhere`.",
     )
   }
 }
@@ -383,13 +396,14 @@ export type Id<
        * or `signedOut`, and its `context.session` is the session. Read it, and send it no event: the
        * instance's actions change the session.
        */
-      actor: SessionMachine.Actor | undefined
+      actor: InternalSession.machines.session.Actor | undefined
       /**
        * Returns the session. The first call reads the saved session, and each call first runs the
        * plugins' `restore` hooks, such as a redirect's callback. Returns `undefined`, and empties
        * the session, when the saved access key expired. Makes no request unless a hook does. With
        * `reauthorize`, a call that finds no session, or an expired one, authorizes the browser's Tempo
-       * ID session, as `authorize` does.
+       * ID session, as `authorize` does, unless a sign-out without `everywhere` followed the last
+       * sign-in.
        */
       get: (
         parameters?: Core.getSession.Parameters,
@@ -415,9 +429,15 @@ export type Id<
     }
     /**
      * Empties the session at once, also when the request fails, deletes the saved session, and
-     * ends the user's Tempo ID session.
+     * revokes its refresh token. With `everywhere`, a first-party app also ends the user's Tempo ID
+     * session, which signs the user out of every app that relies on it. Without it, `session.get`
+     * with `reauthorize` signs the user in again only after the next sign-in. Throws
+     * {@link EverywhereNotAllowedError} for `everywhere` from any other app, and signs nothing out.
      */
-    signOut: () => Promise<void>
+    signOut: (parameters?: {
+      /** Whether the user's Tempo ID session ends too, for a first-party app. Defaults to `false`. */
+      everywhere?: boolean | undefined
+    }) => Promise<void>
   }
 
 /**
@@ -532,12 +552,15 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     ids.add(plugin.id)
   }
 
+  // A session belongs to one deployment, app, and chain, so another one never restores it. The
+  // JSON tuple keeps the key unique, since an origin and a client ID can both hold a colon.
+  const name = `tempo-id:session:${JSON.stringify([new URL(config.url).origin, config.clientId, config.chainId])}`
+  const store = DefaultStore.get(config.store)
+
   const session = InternalSession.create({
     enabled,
     getFn: config.getFn,
-    // A session belongs to one deployment, app, and chain, so another one never restores it. The
-    // JSON tuple keeps the key unique, since an origin and a client ID can both hold a colon.
-    name: `tempo-id:session:${JSON.stringify([new URL(config.url).origin, config.clientId, config.chainId])}`,
+    name,
     async onSignIn(session) {
       for (const plugin of plugins)
         await plugin.hooks?.afterSignIn?.(context, session)
@@ -545,15 +568,14 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     async onSignOut() {
       for (const plugin of plugins) await plugin.hooks?.afterSignOut?.(context)
     },
-    // The revocation ends a session that holds no cookie, such as a CLI's. It runs before the
-    // logout, since a revocation of a token that the logout already revoked counts as a reuse, which
-    // revokes the app's tokens of the user's other sessions. Tempo ID refuses it from a page on
-    // another site, so a refused revocation leaves the sign-out complete. Outside a page, the
-    // revocation is the only end of the session, so one that received no answer throws, after the
-    // logout. A JSON body
-    // keeps the logout out of the CSRF check for form posts.
+    // The revocation ends the app's session, and keeps the user's Tempo ID session unless `logout`.
+    // It runs before the logout, since a revocation of a token that the logout already revoked
+    // counts as a reuse, which revokes the app's tokens of the user's other sessions. A refused
+    // revocation, such as of an expired token, leaves the sign-out complete. Without a logout, the
+    // revocation is the only end of the session, so one that received no answer throws, after any
+    // logout. A JSON body keeps the logout out of the CSRF check for form posts.
     signOut: async (ended, options = {}) => {
-      const { logout = true, restored, unrevoked } = options
+      const { logout = true, onRevoked, restored, unrevoked } = options
       // A sign-out that revokes nothing, or whose revocation received no answer, rejects with that
       // error after the logout, outside a page. On a page, a logout ends the Tempo ID session.
       const failure = await (async () => {
@@ -564,13 +586,20 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         // user's other devices.
         if (restored && !ClientId.thirdParty(config.clientId)) return undefined
         return Api.revoke(config, { refreshToken: ended.refreshToken }).then(
-          () => undefined,
-          (error: unknown) => {
+          async () => {
+            await onRevoked?.()
+            return undefined
+          },
+          async (error: unknown) => {
+            // A rate limit, like no answer, leaves the token live, so a later sign-out sends it again.
             const unanswered =
               !(error instanceof RequestError) ||
               error.status === 0 ||
+              error.status === 429 ||
               error.status >= 500
-            return unanswered ? { error } : undefined
+            if (unanswered) return { error }
+            await onRevoked?.()
+            return undefined
           },
         )
       })()
@@ -585,7 +614,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       if (failure && (typeof document === 'undefined' || !loggedOut))
         throw failure.error
     },
-    store: DefaultStore.get(config.store),
+    store,
   })
 
   const context: Plugin.Context = {
@@ -633,12 +662,17 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
           async restore() {
             for (const plugin of plugins) await plugin.hooks?.restore?.(context)
           },
+          signedOut: session.signedOut,
         }),
       refresh: () => Core.refresh(context),
       status: session.status,
       subscribe: session.subscribe,
     },
-    async signOut() {
+    async signOut(parameters: NonNullable<Parameters<Id['signOut']>[0]> = {}) {
+      // Tempo ID refuses the logout from any other app's origin. The check runs first, so a refused
+      // call ends no session.
+      if (parameters.everywhere && ClientId.thirdParty(config.clientId))
+        throw new EverywhereNotAllowedError()
       // The hooks start before the session's sign-out, which starts at once, so a sign-in that starts
       // after this call meets both. The sign-out's own rejection wins over a hook's.
       const before = (async () => {
@@ -648,7 +682,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       before.catch(() => undefined)
       // The hooks settle before `signOut` settles, also when the session's sign-out rejects.
       try {
-        await session.signOut()
+        await session.signOut(parameters)
       } catch (error) {
         await before.catch(() => undefined)
         throw error

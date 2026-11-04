@@ -41,14 +41,14 @@ async function verifyCode(address: string, code: string) {
 
 // 4. Signing out ends the session for every app on the site.
 async function signOut() {
-  await tempoId.signOut()
+  await tempoId.signOut({ everywhere: true })
 }
 ```
 
 1. [`tempoId.session.get`](../api/Id.create.md#sessionget) reads the session that the instance saved in IndexedDB. [`tempoId.authorize`](../api/Id.create.md#authorize) returns `undefined` for a visitor without a Tempo ID session.
 2. [`email.sendCode`](../api/plugins.email.md#emailsendcode) emails a 6-digit code, with the same response for every address.
 3. [`email.signIn`](../api/plugins.email.md#emailsignin) verifies the code, authorizes the access key, and sets the session with the user's Tempo Account. If the authorization fails, the user is signed in, the error's `signedIn` is `true`, and the instance empties its session.
-4. [`tempoId.signOut`](../api/Id.create.md#signout) empties the session, and ends the Tempo ID session.
+4. [`tempoId.signOut`](../api/Id.create.md#signout) empties the session. With `everywhere: true`, it also ends the Tempo ID session.
 
 The page's origin must be the origin of one of the app's redirect URIs ([CORS](https://github.com/tempoxyz/id/blob/main/docs/apps.md#app-registry)). No page shows the access key, so its [`accessKey`](access-keys.md) names its limits and scopes, and fits the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling), unless the app holds `tempo-id:sign`. Without `expiry`, Tempo ID fills the [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry). A sign-in with `accessKey: false` signs in without an access key.
 

@@ -672,6 +672,9 @@ function SignedIn(props: SignedIn.Props) {
   const authorize = useMutation({
     mutationFn: () => tempoId.dialog.signIn({ accessKey: permissions() }),
   })
+  const hasPasskey = tempoAccount.data?.keys.some(
+    (entry) => entry.type === 'webAuthn',
+  )
   // Two prompts: the authenticator creates the passkey, then the new passkey signs Tempo ID's proof.
   const addPasskey = useMutation({
     mutationFn: () => tempoId.passkey.register(),
@@ -756,13 +759,16 @@ function SignedIn(props: SignedIn.Props) {
           >
             Call the API
           </button>
-          <button
-            disabled={addPasskey.isPending}
-            onClick={() => addPasskey.mutate()}
-            type="button"
-          >
-            Add passkey
-          </button>
+          {/* An account that a passkey already owns offers no second one. */}
+          {hasPasskey ? null : (
+            <button
+              disabled={addPasskey.isPending}
+              onClick={() => addPasskey.mutate()}
+              type="button"
+            >
+              Add passkey
+            </button>
+          )}
           <button
             disabled={props.signingOut}
             onClick={props.onSignOut}

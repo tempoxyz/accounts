@@ -165,6 +165,8 @@ export async function revoke(
         token_type_hint: 'refresh_token',
         ...(await clientAuthentication(auth)),
       }),
+      // A session cookie fails the issuer's origin check, and the revocation needs none.
+      credentials: 'omit',
       method: 'POST',
     },
   )

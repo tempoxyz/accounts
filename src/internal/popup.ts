@@ -98,3 +98,11 @@ export function apple() {
   if (/iPad|iPhone|iPod/.test(agent)) return true
   return /Macintosh/.test(agent) && navigator.maxTouchPoints > 1
 }
+
+/**
+ * Returns whether the page holds a user gesture, within which a popup blocker accepts `window.open`.
+ * A browser without `navigator.userActivation` counts as holding one, so its call opens the popup.
+ */
+export function activated() {
+  return navigator.userActivation?.isActive ?? true
+}

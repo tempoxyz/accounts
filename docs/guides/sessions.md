@@ -25,7 +25,7 @@ async function token() {
   return current?.accessToken
 }
 
-// 4. Sign out of Tempo ID, and forget the saved session.
+// 4. Sign out of this app, and forget the saved session.
 async function signOut() {
   await tempoId.signOut()
 }
@@ -34,7 +34,7 @@ async function signOut() {
 1. [`session.get`](../api/Id.create.md#sessionget) reads the saved session once, completes a redirect's callback with the `redirect` plugin, and returns `undefined` when the saved access key expired.
 2. [`session.subscribe`](../api/Id.create.md#sessionsubscribe) calls its listener with each new session and the one before it. [`session.status`](../api/Id.create.md#sessionstatus) returns the session's [status](../api/types.md#sessionstatus) with `get`, and calls a listener at each change with `subscribe`, such as `reauthorizing` while an authorization renews an expired session. In React, [`tempoId.useSession()`](../api/react.react.md) reads it, as [React](react.md) describes.
 3. [`session.refresh`](../api/Id.create.md#sessionrefresh) exchanges the refresh token for new tokens, saves them, and returns the session. An access key past its expiry needs a new sign-in.
-4. [`signOut`](../api/Id.create.md#signout) empties the session at once, ends the Tempo ID session for every app that relies on it, and revokes the refresh token. The access key works until its `expiry`, but the instance forgets it.
+4. [`signOut`](../api/Id.create.md#signout) empties the session at once, and revokes the refresh token. The user's Tempo ID session and the user's other apps stay signed in. With `everywhere: true`, a first-party app also ends the Tempo ID session for every app that relies on it. Any other app's `everywhere` throws. The access key works until its `expiry`, but the instance forgets it.
 
 | Field          | Lifetime                                                |
 | -------------- | ------------------------------------------------------- |
@@ -42,7 +42,7 @@ async function signOut() {
 | `refreshToken` | Until its use. Each refresh returns a new one           |
 | `key`          | Until its authorization's `expiry`                      |
 
-After sign-out, introspection reports the access tokens inactive. An API that verifies them locally accepts them until they expire.
+After a sign-out with `everywhere`, introspection reports the access tokens inactive. After any other sign-out, the Tempo ID session lives on, so introspection, and an API that verifies them locally, accept them until they expire.
 
 A session belongs to one deployment, one client ID, and one chain, so an instance with another `url`, `clientId`, or `chainId` restores none of it. A sign-in that another sign-in or a sign-out overtakes throws [`Id.SupersededError`](../api/errors.md#idsupersedederror), and the instance keeps the newer session.
 

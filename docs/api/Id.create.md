@@ -131,7 +131,7 @@ const subscription = tempoId.session.actor!.subscribe((snapshot) => {
 
 Returns the [session](types.md#session). The first call reads the saved session. Each call first runs the plugins' `restore` hooks, such as the [`redirect`](plugins.redirect.md) plugin's, which completes a redirect's callback. Returns `undefined`, and empties the session, when the saved access key expired. Makes no request unless a hook does.
 
-With `reauthorize`, a call that finds no session, or an expired one, authorizes the browser's Tempo ID session, as [`authorize`](#authorize) does. `true` uses the instance's `accessKey`, an object passes the parameters of `authorize`, and a function runs as the authorization. One authorization spans the restore, so [`session.status`](#sessionstatus) is `pending` throughout, or `reauthorizing` with the expired session. The result holds no `upgradeAvailable`. A function can call `authorize` itself to read it. With `true` or an object, a refusal that only an interactive sign-in resolves (`reauthentication_required`, `upgrade_required`, or `webauthn_required`) returns `undefined`, so the page shows its sign-in. A `webauthn_required` from a passkey's ceremony that ran on the page and failed, such as a dismissed prompt with `passkey: true`, throws with the ceremony's error as its `cause`. A function receives every refusal itself.
+With `reauthorize`, a call that finds no session, or an expired one, authorizes the browser's Tempo ID session, as [`authorize`](#authorize) does. After a [`signOut`](#signout) without `everywhere`, `reauthorize` authorizes nothing until the next sign-in, since the Tempo ID session stays. `true` uses the instance's `accessKey`, an object passes the parameters of `authorize`, and a function runs as the authorization. One authorization spans the restore, so [`session.status`](#sessionstatus) is `pending` throughout, or `reauthorizing` with the expired session. The result holds no `upgradeAvailable`. A function can call `authorize` itself to read it. With `true` or an object, a refusal that only an interactive sign-in resolves (`reauthentication_required`, `upgrade_required`, or `webauthn_required`) returns `undefined`, so the page shows its sign-in. A `webauthn_required` from a passkey's ceremony that ran on the page and failed, such as a dismissed prompt with `passkey: true`, throws with the ceremony's error as its `cause`. A function receives every refusal itself.
 
 ```ts
 const session = await tempoId.session.get({ reauthorize: true })
@@ -185,12 +185,20 @@ const unsubscribe = tempoId.session.subscribe((session) => render(session))
 
 ### signOut
 
-- **Type:** `() => Promise<void>`
+- **Type:** `(parameters?: { everywhere?: boolean }) => Promise<void>`
 
-Empties the session at once, also when a request fails, and deletes the saved session. It then ends the user's Tempo ID session with `POST /v1/auth/logout`, and revokes the session's refresh token. The revocation ends a session that holds no cookie, such as a CLI's. Outside a page, the sign-out rejects with the request's error, after the logout, when Tempo ID does not answer the revocation. It also rejects when a refresh in progress had an attempt that received no answer, since that refresh may have rotated the token, so the sign-out does not revoke it. On a page, both reject only when no logout runs, such as for a third-party app. The session stays empty in both cases.
+Empties the session at once, also when a request fails, and deletes the saved session. It then revokes the session's refresh token at `POST /oauth2/revoke`. The user's Tempo ID session, and every other app's session, stay signed in. The instance saves a signed-out mark, so [`session.get`](#sessionget) with `reauthorize`, and the [`react`](react.react.md) plugin's first render, sign the user in again only after the next sign-in, such as through [`authorize`](#authorize). Access tokens work until they expire, at most 5 minutes, and the access key until its `expiry`, but the instance forgets both.
+
+With `everywhere: true`, a first-party app also ends the user's Tempo ID session with `POST /v1/auth/logout`, which signs the user out of every app that relies on it, as [`Actions.signOut`](Actions.signOut.md) does. Tempo ID accepts that request only from an enabled first-party app's origin, or from its own. The logout ends only the session whose cookie the instance's requests send, so a native app's sign-out with the [`redirect`](plugins.redirect.md) plugin and `open` leaves the system browser's session. Any other app's `everywhere` throws [`Id.EverywhereNotAllowedError`](errors.md#ideverywherenotallowederror), and signs nothing out.
+
+Outside a page, the sign-out rejects with the request's error when Tempo ID does not answer the revocation. It also rejects when a refresh in progress had an attempt that received no answer, since that refresh may have rotated the token, so the sign-out does not revoke it. On a page, both reject only when no logout runs. The session stays empty in both cases.
 
 ```ts
+// Signs out of this app only.
 await tempoId.signOut()
+
+// Signs out of every app on the user's Tempo ID session.
+await tempoId.signOut({ everywhere: true })
 ```
 
 ## Parameters
@@ -253,6 +261,10 @@ const tempoId = Id.create({
 ### `Id.ClientIdRequiredError`
 
 Thrown outside a browser without `clientId`, where no page's origin can serve as one.
+
+### `Id.EverywhereNotAllowedError`
+
+Thrown by `signOut` with `everywhere` from an app that is not first-party.
 
 ### `Error`
 

@@ -281,6 +281,21 @@ async function redeem(auth: Config, options: redeem.Options) {
     grant_type: 'authorization_code',
     redirect_uri: redirectUri,
   }).catch((error: unknown) => {
+    // The issuer refuses a wrong, expired, or redeemed code with `invalid_grant` and a description that
+    // names no recovery. Tempo ID's own refusals carry a `reason`, and keep their description.
+    if (
+      error instanceof RequestError &&
+      error.code === 'invalid_grant' &&
+      error.reason === undefined
+    )
+      throw new RequestError({
+        cause: error,
+        code: error.code,
+        message:
+          'Invalid code: the code is wrong, expired, or already redeemed. Start sign-in again.',
+        signedIn: true,
+        status: error.status,
+      })
     if (error instanceof RequestError) throw signedIn(error)
     throw new RequestError({
       cause: error,

@@ -32,6 +32,7 @@ import {
   Actions as TempoActions,
   TempoExecutionError,
 } from 'viem/tempo'
+import * as CoinflowFrame from './CoinflowFrame.tsx'
 import * as Defaults from './Defaults.ts'
 import * as FundingFields from './FundingFields.tsx'
 import * as Layout from './Layout.tsx'
@@ -657,6 +658,8 @@ function App() {
         />
       ) : null}
 
+      <CoinflowFrame.Section tempoIdUrl={tempoIdUrl} />
+
       <p aria-live="polite" role="status">
         {status}
       </p>
@@ -718,6 +721,9 @@ function SignedIn(props: SignedIn.Props) {
     mutationFn: () => tempoId.dialog.signIn({ accessKey: permissions() }),
     onSuccess: (result) => queryClient.setQueryData(sessionKey, result),
   })
+  const hasPasskey = tempoAccount.data?.keys.some(
+    (entry) => entry.type === 'webAuthn',
+  )
   // Two prompts: the authenticator creates the passkey, then the new passkey signs Tempo ID's proof.
   const addPasskey = useMutation({
     mutationFn: () => tempoId.passkey.register(),
@@ -805,13 +811,16 @@ function SignedIn(props: SignedIn.Props) {
           >
             Call the API
           </button>
-          <button
-            disabled={addPasskey.isPending}
-            onClick={() => addPasskey.mutate()}
-            type="button"
-          >
-            Add passkey
-          </button>
+          {/* An account that a passkey already owns offers no second one. */}
+          {hasPasskey ? null : (
+            <button
+              disabled={addPasskey.isPending}
+              onClick={() => addPasskey.mutate()}
+              type="button"
+            >
+              Add passkey
+            </button>
+          )}
           <button
             disabled={props.signingOut}
             onClick={props.onSignOut}
@@ -860,7 +869,8 @@ function SignedIn(props: SignedIn.Props) {
         <Wallet sessionKey={key} />
       ) : tempoAccount.data ? (
         <Layout.Section id="fund-heading" title="Fund account">
-          <Deposit />
+          {/* A third-party app's access token reads no accounts, so the page names the account. */}
+          <Deposit address={tempoAccount.data.address} />
         </Layout.Section>
       ) : null}
     </>
@@ -927,15 +937,20 @@ declare namespace KeyDetails {
 }
 
 /**
- * Opens Tempo ID's deposit page for the session's account, in a popup or through a redirect, which
- * returns to the page's origin with the result. A popup's result resolves the mutation.
+ * Opens Tempo ID's deposit page for the session's account, in a popup, a frame, or through a
+ * redirect, which returns to the page's origin with the result. A popup's or a frame's result
+ * resolves the mutation.
  */
 function Deposit(props: Deposit.Props) {
   const queryClient = useQueryClient()
   const deposit = useMutation({
     // The deposit funds the access key's chain, where the page reads and sends.
-    mutationFn: (mode: 'popup' | 'redirect') =>
-      tempoId.funding.open({ chainId: props.chainId, mode }),
+    mutationFn: (mode: 'frame' | 'popup' | 'redirect') =>
+      tempoId.funding.open({
+        ...(props.address ? { address: props.address } : {}),
+        chainId: props.chainId,
+        mode,
+      }),
     // A deposit changes the balances that the page shows.
     onSuccess: async () => {
       props.onDeposit?.()
@@ -954,6 +969,13 @@ function Deposit(props: Deposit.Props) {
           type="button"
         >
           Deposit via popup
+        </button>
+        <button
+          disabled={deposit.isPending}
+          onClick={() => deposit.mutate('frame')}
+          type="button"
+        >
+          Deposit via frame
         </button>
         <button
           disabled={deposit.isPending}
@@ -983,6 +1005,8 @@ function Deposit(props: Deposit.Props) {
 
 declare namespace Deposit {
   type Props = {
+    /** The account to fund. Absent for the session's account. */
+    address?: `0x${string}` | undefined
     /** The chain to fund. Absent for the page's own chain. */
     chainId?: number | undefined
     /** Runs after the deposit page returns, such as to read the balance again. Absent for none. */

@@ -4,20 +4,33 @@
  * hidden, before the sign-in has a request. `show` posts the request to the frame, and the dialog
  * shows once the page shows it. `hide` keeps the frame loaded, and the next `show` posts its request
  * to the same frame. When the frame cannot load, or the sign-in needs a page that the frame cannot
- * show, the dialog offers a popup, which opens from the user's click. An actor of `SheetMachine`
+ * show, the dialog offers a popup, which opens from the user's click. An actor of `machines.sheet`
  * holds the lifecycle, and this module provides its DOM work, its messages, and its popup.
  * @module
  */
 /* istanbul ignore file -- The dialog, its frame, and the popup window exist only in a browser. */
-import { assertEvent, createActor, fromCallback } from 'xstate'
+import {
+  type Actor as XStateActor,
+  and,
+  assertEvent,
+  assign,
+  createActor,
+  fromCallback,
+  raise,
+  sendTo,
+  setup,
+  stateIn,
+} from 'xstate'
 import * as Popup from './popup.js'
-import * as SheetMachine from './sheet.machine.js'
 
 /** The stylesheets that {@link adopt} constructed, which a document adopts once. */
 const adopted = new WeakSet<CSSStyleSheet>()
 
 /** The attribute that marks the dialog, which the styles select. */
 const attribute = 'data-tempo-id-dialog'
+
+/** Milliseconds of the dialog's exit, which `hide` and `close` wait for. */
+const exit = 240
 
 /** The curve of the dialog's entrance and exit, which eases out like a native sheet. */
 const curve = 'cubic-bezier(0.32, 0.72, 0, 1)'
@@ -28,11 +41,15 @@ const curve = 'cubic-bezier(0.32, 0.72, 0, 1)'
  * screen, so a hidden frame lays out at the width that it shows at. A browser with `corner-shape`
  * draws squircle corners, with a larger radius for the same visual size. A click on the backdrop
  * targets the dialog, so the dialog takes no selection, which repeated clicks would draw over the
- * frame.
+ * frame. The dialog's fill is the design system's `background.elevated`, which the frame's page
+ * draws too, so the dialog shows no seam while the frame loads. IntersectionObserver v2 reports the
+ * frame not visible under an opacity below 1 or a scale, and `/embed` waits for a visible frame
+ * before it acts. So the card's entrance translates without a scale, and its fade takes 120
+ * milliseconds of the 320 that the translate takes.
  */
 const css = `
 dialog[${attribute}] {
-  background: Canvas;
+  background: light-dark(#ffffff, #141414);
   border: 0;
   border-radius: 20px;
   box-shadow: 0 16px 48px rgb(0 0 0 / 0.24);
@@ -90,6 +107,37 @@ dialog[${attribute}] [data-panel] button:not([data-primary]) {
   background: transparent;
   color: inherit;
 }
+dialog[${attribute}] [data-skeleton] {
+  background: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  inset: 0;
+  padding: 12px 24px 24px;
+  position: absolute;
+}
+dialog[${attribute}] [data-skeleton] > div {
+  background: light-dark(rgb(0 0 0 / 0.06), rgb(255 255 255 / 0.08));
+  border-radius: 10px;
+  flex: none;
+}
+dialog[${attribute}] [data-skeleton] [data-bar] {
+  height: 20px;
+  margin-bottom: 20px;
+  width: 120px;
+}
+dialog[${attribute}] [data-skeleton] [data-title] {
+  height: 28px;
+  width: 50%;
+}
+dialog[${attribute}] [data-skeleton] [data-text] {
+  height: 16px;
+  margin-bottom: 12px;
+  width: 75%;
+}
+dialog[${attribute}] [data-skeleton] [data-row] {
+  height: 56px;
+}
 @media (max-width: 480px) {
   dialog[${attribute}] {
     border-radius: 20px 20px 0 0;
@@ -117,28 +165,33 @@ dialog[${attribute}] [data-panel] button:not([data-primary]) {
 }
 @media (prefers-reduced-motion: no-preference) {
   dialog[${attribute}][open] {
-    animation: tempo-id-card-in 320ms ${curve};
+    animation:
+      tempo-id-card-in 320ms ${curve},
+      tempo-id-fade-in 120ms ${curve};
   }
   dialog[${attribute}][open]::backdrop {
     animation: tempo-id-fade-in 320ms ${curve};
   }
+  dialog[${attribute}] [data-skeleton] > div {
+    animation: tempo-id-pulse 1s ease-in-out infinite alternate;
+  }
   dialog[${attribute}][data-closing] {
-    animation: tempo-id-card-out ${SheetMachine.exit}ms ${curve} forwards;
+    animation: tempo-id-card-out ${exit}ms ${curve} forwards;
   }
   dialog[${attribute}][data-closing]::backdrop {
-    animation: tempo-id-fade-out ${SheetMachine.exit}ms ${curve} forwards;
+    animation: tempo-id-fade-out ${exit}ms ${curve} forwards;
   }
   @media (max-width: 480px) {
     dialog[${attribute}][open] {
       animation: tempo-id-sheet-in 500ms ${curve};
     }
     dialog[${attribute}][data-closing] {
-      animation: tempo-id-sheet-out ${SheetMachine.exit}ms ${curve} forwards;
+      animation: tempo-id-sheet-out ${exit}ms ${curve} forwards;
     }
   }
 }
 @keyframes tempo-id-card-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  from { transform: translateY(8px); }
 }
 @keyframes tempo-id-card-out {
   to { opacity: 0; transform: translateY(8px) scale(0.97); }
@@ -154,6 +207,9 @@ dialog[${attribute}] [data-panel] button:not([data-primary]) {
 }
 @keyframes tempo-id-fade-out {
   to { opacity: 0; }
+}
+@keyframes tempo-id-pulse {
+  to { opacity: 0.5; }
 }
 `
 
@@ -206,7 +262,7 @@ export function create(options: create.Options): create.ReturnType {
   panel.appendChild(cancel)
 
   const actor = createActor(
-    SheetMachine.machine.provide({
+    machines.sheet.provide({
       actions: {
         animate: () => {
           // The exit plays before the dialog leaves the top layer, and the frame takes no input in
@@ -244,7 +300,10 @@ export function create(options: create.Options): create.ReturnType {
         },
         onCallback: ({ context, event }) => {
           assertEvent(event, ['embed.callback', 'popup.callback'])
-          context.current?.handlers.onCallback(event.url)
+          context.current?.handlers.onCallback(
+            event.url,
+            event.type === 'embed.callback' ? event.funding : undefined,
+          )
         },
         onClose: ({ context }) => context.current?.handlers.onClose(),
         opened: () => {
@@ -348,7 +407,7 @@ export function create(options: create.Options): create.ReturnType {
     },
     connected: () => dialog.isConnected,
     hide() {
-      if (SheetMachine.failed(actor.getSnapshot())) return false
+      if (machines.failed(actor.getSnapshot())) return false
       actor.send({ animate: animate(), type: 'hide' })
       return true
     },
@@ -366,7 +425,7 @@ export function create(options: create.Options): create.ReturnType {
         type: 'show',
       })
     },
-    trusted: () => SheetMachine.trusted(actor.getSnapshot()),
+    trusted: () => machines.trusted(actor.getSnapshot()),
   }
 }
 
@@ -377,7 +436,7 @@ export declare namespace create {
   }
 
   /** Where the dialog routes the user's actions. */
-  type Handlers = SheetMachine.Handlers
+  type Handlers = machines.sheet.Handlers
 
   type ReturnType = {
     /** Closes the dialog, after its exit, and removes it with its frame and any popup it opened. */
@@ -471,7 +530,6 @@ export function waiting(options: waiting.Options): waiting.ReturnType {
   document.body.appendChild(dialog)
   dialog.showModal()
 
-  // Whether the dialog closed. Without its own binding, the name is the read-only `window.closed`.
   let closed = false
   return () => {
     if (closed) return
@@ -483,7 +541,7 @@ export function waiting(options: waiting.Options): waiting.ReturnType {
     if (!motion()) return remove()
     dialog.inert = true
     dialog.setAttribute('data-closing', '')
-    setTimeout(remove, SheetMachine.exit)
+    setTimeout(remove, exit)
   }
 }
 
@@ -500,11 +558,84 @@ export declare namespace waiting {
 }
 
 /**
- * Shows the dialog with a frame of Tempo ID's deposit pages at `options.url`, for a first-party
- * app's `funding.open` in `frame` mode. The frame's page reports that it loaded, its height, and the
+ * Shows a modal dialog that offers a popup, for a call that runs outside a user gesture, where a
+ * popup blocker refuses `window.open`. Continue runs `onContinue` in its click, so the popup opens.
+ * Cancel and Escape run `onCancel`. Returns the function that closes the dialog, after its exit.
+ */
+export function prompt(options: prompt.Options): prompt.ReturnType {
+  const { label, onCancel, onContinue, text: message } = options
+
+  adopt()
+
+  const dialog = document.createElement('dialog')
+  dialog.setAttribute(attribute, '')
+  dialog.setAttribute('aria-label', label)
+
+  const panel = document.createElement('div')
+  panel.setAttribute('data-panel', '')
+  const text = document.createElement('p')
+  text.setAttribute('aria-live', 'polite')
+  text.textContent = message
+  const primary = document.createElement('button')
+  primary.setAttribute('data-primary', '')
+  primary.type = 'button'
+  primary.textContent = 'Continue'
+  const cancel = document.createElement('button')
+  cancel.type = 'button'
+  cancel.textContent = 'Cancel'
+
+  primary.addEventListener('click', () => onContinue())
+  cancel.addEventListener('click', () => onCancel())
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault()
+    onCancel()
+  })
+
+  panel.appendChild(text)
+  panel.appendChild(primary)
+  panel.appendChild(cancel)
+  dialog.appendChild(panel)
+  document.body.appendChild(dialog)
+  dialog.showModal()
+
+  let closed = false
+  return () => {
+    if (closed) return
+    closed = true
+    const remove = () => {
+      dialog.close()
+      dialog.remove()
+    }
+    if (!motion()) return remove()
+    dialog.inert = true
+    dialog.setAttribute('data-closing', '')
+    setTimeout(remove, exit)
+  }
+}
+
+export declare namespace prompt {
+  type Options = {
+    /** The dialog's accessible name. */
+    label: string
+    /** Runs when the user selects Cancel, or presses Escape. */
+    onCancel: () => void
+    /** Runs in the click of Continue, so a popup can open. */
+    onContinue: () => void
+    /** The sentence that states where the user continues. */
+    text: string
+  }
+
+  /** Closes the dialog, after its exit. Later calls do nothing. */
+  type ReturnType = () => void
+}
+
+/**
+ * Shows the dialog with a frame of Tempo ID's deposit pages at `options.url`, for an app's
+ * `funding.open` in `frame` mode. The frame's page reports that it loaded, its height, and the
  * return to the app, each from Tempo ID's origin. A frame that loads without that report, such as
  * one that Tempo ID refuses to frame, or the sign-in page without a session, shows the offer of a
- * popup, which opens from the user's click. Returns the function that closes the dialog, after its
+ * popup, which opens from the user's click. So does a frame that requests a popup, since the app's
+ * page can cover it. Returns the function that closes the dialog, after its
  * exit.
  */
 export function frame(options: frame.Options): frame.ReturnType {
@@ -529,38 +660,26 @@ export function frame(options: frame.Options): frame.ReturnType {
   element.style.height = '420px'
   element.src = options.url
 
+  // The skeleton covers the frame until its first document reports that it shows a deposit page, so
+  // the dialog never shows an empty frame.
+  const skeleton = document.createElement('div')
+  skeleton.setAttribute('aria-label', 'Loading')
+  skeleton.setAttribute('data-skeleton', '')
+  skeleton.setAttribute('role', 'progressbar')
+  for (const part of ['bar', 'title', 'text', 'row', 'row', 'row']) {
+    const block = document.createElement('div')
+    block.setAttribute(`data-${part}`, '')
+    skeleton.appendChild(block)
+  }
+
   // Whether the frame's current document reported that it shows a deposit page. Each document reports
   // as it parses, before its `load`, which resets the report for the next document.
   let shown = false
   let closed = false
-  const listener = (event: MessageEvent) => {
-    if (event.origin !== origin || event.source !== element.contentWindow)
-      return
-    const data = event.data as {
-      height?: unknown
-      type?: unknown
-      url?: unknown
-    } | null
-    if (data?.type === 'tempo-id:frame.open') shown = true
-    else if (
-      data?.type === 'tempo-id:frame.resize' &&
-      typeof data.height === 'number'
-    )
-      element.style.height = `${Math.max(0, Math.ceil(data.height))}px`
-    else if (
-      data?.type === 'tempo-id:frame.callback' &&
-      typeof data.url === 'string'
-    )
-      onCallback(data.url)
-  }
-  window.addEventListener('message', listener)
-
-  // A document that fires `load` without the report shows no deposit page, such as the sign-in page
-  // after the session ends, which Tempo ID refuses to frame.
-  element.addEventListener('load', () => {
-    const reported = shown
-    shown = false
-    if (reported || closed) return
+  // Offers a popup in place of the frame, which opens `popup` from the user's click.
+  const offer = (popup: Omit<frame.Popup, 'automatic'> = {}) => {
+    skeleton.remove()
+    if (closed || !element.isConnected) return
     const panel = document.createElement('div')
     panel.setAttribute('data-panel', '')
     const text = document.createElement('p')
@@ -573,12 +692,64 @@ export function frame(options: frame.Options): frame.ReturnType {
     const cancel = document.createElement('button')
     cancel.type = 'button'
     cancel.textContent = 'Cancel'
-    primary.addEventListener('click', () => onPopup())
+    primary.addEventListener('click', () =>
+      onPopup({ ...popup, automatic: false }),
+    )
     cancel.addEventListener('click', () => onCancel())
     panel.appendChild(text)
     panel.appendChild(primary)
     panel.appendChild(cancel)
     element.replaceWith(panel)
+  }
+  const listener = (event: MessageEvent) => {
+    if (event.origin !== origin || event.source !== element.contentWindow)
+      return
+    const data = event.data as {
+      amount?: unknown
+      height?: unknown
+      method?: unknown
+      type?: unknown
+      url?: unknown
+    } | null
+    if (data?.type === 'tempo-id:embed.ready') {
+      shown = true
+      skeleton.remove()
+    } else if (
+      data?.type === 'tempo-id:embed.resize' &&
+      typeof data.height === 'number'
+    )
+      element.style.height = `${Math.max(0, Math.ceil(data.height))}px`
+    else if (
+      data?.type === 'tempo-id:embed.callback' &&
+      typeof data.url === 'string'
+    )
+      onCallback(data.url)
+    // The frame cannot show that nothing covers it, or found it covered at an action. A method, such
+    // as Buy MACH, that runs only in a popup opens at once, within the click in the frame.
+    else if (data?.type === 'tempo-id:embed.popup') {
+      const popup: Omit<frame.Popup, 'automatic'> =
+        data.method === 'mach'
+          ? {
+              ...(typeof data.amount === 'string'
+                ? { amount: data.amount }
+                : {}),
+              method: 'mach' as const,
+            }
+          : {}
+      if (popup.method && onPopup({ ...popup, automatic: true })) return
+      offer(popup)
+    }
+    // The frame's close button or Escape, which the frame's page receives in place of the dialog.
+    else if (data?.type === 'tempo-id:embed.close') onCancel()
+  }
+  window.addEventListener('message', listener)
+
+  // A document that fires `load` without the report shows no deposit page, such as the sign-in page
+  // after the session ends, which Tempo ID refuses to frame.
+  element.addEventListener('load', () => {
+    const reported = shown
+    shown = false
+    if (!reported) offer()
   })
 
   dialog.addEventListener('cancel', (event) => {
@@ -591,6 +762,7 @@ export function frame(options: frame.Options): frame.ReturnType {
   })
 
   dialog.appendChild(element)
+  dialog.appendChild(skeleton)
   document.body.appendChild(dialog)
   dialog.showModal()
 
@@ -605,7 +777,7 @@ export function frame(options: frame.Options): frame.ReturnType {
     if (!motion()) return remove()
     dialog.inert = true
     dialog.setAttribute('data-closing', '')
-    setTimeout(remove, SheetMachine.exit)
+    setTimeout(remove, exit)
   }
 }
 
@@ -613,14 +785,30 @@ export declare namespace frame {
   type Options = {
     /** Runs with the return to the app: the redirect URI with `deposit_status`. */
     onCallback: (url: string) => void
-    /** Runs when the user selects Cancel, presses Escape, or clicks the backdrop. */
+    /**
+     * Runs when the user selects Cancel, presses Escape, clicks the backdrop, or selects the frame's
+     * close button.
+     */
     onCancel: () => void
-    /** Runs in the click of Continue, when the frame shows no deposit page, so a popup can open. */
-    onPopup: () => void
+    /**
+     * Opens the popup, and returns whether it opened. It runs in the click of Continue, or with
+     * `automatic` for a method that the frame requests, within the user's click in the frame.
+     */
+    onPopup: (options: Popup) => boolean
     /** Tempo ID's origin, whose page in the frame posts the messages. */
     origin: string
-    /** The deposit page's URL, with `display=frame`. */
+    /** The deposit page's URL at `/embed/deposit`. */
     url: string
+  }
+
+  /** The popup that `onPopup` opens. */
+  type Popup = {
+    /** With `method`, the amount in USD that its first step shows, such as `7.50`. */
+    amount?: string | undefined
+    /** Whether the frame requested the popup, so a blocked popup shows the offer instead. */
+    automatic: boolean
+    /** The method that the popup opens, such as `mach` for Buy MACH. */
+    method?: 'mach' | undefined
   }
 
   /** Closes the dialog, after its exit. Later calls do nothing. */
@@ -656,7 +844,7 @@ function adopt() {
  * Returns `data` as a message from the page, with the `tempo-id:` prefix removed from its type, or
  * `undefined` for any other value.
  */
-function parse(data: unknown): SheetMachine.Message | undefined {
+function parse(data: unknown): machines.sheet.Message | undefined {
   if (typeof data !== 'object' || data === null || !('type' in data))
     return undefined
   const value = data as Record<string, unknown>
@@ -673,12 +861,522 @@ function parse(data: unknown): SheetMachine.Message | undefined {
   if (id === undefined) return undefined
   if (value.type === 'tempo-id:embed.close') return { id, type: 'embed.close' }
   if (value.type === 'tempo-id:embed.ready') return { id, type: 'embed.ready' }
-  if (value.type === 'tempo-id:embed.callback' && typeof value.url === 'string')
-    return { id, type: 'embed.callback', url: value.url }
+  if (
+    value.type === 'tempo-id:embed.callback' &&
+    typeof value.url === 'string'
+  ) {
+    const funding = address(value.funding)
+    return {
+      ...(funding ? { funding: { address: funding } } : {}),
+      id,
+      type: 'embed.callback',
+      url: value.url,
+    }
+  }
   return undefined
+}
+
+/** Returns the account address of a callback's `funding`, or `undefined` for any other value. */
+function address(funding: unknown) {
+  if (typeof funding !== 'object' || funding === null) return undefined
+  const value = (funding as Record<string, unknown>).address
+  if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(value))
+    return undefined
+  return value as `0x${string}`
 }
 
 /** Returns whether the dialog plays its entrance and exit, which reduced motion turns off. */
 function motion() {
   return !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+/** The state machines that this module runs. */
+export namespace machines {
+  /** Milliseconds after the frame's `load` event that its page has to send `loaded`. */
+  export const loadDelay = 3_000
+
+  /**
+   * The machine. While `open`, two regions run in parallel: `dialog`, the request that the dialog
+   * shows, and `frame`, the frame that shows it or the popup that replaces it. A frame that fails
+   * stays failed, so the dialog shows its offer of a popup at once on each later `show`.
+   *
+   * | State                  | Meaning                                                                 |
+   * | ---------------------- | ----------------------------------------------------------------------- |
+   * | `dialog.idle`          | No request. The dialog is hidden.                                       |
+   * | `dialog.pending`       | A request waits for the page to show it, until its `timeout`.           |
+   * | `dialog.revealed`      | The dialog shows the request, or the offer of a popup.                  |
+   * | `dialog.hiding`        | The dialog plays its exit, then goes idle.                              |
+   * | `frame.loading`        | The page has not loaded. `checking` waits for it after the frame's `load`. |
+   * | `frame.loaded`         | The page takes requests.                                                |
+   * | `frame.failed`         | The offer of a popup replaces the frame. `popup` watches the popup.     |
+   * | `closing` and `closed` | `close` plays the exit, if the dialog is open, then removes the dialog. |
+   */
+  export const sheet = setup({
+    actions: {
+      /** Plays the dialog's exit, and keeps the frame from input. `sheet.ts` provides it. */
+      animate: () => {},
+      /** Shows that the browser blocked the popup. `sheet.ts` provides it. */
+      blocked: () => {},
+      /** Ends the current request. */
+      clear: assign({ current: undefined, request: undefined }),
+      /** Takes the dialog out of the top layer, the accessibility tree, and focus. `sheet.ts` provides it. */
+      conceal: () => {},
+      /** Posts the end of the current request to the page. `sheet.ts` provides it. */
+      end: () => {},
+      /** Raises `fallback` for `params.reason`. */
+      fail: raise((_, params: { reason: 'popup' | 'unavailable' }) => ({
+        reason: params.reason,
+        type: 'fallback' as const,
+      })),
+      /** Replaces the frame with the offer of a popup, on `fallback`. `sheet.ts` provides it. */
+      offer: () => {},
+      /** Runs the current request's `onCallback`, on `embed.callback` or `popup.callback`. `sheet.ts` provides it. */
+      onCallback: () => {},
+      /** Runs the current request's `onClose`. `sheet.ts` provides it. */
+      onClose: () => {},
+      /** Shows that the popup opened, and removes Continue. `sheet.ts` provides it. */
+      opened: () => {},
+      /** Posts `context.request` to the page. `sheet.ts` provides it. */
+      post: () => {},
+      /** Stops the popup's watch, and keeps the popup open. */
+      receive: sendTo('popup', { type: 'received' }),
+      /** Removes the dialog and its frame from the document. `sheet.ts` provides it. */
+      remove: () => {},
+      /** Sets the frame's height, on `embed.resize`. `sheet.ts` provides it. */
+      resize: () => {},
+      /** Shows the dialog, and admits it to the accessibility tree and to focus. `sheet.ts` provides it. */
+      reveal: () => {},
+      /** Marks the request posted. */
+      sent: assign({ request: undefined }),
+      /** Starts the request of `show`. */
+      start: assign(({ event }) => {
+        if (event.type !== 'show') return {}
+        return {
+          current: {
+            handlers: {
+              onCallback: event.onCallback,
+              onClose: event.onClose,
+            },
+            id: event.id,
+            popupUrl: event.popupUrl,
+            timeout: event.timeout,
+          },
+          request: event.request,
+        }
+      }),
+      /** Holds the trust that the loaded page reports. */
+      trust: assign(({ event }) => {
+        if (event.type !== 'embed.loaded') return {}
+        return { trusted: event.trusted }
+      }),
+      /** Stops taking the page's messages. `sheet.ts` provides it. */
+      unlisten: () => {},
+    },
+    actors: {
+      /**
+       * Opens the popup of `input.url`, watches it, and closes it once its state ends. It sends
+       * `popup.opened` or `popup.blocked`, then `popup.callback` and `popup.close`, and stops watching
+       * on `received`. `sheet.ts` provides it.
+       */
+      popup: fromCallback<{ type: 'received' }, { url: string }>(() => {}),
+    },
+    delays: {
+      exit,
+      load: loadDelay,
+      timeout: ({ context }) => context.current?.timeout ?? 0,
+    },
+    guards: {
+      animate: ({ event }) =>
+        (event.type === 'close' || event.type === 'hide') && event.animate,
+      current: ({ context }) => context.current !== undefined,
+      failed: stateIn('#sheet.open.frame.failed'),
+      // A popup without an ID concerns the frame, which takes no request.
+      frame: ({ context, event }) =>
+        event.type === 'embed.popup' &&
+        (event.id === undefined || event.id === context.current?.id),
+      loaded: stateIn('#sheet.open.frame.loaded'),
+      // A message about a request names its ID, so one about an earlier sign-in in the same frame
+      // acts on nothing.
+      ours: ({ context, event }) =>
+        'id' in event && event.id === context.current?.id,
+      unsent: ({ context }) =>
+        context.current !== undefined && context.request !== undefined,
+    },
+    types: {
+      context: {} as machines.sheet.Context,
+      events: {} as machines.sheet.Event,
+    },
+  }).createMachine({
+    context: { current: undefined, request: undefined, trusted: undefined },
+    id: 'sheet',
+    initial: 'open',
+    states: {
+      // Not final: a stopped actor warns on each event, and the dialog's callers can still call it.
+      closed: { entry: 'remove' },
+      closing: {
+        after: { exit: 'closed' },
+        entry: 'animate',
+      },
+      open: {
+        exit: 'unlisten',
+        on: {
+          close: [
+            { guard: 'animate', target: 'closing' },
+            { target: 'closed' },
+          ],
+          dismiss: { actions: 'onClose', guard: 'current' },
+          'embed.callback': {
+            actions: 'onCallback',
+            guard: 'ours',
+          },
+          'embed.close': { actions: 'onClose', guard: 'ours' },
+          'embed.popup': {
+            actions: { params: { reason: 'popup' }, type: 'fail' },
+            guard: 'frame',
+          },
+          'embed.resize': {
+            actions: 'resize',
+          },
+          'popup.callback': {
+            actions: 'onCallback',
+            guard: 'current',
+          },
+          'popup.close': { actions: 'onClose', guard: 'current' },
+        },
+        states: {
+          dialog: {
+            initial: 'idle',
+            states: {
+              hiding: {
+                after: { exit: { actions: 'conceal', target: 'idle' } },
+                entry: 'animate',
+                on: {
+                  // The exit continues, and conceals the dialog once it ends, unless the dialog stops
+                  // animating.
+                  hide: [
+                    { guard: 'failed' },
+                    { guard: 'animate' },
+                    { actions: 'conceal', target: 'idle' },
+                  ],
+                  // A dialog that still plays its exit leaves the top layer at once, so its frame is
+                  // out of view and takes the request.
+                  show: [
+                    {
+                      actions: ['conceal', 'start'],
+                      guard: 'failed',
+                      target: 'revealed',
+                    },
+                    {
+                      actions: ['conceal', 'start', 'post', 'sent'],
+                      guard: 'loaded',
+                      target: 'pending',
+                    },
+                    { actions: ['conceal', 'start'], target: 'pending' },
+                  ],
+                },
+              },
+              idle: {
+                on: { hide: [{ guard: 'failed' }, { actions: 'conceal' }] },
+              },
+              pending: {
+                after: {
+                  timeout: {
+                    actions: {
+                      params: { reason: 'unavailable' },
+                      type: 'fail',
+                    },
+                  },
+                },
+                on: {
+                  'embed.ready': { guard: 'ours', target: 'revealed' },
+                  fallback: 'revealed',
+                },
+              },
+              revealed: { entry: 'reveal' },
+            },
+            // `idle` and `hiding` handle `hide` and `show` themselves. A request that the dialog shows
+            // ends with `hide`, or gives way to the next `show`. A dialog that offers a popup keeps its
+            // request, since the popup can still finish it.
+            on: {
+              hide: [
+                { guard: 'failed' },
+                {
+                  actions: ['end', 'clear'],
+                  guard: and(['loaded', 'animate']),
+                  target: '.hiding',
+                },
+                {
+                  actions: ['end', 'clear', 'conceal'],
+                  guard: 'loaded',
+                  target: '.idle',
+                },
+                { actions: 'clear', guard: 'animate', target: '.hiding' },
+                { actions: ['clear', 'conceal'], target: '.idle' },
+              ],
+              show: [
+                { actions: 'start', guard: 'failed', target: '.revealed' },
+                {
+                  actions: ['start', 'post', 'sent'],
+                  guard: 'loaded',
+                  target: '.pending',
+                },
+                { actions: 'start', target: '.pending' },
+              ],
+            },
+          },
+          frame: {
+            initial: 'loading',
+            states: {
+              failed: {
+                initial: 'offered',
+                states: {
+                  offered: {
+                    on: {
+                      'popup.open': { guard: 'current', target: 'popup' },
+                    },
+                  },
+                  popup: {
+                    invoke: {
+                      id: 'popup',
+                      input: ({ context }) => ({
+                        url: context.current?.popupUrl ?? '',
+                      }),
+                      src: 'popup',
+                    },
+                    on: {
+                      'popup.blocked': {
+                        actions: 'blocked',
+                        target: 'offered',
+                      },
+                      'popup.opened': { actions: 'opened' },
+                      received: { actions: 'receive' },
+                    },
+                  },
+                },
+              },
+              loaded: {
+                on: {
+                  'embed.loaded': { actions: 'trust' },
+                  fallback: {
+                    actions: 'offer',
+                    target: 'failed',
+                  },
+                },
+              },
+              loading: {
+                initial: 'blank',
+                on: {
+                  'embed.loaded': [
+                    {
+                      actions: ['trust', 'post', 'sent'],
+                      guard: 'unsent',
+                      target: 'loaded',
+                    },
+                    { actions: 'trust', target: 'loaded' },
+                  ],
+                  fallback: {
+                    actions: 'offer',
+                    target: 'failed',
+                  },
+                },
+                states: {
+                  blank: { on: { 'frame.load': 'checking' } },
+                  // Tempo ID refuses a frame with `frame-ancestors 'none'`, which loads an error page
+                  // without a message, so a frame without `loaded` soon after `load` fails.
+                  checking: {
+                    // A `hide` ends the check, as it ends the request's timeout. The next request's
+                    // timeout then offers the popup.
+                    on: { hide: 'blank' },
+                    after: {
+                      load: {
+                        actions: {
+                          params: { reason: 'unavailable' },
+                          type: 'fail',
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        type: 'parallel',
+      },
+    },
+  })
+
+  /** The types of {@link sheet}. */
+  export namespace sheet {
+    /** The deposit page that the frame's sign-in leaves to the app, since the frame cannot show it. */
+    export type Funding = {
+      /** The Tempo Account that holds less than the funding hint. */
+      address: `0x${string}`
+    }
+
+    /** Where the dialog routes the user's actions. */
+    export type Handlers = {
+      /**
+       * Receives the callback URL that the frame or the popup posts, with the account that the frame
+       * names for the deposit page of a funding hint.
+       */
+      onCallback: (url: string, funding?: Funding) => void
+      /** Runs when the user closes the dialog, the frame's sign-in, or the popup. */
+      onClose: () => void
+    }
+
+    /** The context of the machine. The states hold the rest. */
+    export type Context = {
+      /** The sign-in that the dialog shows, from `show` until `hide`. Absent while idle and hiding. */
+      current:
+        | {
+            /** Where the dialog routes the user's actions. */
+            handlers: Handlers
+            /** The ID of the request, which the page names in each message about it. */
+            id: string
+            /** The `/oauth2/authorize` URL of the request, which a fallback popup opens. */
+            popupUrl: string
+            /** Milliseconds that the page has to show the request, before the dialog offers the popup. */
+            timeout: number
+          }
+        | undefined
+      /** The authorization request that the page has not received yet, until the page loads. */
+      request: string | undefined
+      /**
+       * Whether Tempo ID trusts the app not to cover the frame, as the loaded page reports it, or
+       * `undefined` before the page loads.
+       */
+      trusted: boolean | undefined
+    }
+
+    /** A message from the page of `/embed`, without the `tempo-id:` prefix of its wire type. */
+    export type Message =
+      | {
+          /** The deposit page that the app opens after the sign-in. Absent for none. */
+          funding?: Funding | undefined
+          /** The ID of the request that the sign-in finished. */
+          id: string
+          /** The sign-in finished. */
+          type: 'embed.callback'
+          /** The redirect URI with `code` and `state`, or with `error`. */
+          url: string
+        }
+      | {
+          /** The ID of the request whose sign-in the user closed. */
+          id: string
+          /** The user closed the sign-in. */
+          type: 'embed.close'
+        }
+      | {
+          /** Whether Tempo ID trusts the app not to cover the frame, which skips its check of visibility. */
+          trusted: boolean
+          /** The page loaded, and takes a request. */
+          type: 'embed.loaded'
+        }
+      | {
+          /** The ID of the request that needs the popup. Absent when the frame cannot take any request. */
+          id?: string | undefined
+          /** The sign-in needs a page that the frame cannot show. */
+          type: 'embed.popup'
+        }
+      | {
+          /** The ID of the request that the page shows. */
+          id: string
+          /** The page shows the request. */
+          type: 'embed.ready'
+        }
+      | {
+          /** The document's height, in CSS pixels. */
+          height: number
+          /** The page changed its size. */
+          type: 'embed.resize'
+        }
+
+    /** An event of the machine: a message from the page, a call of the dialog, or a DOM or popup event. */
+    export type Event =
+      | Message
+      | {
+          /** Whether the dialog is open and plays its exit, which reduced motion turns off. */
+          animate: boolean
+          /** `close` ends the dialog, and removes it after its exit. */
+          type: 'close'
+        }
+      | {
+          /** The user closed the dialog with the Escape key, a click on the backdrop, or Cancel. */
+          type: 'dismiss'
+        }
+      | {
+          /** Why the dialog offers the popup: the sign-in needs it, or the frame cannot show the sign-in. */
+          reason: 'popup' | 'unavailable'
+          /** The frame gives way to the offer of a popup, for good. */
+          type: 'fallback'
+        }
+      | {
+          /** The frame loaded a document other than its first, `about:blank`. */
+          type: 'frame.load'
+        }
+      | {
+          /** Whether the dialog is open and plays its exit, which reduced motion turns off. */
+          animate: boolean
+          /** `hide` ends the request, and keeps the frame loaded for the next one. */
+          type: 'hide'
+        }
+      | {
+          /** The browser blocked the popup that the user's click opened. */
+          type: 'popup.blocked'
+        }
+      | {
+          /** The redirect URI that the popup's callback page posted. */
+          url: string
+          /** The popup delivered the callback. */
+          type: 'popup.callback'
+        }
+      | {
+          /** The user closed the popup. */
+          type: 'popup.close'
+        }
+      | {
+          /** The user selected Continue on the offer of a popup. */
+          type: 'popup.open'
+        }
+      | {
+          /** The popup opened. */
+          type: 'popup.opened'
+        }
+      | {
+          /** The callback arrived through another channel, so the dialog stops watching the popup. */
+          type: 'received'
+        }
+      | (Handlers & {
+          /** The ID of the request, which `sheet.ts` generates. */
+          id: string
+          /** The `/oauth2/authorize` URL of the request, which a fallback popup opens. */
+          popupUrl: string
+          /** The authorization request, as the query of `popupUrl`. */
+          request: string
+          /** Milliseconds that the page has to show the request, before the dialog offers the popup. */
+          timeout: number
+          /** `show` starts a request. */
+          type: 'show'
+        })
+
+    /** A running instance of {@link machine}. */
+    export type Actor = XStateActor<typeof sheet>
+
+    /** A snapshot of {@link machine}. */
+    export type Snapshot = ReturnType<Actor['getSnapshot']>
+  }
+
+  /** Returns whether the dialog offers a popup in place of its frame, which then takes no request. */
+  export function failed(snapshot: machines.sheet.Snapshot) {
+    return snapshot.matches({ open: { frame: 'failed' } })
+  }
+
+  /**
+   * Returns whether Tempo ID trusts the app not to cover the frame, as the loaded page reports it,
+   * or `undefined` before the page loads.
+   */
+  export function trusted(snapshot: machines.sheet.Snapshot) {
+    return snapshot.context.trusted
+  }
 }

@@ -4,15 +4,15 @@
 
 Opens Tempo ID's deposit page for one of the signed-in user's Tempo Accounts, from the app's page after the sign-in. An instance calls it through [`tempoId.funding.open`](plugins.funding.md#fundingopen), which reads the account from the session. The page lists the deposit methods, as [Funding hints](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md#deposit-methods) describes, and offers **Continue to** the app on each screen of a tab. A popup offers none: it returns to the app once **Done** on a receive screen reads the deposit, and the window's close returns without one. **Continue to** the app returns to one of the app's registered redirect URIs through `GET /i/funding/return`, as [Deposit page of an app](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md#deposit-page-of-an-app) describes. `mode` selects where the page opens:
 
-| `mode`           | Where                                                                                                                                  | Result                                                                                                                             |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `popup`          | A popup window, with `display=popup`                                                                                                   | Resolves when the user continues to the app, or closes the popup                                                                   |
-| `frame`, default | A frame in a dialog on the app's page, with `display=frame`. iOS and iPadOS, and an app whose client ID is a URL, open a popup instead | Resolves when the user continues to the app, or closes the dialog                                                                  |
-| `redirect`       | The same tab, which returns to the app                                                                                                 | Resolves with `undefined`. The redirect URI's page reads the result with [`Actions.funding.complete`](Actions.funding.complete.md) |
+| `mode`           | Where                                                                                          | Result                                                                                                                             |
+| ---------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `popup`          | A popup window, with `display=popup`                                                           | Resolves when the user continues to the app, or closes the popup                                                                   |
+| `frame`, default | A frame of `/embed/deposit` in a dialog on the app's page. iOS and iPadOS open a popup instead | Resolves when the user continues to the app, or closes the dialog                                                                  |
+| `redirect`       | The same tab, which returns to the app                                                         | Resolves with `undefined`. The redirect URI's page reads the result with [`Actions.funding.complete`](Actions.funding.complete.md) |
 
-Call it in a user gesture, such as a click. The popup opens before the first `await`, since a popup blocker accepts `window.open` only within the gesture. In `popup` mode, the page must be on the redirect URI's origin, since Tempo ID posts the return only to that origin. The popup closes when the call settles.
+Call it in a user gesture, such as a click. In `frame` mode on iOS and iPadOS, a call outside a gesture shows a dialog that offers **Continue**, whose click opens the popup. The popup opens before the first `await`, since a popup blocker accepts `window.open` only within the gesture. In `popup` mode, the page must be on the redirect URI's origin, since Tempo ID posts the return only to that origin. The popup closes when the call settles.
 
-In `frame` mode, Tempo ID frames the page only for an enabled first-party web app, from the origin of the redirect URI. A frame that shows no deposit page, such as one that Tempo ID refuses, or one without a Tempo ID session, shows **Continue** in the dialog, which opens the popup in the user's click. **Cancel**, the Escape key, and a click on the backdrop close the dialog, and the call resolves with `closed`.
+In `frame` mode, Tempo ID frames the page for any enabled web app, from the origin of the redirect URI, as [Deposit pages in a frame](https://github.com/tempoxyz/id/blob/main/docs/funding-hints.md#deposit-pages-in-a-frame) describes. A frame that shows no deposit page, such as one that Tempo ID refuses, one without a Tempo ID session, or one that the app's page covers, shows **Continue** in the dialog, which opens the popup in the user's click. **Cancel**, the Escape key, and a click on the backdrop close the dialog, and the call resolves with `closed`.
 
 While the popup is open, a modal dialog on the app's page states **Continue in the Tempo ID window.** It blocks input to the page. **Show window** and a click on the backdrop focus the popup, which a browser can refuse to raise above the page. **Cancel** and the Escape key close the popup, and the call resolves with `closed`. The dialog closes when the call settles.
 
@@ -107,7 +107,7 @@ const result = await Actions.funding.open(config, {
 - **Type:** `'frame' | 'popup' | 'redirect'`
 - **Default:** `'frame'`
 
-Where the deposit page opens: a frame in a dialog on the page, a popup window, or the same tab through a redirect. iOS and iPadOS, and an app whose client ID is a URL, open `frame` in a popup.
+Where the deposit page opens: a frame in a dialog on the page, a popup window, or the same tab through a redirect. iOS and iPadOS open `frame` in a popup.
 
 ```ts
 await Actions.funding.open(config, { address, mode: 'redirect' })
@@ -144,7 +144,7 @@ const result = await Actions.funding.open(config, {
 
 - **Type:** `string`
 
-The symbol or address of the only token that counts toward `amount`, such as `USDC.e`. Its currency must equal `currency`. It needs `amount`.
+The symbol or address of the only token that counts toward `amount`, such as `USDC.e`. Its currency must equal `currency`. It needs `amount`. On Tempo mainnet, `MACH` opens Buy MACH with `amount` in place of the list of methods.
 
 ```ts
 const result = await Actions.funding.open(config, {

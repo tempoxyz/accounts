@@ -79,8 +79,8 @@ catalogs:
       specifier: 7.0.2
       version: 7.0.2
     viem:
-      specifier: 2.57.16
-      version: 2.57.16
+      specifier: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
+      version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
     vite:
       specifier: npm:@voidzero-dev/vite-plus-core@1.3.0
       version: 1.3.0
@@ -110,13 +110,13 @@ overrides:
   example-backend>accounts: workspace:*
   example-backend>hono: 4.13.13
   example-backend>typescript: 7.0.2
-  example-backend>viem: 2.57.16
+  example-backend>viem: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
   example-backend>wrangler: 4.151.0
   example-cli>@types/node: 26.6.4
   example-cli>accounts: workspace:*
   example-cli>tsx: 4.23.15
   example-cli>typescript: 7.0.2
-  example-cli>viem: 2.57.16
+  example-cli>viem: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
   example-mobile>@types/node: 26.6.4
   example-mobile>@types/react: 19.2.18
   example-mobile>accounts: workspace:*
@@ -127,7 +127,7 @@ overrides:
   example-mobile>react-native: 0.86.3
   example-mobile>react-native-get-random-values: 1.11.0
   example-mobile>typescript: 7.0.2
-  example-mobile>viem: 2.57.16
+  example-mobile>viem: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
   example-wagmi>@tanstack/react-query: 5.104.1
   example-wagmi>@types/react: 19.3.0
   example-wagmi>@types/react-dom: 19.3.0
@@ -137,7 +137,7 @@ overrides:
   example-wagmi>react: 19.3.0
   example-wagmi>react-dom: 19.3.0
   example-wagmi>typescript: 7.0.2
-  example-wagmi>viem: 2.57.16
+  example-wagmi>viem: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
   example-wagmi>vite: 8.3.4
   example-wagmi>wagmi: 3.7.9
   example-web>@types/react: 19.3.0
@@ -147,7 +147,7 @@ overrides:
   example-web>react: 19.3.0
   example-web>react-dom: 19.3.0
   example-web>typescript: 7.0.2
-  example-web>viem: 2.57.16
+  example-web>viem: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
   example-web>vite: 8.3.4
   oxfmt>tinypool: 2.2.0
   pkg-pr-new>query-registry: 4.3.0
@@ -162,7 +162,6 @@ overrides:
   minimatch@>=5.0.0 <11.0.1: 11.0.3
 
 patchedDependencies:
-  viem@2.57.16: 1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb
   zile@0.0.29: 74215a38f10f06e14331bcf62c80d3cfce6a40ae527ef8323cd06f7617f561fb
 
 importers:
@@ -190,7 +189,7 @@ importers:
         version: 19.3.0
       '@wagmi/core':
         specifier: 'catalog:'
-        version: 3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@2.57.16)
+        version: 3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       expo-secure-store:
         specifier: 'catalog:'
         version: 57.0.4(expo@57.0.26)
@@ -199,7 +198,7 @@ importers:
         version: 57.0.3(expo@57.0.26)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))
       mppx:
         specifier: 'catalog:'
-        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@2.57.16)
+        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       pkg-pr-new:
         specifier: 'catalog:'
         version: 0.0.70
@@ -214,7 +213,7 @@ importers:
         version: 7.0.2
       viem:
         specifier: 'catalog:'
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
       vite:
         specifier: 'catalog:'
         version: '@voidzero-dev/vite-plus-core@1.3.0(@types/node@26.6.4)(esbuild@0.28.2)(terser@5.51.2)(tsx@4.23.15)(typescript@7.0.2)(yaml@2.9.1)'
@@ -234,8 +233,8 @@ importers:
         specifier: 4.13.13
         version: 4.13.13
       viem:
-        specifier: 2.57.16
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        specifier: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 5.20261014.1
@@ -256,8 +255,8 @@ importers:
         specifier: workspace:*
         version: link:../..
       viem:
-        specifier: 2.57.16
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        specifier: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@types/node':
         specifier: 26.6.4
@@ -293,8 +292,8 @@ importers:
         specifier: 1.11.0
         version: 1.11.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))
       viem:
-        specifier: 2.57.16
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        specifier: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@types/node':
         specifier: 26.6.4
@@ -313,7 +312,7 @@ importers:
         version: 5.104.1(react@19.3.0)
       '@wagmi/core':
         specifier: 3.6.7
-        version: 3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@2.57.16)
+        version: 3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       accounts:
         specifier: workspace:*
         version: link:../..
@@ -324,11 +323,11 @@ importers:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
       viem:
-        specifier: 2.57.16
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        specifier: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
       wagmi:
         specifier: 3.7.9
-        version: 3.7.9(@tanstack/query-core@5.104.1)(@tanstack/react-query@5.104.1(react@19.3.0))(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(viem@2.57.16)
+        version: 3.7.9(@tanstack/query-core@5.104.1)(@tanstack/react-query@5.104.1(react@19.3.0))(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
     devDependencies:
       '@types/react':
         specifier: 19.3.0
@@ -358,8 +357,8 @@ importers:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
       viem:
-        specifier: 2.57.16
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        specifier: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@types/react':
         specifier: 19.3.0
@@ -390,13 +389,13 @@ importers:
         version: 6.2.12
       mppx:
         specifier: 'catalog:'
-        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@2.57.16)
+        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       ox:
         specifier: 'catalog:'
         version: 0.14.59(typescript@7.0.2)(zod@4.6.7)
       viem:
         specifier: 'catalog:'
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 'catalog:'
@@ -421,13 +420,13 @@ importers:
         version: 4.13.13
       mppx:
         specifier: 'catalog:'
-        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@2.57.16)
+        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       ox:
         specifier: 'catalog:'
         version: 0.14.59(typescript@7.0.2)(zod@4.6.7)
       viem:
         specifier: 'catalog:'
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 'catalog:'
@@ -452,13 +451,13 @@ importers:
         version: 0.7.0
       mppx:
         specifier: 'catalog:'
-        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@2.57.16)
+        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       ox:
         specifier: 'catalog:'
         version: 0.14.59(typescript@7.0.2)(zod@4.6.7)
       viem:
         specifier: 'catalog:'
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -489,7 +488,7 @@ importers:
         version: 57.0.3(expo@57.0.26)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))
       mppx:
         specifier: 'catalog:'
-        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@2.57.16)
+        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       ox:
         specifier: 'catalog:'
         version: 0.14.59(typescript@7.0.2)(zod@4.6.7)
@@ -504,7 +503,7 @@ importers:
         version: 1.11.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))
       viem:
         specifier: 'catalog:'
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -526,7 +525,7 @@ importers:
         version: link:../..
       mppx:
         specifier: 'catalog:'
-        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@2.57.16)
+        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       ox:
         specifier: 'catalog:'
         version: 0.14.59(typescript@7.0.2)(zod@4.6.7)
@@ -538,7 +537,7 @@ importers:
         version: 19.3.0(react@19.3.0)
       viem:
         specifier: 'catalog:'
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@types/react':
         specifier: 'catalog:'
@@ -566,13 +565,13 @@ importers:
         version: 5.104.1(react@19.3.0)
       '@wagmi/core':
         specifier: 'catalog:'
-        version: 3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@2.57.16)
+        version: 3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       accounts:
         specifier: workspace:*
         version: link:../..
       mppx:
         specifier: 'catalog:'
-        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@2.57.16)
+        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       ox:
         specifier: 'catalog:'
         version: 0.14.59(typescript@7.0.2)(zod@4.6.7)
@@ -584,10 +583,10 @@ importers:
         version: 19.3.0(react@19.3.0)
       viem:
         specifier: 'catalog:'
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
       wagmi:
         specifier: 'catalog:'
-        version: 3.7.9(@tanstack/query-core@5.104.1)(@tanstack/react-query@5.104.1(react@19.3.0))(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(viem@2.57.16)
+        version: 3.7.9(@tanstack/query-core@5.104.1)(@tanstack/react-query@5.104.1(react@19.3.0))(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
     devDependencies:
       '@types/react':
         specifier: 'catalog:'
@@ -618,7 +617,7 @@ importers:
         version: link:../..
       mppx:
         specifier: 'catalog:'
-        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@2.57.16)
+        version: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       ox:
         specifier: 'catalog:'
         version: 0.14.59(typescript@7.0.2)(zod@4.6.7)
@@ -630,7 +629,7 @@ importers:
         version: 19.3.0(react@19.3.0)
       viem:
         specifier: 'catalog:'
-        version: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+        version: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@types/react':
         specifier: 'catalog:'
@@ -4842,8 +4841,8 @@ packages:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
 
-  viem@2.57.16:
-    resolution: {integrity: sha512-+4uaUw3NfkqjaqsZp8Zci94K33oc9rv7mIUgvPduJxsY/tI0ASi2YkaXoUVSBGfdIw/QPWuVnIf9LTFf35IoMg==}
+  viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30:
+    resolution: {integrity: sha512-PAcExaia/TbIuvayDvNU3FRDOEzaO0STCX+FHRlllwWlIlD/Uv64zN83XRyI5VuSrt/foq/HKrbBnTovXzIi7Q==}
     peerDependencies:
       mppx: '>=0.17.0'
       typescript: '>=5.0.4'
@@ -7273,19 +7272,19 @@ snapshots:
   '@voidzero-dev/vite-plus-win32-x64-msvc@1.3.0':
     optional: true
 
-  '@wagmi/connectors@8.2.2(@wagmi/core@3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@2.57.16))(accounts@)(typescript@7.0.2)(viem@2.57.16)':
+  '@wagmi/connectors@8.2.2(@wagmi/core@3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30))(accounts@)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)':
     dependencies:
-      '@wagmi/core': 3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@2.57.16)
-      viem: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+      '@wagmi/core': 3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
+      viem: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     optionalDependencies:
       accounts: 'link:'
       typescript: 7.0.2
 
-  '@wagmi/core@3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@2.57.16)':
+  '@wagmi/core@3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)':
     dependencies:
       eventemitter3: 5.0.1
       mipd: 0.0.7(typescript@7.0.2)
-      viem: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+      viem: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
       zustand: 5.0.0(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.4.0(react@19.3.0))
     optionalDependencies:
       '@tanstack/query-core': 5.104.1
@@ -8795,13 +8794,13 @@ snapshots:
 
   mkdirp@1.0.4: {}
 
-  mppx@0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@2.57.16):
+  mppx@0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30):
     dependencies:
       '@stripe/stripe-js': 9.13.0
       eventsource-parser: 3.1.1
       ox: 0.14.45(typescript@7.0.2)(zod@4.6.7)
       structured-headers: 2.0.3
-      viem: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+      viem: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
       zod: 4.6.7
     optionalDependencies:
       hono: 4.13.13
@@ -9704,7 +9703,7 @@ snapshots:
 
   vary@1.1.2: {}
 
-  viem@2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7):
+  viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7):
     dependencies:
       '@noble/curves': 1.9.1
       '@noble/hashes': 1.8.0
@@ -9715,7 +9714,7 @@ snapshots:
       ox: 0.14.59(typescript@7.0.2)(zod@4.6.7)
       ws: 8.21.0
     optionalDependencies:
-      mppx: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@2.57.16)
+      mppx: 0.12.0(hono@4.13.13)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       typescript: 7.0.2
     transitivePeerDependencies:
       - bufferutil
@@ -9882,14 +9881,14 @@ snapshots:
 
   vlq@1.0.1: {}
 
-  wagmi@3.7.9(@tanstack/query-core@5.104.1)(@tanstack/react-query@5.104.1(react@19.3.0))(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(viem@2.57.16):
+  wagmi@3.7.9(@tanstack/query-core@5.104.1)(@tanstack/react-query@5.104.1(react@19.3.0))(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30):
     dependencies:
       '@tanstack/react-query': 5.104.1(react@19.3.0)
-      '@wagmi/connectors': 8.2.2(@wagmi/core@3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@2.57.16))(accounts@)(typescript@7.0.2)(viem@2.57.16)
-      '@wagmi/core': 3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@2.57.16)
+      '@wagmi/connectors': 8.2.2(@wagmi/core@3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30))(accounts@)(typescript@7.0.2)(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
+      '@wagmi/core': 3.6.7(@tanstack/query-core@5.104.1)(@types/react@19.3.0)(accounts@)(react@19.3.0)(typescript@7.0.2)(use-sync-external-store@1.4.0(react@19.3.0))(viem@0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30)
       react: 19.3.0
       use-sync-external-store: 1.4.0(react@19.3.0)
-      viem: 2.57.16(patch_hash=1ad38700deaa2fa6445d561ae8481bc9a6f22682d6e7de0bddae8e6239beb9bb)(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
+      viem: 0.0.0-bf3ffc52b5633afebacf3d728d846080f1668f30(mppx@0.12.0)(typescript@7.0.2)(zod@4.6.7)
     optionalDependencies:
       typescript: 7.0.2
     transitivePeerDependencies:

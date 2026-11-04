@@ -4,6 +4,7 @@
  * @module
  */
 import { Address } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
 import {
   type Chain,
   custom,
@@ -22,12 +23,45 @@ import * as AccessToken from '../AccessToken.js'
 import type * as Id from '../Id.js'
 import { KeyRequiredError } from '../Id.js'
 import * as Core from '../internal/core.js'
+import * as SignIn from '../internal/signIn.js'
 import * as AccessKey from '../internal/viem/accessKey.js'
+import * as Retry from '../internal/viem/retry.js'
 import * as Signer from '../internal/signer.js'
 import * as RelayRoute from '../internal/relayRoute.js'
 import * as Verify from '../internal/viem/verify.js'
+import * as Permissions from '../Permissions.js'
 import * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
+
+/** The sign-in for a new access key returned another user or Tempo Account, so the transaction did not send. */
+export class RetryAccountError extends Error {
+  override readonly name = 'Plugins.viem.RetryAccountError'
+  /** The failure that the sign-in resolves. */
+  readonly kind: Retry.Kind
+
+  constructor(options: { cause: unknown; kind: Retry.Kind }) {
+    super(
+      'The sign-in for a new access key returned another account. The transaction did not send. Sign in with the same account, then send it again.',
+      { cause: options.cause },
+    )
+    this.kind = options.kind
+  }
+}
+
+/** The user closed the screen that a failed transaction showed, so the transaction did not send. */
+export class RetryClosedError extends Error {
+  override readonly name = 'Plugins.viem.RetryClosedError'
+  /** The failure that the screen resolves. */
+  readonly kind: Retry.Kind
+
+  constructor(options: { cause: unknown; kind: Retry.Kind }) {
+    super(
+      `${closedMessages[options.kind]} The transaction did not send. Send it again to retry.`,
+      { cause: options.cause },
+    )
+    this.kind = options.kind
+  }
+}
 
 /**
  * Returns the plugin of the Viem client, which adds `viem`, and the default client's actions to the
@@ -48,6 +82,10 @@ import type * as Session from '../Session.js'
  * `accessToken`, and count a live access key's signature only when the token names the access key. `Actions.account.signMessage` and `signTypedData` sign as the owner
  * explicitly. `accessKey.revoke` and `accessKey.updateLimit`, and their `Sync` forms, send through
  * Tempo ID with the account's owner, unless a call passes `account`.
+ *
+ * On a page, a transaction of the session's access key that the node refuses for a low balance, a
+ * spent limit, or an access key that the chain does not hold shows Tempo ID's screen that fixes it,
+ * then sends again, unless `retry` turns it off.
  *
  * @example
  * ```ts
@@ -91,6 +129,11 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         number,
         WeakMap<Session.Session, LocalAccount | undefined>
       >()
+      // The retry of the plugin's clients, whose transports mark the refusals that it retries.
+      const retry = Retry.create()
+      // The fix in progress for each screen, which concurrent failures that the screen resolves share:
+      // a deposit of one token on one chain, or one sign-in on one chain.
+      const fixes = new Map<string, Promise<void>>()
       // The clients without overrides beyond `chainId`, one for each chain.
       const clients = new Map<number, viem.Client>()
       // The verifier of the app's access tokens, built at the first verification that names one. Its
@@ -192,10 +235,95 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         )
       }
 
+      /**
+       * Shows the screen that resolves `failure` of a transaction of the client of `chainId`, and
+       * resolves once the transaction can send again. A deposit page opens for a balance, and a sign-in
+       * for a new access key with the session's access key's limits and scopes, for an access key or
+       * its limit. The new access key keeps the old one's expiry while it is in the future. Otherwise
+       * it takes the instance's `accessKey` expiry, or the one that Tempo ID fills. A sign-in that
+       * returns another user or account sets no session, and rejects.
+       */
+      async function fix(
+        failure: Retry.Failure,
+        options: {
+          address: `0x${string}`
+          chainId: number
+          error: unknown
+          signal: AbortSignal | undefined
+        },
+      ) {
+        const { address, chainId, error, signal } = options
+        // The screens load from chunks of their own, so a bundle of the client holds them only once
+        // a transaction fails.
+        if (failure.kind === 'balance') {
+          const Funding = await import('../actions/funding.js')
+          const result = await Funding.open(config, {
+            address,
+            chainId,
+            mode: 'frame',
+            signal,
+            ...(failure.amount === undefined
+              ? {}
+              : { amount: failure.amount, token: failure.token }),
+          })
+          if (result?.status !== 'received')
+            throw new RetryClosedError({ cause: error, kind: failure.kind })
+          return
+        }
+        const before = context.session.get()
+        const key = before?.key
+        if (!before || !key) throw error
+        const authorization = KeyAuthorization.fromRpc(key.keyAuthorization)
+        const expiry =
+          authorization.expiry && authorization.expiry * 1000 > Date.now()
+            ? authorization.expiry
+            : context.accessKey()?.expiry
+        // An authorization without scopes makes any call.
+        const accessKey = Permissions.from({
+          chainId: Number(authorization.chainId),
+          ...(expiry === undefined ? {} : { expiry }),
+          limits: authorization.limits?.map((entry) => ({
+            limit: entry.limit,
+            period: entry.period || undefined,
+            token: entry.token,
+          })),
+          scopes: authorization.scopes ?? 'any',
+        })
+        const Dialog = await import('../actions/dialog.js')
+        const change = context.session.change()
+        const result = await Dialog.signIn(config, {
+          accessKey,
+          mode: 'iframe',
+          signal,
+        }).catch((reason: unknown) => {
+          if (
+            !signal?.aborted &&
+            reason instanceof DOMException &&
+            reason.name === 'AbortError'
+          )
+            return change.fail(
+              new RetryClosedError({ cause: error, kind: failure.kind }),
+            )
+          return change.fail(reason)
+        })
+        const session = SignIn.toSession(result)
+        // The retry sends from the live account, so it sends only from the account that failed.
+        if (
+          session.user.id !== before.user.id ||
+          !session.key ||
+          !Address.isEqual(session.key.account, key.account)
+        )
+          return change.fail(
+            new RetryAccountError({ cause: error, kind: failure.kind }),
+          )
+        await change.commit(session)
+      }
+
       /** Returns a new client with `overrides`. */
       function create(overrides: viem.Overrides = {}): viem.Client {
         const {
           chainId = config.chainId,
+          retry: retryOverride,
           session,
           transport,
           ...clientOptions
@@ -205,7 +333,22 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           throw new Error(
             `Invalid chain: ${chainId} is not a Tempo chain, and its options name no \`chain\`. Return its definition as \`chain\`.`,
           )
-        const reads = transport ?? own.transport(chainId)
+        const {
+          accessTokens: _accessTokens,
+          chain: _chain,
+          relay: _relay,
+          retry: retryDefault = true,
+          transport: _transport,
+          ...defaults
+        } = resolve(chainId)
+        // Only a page shows the screens, and only for the session's account, since a fixed session
+        // signs on a backend.
+        const retries = merge(retryDefault, retryOverride)
+        const retrying = page && !session && retries !== false
+        const reads = (() => {
+          const value = transport ?? own.transport(chainId)
+          return retrying ? retry.transport(value) : value
+        })()
         const account = (() => {
           if (!session) {
             // The default transport shares one account for each session and chain, and another
@@ -229,13 +372,6 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           if (!fixed) throw new KeyRequiredError()
           return fixed
         })()
-        const {
-          accessTokens: _accessTokens,
-          chain: _chain,
-          relay: _relay,
-          transport: _transport,
-          ...defaults
-        } = resolve(chainId)
         const client = build(
           {
             ...defaults,
@@ -246,7 +382,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           },
           { verifier: tokens },
         )
-        return client.extend((client) => ({
+        const extended = client.extend((client) => ({
           accessKey: {
             revoke: (parameters: AccessKey.revoke.Parameters) =>
               AccessKey.revoke(client as never, { config, parameters }),
@@ -267,6 +403,32 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
               }),
           },
         })) as viem.Client
+        if (!retrying) return extended
+        const kinds = typeof retries === 'object' ? retries : {}
+        return retry.wrap(extended, {
+          enabled: (kind) => kinds[kind] !== false,
+          fix(failure, error) {
+            // A new access key resolves a spent limit and a missing access key at once, and a second
+            // sign-in would end the first.
+            const key =
+              failure.kind === 'balance'
+                ? `balance:${chainId}:${failure.token ?? ''}`
+                : `signIn:${chainId}`
+            let pending = fixes.get(key)
+            if (!pending) {
+              pending = fix(failure, {
+                address: extended.account.address,
+                chainId,
+                error,
+                signal: kinds.signal,
+              }).finally(() => fixes.delete(key))
+              fixes.set(key, pending)
+            }
+            return pending
+          },
+          signal: kinds.signal,
+          skip: internal,
+        })
       }
 
       /** Returns the client with `overrides`, from the cache when they name at most a chain. */
@@ -350,6 +512,12 @@ export declare namespace viem {
      */
     chain?: Chain | undefined
     /**
+     * Which refused transactions of the session's access key retry on a page: `false` for none, or
+     * an object that turns off each kind with `false`. A retry first shows Tempo ID's screen that
+     * fixes the failure, then sends the same transaction again. Defaults to `true`, every kind.
+     */
+    retry?: RetryOptions | undefined
+    /**
      * The URL of the app's relay route, such as `/api/relay`, which the `relay` plugin serves. The
      * chain's transport then sends its sponsorship requests to the route, so the relay's fee payer
      * pays the fees of each transaction. In the object form, it applies to the same chain as
@@ -362,6 +530,23 @@ export declare namespace viem {
      */
     transport?: Transport | undefined
   }
+
+  /**
+   * Which refused transactions retry: `true` for every kind, `false` for none, or an object whose
+   * kinds default to `true`.
+   */
+  type RetryOptions =
+    | boolean
+    | {
+        /** A balance below the transaction's need opens the deposit page. */
+        balance?: boolean | undefined
+        /** An access key that the chain does not hold, expired, or revoked, signs in for a new one. */
+        key?: boolean | undefined
+        /** A spent limit of the access key signs in for a new access key. */
+        limit?: boolean | undefined
+        /** Closes the screen of a retry, and rejects the call with the signal's reason. */
+        signal?: AbortSignal | undefined
+      }
 
   /** Returns the options of the chain of `chainId`. */
   type Resolver = (chainId: number) => Options
@@ -376,6 +561,8 @@ export declare namespace viem {
      * `chainId`.
      */
     chainId?: number | undefined
+    /** Which refused transactions of the client retry. Defaults to the plugin's `retry`. */
+    retry?: RetryOptions | undefined
     /**
      * A fixed session, such as one that `tempoId.backend.get` returns, whose access key signs. A
      * client of a session without an access key throws `Id.KeyRequiredError`.
@@ -439,6 +626,31 @@ export const settings = Symbol('viem.settings')
  * do not export it, so only the package's own plugins read it.
  */
 export const pluginOptions = Symbol('viem.options')
+
+/**
+ * Returns the retries of a client: the plugin's `retry`, with the call's `retry` over it. A call's
+ * object turns on or off the kinds that it names, and keeps the plugin's other kinds.
+ */
+function merge(
+  plugin: viem.RetryOptions,
+  call: viem.RetryOptions | undefined,
+): viem.RetryOptions {
+  if (call === undefined || typeof call === 'boolean') return call ?? plugin
+  const base =
+    plugin === false
+      ? { balance: false, key: false, limit: false }
+      : plugin === true
+        ? {}
+        : plugin
+  return { ...base, ...call }
+}
+
+/** What the user closed, for each kind of failure, in the message of {@link RetryClosedError}. */
+const closedMessages = {
+  balance: 'The user closed the deposit page before a deposit arrived.',
+  key: 'The user closed the sign-in for a new access key.',
+  limit: 'The user closed the sign-in for a new access key with a new limit.',
+} as const satisfies Record<Retry.Kind, string>
 
 /** Tempo's chains, which a chain ID without a `chain` in its options uses. */
 const defaultChains = [tempo, tempoTestnet, tempoDevnet, tempoLocalnet] as const

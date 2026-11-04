@@ -124,7 +124,11 @@ export declare namespace complete {
  * Opens Tempo ID's deposit page for `address`, one of the signed-in user's Tempo Accounts. Call it in
  * a user gesture, such as a click, since a popup opens only within one.
  *
- * - `popup`, the default, opens the page in a popup window, and resolves when the user continues to
+ * - `frame`, the default, opens the page in a frame in a dialog, and resolves when the user continues
+ *   to the app or closes the dialog. The frame offers a popup when it cannot show the page. A
+ *   third-party app's frame continues Buy MACH in a popup, which opens within the user's click in
+ *   the frame, or from the dialog's offer when the browser blocks it.
+ * - `popup` opens the page in a popup window, and resolves when the user continues to
  *   the app or closes the popup. The page must be on the origin of the redirect URI, since Tempo ID
  *   posts the return only to that origin.
  * - `redirect` sends the browser to the page, and resolves with `undefined` once the navigation starts.
@@ -152,12 +156,10 @@ export async function open(
   options: open.Options,
 ): Promise<open.ReturnType> {
   const { amount, currency, signal, token } = options
-  // iOS and iPadOS open the deposit page in a popup, since Apple Pay pays there without a frame. So
-  // does a third-party app whose client ID is its metadata document's URL, which no frame admits.
+  // iOS and iPadOS open the deposit page in a popup, since Apple Pay pays there without a frame.
   const mode = (() => {
     const value = options.mode ?? 'frame'
-    if (value !== 'frame') return value
-    if (Popup.apple() || URL.canParse(auth.clientId)) return 'popup'
+    if (value === 'frame' && Popup.apple()) return 'popup'
     return value
   })()
   // A refusal below, such as of an aborted signal or another origin, leaves a promised address
@@ -168,18 +170,24 @@ export async function open(
   const redirectUri =
     options.redirectUri ?? auth.redirectUri ?? `${window.location.origin}/`
   /** Returns the deposit page's URL for the account at `address`. */
-  const toUrl = (address: string) => {
-    const url = new URL('/deposit', auth.url)
+  const toUrl = (address: string, entry: toUrl.Options = { mode }) => {
+    // A frame loads the deposit pages at `/embed/deposit`, the path that Tempo ID frames.
+    const url = new URL(
+      entry.mode === 'frame' ? '/embed/deposit' : '/deposit',
+      auth.url,
+    )
     url.search = new URLSearchParams({
       address,
+      ...(entry.amount ? { amount: entry.amount } : {}),
       // The page reads `mainnet` and `testnet` by name, and another chain by the name that the
       // deployment lists for its ID.
       chain: Chains.parameter({ chainId: options.chainId ?? auth.chainId }),
       client_id: auth.clientId,
-      ...(mode === 'redirect' ? {} : { display: mode }),
+      ...(entry.mode === 'popup' ? { display: entry.mode } : {}),
       ...(currency === undefined ? {} : { funding_currency: currency }),
       ...(amount === undefined ? {} : { funding_hint: amount }),
       ...(token === undefined ? {} : { funding_token: token }),
+      ...(entry.method ? { method: entry.method } : {}),
       redirect_uri: redirectUri,
     }).toString()
     return url.href
@@ -207,14 +215,40 @@ export async function open(
   if (new URL(redirectUri).origin !== window.location.origin)
     throw new OriginError({ origin: window.location.origin, redirectUri })
 
-  if (mode === 'frame')
-    return await frame(auth, {
-      address: read(),
-      popup: (address) => open(auth, { ...options, address, mode: 'popup' }),
-      redirectUri,
-      signal,
-      toUrl,
+  // Outside a gesture, such as after a failed transaction, a popup blocker refuses the popup that iOS
+  // and iPadOS open, so a dialog offers it, and the user's click on Continue opens it.
+  if (mode === 'popup' && options.mode !== 'popup' && !Popup.activated()) {
+    const address = await abortable(read(), { signal })
+    const Sheet = await import('../internal/sheet.js')
+    return await new Promise((resolve, reject) => {
+      const abort = () => {
+        close()
+        reject(signal?.reason)
+      }
+      const close = Sheet.prompt({
+        label: 'Add funds with Tempo',
+        onCancel: () => {
+          close()
+          signal?.removeEventListener('abort', abort)
+          resolve({ status: 'closed' })
+        },
+        onContinue: () => {
+          close()
+          signal?.removeEventListener('abort', abort)
+          open(auth, { ...options, address, mode: 'popup' }).then(
+            resolve,
+            reject,
+          )
+        },
+        text: 'Continue in a Tempo ID window to add funds.',
+      })
+      if (signal?.aborted) abort()
+      else signal?.addEventListener('abort', abort, { once: true })
     })
+  }
+
+  if (mode === 'frame')
+    return await frame(auth, { address: read(), redirectUri, signal, toUrl })
   // A popup blocker accepts `window.open` only within the gesture, so the popup opens before any
   // `await`. An address that resolves later loads in the open popup.
   const popup = Popup.openPopup(
@@ -223,7 +257,24 @@ export async function open(
       : 'about:blank',
   )
   if (popup === null) throw new BlockedError()
-  const address = read()
+  return await watch(auth, {
+    address: read(),
+    popup,
+    redirectUri,
+    signal,
+    toUrl,
+  })
+}
+
+/**
+ * Resolves once the deposit page in `options.popup` returns to the app, or the user closes the
+ * popup, and closes the popup. An address that resolves later loads in the popup.
+ */
+async function watch(
+  auth: Config,
+  options: watch.Options,
+): Promise<NonNullable<open.ReturnType>> {
+  const { address, popup, redirectUri, signal, toUrl } = options
   const pending = typeof address !== 'string'
 
   let abort: (() => void) | undefined
@@ -284,6 +335,32 @@ export async function open(
   }
 }
 
+declare namespace watch {
+  type Options = {
+    /** The Tempo Account that receives the deposit, or the read that returns it. */
+    address: `0x${string}` | Promise<`0x${string}`>
+    /** The open popup, which holds the deposit page, or `about:blank` until `address` resolves. */
+    popup: Window
+    /** The registered redirect URI of the deposit page. */
+    redirectUri: string
+    /** Rejects the call with the signal's reason, and closes the popup. */
+    signal: AbortSignal | undefined
+    /** Returns the deposit page's URL for the account at `address`. */
+    toUrl: (address: string) => string
+  }
+}
+
+declare namespace toUrl {
+  type Options = {
+    /** With `method`, the amount in USD that the method's first step shows, such as `7.50`. */
+    amount?: string | undefined
+    /** The method that the page opens, such as `mach` for Buy MACH. Absent, the page lists them. */
+    method?: 'mach' | undefined
+    /** The mode that loads the page, which selects its path and `display`. */
+    mode: 'frame' | 'popup' | 'redirect'
+  }
+}
+
 export declare namespace open {
   type Options = {
     /**
@@ -310,11 +387,10 @@ export declare namespace open {
     currency?: string | undefined
     /**
      * `frame` for a frame in a dialog on the page, `popup` for a popup window, or `redirect` for a
-     * redirect of the page. Defaults to `frame`. Tempo ID frames the page only for an enabled
-     * first-party web app, from the origin of `redirectUri`. iOS and iPadOS, and an app whose client
-     * ID is a URL, open `frame` in a popup.
-     * A frame that shows no deposit page, such as without a Tempo ID session in the frame, offers a
-     * popup, which opens from the user's click.
+     * redirect of the page. Defaults to `frame`. Tempo ID frames the page at `/embed/deposit` for
+     * any enabled web app, from the origin of `redirectUri`. iOS and iPadOS open `frame` in a popup.
+     * A frame that shows no deposit page, such as without a Tempo ID session in the frame, or one
+     * that the app's page covers, offers a popup, which opens from the user's click.
      */
     mode?: 'frame' | 'popup' | 'redirect' | undefined
     /**
@@ -405,14 +481,15 @@ declare namespace parse {
 
 /**
  * Shows the deposit page of `options.address` in a frame in a dialog, and resolves once the page
- * returns to the app or the user closes the dialog. A frame that shows no deposit page offers a
- * popup, whose call `options.popup` starts in the user's click.
+ * returns to the app or the user closes the dialog. A frame that requests a popup for a method, such
+ * as Buy MACH, opens it at once within the user's click. Otherwise, or if the browser blocks it, the
+ * dialog offers the popup, which opens from the user's click.
  */
 async function frame(
   auth: Config,
   options: frame.Options,
 ): Promise<NonNullable<open.ReturnType>> {
-  const { popup, redirectUri, signal, toUrl } = options
+  const { redirectUri, signal, toUrl } = options
   const address = await abortable(options.address, { signal })
   const Sheet = await import('../internal/sheet.js')
   // An abort while the dialog's module loads fired before the listener below, so it rejects here.
@@ -433,12 +510,25 @@ async function frame(
               },
             ),
           onCancel: () => resolve({ status: 'closed' }),
-          onPopup: () => {
+          onPopup: (entry) => {
+            const popup = Popup.openPopup(
+              toUrl(address, {
+                amount: entry.amount,
+                method: entry.method,
+                mode: 'popup',
+              }),
+            )
+            if (popup === null) {
+              // The offer's Continue is the user's click, so only a blocker refuses it.
+              if (!entry.automatic) reject(new BlockedError())
+              return false
+            }
             close?.()
-            popup(address).then(
-              (result) => resolve(result ?? { status: 'closed' }),
+            watch(auth, { address, popup, redirectUri, signal, toUrl }).then(
+              resolve,
               reject,
             )
+            return true
           },
           origin: new URL(auth.url).origin,
           url: toUrl(address),
@@ -455,13 +545,11 @@ declare namespace frame {
   type Options = {
     /** The Tempo Account that receives the deposit, or the read that returns it. */
     address: `0x${string}` | Promise<`0x${string}`>
-    /** Opens the deposit page of `address` in a popup instead, in the user's click. */
-    popup: (address: `0x${string}`) => Promise<open.ReturnType>
     /** The registered redirect URI of the deposit page. */
     redirectUri: string
     /** Rejects the call with the signal's reason, and closes the dialog. */
     signal: AbortSignal | undefined
     /** Returns the deposit page's URL for the account at `address`. */
-    toUrl: (address: string) => string
+    toUrl: (address: string, entry?: toUrl.Options) => string
   }
 }

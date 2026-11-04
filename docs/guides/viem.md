@@ -171,6 +171,24 @@ Without `accessToken`, an access key's signature does not count, and the owner's
 
 An access key signs nothing that verifies before its first transaction registers it on the chain. On a page, the account's owner signs until then, for an app with the `tempo-id:sign` scope on a chain with configurable accounts. For another app, the access key signs, and its signature verifies after the registration. Outside a page, and for a fixed `session`, the access key signs at once, so send its first transaction before a signature that a verifier checks. A session without an access key on the chain signs through the account's owner, on a page or not, such as after `email.signIn` with `accessKey: false`. A transaction then throws [`Id.KeyRequiredError`](../api/errors.md#idkeyrequirederror). To sign as the user's [configurable account](https://github.com/tempoxyz/id/blob/main/docs/configurable-accounts.md#message-signing) with an access key in the session, an app with the `tempo-id:sign` scope calls [`Actions.account.signMessage`](../api/Actions.account.signMessage.md) or [`signTypedData`](../api/Actions.account.signTypedData.md).
 
+### Retry a refused transaction
+
+On a page, a transaction of the session's access key that the node refuses for a low balance, a spent limit, or an access key that the chain does not hold retries. Tempo ID's deposit page or sign-in shows in a frame, and the transaction sends again once the user finishes it. A user who closes the screen receives [`Plugins.viem.RetryClosedError`](../api/plugins.viem.md#pluginsviemretryclosederror). [`retry`](../api/plugins.viem.md#retry-optional) lists the failures and turns them off.
+
+```ts
+const tempoId = Id.create({
+  plugins: [dialog(), viem({ retry: { limit: false } })],
+})
+
+try {
+  await tempoId.token.transferSync({ amount, to, token: ousd })
+} catch (error) {
+  if ((error as Error).name === 'Plugins.viem.RetryClosedError')
+    showMessage((error as Error).message)
+  else throw error
+}
+```
+
 ### Revoke or limit an access key
 
 `tempoId.accessKey.revoke`, `revokeSync`, `updateLimit`, and `updateLimitSync` change an access key of the user's account through Tempo ID, with the user's cloud wallet as the owner, since the chain refuses keychain changes from an access key. Each returns what Viem's own action returns. They need the app's `tempo-id:sign` scope, an access key that Tempo ID signed for the user, and a sign-in within the last 10 minutes. An access key that the chain has not registered registers with the new limit. With an `account` in the parameters, such as the account's root key, each is Viem's own action. [App revocation and changes](https://github.com/tempoxyz/id/blob/main/docs/access-keys.md#app-revocation-and-changes) describes the rules.

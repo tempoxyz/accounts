@@ -18,6 +18,7 @@ import { StrictMode, useCallback, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { formatUnits, isAddress, isAddressEqual, parseUnits } from 'viem'
 import { Actions as TempoActions, TempoExecutionError } from 'viem/tempo'
+import * as CoinflowFrame from '../web/CoinflowFrame.tsx'
 import * as Defaults from '../web/Defaults.ts'
 import * as FundingFields from '../web/FundingFields.tsx'
 import * as Layout from '../web/Layout.tsx'
@@ -302,6 +303,8 @@ function App() {
       {signedIn ? (
         <SignedIn authorization={signedIn} onSignOut={signOut} />
       ) : null}
+
+      <CoinflowFrame.Section tempoIdUrl={tempoIdUrl} />
 
       <p aria-live="polite" role="status">
         {status}

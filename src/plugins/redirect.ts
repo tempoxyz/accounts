@@ -134,10 +134,11 @@ export function redirect(options: redirect.Options = {}) {
     },
     hooks: {
       async beforeSignOut(context) {
-        // A page's sign-out ends its Tempo ID session, but a system browser's session outlives the
-        // app's sign-out. The flag is set before the sign-out starts, so a sign-in that overlaps the
-        // sign-out, or follows a sign-out that rejects, sends `prompt=login`. A failed write of the
-        // stored flag never fails the sign-out.
+        // A system browser's Tempo ID session outlives the app's sign-out, also one with
+        // `everywhere`, since its logout sends the app's cookies, not the browser's. The flag is set
+        // before the sign-out starts, so a sign-in that overlaps the sign-out, or follows a sign-out
+        // that rejects, sends `prompt=login`. A failed write of the stored flag never fails the
+        // sign-out.
         if (!open) return
         const flag = Hex.fromBytes(Bytes.random(16))
         signingOut.set(context.config, flag)

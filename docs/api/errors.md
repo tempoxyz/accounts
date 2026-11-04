@@ -32,6 +32,10 @@ Thrown before any request when a sign-in receives `challenge` without `accessKey
 
 Thrown by [`Id.create`](Id.create.md) and [`Id.from`](Id.from.md) outside a browser without `clientId`, where no page's origin can serve as one.
 
+### `Id.EverywhereNotAllowedError`
+
+Thrown by [`signOut`](Id.create.md#signout) with `everywhere` from an app that is not first-party, such as an app whose client ID is an origin, a metadata document's URL, an `app_` ID, or a `cli:` name. The call signs nothing out. Sign out without `everywhere`.
+
 ### `Id.KeyRequiredError`
 
 Thrown when a sign-in without an access key cannot serve the call: [`device.signIn`](plugins.device.md) without `accessKey`, since the device grant always requests an access key, a transaction from the account of a [`viem`](plugins.viem.md) client whose session holds no access key, and `tempoId.viem({ session })` for a session without an access key.
@@ -115,6 +119,14 @@ Thrown by [`Permissions.resolve`](Permissions.resolve.md), and by each sign-in, 
 ### `Permissions.TokenUnknownError`
 
 Thrown by [`Permissions.resolve`](Permissions.resolve.md), and by each sign-in, for a token symbol that the chain does not list.
+
+### `Plugins.viem.RetryAccountError`
+
+Thrown by a transaction of the [`viem`](plugins.viem.md#pluginsviemretryaccounterror) plugin's client when the sign-in of its [retry](plugins.viem.md#retry-optional) returns another user or Tempo Account. Match it by `name`.
+
+### `Plugins.viem.RetryClosedError`
+
+Thrown by a transaction of the [`viem`](plugins.viem.md#pluginsviemretryclosederror) plugin's client when the user closes the screen of its [retry](plugins.viem.md#retry-optional). Its `kind` names the failure, and its `cause` is the transaction's error. Match it by `name`.
 
 ### `TempoAccount.AddressMismatchError`
 

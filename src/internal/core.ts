@@ -280,6 +280,8 @@ export async function getSession(
     await restore()
     const loaded = await context.session.load()
     if (loaded) return loaded
+    // The mark is read after the restore, so a sign-out during a slow hook still applies.
+    if (await options.signedOut?.()) return undefined
     return await fn()
   })
 }
@@ -311,6 +313,11 @@ export declare namespace getSession {
   type Options = Parameters & {
     /** Runs the plugins' `restore` hooks, such as a redirect's callback. */
     restore: () => Promise<void>
+    /**
+     * Returns whether a sign-out without `everywhere` followed the last sign-in, which stops
+     * `reauthorize`. Absent, nothing stops it.
+     */
+    signedOut?: (() => Promise<boolean>) | undefined
   }
 }
 

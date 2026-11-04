@@ -3,7 +3,6 @@
   "compilerOptions": {
     // Node runs each playground's TypeScript as it is, so relative imports name the `.ts` file.
     "allowImportingTsExtensions": true,
-    "erasableSyntaxOnly": true,
     "jsx": "preserve",
     "types": ["node"]
   },
