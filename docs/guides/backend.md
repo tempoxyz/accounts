@@ -114,7 +114,7 @@ sequenceDiagram
 > [!WARNING]
 > Never sign with the default `accounts.viem` client on a server. The instance holds no session, so its account throws `Accounts.SignedOutError`. Pass each request's `session` to `accounts.viem({ session })`.
 
-[`examples/backend`](../../examples/backend/worker.ts) runs this flow in a Worker, and [`playgrounds/backend`](../../playgrounds/backend/app.ts) runs it on Node and in a Durable Object.
+[`examples/backend`](../../examples/backend/worker.ts) runs this flow in a Worker, and [`playgrounds/backend`](https://github.com/tempoxyz/id/blob/main/playgrounds/backend/app.ts) runs it on Node and in a Durable Object.
 
 > [!NOTE]
 > Rate-limit `/auth/start`. Each request stores a pending sign-in for 10 minutes, so the store holds every sign-in that started in that time.

@@ -3,7 +3,7 @@
 ## Project Principles
 
 - `accounts` is the SDK of Tempo ID (`id.tempo.xyz`). Apps use it to sign users in, keep their session and access key, and act on Tempo with it.
-- `tempoxyz/id` holds the server, its HTTP API, and its docs. This repository holds the package, its docs, `examples/`, and `playgrounds/`.
+- `tempoxyz/id` holds the server, its HTTP API, and its docs. This repository holds the package, its docs, and `examples/`. The playgrounds live in `tempoxyz/id`.
 - The package runs in browsers, React Native, Node, and Workers. Entries stay free of platform imports, except `accounts/cloudflare`, `accounts/expo`, and `index.native.ts`.
 - Tempo ID issues every token. The package holds tokens and access keys only in the instance's `store`.
 - Tokens, refresh tokens, client secrets, private keys, and DPoP keys never appear in errors, events, or logs.
@@ -301,10 +301,10 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 
 - `src/` is the published package `accounts`. Its entries are in `package.json` `exports`: `.`, `./cloudflare`, `./expo`, `./internal`, `./mpp`, `./plugins`, `./react`, and `./wagmi`.
 - `src/actions/` holds the actions that `Actions` exports. `src/plugins/` holds the plugins.
+- `src/stores/` holds each store that `Store` exports, such as `Store.memory`. `Store.ts` holds only the `Store` type and `Store.from`.
+- `src/internal/handlers/` holds each route handler, such as the relay route. `src/internal/Handler.ts` holds the `Handler` type that each returns.
 - `docs/` documents the package.
 - `examples/` holds one small app per platform (`backend`, `cli`, `mobile`, `wagmi`, `web`). Each names a published range, so a copy installs as it is. CI type-checks them.
-- `playgrounds/` holds one app per flow (`api`, `backend`, `cli`, `mobile`, `third-party`, `wagmi`, `web`). They use client IDs that `tempoxyz/id` registers in its seed. Its end-to-end suite drives them.
-- Keep the playgrounds' names, client IDs, environment variables, ports, and page labels stable. `tempoxyz/id`'s end-to-end suite depends on them.
 
 ## Tooling
 
@@ -316,12 +316,12 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 
 ## Commands
 
-| Command            | Description                                                   |
-| ------------------ | ------------------------------------------------------------- |
-| `pnpm build`       | Builds the package. Run `pnpm exec zile dev` after.           |
-| `pnpm check`       | Formats and lints with fixes.                                 |
-| `pnpm check:types` | Runs `tsc` on the package, the examples, and the playgrounds. |
-| `pnpm test`        | Runs the tests in `src/`.                                     |
+| Command            | Description                                         |
+| ------------------ | --------------------------------------------------- |
+| `pnpm build`       | Builds the package. Run `pnpm exec zile dev` after. |
+| `pnpm check`       | Formats and lints with fixes.                       |
+| `pnpm check:types` | Runs `tsc` on the package and the examples.         |
+| `pnpm test`        | Runs the tests in `src/`.                           |
 
 ## Friction Logging
 

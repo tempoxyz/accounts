@@ -5,7 +5,7 @@
     "changeset:publish": "pnpm changeset:prepublish && changeset publish && zile publish:post",
     "changeset:version": "changeset version && pnpm check",
     "check": "vp check --fix",
-    "check:types": "tsc && pnpm --filter './examples/*' --filter './playgrounds/*' check:types",
+    "check:types": "tsc && pnpm --filter './examples/*' check:types",
     "postinstall": "zile dev",
     "test": "vp test"
   },
