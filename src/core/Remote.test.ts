@@ -222,6 +222,25 @@ describe('validateSearch', () => {
     expect(remote.rejectAll).not.toHaveBeenCalled()
   })
 
+  test('behavior: rejects wallet_connect with a raw digest when strict is false', () => {
+    const remote = createMockRemote()
+    expect(() =>
+      Remote.validateSearch(
+        remote,
+        {
+          method: 'wallet_connect',
+          id: 9,
+          jsonrpc: '2.0',
+          params: [{ capabilities: { digest: '0x' + '11'.repeat(32) } }],
+        },
+        { method: 'wallet_connect', strict: false },
+      ),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: \`capabilities.digest\` is not supported by a remote wallet, since it signs an arbitrary hash. Use \`capabilities.personalSign\` instead.]`,
+    )
+    expect(remote.rejectAll).toHaveBeenCalledOnce()
+  })
+
   test('strict: rejects wallet_connect with a raw digest', () => {
     for (const capabilities of [
       { method: 'register', digest: '0x' + '11'.repeat(32) },
