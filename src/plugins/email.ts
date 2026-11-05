@@ -6,6 +6,7 @@
 import * as Actions from '../internal/Actions.js'
 import type * as Api from '../internal/Api.js'
 import * as SignIn from '../internal/SignIn.js'
+import type * as TempoAccount from '../internal/TempoAccount.js'
 import * as Plugin from '../Plugin.js'
 import type * as Session from '../Session.js'
 
@@ -89,7 +90,11 @@ export function email(options: email.Options = {}) {
 
           const session = SignIn.toSession(result)
           await change.commit(session)
-          return { ...session, upgradeAvailable: result.upgradeAvailable }
+          return {
+            ...session,
+            accounts: ('accounts' in result && result.accounts) || [],
+            upgradeAvailable: result.upgradeAvailable,
+          }
         },
       }
     },
@@ -146,6 +151,13 @@ export declare namespace email {
     }
 
     type ReturnType = Session.Session & {
+      /**
+       * Every Tempo Account of the user in the app's realms, on the instance's chain: the session's
+       * account first, then oldest first. Empty on a backend, and where the session holds no account.
+       * With more than one, the app asks the user, then calls `accounts.authorize` with the chosen
+       * `account`.
+       */
+      accounts: readonly TempoAccount.TempoAccount[]
       /**
        * Whether the account is a wallet.tempo passkey's that waits for its upgrade on the access key's
        * chain.

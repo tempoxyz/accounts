@@ -74,11 +74,11 @@ if (session.upgradeAvailable) await accounts.account.upgrade()
 
 ### authorize
 
-- **Type:** `(parameters?: { accessKey?: Permissions | (() => Permissions | undefined) | false; challenge?: string; getFn?: GetFn; passkey?: boolean }) => Promise<(Session & { upgradeAvailable: boolean }) | undefined>`
+- **Type:** `(parameters?: { accessKey?: Permissions | (() => Permissions | undefined) | false; account?: Address; challenge?: string; getFn?: GetFn; passkey?: boolean }) => Promise<(Session & { upgradeAvailable: boolean }) | undefined>`
 
 Requests the app's tokens, and an access key, for the user's Tempo ID session in the browser, with no sign-in. Sets the instance's session, and returns it. Returns `undefined`, and empties the session, when the browser holds no Tempo ID session. Only a [first-party app](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps) authorizes this way, and the access key must fit the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling), unless the app holds `tempo-id:sign`.
 
-`accessKey` defaults to the instance's `accessKey`, and `false` requests no access key. `passkey: true` lets a passkey that owns the account sign the access key on the page, so call it from a click.
+`accessKey` defaults to the instance's `accessKey`, and `false` requests no access key. `account` names the Tempo Account that the access key acts for, such as one of the `accounts` that [`email.signIn`](plugins.email.md#emailsignin) returns. Tempo ID keeps it as the app's account for the rest of the browser's Tempo ID session. Without it, the access key acts for that account, else the user's oldest. An account that is not the user's fails with [`foreign_account`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#foreign_account). `passkey: true` lets a passkey that owns the account sign the access key on the page, so call it from a click.
 
 While it runs, [`session.status`](#sessionstatus) is `pending`. To restore the saved session first, and show an expired one while the authorization renews it, call [`session.get`](#sessionget) with `reauthorize`.
 

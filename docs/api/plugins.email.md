@@ -37,12 +37,18 @@ await accounts.email.sendCode({ email: 'user@example.com' })
 
 ### email.signIn
 
-- **Type:** `(parameters: email.signIn.Parameters) => Promise<Session & { upgradeAvailable: boolean }>`
+- **Type:** `(parameters: email.signIn.Parameters) => Promise<Session & { accounts: readonly TempoAccount[]; upgradeAvailable: boolean }>`
 
 Signs the user in with the emailed code, sets the instance's [session](types.md#session), and returns it. With `accessKey`, the session holds an access key. On a page, the session holds the user's Tempo Account from the sign-in's own response, with no request after it. A chain that Tempo ID does not list leaves the account out. `upgradeAvailable` is `true` for a wallet.tempo passkey's account that waits for its [upgrade](Accounts.create.md#accountupgrade).
 
+`accounts` lists every [Tempo Account](types.md#tempoaccount) of the user in the app's realms, from the same response: the session's account first, then oldest first. It is empty on a backend, and where the session holds no account. The access key acts for the first account. If the list holds more than one, ask the user, then call [`authorize`](Accounts.create.md#authorize) with the chosen `account`.
+
 ```ts
 const session = await accounts.email.signIn({ code, email: address })
+if (session.accounts.length > 1) {
+  const [, other] = session.accounts
+  await accounts.authorize({ account: other!.address, passkey: true })
+}
 ```
 
 ## Parameters

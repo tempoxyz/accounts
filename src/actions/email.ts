@@ -136,15 +136,23 @@ export async function signIn<
   })
   // A response without the accounts, as where `POST /v1/account` refuses them, leaves `account` out.
   // The page then reads them with `Actions.account.get`, whose refusal does not discard the
-  // authorization.
+  // authorization. Tempo ID lists the access key's account first, then the others oldest first.
   const account = (() => {
     if (!options.account || !body.tempo) return undefined
-    const [first] = body.tempo
-    return {
-      account: first
-        ? Api.tempoAccount(first, { getFn: options.account.getFn })
-        : undefined,
-    }
+    const { getFn } = options.account
+    const [first, ...rest] = body.tempo
+    if (!first) return { account: undefined, accounts: [] }
+    const account = Api.tempoAccount(first, { getFn })
+    // Another account that the client cannot rebuild stays out of the list, so the sign-in of the
+    // first one still completes.
+    const others = rest.flatMap((entry) => {
+      try {
+        return [Api.tempoAccount(entry, { getFn })]
+      } catch {
+        return []
+      }
+    })
+    return { account, accounts: [account, ...others] }
   })()
   // `key` decides both the type and the runtime value of the authorization, which TypeScript does
   // not narrow through a spread.
@@ -223,6 +231,12 @@ export declare namespace signIn {
      * with `Actions.account.get`, which throws the refusal.
      */
     account?: TempoAccount | undefined
+    /**
+     * Every Tempo Account of the user in the app's realms, on the chain of `account`: `account` first,
+     * then oldest first. Absent where `account` is absent. An app with more than one asks the user,
+     * then authorizes the chosen account's access key with `Actions.authorize`.
+     */
+    accounts?: readonly TempoAccount[] | undefined
     /**
      * The options of a passkey registration, for `Actions.passkey.register`'s `registration`.
      * Absent without `registration`, and where the options request would refuse them.

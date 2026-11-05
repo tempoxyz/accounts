@@ -32,6 +32,12 @@ export declare namespace authorize {
      * sign-in without an access key. Defaults to the instance's `accessKey`.
      */
     accessKey?: SignIn.AccessKeyOption
+    /**
+     * The Tempo Account the access key acts for, one of the user's accounts in the app's realms.
+     * Tempo ID keeps it as the app's account for the rest of the browser's Tempo ID session.
+     * Defaults to that account, else the user's oldest.
+     */
+    account?: `0x${string}` | undefined
     /** A message whose EIP-191 hash the key authorization binds as its `witness`. */
     challenge?: string | undefined
     /** Runs the ceremony of a passkey that owns the account, in place of `navigator.credentials.get`. */
@@ -65,6 +71,7 @@ async function run(
   const result: Actions.authorize.ReturnType<number, boolean> =
     await Actions.authorize(config, {
       accessKey,
+      account: parameters.account,
       challenge: parameters.challenge,
       getFn: parameters.getFn ?? config.getFn,
       passkey: parameters.passkey,
