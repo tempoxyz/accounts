@@ -17,6 +17,12 @@ connected account on the active connect chain.
 `'login'`. Both branches share the `digest`, `authorizeAccessKey`, `auth`,
 `identity`, `personalSign`, and `showDeposit` fields.
 
+`digest` is signed as a raw hash, so only adapters running in your own app
+honor it. A remote wallet (the Tempo Wallet dialog, popup or other remote
+adapters) rejects a `wallet_connect` that sets it with `-32602` (invalid
+params), since an app could otherwise pass a transaction hash and have it
+signed behind a sign-in prompt. Use `personalSign` to sign during connect.
+
 ```ts
 type Request = {
   method: 'wallet_connect'
@@ -31,7 +37,7 @@ type Request = {
 
 type ConnectRegisterCapabilities = {
   method: 'register'
-  /** Optional digest to bind into the registration ceremony. */
+  /** Optional digest to bind into the registration ceremony. Rejected by remote wallets: use `personalSign`. */
   digest?: `0x${string}`
   /** Authorize an access key during the same ceremony. */
   authorizeAccessKey?: AuthorizeAccessKeyCapability
@@ -51,7 +57,7 @@ type ConnectRegisterCapabilities = {
 
 type ConnectLoginCapabilities = {
   method?: 'login'
-  /** Optional digest to bind into the login ceremony. */
+  /** Optional digest to bind into the login ceremony. Rejected by remote wallets: use `personalSign`. */
   digest?: `0x${string}`
   /** WebAuthn credential ID or IDs to authenticate with. */
   credentialId?: string | string[]

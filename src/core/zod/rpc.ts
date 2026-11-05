@@ -841,12 +841,24 @@ export namespace wallet_connect_strict {
   const identity = wallet_connect.identity
   const personalSign = wallet_connect.personalSign
   const showDeposit = wallet_connect.showDeposit
+  /**
+   * A remote wallet never signs a caller-supplied raw `digest`: the user
+   * can't see what it commits to, so an app could pass a transaction hash
+   * and have it signed behind a sign-in prompt. Use `personalSign`, whose
+   * EIP-191 prefix can't produce a transaction hash.
+   */
+  const digest = z.optional(
+    z.custom<never>(() => false, {
+      error:
+        'not supported by a remote wallet, since it signs an arbitrary hash. Use `personalSign` instead.',
+    }),
+  )
 
   export const parameters = z.object({
     capabilities: z.optional(
       z.union([
         z.object({
-          digest: z.optional(u.hex()),
+          digest,
           authorizeAccessKey,
           auth,
           identity,
@@ -857,7 +869,7 @@ export namespace wallet_connect_strict {
           userId: z.optional(z.string()),
         }),
         z.object({
-          digest: z.optional(u.hex()),
+          digest,
           credentialId: z.optional(z.union([z.string(), z.array(z.string())])),
           authorizeAccessKey,
           auth,

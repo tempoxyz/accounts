@@ -222,6 +222,23 @@ describe('validateSearch', () => {
     expect(remote.rejectAll).not.toHaveBeenCalled()
   })
 
+  test('strict: rejects wallet_connect with a raw digest', () => {
+    for (const capabilities of [
+      { method: 'register', digest: '0x' + '11'.repeat(32) },
+      { digest: '0x' + '11'.repeat(32) },
+    ]) {
+      const remote = createMockRemote()
+      expect(() =>
+        Remote.validateSearch(
+          remote,
+          { method: 'wallet_connect', id: 8, jsonrpc: '2.0', params: [{ capabilities }] },
+          { method: 'wallet_connect' },
+        ),
+      ).toThrowError(/capabilities\.digest: not supported by a remote wallet/)
+      expect(remote.rejectAll).toHaveBeenCalledOnce()
+    }
+  })
+
   test('strict: passes wallet_connect without authorizeAccessKey', () => {
     const remote = createMockRemote()
     const result = Remote.validateSearch(
@@ -378,5 +395,53 @@ describe('respond', () => {
       }
     `)
     expect(send).not.toHaveBeenCalled()
+  })
+
+  test('behavior: refuses to sign a wallet_connect digest', async () => {
+    const send = vi.fn()
+    const request = vi.fn(async () => ({ accounts: [] }))
+    const remote = Remote.create({
+      messenger: { on: vi.fn(), ready: vi.fn(), send } as never,
+      provider: { request } as never,
+    })
+
+    const digest = '0x' + '11'.repeat(32)
+    await expect(
+      remote.respond({
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'wallet_connect',
+        params: [{ capabilities: { digest } }],
+      } as never),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: \`capabilities.digest\` is not supported by a remote wallet, since it signs an arbitrary hash. Use \`capabilities.personalSign\` instead.]`,
+    )
+
+    expect(request).not.toHaveBeenCalled()
+    expect(send).toHaveBeenCalledOnce()
+    expect(send.mock.calls[0]![1].error.code).toBe(-32602)
+  })
+
+  test('behavior: executes wallet_connect with personalSign', async () => {
+    const send = vi.fn()
+    const request = vi.fn(async () => ({ accounts: [] }))
+    const remote = Remote.create({
+      messenger: { on: vi.fn(), ready: vi.fn(), send } as never,
+      provider: { request } as never,
+    })
+
+    await remote.respond({
+      id: 1,
+      jsonrpc: '2.0',
+      method: 'wallet_connect',
+      params: [{ capabilities: { personalSign: { message: 'hello' } } }],
+    } as never)
+
+    expect(request).toHaveBeenCalledOnce()
+    expect(send.mock.calls[0]![1].result).toMatchInlineSnapshot(`
+      {
+        "accounts": [],
+      }
+    `)
   })
 })

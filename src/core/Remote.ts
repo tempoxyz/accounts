@@ -321,6 +321,7 @@ export function create(options: create.Options): Remote {
       }
 
       try {
+        if (!('result' in options)) assertNoDigest(request)
         let result =
           'result' in options ? options.result : await provider?.request(request as never)
         if (selector) result = selector(result)
@@ -459,6 +460,24 @@ export declare namespace validateSearch {
     _decoded: Extract<Schema.Request, { method: method }>
     _returnType: unknown
   }
+}
+
+/**
+ * Refuses to execute a `wallet_connect` whose `capabilities.digest` came
+ * from the host app: the wallet would sign that raw hash (which can be a
+ * transaction's) behind a sign-in prompt. `personalSign` covers sign-in.
+ */
+function assertNoDigest(request: Request['request']) {
+  if (request.method !== 'wallet_connect') return
+  const [parameters] = (request.params ?? []) as readonly (
+    | { capabilities?: { digest?: unknown } | undefined }
+    | undefined
+  )[]
+  if (parameters?.capabilities?.digest === undefined) return
+  throw new RpcResponse.InvalidParamsError({
+    message:
+      '`capabilities.digest` is not supported by a remote wallet, since it signs an arbitrary hash. Use `capabilities.personalSign` instead.',
+  })
 }
 
 function formatZodErrors(method: string, error: { issues: readonly ZodIssue[] }) {
