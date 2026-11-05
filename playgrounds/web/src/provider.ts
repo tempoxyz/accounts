@@ -92,6 +92,15 @@ export const tokens =
 export const host =
   new URLSearchParams(window.location.search).get('host') ?? import.meta.env.VITE_WALLET_HOST
 
+/**
+ * `?id` (bare or `true`): asks Tempo Wallet's dialog to sign in through Tempo ID, on the selected
+ * network. The `tempoWallet` adapter sends it on the dialog's URL.
+ */
+export const tempoId = (() => {
+  const params = new URLSearchParams(window.location.search)
+  return params.has('id') && ['', 'true'].includes(params.get('id')!)
+})()
+
 /** Initial adapter, read from `?adapter=` so a reload keeps the selection. */
 export const initialAdapter: AdapterType = (() => {
   const param = new URLSearchParams(window.location.search).get('adapter')
@@ -139,6 +148,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     if (theme?.accent) postMessageHost.searchParams.set('accent', theme.accent)
     if (theme?.radius) postMessageHost.searchParams.set('radius', theme.radius)
     if (theme?.scheme) postMessageHost.searchParams.set('scheme', theme.scheme)
+    if (tempoId) postMessageHost.searchParams.set('id', 'true')
     return Provider.create({
       adapter: postMessage({
         host: postMessageHost.toString(),
