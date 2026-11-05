@@ -431,6 +431,8 @@ export function validateSearch<const method extends Schema.Request['method']>(
           message: formatZodErrors(method, result_strict.error),
         })
     }
+    // Trusted routes may skip the strict schemas, never the digest check.
+    assertNoDigest(result.data as never)
     return {
       ...search,
       _decoded: result.data,
