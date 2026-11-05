@@ -17,6 +17,8 @@
     "tempo-docs-git-jxom-accounts-sdk-docs-tempoxyz.vercel.app",
     "appkit-wagmi-tempo-wallet.vercel.app",
     "tip.bot",
-    "*.tip.bot"
+    "*.tip.bot",
+    "trypatron.com",
+    "*.trypatron.com"
   ]
 }
