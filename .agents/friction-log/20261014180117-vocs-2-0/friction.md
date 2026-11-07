@@ -1,6 +1,7 @@
 ---
 title: 'Documentation exports contain raw interactive MDX'
 severity: 'minor'
+issue: 'tempoxyz/accounts#873'
 ---
 
 ### Expected Behavior

@@ -1,6 +1,7 @@
 ---
 title: 'Device-code denial fixture races its one-second polling deadline'
 severity: 'minor'
+issue: 'tempoxyz/accounts#962'
 ---
 
 ### Expected Behavior

@@ -1,6 +1,7 @@
 ---
 title: 'Default test config excludes existing dialog browser regressions'
 severity: 'minor'
+issue: 'tempoxyz/accounts#934'
 ---
 
 ## Expected Behavior
