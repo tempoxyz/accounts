@@ -1,0 +1,23 @@
+name: Scan GitHub Actions
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/**"
+  workflow_dispatch:
+  schedule:
+    - cron: "19 7 * * 1"
+
+permissions: {}
+
+jobs:
+  scan:
+    name: Scan GitHub Actions
+    uses: tempoxyz/gh-actions/.github/workflows/scan-github-actions.yml@763efe11a9d8333bcbf0bb2f5ab80f21961c48fd # 2026-11-02T08-44-18Z-763efe11
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
