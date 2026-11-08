@@ -21,11 +21,15 @@ jobs:
     permissions:
       actions: read # to read this commit's Verify run
       contents: read # to read main's tip
+      id-token: write
     outputs:
       ship: ${{ steps.tip.outputs.ship }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@763efe11a9d8333bcbf0bb2f5ab80f21961c48fd # 2026-11-02T08-44-18Z-763efe11
+
       - name: Wait for Verify
         env:
           GH_TOKEN: ${{ github.token }}
@@ -73,6 +77,7 @@ jobs:
     permissions:
       actions: read # to find the last successful deploy
       contents: read
+      id-token: write
       pull-requests: write # requested by the reusable workflow for preview comments
     uses: ./.github/workflows/deploy-workers.yml # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
     secrets:
@@ -94,8 +99,11 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@763efe11a9d8333bcbf0bb2f5ab80f21961c48fd # 2026-11-02T08-44-18Z-763efe11
+
       - name: Clone repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -106,13 +114,13 @@ jobs:
 
       - name: Fetch GitHub token via STS
         id: sts
-        uses: tempoxyz/gh-actions/actions/github-sts@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+        uses: tempoxyz/gh-actions/actions/github-sts@763efe11a9d8333bcbf0bb2f5ab80f21961c48fd # 2026-11-02T08-44-18Z-763efe11
         with:
           policy: changesets
 
       - name: Create or update release pull request
         id: changesets
-        uses: tempoxyz/gh-actions/vendor/changesets/action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+        uses: tempoxyz/gh-actions/vendor/changesets/action@763efe11a9d8333bcbf0bb2f5ab80f21961c48fd # 2026-11-02T08-44-18Z-763efe11
         with:
           github-token: ${{ steps.sts.outputs.token }}
           pr-title: 'chore: version packages'
@@ -133,6 +141,9 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@763efe11a9d8333bcbf0bb2f5ab80f21961c48fd # 2026-11-02T08-44-18Z-763efe11
+
       # "Re-run failed jobs" re-runs this job without Verify's tip check, so check here: a
       # re-run of an older commit publishes only while main still holds the same version, so
       # retrying a failed publish works but never publishes an older version over a newer one.
@@ -156,7 +167,7 @@ jobs:
           fi
 
       - name: Clone repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -166,7 +177,7 @@ jobs:
           skip-cache: 'true' # avoid cache poisoning attacks
 
       - name: Publish to npm
-        uses: tempoxyz/gh-actions/vendor/changesets/action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+        uses: tempoxyz/gh-actions/vendor/changesets/action@763efe11a9d8333bcbf0bb2f5ab80f21961c48fd # 2026-11-02T08-44-18Z-763efe11
         env:
           NPM_CONFIG_IGNORE_SCRIPTS: 'true'
         with:
