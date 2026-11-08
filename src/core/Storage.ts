@@ -48,22 +48,22 @@ function markStructuredClone(storage: Storage): Storage {
 
 /**
  * Combines multiple storage adapters into one. Reads return the first
- * non-null result; writes propagate to all storages (failures are isolated
- * via `Promise.allSettled`).
+ * non-null result; writes propagate to all storages. Synchronous throws and
+ * rejected promises are isolated via `Promise.allSettled`.
  */
 export function combine(...storages: readonly Storage[]): Storage {
   const storage = {
     async getItem<value>(name: string) {
-      const results = await Promise.allSettled(storages.map((x) => x.getItem<value>(name)))
+      const results = await Promise.allSettled(storages.map(async (x) => x.getItem<value>(name)))
       const result = results.find((x) => x.status === 'fulfilled' && x.value != null)
       if (result?.status !== 'fulfilled') return null
       return result.value as value
     },
     async removeItem(name: string) {
-      await Promise.allSettled(storages.map((x) => x.removeItem(name)))
+      await Promise.allSettled(storages.map(async (x) => x.removeItem(name)))
     },
     async setItem(name: string, value: unknown) {
-      await Promise.allSettled(storages.map((x) => x.setItem(name, value)))
+      await Promise.allSettled(storages.map(async (x) => x.setItem(name, value)))
     },
   }
   if (storages.length > 0 && storages.every(canStructuredClone)) return markStructuredClone(storage)
