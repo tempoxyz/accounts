@@ -31,10 +31,44 @@ export function sameRegistrableDomain(a: string, b: string) {
   return registrableDomain(a) === registrableDomain(b)
 }
 
+/**
+ * Common multi-label public suffixes. Without these, hosts such as
+ * `a.github.io` and `b.github.io` would share a registrable domain, letting
+ * unrelated sites trust each other via `sameRegistrableDomain`.
+ */
+const multiLabelPublicSuffixes = new Set([
+  'ac.uk',
+  'co.jp',
+  'co.nz',
+  'co.uk',
+  'co.za',
+  'com.au',
+  'com.br',
+  'com.mx',
+  'github.io',
+  'gitlab.io',
+  'gov.uk',
+  'herokuapp.com',
+  'neocities.org',
+  'netlify.app',
+  'now.sh',
+  'onrender.com',
+  'org.uk',
+  'pages.dev',
+  'repl.co',
+  'replit.app',
+  'surge.sh',
+  'vercel.app',
+  'web.app',
+  'workers.dev',
+])
+
 /** Returns the registrable domain ("eTLD+1") for a hostname. */
 function registrableDomain(host: string) {
   const hostname = host.split(':')[0]!.toLowerCase()
   const labels = hostname.split('.')
   if (labels.length <= 2) return hostname
-  return labels.slice(-2).join('.')
+  const suffixLabels = multiLabelPublicSuffixes.has(labels.slice(-2).join('.')) ? 2 : 1
+  if (labels.length <= suffixLabels + 1) return hostname
+  return labels.slice(-(suffixLabels + 1)).join('.')
 }
