@@ -44,7 +44,7 @@ catalog:
   '@vitejs/devtools': 0.7.1
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.6.0
-  hono: ^4.13.11
+  hono: ^4.13.18
   mppx: ^0.12.0
   ox: 0.14.62
   prool: ~0.2.4
@@ -143,7 +143,7 @@ overrides:
   '@grpc/grpc-js': '1.14.5'
   # GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg and GHSA-rmxm-3fg6-px4f: v2 preserves the
   # getRequestListener API used by wata.
-  '@hono/node-server@>=1.0.0 <2.1.5': '2.1.5'
+  '@hono/node-server@>=1.0.0 <2.1.8': '2.1.8'
   '@sinclair/typebox': '^0.34.0'
   # GHSA-p95v-992w-h6c3: prototype pollution via nested decoder keys.
   '@toon-format/toon@<2.3.1': '2.3.1'
@@ -172,7 +172,7 @@ overrides:
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
   'form-data@>=4.0.0 <4.0.6': '4.0.6'
   # Patch Hono static-path middleware bypass, traversal, body-parser, and query parsing advisories.
-  'hono@>=4.0.0 <4.13.11': '4.13.11'
+  'hono@>=4.0.0 <4.13.18': '4.13.18'
   # GHSA-rpw4-54j3-4h4q + GHSA-2vr4-cq9g-pvrc: ip-address trust-boundary bypasses.
   'ip-address@<10.7.4': '10.7.4'
   # GHSA-v6wh-96g9-6wx3: launch-editor NTLMv2 hash disclosure via UNC path (dev tooling).
