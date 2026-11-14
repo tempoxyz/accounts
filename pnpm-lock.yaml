@@ -69,7 +69,7 @@ overrides:
   '@babel/core@<=7.29.0': 7.29.6
   browserslist@<=4.28.6: 4.28.7
   '@grpc/grpc-js': 1.14.5
-  '@hono/node-server@>=1.0.0 <2.1.8': 2.1.8
+  wata>@hono/node-server: 2.1.8
   '@sinclair/typebox': ^0.34.0
   '@toon-format/toon@<2.3.1': 2.3.1
   axios@>=1.0.0 <1.20.0: 1.20.0
@@ -88,7 +88,6 @@ overrides:
   archiver-utils>glob: 14.0.3
   minimatch@>=5.0.0 <11.0.1: 11.0.3
   form-data@>=4.0.0 <4.0.6: 4.0.6
-  hono@>=4.0.0 <4.13.18: 4.13.18
   ip-address@<10.7.4: 10.7.4
   launch-editor@<2.14.2: 2.14.2
   js-cookie@<=3.0.5: 3.0.7
@@ -100,7 +99,6 @@ overrides:
   postcss: 8.5.23
   protobufjs: 7.6.5
   '@protobufjs/utf8': 1.1.1
-  qs: 6.16.1
   react-server-dom-webpack: 19.3.1
   reselect: 5.1.0
   seroval: 1.6.12
@@ -361,7 +359,7 @@ importers:
         specifier: workspace:*
         version: link:../..
       hono:
-        specifier: 4.13.18
+        specifier: ^4.13.18
         version: 4.13.18
       react:
         specifier: ^19.3.0
@@ -416,7 +414,7 @@ importers:
         specifier: workspace:*
         version: link:../..
       hono:
-        specifier: 4.13.18
+        specifier: ^4.13.18
         version: 4.13.18
       react:
         specifier: ^19.3.0
@@ -576,7 +574,7 @@ importers:
         specifier: workspace:*
         version: link:../..
       hono:
-        specifier: 4.13.18
+        specifier: ^4.13.18
         version: 4.13.18
       react:
         specifier: ^19.3.0
@@ -631,7 +629,7 @@ importers:
         specifier: workspace:*
         version: link:../..
       hono:
-        specifier: 4.13.18
+        specifier: ^4.13.18
         version: 4.13.18
       react:
         specifier: ^19.3.0
@@ -888,7 +886,7 @@ importers:
         specifier: workspace:*
         version: link:../..
       hono:
-        specifier: 4.13.18
+        specifier: ^4.13.18
         version: 4.13.18
       react:
         specifier: ^19.3.0
@@ -2715,7 +2713,7 @@ packages:
     resolution: {integrity: sha512-jdf7FHh6A1lzjpHHQUgxsg2GeER2vMetnAOfeActzcoli6jamlK+NAwL6Dsr5Fl3BS3tYUQzCdtZjU8Qxv7bEA==}
     engines: {node: '>=20'}
     peerDependencies:
-      hono: 4.13.18
+      hono: ^4 || ^5.0.0-0
 
   '@iconify-json/lucide@1.2.108':
     resolution: {integrity: sha512-jnmMx7xxShfsKeNNJhn47IKj3gD/AbRz+poKLIPn4rSIXw+yVbXCfUBXza/Jo9YIEEFajBk6Zayet8DqGCvX6w==}
@@ -9386,7 +9384,7 @@ packages:
       '@x402/next': '>=2.22.0'
       elysia: '>=1'
       express: '>=5'
-      hono: 4.13.18
+      hono: '>=4.12.25'
       next: '>=16.2.6'
       viem: 0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf
     peerDependenciesMeta:
