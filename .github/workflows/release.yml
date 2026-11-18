@@ -45,9 +45,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release.ts resolve
 
+      # The published tarball installs from the registry alone, never from a store that another job
+      # cached.
       - name: Install dependencies
         if: steps.version.outputs.version != ''
         uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository]
+        with:
+          skip-cache: 'true'
 
       - name: Pack
         if: steps.version.outputs.version != ''
