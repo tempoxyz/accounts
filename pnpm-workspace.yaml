@@ -222,7 +222,7 @@ overrides:
   '@xmldom/xmldom@>=0.7.0 <0.8.15': '0.8.15'
   '@xmldom/xmldom@>=0.9.0 <0.9.12': '0.9.12'
   # Keep plugins on Vite+'s patched core to avoid mixing incompatible Vite types.
-  'vite@*': 'npm:@voidzero-dev/vite-plus-core@~1.5.1'
+  vite: 'npm:@voidzero-dev/vite-plus-core@~1.5.1'
   vite-plus: 'catalog:'
   vp: 'catalog:'
   # GHSA-96hv-2xvq-fx4p: ws memory-exhaustion DoS (v8 prod path via viem; v7 dev path via react-native metro).
