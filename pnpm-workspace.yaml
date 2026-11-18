@@ -79,7 +79,7 @@ catalogs:
   # The examples run Vite itself, since a copy of an example installs it. The site and the test apps
   # run it too. The default catalog's `vite` is Vite+'s core, which has no `vite` command.
   examples:
-    vite: 8.3.5
+    vite: 8.3.7
   # React Native 0.88 needs React 19.3, and the mobile example names React 19.3.1, so it pins its own React.
   mobile:
     '@types/react': 19.3.0
