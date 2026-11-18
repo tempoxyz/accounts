@@ -1,5 +1,5 @@
-import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import mkcert from 'vite-plugin-mkcert'
 import { vocs } from 'vocs/vite'
@@ -23,10 +23,24 @@ function landingStylesheet(): Plugin {
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
-        if (req.url === '/src/landing/styles.css')
-          req.url = '/src/landing/styles.css?direct'
+        if (req.url === '/src/landing/styles.css') req.url = '/src/landing/styles.css?direct'
         next()
       })
+    },
+  }
+}
+
+function clientWorkerThreadsExternal(): Plugin {
+  // ox imports `node:worker_threads` lazily on its Node-only code path.
+  // Keep it external in the browser build instead of bundling it.
+  return {
+    name: 'site:client-worker-threads-external',
+    enforce: 'pre',
+    applyToEnvironment(environment) {
+      return environment.name === 'client'
+    },
+    resolveId(id) {
+      if (id === 'node:worker_threads') return { id, external: true }
     },
   }
 }
@@ -68,6 +82,7 @@ export default defineConfig(({ command }) => {
     },
     plugins: [
       landingStylesheet(),
+      clientWorkerThreadsExternal(),
       tailwindcss(),
       vocs(),
       wakuRscOptimizeDeps(),
