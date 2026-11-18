@@ -106,8 +106,8 @@ jobs:
       - name: Set install cutoff
         run: echo "NPM_CONFIG_BEFORE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
-      # `versions upload` rejects a Worker that does not exist, so a pull request first deploys a
-      # Worker that has no deployment.
+      # A pull request only uploads a version, so its build never serves the Worker's domain. Its
+      # `versions upload` rejects a Worker that does not exist, until a push to main deploys one.
       - name: Deploy site
         id: deploy
         uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
@@ -115,7 +115,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           command: ${{ github.event_name == 'pull_request' && format('versions upload --preview-alias pr-{0}', github.event.pull_request.number) || 'deploy' }}
-          preCommands: ${{ github.event_name == 'pull_request' && 'npx wrangler deployments list > /dev/null 2>&1 || npx wrangler deploy' || '' }}
           workingDirectory: site
           wranglerVersion: ${{ needs.build.outputs.wrangler }}
 
