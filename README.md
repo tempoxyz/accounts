@@ -125,7 +125,7 @@ pnpm test             # run tests
 
 ### Releases
 
-Each push to `main` publishes to npm through trusted publishing, from `.github/workflows/release.yml`, as `<breaking>.<commit time>.0-<short SHA>` under `latest`, such as `1.20261118194700.0-86519034c`, so `accounts` installs the current commit of `main`. A breaking pull request title, such as `feat!:`, raises `<breaking>`. `scripts/release.ts` picks the version.
+Each push to `main` publishes to npm through trusted publishing, from `.github/workflows/release.yml`, as `<breaking>.<commit time>.<n>` under `latest`, such as `1.20261118194700.0`, so `accounts` installs the current commit of `main`, and a caret range resolves each later release. A breaking pull request title, such as `feat!:`, raises `<breaking>`. `scripts/release.ts` picks the version.
 
 ## License
 

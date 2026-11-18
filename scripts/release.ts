@@ -2,8 +2,9 @@
  * Resolves the next `accounts` release for the Main workflow, from the squash commit titles on
  * `main` since the last release.
  *
- * - Each version is `<breaking>.<time>.0-<sha>`, such as `1.20261118194700.0-86519034c`: `<time>` is
- *   the commit's UTC time and `<sha>` its short SHA, so a rerun of a commit resolves the same version.
+ * - Each version is `<breaking>.<time>.<n>`, such as `1.20261118194700.0`: `<time>` is the commit's
+ *   UTC time, and `<n>` is `0` unless `latest` holds the same time, so a rerun of a commit resolves the
+ *   same version. No version is a prerelease, so a caret range resolves each later release.
  * - A title marked breaking, such as `feat!: …` or one whose commit says `BREAKING CHANGE:`, raises
  *   `<breaking>`. It starts at `1`, after the `0.x` releases of `tempoxyz/accounts`. A `dogfood: ` prefix is
  *   read past, so `dogfood: feat!: …` is breaking too.
@@ -26,20 +27,23 @@ type Commit = { message: string; sha: string }
 
 const title = /^(?:dogfood: )?(?<type>[a-z]+)(?:\([^)]*\))?(?<breaking>!)?: /
 
-/** A release version, such as `1.20261118194700.0-86519034c` or the earlier `0.21.1`. The `1.0.0-alpha.…` versions don't match. */
+/** A release version, such as `1.20261118194700.0` or the earlier `0.21.1`. The `1.0.0-alpha.…` versions don't match. */
 const release = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9a-z]+)?$/
 
-/** A version this scheme publishes under `latest`, such as `1.20261118194700.0-86519034c`. */
-const channel = /^[1-9]\d*\.\d{14}\.0-[0-9a-z]+$/
+/**
+ * A version of this scheme, such as `1.20261118194700.0`, or one that it published under `alpha`
+ * before, such as `1.20261118194700.0-86519034c`.
+ */
+const channel = /^[1-9]\d*\.\d{14}\.\d+(?:-[0-9a-z]+)?$/
 
 /**
- * Returns the version after `latest` that `commits` release, from the commit `sha` made at `time`,
- * or `undefined` when they release nothing. Without `base`, no commit raises `<breaking>`.
+ * Returns the version after `latest` that `commits` release, from the commit made at `time`, or
+ * `undefined` when they release nothing. Without `base`, no commit raises `<breaking>`.
  */
 function next(
   latest: string,
   commits: readonly Commit[],
-  head: { sha: string; time: Date },
+  time: Date,
   options: { base?: string | undefined; force?: boolean | undefined } = {},
 ): string | undefined {
   const { base, force = false } = options
@@ -65,21 +69,17 @@ function next(
     )
   // The `0.x` releases came before this scheme, so its first release is 1 either way.
   const breakingVersion = Math.max(1, breaking ? major + 1 : major)
-  return `${breakingVersion}.${timestamp(head.time)}.0-${short(head.sha)}`
+  const at = timestamp(time)
+  // npm refuses a version twice, so a release in the same second as `latest` raises the last number.
+  const patch = latest.startsWith(`${breakingVersion}.${at}.`)
+    ? Number(match[3]) + 1
+    : 0
+  return `${breakingVersion}.${at}.${patch}`
 }
 
 /** Returns `time` in UTC as `YYYYMMDDHHMMSS`. */
 function timestamp(time: Date): string {
   return time.toISOString().replace(/\D/g, '').slice(0, 14)
-}
-
-/**
- * Returns the first 8 characters of `sha`, or more until one is a letter, since a prerelease
- * identifier of digits alone can't start with `0` and sorts as a number.
- */
-function short(sha: string): string {
-  const letter = sha.search(/[a-f]/)
-  return sha.slice(0, Math.max(8, letter + 1))
 }
 
 /** Returns the release notes for `commits`, newest first. GitHub links each `(#123)` to its pull request. */
@@ -143,7 +143,7 @@ export function resolve(
   const { base, cwd, force, latest, sha } = options
   const commits = log(base, sha, cwd)
   const time = new Date(run('git', ['log', '-1', '--format=%cI', sha], cwd))
-  const version = next(latest, commits, { sha, time }, { base, force })
+  const version = next(latest, commits, time, { base, force })
   if (!version) return undefined
   return { notes: notes(commits), version }
 }

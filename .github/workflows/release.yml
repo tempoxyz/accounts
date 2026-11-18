@@ -1,5 +1,5 @@
 # Publishes each push to main to npm, through npm trusted publishing, as
-# `<breaking>.<commit time>.0-<short SHA>` under `latest`, such as `1.20261118194700.0-86519034c`, with
+# `<breaking>.<commit time>.<n>` under `latest`, such as `1.20261118194700.0`, with
 # a GitHub release that lists the squash commit titles since the last one. `scripts/release.ts`
 # picks the version: a breaking title (`feat!:`) raises `<breaking>`, and `ci:` and `test:` commits
 # release nothing alone, unless Main runs by hand.
@@ -161,7 +161,7 @@ jobs:
         run: |
           tag="accounts@$VERSION"
           if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --notes-file "$RUNNER_TEMP/packs/notes.md" --prerelease
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --notes-file "$RUNNER_TEMP/packs/notes.md"
           fi
           # A rerun finds the release already made, which must be this commit's.
           target=$(gh api "repos/$GITHUB_REPOSITORY/commits/$(printf %s "$tag" | jq -sRr @uri)" --jq .sha)

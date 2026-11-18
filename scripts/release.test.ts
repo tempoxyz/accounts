@@ -60,9 +60,7 @@ describe('resolve', () => {
 
     const resolved = Release.resolve({ base, cwd, latest: '0.21.1', sha })
 
-    expect(resolved?.version).toMatchInlineSnapshot(
-      `"1.20261118190300.0-d0e3b646"`,
-    )
+    expect(resolved?.version).toMatchInlineSnapshot(`"1.20261118190300.0"`)
     expect(resolved?.notes).toMatchInlineSnapshot(`
       "- feat(marketing): add Nav (#355) (d0e3b64)
       - ci: publish each main commit (#354) (f5ac1ef)
@@ -79,7 +77,7 @@ describe('resolve', () => {
     expect(
       Release.resolve({ base, cwd, latest: '1.20261118190100.0-abcdef12', sha })
         ?.version,
-    ).toMatchInlineSnapshot(`"1.20261118190300.0-71cd2a89"`)
+    ).toMatchInlineSnapshot(`"1.20261118190300.0"`)
   })
 
   test('raises the breaking number for a breaking title or body', () => {
@@ -95,7 +93,7 @@ describe('resolve', () => {
         latest: '1.20261118190100.0-abcdef12',
         sha: title,
       })?.version,
-    ).toMatchInlineSnapshot(`"2.20261118190200.0-51e59c83"`)
+    ).toMatchInlineSnapshot(`"2.20261118190200.0"`)
     expect(
       Release.resolve({
         base: title,
@@ -103,7 +101,7 @@ describe('resolve', () => {
         latest: '2.20261118190200.0-abcdef12',
         sha: body,
       })?.version,
-    ).toMatchInlineSnapshot(`"3.20261118190300.0-9c61dfa9"`)
+    ).toMatchInlineSnapshot(`"3.20261118190300.0"`)
   })
 
   test('reads a breaking title past its dogfood prefix', () => {
@@ -114,7 +112,7 @@ describe('resolve', () => {
     expect(
       Release.resolve({ base, cwd, latest: '1.20261118190100.0-abcdef12', sha })
         ?.version,
-    ).toMatchInlineSnapshot(`"2.20261118190200.0-d4050180"`)
+    ).toMatchInlineSnapshot(`"2.20261118190200.0"`)
   })
 
   test('reads a commit body that holds separators', () => {
@@ -157,7 +155,7 @@ describe('resolve', () => {
     expect(
       Release.resolve({ base, cwd, force: true, latest: '0.21.1', sha })
         ?.version,
-    ).toMatchInlineSnapshot(`"1.20261118190200.0-827ab2ac"`)
+    ).toMatchInlineSnapshot(`"1.20261118190200.0"`)
   })
 
   test('lists only its own commit without a base', () => {
@@ -185,17 +183,15 @@ describe('resolve', () => {
     expect(resolved?.version.split('.')[0]).toMatchInlineSnapshot(`"1"`)
   })
 
-  test('extends a short SHA of digits until a letter', () => {
+  test('raises the last number for a release in the same second as the latest', () => {
     const { commit, cwd } = repository()
-    // The first of these titles whose commit's first 8 characters are digits.
-    let sha = ''
-    for (let index = 1; !/^\d{8}/.test(sha); index++)
-      sha = commit(`fix: pad Tab ${index}`)
+    const base = commit('feat: add Tab (#1)')
+    const sha = commit('fix: pad Tab (#2)')
 
     expect(
-      Release.resolve({ cwd, latest: '1.20261118190100.0-abcdef12', sha })
+      Release.resolve({ base, cwd, latest: '1.20261118190200.0', sha })
         ?.version,
-    ).toMatchInlineSnapshot(`"1.20261118193700.0-561645865f"`)
+    ).toMatchInlineSnapshot(`"1.20261118190200.1"`)
   })
 
   test('refuses a pull request prerelease as the latest version', () => {
@@ -212,24 +208,24 @@ describe('resolve', () => {
 
 describe('previous', () => {
   test('finds the release npm took before a resumed one, by publish time', () => {
-    // npm lists same-second releases by their SHA, so `cccc3333` sorts after `bbbb2222` but came first.
+    // The release of `alpha` before this scheme's stable versions counts too.
     const times = {
       created: '2026-11-01T00:00:00.000Z',
       modified: '2026-11-18T19:05:00.000Z',
       '0.21.1': '2026-11-01T00:00:00.000Z',
       '1.0.0-alpha.20261118202233-e426ab8': '2026-11-18T18:00:00.000Z',
       '1.20261118190100.0-aaaa1111': '2026-11-18T19:02:00.000Z',
-      '1.20261118190200.0-cccc3333': '2026-11-18T19:03:00.000Z',
-      '1.20261118190200.0-bbbb2222': '2026-11-18T19:04:00.000Z',
+      '1.20261118190200.0': '2026-11-18T19:03:00.000Z',
+      '1.20261118190200.1': '2026-11-18T19:04:00.000Z',
       // A patch of the 0.x line, published later, never counts.
       '0.21.2': '2026-11-18T19:03:30.000Z',
     }
 
     expect(
-      Release.previous(times, { latest: '1.20261118190200.0-bbbb2222' }),
-    ).toMatchInlineSnapshot(`"1.20261118190200.0-cccc3333"`)
+      Release.previous(times, { latest: '1.20261118190200.1' }),
+    ).toMatchInlineSnapshot(`"1.20261118190200.0"`)
     expect(
-      Release.previous(times, { latest: '1.20261118190200.0-cccc3333' }),
+      Release.previous(times, { latest: '1.20261118190200.0' }),
     ).toMatchInlineSnapshot(`"1.20261118190100.0-aaaa1111"`)
     expect(Release.previous(times, { latest: '0.21.1' })).toMatchInlineSnapshot(
       `undefined`,
