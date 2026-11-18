@@ -34,14 +34,15 @@ const channel = /^[1-9]\d*\.\d{14}\.0-[0-9a-z]+$/
 
 /**
  * Returns the version after `latest` that `commits` release, from the commit `sha` made at `time`,
- * or `undefined` when they release nothing.
+ * or `undefined` when they release nothing. Without `base`, no commit raises `<breaking>`.
  */
 function next(
   latest: string,
   commits: readonly Commit[],
   head: { sha: string; time: Date },
-  force = false,
+  options: { base?: string | undefined; force?: boolean | undefined } = {},
 ): string | undefined {
+  const { base, force = false } = options
   const match = release.exec(latest)
   if (!match || latest.startsWith('0.0.0'))
     throw new Error(`npm's latest version ${latest} is not a release version.`)
@@ -53,11 +54,15 @@ function next(
   })
   if (releasing.length === 0 && !force) return undefined
 
-  const breaking = commits.some(
-    (commit) =>
-      title.exec(subject(commit))?.groups?.breaking === '!' ||
-      /^BREAKING[ -]CHANGE: /m.test(commit.message),
-  )
+  // Without the commit of `latest`, such as the `1.x` releases from `tempoxyz/accounts2`'s private
+  // history, the commits since it are unknown, so `<breaking>` stays.
+  const breaking =
+    !!base &&
+    commits.some(
+      (commit) =>
+        title.exec(subject(commit))?.groups?.breaking === '!' ||
+        /^BREAKING[ -]CHANGE: /m.test(commit.message),
+    )
   // The `0.x` releases came before this scheme, so its first release is 1 either way.
   const breakingVersion = Math.max(1, breaking ? major + 1 : major)
   return `${breakingVersion}.${timestamp(head.time)}.0-${short(head.sha)}`
@@ -138,7 +143,7 @@ export function resolve(
   const { base, cwd, force, latest, sha } = options
   const commits = log(base, sha, cwd)
   const time = new Date(run('git', ['log', '-1', '--format=%cI', sha], cwd))
-  const version = next(latest, commits, { sha, time }, force)
+  const version = next(latest, commits, { sha, time }, { base, force })
   if (!version) return undefined
   return { notes: notes(commits), version }
 }

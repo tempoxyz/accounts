@@ -172,6 +172,19 @@ describe('resolve', () => {
     `)
   })
 
+  test('keeps the breaking number for a breaking title without a base', () => {
+    const { commit, cwd } = repository()
+    const sha = commit('feat!: replace the package (#984)')
+
+    const resolved = Release.resolve({
+      cwd,
+      latest: '1.20261118190000.0-abcdef12',
+      sha,
+    })
+
+    expect(resolved?.version.split('.')[0]).toMatchInlineSnapshot(`"1"`)
+  })
+
   test('extends a short SHA of digits until a letter', () => {
     const { commit, cwd } = repository()
     // The first of these titles whose commit's first 8 characters are digits.
