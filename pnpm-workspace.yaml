@@ -54,9 +54,9 @@ catalog:
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
   viem: 0.0.0-9348d386a9f62fd6713124e25360d6040e4a34cf
-  vite: npm:@voidzero-dev/vite-plus-core@~1.3.0
-  vite-plus: ~1.3.0
-  vp: npm:vite-plus@~1.3.0
+  vite: npm:@voidzero-dev/vite-plus-core@~1.5.1
+  vite-plus: ~1.5.1
+  vp: npm:vite-plus@~1.5.1
   wagmi: 3.7.7
   wrangler: ^4.98.0
   zod: ^4.6.7
@@ -222,7 +222,7 @@ overrides:
   '@xmldom/xmldom@>=0.7.0 <0.8.15': '0.8.15'
   '@xmldom/xmldom@>=0.9.0 <0.9.12': '0.9.12'
   # Keep plugins on Vite+'s patched core to avoid mixing incompatible Vite types.
-  'vite@*': 'npm:@voidzero-dev/vite-plus-core@~1.3.0'
+  'vite@*': 'npm:@voidzero-dev/vite-plus-core@~1.5.1'
   vite-plus: 'catalog:'
   vp: 'catalog:'
   # GHSA-96hv-2xvq-fx4p: ws memory-exhaustion DoS (v8 prod path via viem; v7 dev path via react-native metro).
@@ -242,7 +242,7 @@ peerDependencyRules:
   allowedVersions:
     accounts: '*'
     # Vite+ core uses the toolchain release version while implementing Vite 8.
-    vite: '1.3.0'
+    vite: '1.5.1'
 
 shellEmulator: true
 
