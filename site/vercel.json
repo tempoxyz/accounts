@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "mkdir -p dist/vercel",
+  "buildCommand": "mkdir -p dist/vercel && echo 'Proxied to the Worker.' > dist/vercel/proxy.txt",
   "framework": null,
   "headers": [
     {
