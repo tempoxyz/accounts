@@ -29,7 +29,7 @@ Through a proxy that names another host, the dev server responds with an error. 
 
 | Event           | Deployment                                                                                    |
 | --------------- | --------------------------------------------------------------------------------------------- |
-| Push to `main`  | The Worker, at [accounts.tempo.xyz](https://accounts.tempo.xyz), the route of `wrangler.json` |
+| Push to `main`  | The Worker, at the route of `wrangler.json`, or its workers.dev URL without one               |
 | Pull request    | A version with the preview alias `pr-<number>`, whose URL a comment on the pull request names |
 | Manual dispatch | The Worker, from the selected branch                                                          |
 

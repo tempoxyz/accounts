@@ -127,7 +127,10 @@ jobs:
           OUTPUT: ${{ steps.deploy.outputs.command-output }}
           VERSION_URL: ${{ steps.deploy.outputs.deployment-url }}
         run: |
-          url="https://$(jq --raw-output '.routes[0].pattern' site/wrangler.json)"
+          # Without a route, a deployment's URL is the Worker's workers.dev URL.
+          pattern="$(jq --raw-output '.routes[0].pattern // empty' site/wrangler.json)"
+          url="${pattern:+https://$pattern}"
+          url="${url:-$(grep --only-matching --extended-regexp "https://[^ ]+\.workers\.dev" <<< "$OUTPUT" | head -n 1 || true)}"
           if [ -n "$NUMBER" ]; then
             url="$(grep --only-matching --extended-regexp "https://pr-$NUMBER-[^ ]+\.workers\.dev" <<< "$OUTPUT" | head -n 1 || true)"
             url="${url:-$VERSION_URL}"

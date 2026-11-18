@@ -12,6 +12,5 @@
   "kv_namespaces": [{ "binding": "STORE" }],
   "main": "./src/server/Worker.ts",
   "preview_urls": true,
-  "routes": [{ "custom_domain": true, "pattern": "accounts.tempo.xyz" }],
   "workers_dev": true
 }
