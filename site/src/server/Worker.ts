@@ -37,11 +37,20 @@ const routes: Record<string, Route> = {
   [Subscriptions.path]: Subscriptions.fetch,
 }
 
+/** The site's production host, which a proxy names in `x-forwarded-host` until the Worker has its route. */
+const host = 'accounts.tempo.xyz'
+
 export default {
   fetch(request) {
-    const { pathname } = new URL(request.url)
-    const route = routes[pathname.split('/', 3).join('/')]
+    const url = new URL(request.url)
+    const route = routes[url.pathname.split('/', 3).join('/')]
     if (!route) return Response.json({ error: 'not_found' }, { status: 404 })
-    return route(request)
+
+    // Each route derives the client ID and redirect URI from `request.url`, so a proxied request
+    // names the page's origin, not the Worker's workers.dev host. Only the production origin is
+    // accepted, so a header names no other app.
+    if (request.headers.get('x-forwarded-host') !== host) return route(request)
+    const proxied = new URL(`${url.pathname}${url.search}`, `https://${host}`)
+    return route(new Request(proxied, request))
   },
 } satisfies ExportedHandler
