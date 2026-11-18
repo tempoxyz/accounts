@@ -1,83 +1,49 @@
-@import 'tailwindcss';
-@import 'regen-ui/tailwind.css';
-@import 'vocs/styles/theme.css';
-@import '../landing/styles.css';
-
-@source "../";
-
-button {
-  font-weight: 500;
-}
-
-[data-v-topnav] > [data-v-surface-bg] {
-  @media (width >= 1080px) {
-    border-top-left-radius: 0;
-  }
-}
-
+/* The height of Tempo's wordmark on Tempo's other docs sites, such as `accounts.tempo.xyz/docs`. */
 [data-v-logo-image] {
   max-height: 1.125rem;
 }
 
-* {
-  border-style: dashed;
+/*
+ * Vocs renders the icon of a sidebar item in a badge after the text. These rules show it as a plain
+ * icon before the text.
+ */
+[data-v-sidebar-item]:has([data-v-sidebar-item-badge][data-v-icon]) {
+  justify-content: flex-start;
 }
 
-[data-active],
-[data-v-active='true'],
-[aria-current='page'] {
-  border-style: solid;
+[data-v-sidebar-item-badge][data-v-icon] {
+  background: none;
+  border: 0;
+  color: inherit;
+  display: inline-flex;
+  font-size: 1rem;
+  margin: 0 0.5rem 0 0;
+  order: -1;
+  padding: 0;
 }
 
-table[data-v] th {
-  background-color: var(--background-color-surface);
+[data-v-sidebar-item-badge-icon] {
+  display: inline-flex;
 }
 
-[data-v-code-header] {
-  background-color: color-mix(in srgb, var(--background-color-secondary) 50%, transparent);
-}
-
-:root {
-  --regen-radius: 0px;
-
-  --vocs-radius-sm: 0px;
-  --vocs-radius-md: 0px;
-  --vocs-radius-lg: 0px;
-  --vocs-radius-xl: 0px;
-  --vocs-radius-2xl: 0px;
-
-  /* Use regen's background/surface palette for both regen and vocs
-   * surfaces. The vocs `@theme` block re-declares `--background-color-*`
-   * on top of regen, so we re-pin both layers explicitly. */
-  --background-color-background: light-dark(#fafafa, #0c0c0c);
-  --background-color-surface: light-dark(#ffffff, #141414);
-  --vocs-background-color-primary: var(--background-color-background);
-  --vocs-background-color-surface: var(--background-color-surface);
-  --vocs-background-color-code-block: color-mix(
-    in srgb,
-    var(--background-color-secondary) 50%,
-    transparent
-  );
-  --vocs-background-color-inline-code: color-mix(
-    in srgb,
-    var(--background-color-secondary) 50%,
-    transparent
-  );
+[data-v-sidebar-item-badge][data-v-icon] [data-v-sidebar-item-badge-icon] svg {
+  height: 1rem;
+  width: 1rem;
 }
 
 /*
- * Fix: LightningCSS (via Tailwind v4) compiles light-dark() into a polyfill
- * that uses @media (prefers-color-scheme) — which only responds to the OS-level
- * dark preference, not the inline `color-scheme` set by Vocs's theme toggle.
- *
- * Override the polyfill variables (--lightningcss-light / --lightningcss-dark)
- * to respect the inline color-scheme attribute that Vocs sets on <html>.
+ * Vocs keeps the text of a table's headers on one line, but wraps the text of its cells. This rule
+ * keeps the text of each cell on one line too. The wrapper of the table scrolls horizontally.
  */
-html[style*='color-scheme: light'] {
-  --lightningcss-light: initial;
-  --lightningcss-dark: ;
+table[data-v] td {
+  white-space: nowrap;
 }
-html[style*='color-scheme: dark'] {
-  --lightningcss-light: ;
-  --lightningcss-dark: initial;
+
+/*
+ * Vocs' reset removes the margin of each element, and the `auto` margin of a modal dialog centers
+ * it. This rule returns the margin to Tempo ID's dialog, which a demo opens. The dialog's own rule
+ * for a narrow screen comes later, and still applies.
+ */
+dialog[data-tempo-id-dialog] {
+  margin: auto;
 }

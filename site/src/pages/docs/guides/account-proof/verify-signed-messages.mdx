@@ -1,0 +1,555 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+import { StepTag } from '../../../../components/StepTag.tsx'
+
+# Verify signed messages [A server verifies a message that the access key signs for a Tempo Account.]
+
+## Overview
+
+After a sign-in, the [access key](/docs/guides/access-keys) signs messages for the Tempo Account with no prompt. The chain accepts every live access key of the account, also another app's, so a server counts the signature only if the user's [access token](/docs/guides/api-authentication/authenticate-requests) names the access key. A signature verifies only after the access key's first transaction registers it.
+
+The demo signs in, sends 0.01 OUSD as the access key's first transaction, and signs a message, which the site's server verifies. Before the transaction, the server refuses the signature.
+
+<Demo name="VerifySignedMessages" title="Verify a signed message" />
+
+## Walkthrough
+
+The steps build a React page and a Hono server.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts hono react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts hono react react-dom viem
+```
+
+```sh [bun]
+bun add accounts hono react react-dom viem
+```
+
+:::
+
+### Create the instance<StepTag kind="client" />
+
+The <SourceLink name="react" path="src/react/index.ts">`react`</SourceLink> plugin adds <SourceLink name="useSession" path="src/react/index.ts">`useSession`</SourceLink>, and the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin adds `signMessage`.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+### Sign the user in<StepTag kind="client" />
+
+The session's <SourceLink name="Session.accessKey" path="src/Session.ts">`accessKey.account`</SourceLink> is the Tempo Account that the access key signs for.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+  const address = session?.accessKey?.account // [!code hl]
+
+  if (!address)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return (
+    <main>
+      <p>Tempo Account {address}</p>
+    </main>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Send the first transaction<StepTag kind="client" />
+
+The first transaction carries the key authorization, and registers the access key on the chain.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+  const address = session?.accessKey?.account
+
+  if (!address)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return (
+    <main>
+      <p>Tempo Account {address}</p>
+      <button // [!code ++]
+        onClick={() => // [!code ++]
+          accounts.pay({ // [!code ++]
+            amount: '0.01', // [!code ++]
+            to: '0x000000000000000000000000000000000000dEaD', // [!code ++]
+            token: 'ousd', // [!code ++]
+          }) // [!code ++]
+        } // [!code ++]
+        type="button" // [!code ++]
+      > {/* [!code ++] */}
+        Send 0.01 OUSD {/* [!code ++] */}
+      </button> {/* [!code ++] */}
+    </main>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Sign the message<StepTag kind="client" />
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+const message = 'I agree to the terms of app.example.' // [!code ++]
+
+export function App() {
+  const { session } = accounts.useSession()
+  const address = session?.accessKey?.account
+
+  if (!address)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return (
+    <main>
+      <p>Tempo Account {address}</p>
+      <button
+        onClick={() =>
+          accounts.pay({
+            amount: '0.01',
+            to: '0x000000000000000000000000000000000000dEaD',
+            token: 'ousd',
+          })
+        }
+        type="button"
+      >
+        Send 0.01 OUSD
+      </button>
+      <button // [!code ++]
+        onClick={async () => { // [!code ++]
+          const signature = await accounts.signMessage({ message }) // [!code ++]
+        }} // [!code ++]
+        type="button" // [!code ++]
+      > {/* [!code ++] */}
+        Prove the account {/* [!code ++] */}
+      </button> {/* [!code ++] */}
+    </main>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Send the signature<StepTag kind="client" />
+
+<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch`</SourceLink> sends the signature with the session's access token.
+
+:::code-group
+
+```tsx [App.tsx]
+import { useState } from 'react' // [!code ++]
+import { accounts } from './tempo.config.js'
+
+const message = 'I agree to the terms of app.example.'
+
+export function App() {
+  const { session } = accounts.useSession()
+  const [proven, setProven] = useState<string>() // [!code ++]
+  const address = session?.accessKey?.account
+
+  if (!address)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return (
+    <main>
+      <p>Tempo Account {address}</p>
+      <button
+        onClick={() =>
+          accounts.pay({
+            amount: '0.01',
+            to: '0x000000000000000000000000000000000000dEaD',
+            token: 'ousd',
+          })
+        }
+        type="button"
+      >
+        Send 0.01 OUSD
+      </button>
+      <button
+        onClick={async () => {
+          const signature = await accounts.signMessage({ message })
+          const response = await accounts.session.fetch({ // [!code ++]
+            init: { // [!code ++]
+              body: JSON.stringify({ address, message, signature }), // [!code ++]
+              headers: { 'content-type': 'application/json' }, // [!code ++]
+              method: 'POST', // [!code ++]
+            }, // [!code ++]
+            url: '/api/message', // [!code ++]
+          }) // [!code ++]
+          const body = await response.json() // [!code ++]
+          setProven(body.address) // [!code ++]
+        }}
+        type="button"
+      >
+        Prove the account
+      </button>
+      {proven && <p>The server verified {proven}.</p>} {/* [!code ++] */}
+    </main>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Create the instance of the server<StepTag kind="server" />
+
+Name the app's <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink>, so the instance accepts only the app's access tokens.
+
+```ts [api.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'https://app.example',
+  plugins: [viem()],
+})
+```
+
+:::warning
+Another app's access token names that app's access keys. A server that accepts it accepts that app's signatures.
+:::
+
+### Verify the signature<StepTag kind="server" />
+
+<SourceLink name="message" path="src/internal/viem/Verify.ts">`verifyMessage`</SourceLink> verifies the access token, then the signature. An access key's signature counts only if the token names it for the address, on the instance's chain. The owner's signature also counts.
+
+```ts [api.ts]
+import { AccessToken, Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { Hono } from 'hono'
+import { isAddress, isHex } from 'viem'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'https://app.example',
+  plugins: [viem()],
+})
+
+const app = new Hono()
+
+app.post('/api/message', async (c) => {
+  const [, accessToken] = c.req.header('authorization')?.split(' ') ?? []
+  if (!accessToken) return c.json({ error: 'invalid_token' }, 401)
+
+  const { address, message, signature } = await c.req.json()
+  if (
+    !isAddress(address) ||
+    typeof message !== 'string' ||
+    !isHex(signature)
+  )
+    return c.json({ error: 'invalid_request' }, 400)
+
+  try {
+    // [!code hl:start]
+    const valid = await accounts.verifyMessage({
+      accessToken,
+      address,
+      message,
+      signature,
+    })
+    // [!code hl:end]
+    if (!valid) return c.json({ error: 'invalid_signature' }, 400)
+  } catch (error) {
+    if (error instanceof AccessToken.InvalidError)
+      return c.json({ error: 'invalid_token' }, 401)
+    throw error
+  }
+
+  // The access key of the app signed `message` for `address`.
+  return c.json({ address })
+})
+
+export default app
+```
+
+A signature verifies each time. If a message counts once, add a server challenge to it, and [spend the challenge](/docs/guides/account-proof/sign-challenges#spend-the-challenge).
+
+::::
+
+## Use cases
+
+Each use case sets one option of <SourceLink name="message" path="src/internal/viem/Verify.ts">`verifyMessage`</SourceLink> or of the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, or verifies another kind of signature.
+
+### Verify a DPoP token
+
+If a [DPoP key](/docs/guides/api-authentication/bind-dpop-keys) binds the access token, pass the request's proof as <SourceLink name="message.dpop" path="src/internal/viem/Verify.ts">`dpop`</SourceLink>. <SourceLink name="message" path="src/internal/viem/Verify.ts">`verifyMessage`</SourceLink> refuses no repeated proof, so the API refuses one with <SourceLink name="tokens.verifyAccessToken" path="src/plugins/tokens.ts">`tokens.verifyAccessToken`</SourceLink>, as [Bind DPoP keys](/docs/guides/api-authentication/bind-dpop-keys#refuse-a-repeated-proof) shows.
+
+```ts [api.ts]
+import { AccessToken, Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { Hono } from 'hono'
+import { isAddress, isHex } from 'viem'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'https://app.example',
+  plugins: [viem()],
+})
+
+const app = new Hono()
+
+app.post('/api/message', async (c) => {
+  const [scheme, accessToken] = c.req.header('authorization')?.split(' ') ?? [] // [!code hl]
+  if (!accessToken) return c.json({ error: 'invalid_token' }, 401)
+
+  const { address, message, signature } = await c.req.json()
+  if (
+    !isAddress(address) ||
+    typeof message !== 'string' ||
+    !isHex(signature)
+  )
+    return c.json({ error: 'invalid_request' }, 400)
+
+  try {
+    const valid = await accounts.verifyMessage({
+      accessToken,
+      address,
+      // [!code hl:start]
+      dpop: {
+        method: c.req.method,
+        proof: c.req.header('dpop'),
+        scheme,
+        url: c.req.url,
+      },
+      // [!code hl:end]
+      message,
+      signature,
+    })
+    if (!valid) return c.json({ error: 'invalid_signature' }, 400)
+  } catch (error) {
+    if (error instanceof AccessToken.InvalidError)
+      return c.json({ error: 'invalid_token' }, 401)
+    throw error
+  }
+
+  return c.json({ address })
+})
+
+export default app
+```
+
+### Verify typed data
+
+`accounts.signTypedData` signs typed data (EIP-712) with the access key. <SourceLink name="typedData" path="src/internal/viem/Verify.ts">`accounts.verifyTypedData`</SourceLink> verifies it with the same <SourceLink name="typedData.accessToken" path="src/internal/viem/Verify.ts">`accessToken`</SourceLink>.
+
+```ts [api.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import type { Address, Hex } from 'viem'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'https://app.example',
+  plugins: [viem()],
+})
+
+export async function verify(options: {
+  accessToken: string
+  address: Address
+  signature: Hex
+}) {
+  // [!code hl:start]
+  return await accounts.verifyTypedData({
+    accessToken: options.accessToken,
+    address: options.address,
+    domain: { name: 'app.example', version: '1' },
+    message: { terms: 'I agree to the terms of app.example.' },
+    primaryType: 'Agreement',
+    signature: options.signature,
+    types: { Agreement: [{ name: 'terms', type: 'string' }] },
+  })
+  // [!code hl:end]
+}
+```
+
+### Verify a hash
+
+<SourceLink name="hash" path="src/internal/viem/Verify.ts">`accounts.verifyHash`</SourceLink> verifies a signature of a 32-byte hash, such as one that the app computed itself. An access key's signature counts as <SourceLink name="message" path="src/internal/viem/Verify.ts">`verifyMessage`</SourceLink> decides.
+
+```ts [api.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'https://app.example',
+  plugins: [viem()],
+})
+
+export async function verify(
+  options: Parameters<typeof accounts.verifyHash>[0],
+) {
+  return await accounts.verifyHash(options) // [!code hl]
+}
+```
+
+### Accept the tokens of several apps
+
+The <SourceLink name="viem.accessTokens" path="src/plugins/viem.ts">`accessTokens`</SourceLink> option of the plugin takes the options of the access token's verifier, as the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin does. With <SourceLink name="create.clientIds" path="src/AccessToken.ts">`clientIds`</SourceLink>, a server counts the access keys of each named app.
+
+```ts [api.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'https://app.example',
+  plugins: [
+    viem({
+      // [!code hl:start]
+      accessTokens: {
+        clientIds: ['https://app.example', 'https://admin.example'],
+      },
+      // [!code hl:end]
+    }),
+  ],
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Prove a Tempo Account at sign-in, with no access key."
+    icon="signed-file"
+    title="Sign challenges"
+    to="/docs/guides/account-proof/sign-challenges"
+  />
+  <PageCard
+    description="Sign a message as the Tempo Account with the Viem client of the instance."
+    icon="viem"
+    title="Viem"
+    to="/docs/guides/viem"
+  />
+  <PageCard
+    description="Verify the access token of each request to an API."
+    icon="shield-check"
+    title="Authenticate requests"
+    to="/docs/guides/api-authentication/authenticate-requests"
+  />
+  <PageCard
+    description="Bind the tokens of a session to a DPoP key."
+    icon="shield-check"
+    title="Bind DPoP keys"
+    to="/docs/guides/api-authentication/bind-dpop-keys"
+  />
+</Cards>

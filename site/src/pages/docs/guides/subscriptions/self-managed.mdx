@@ -1,0 +1,504 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+import { StepTag } from '../../../../components/StepTag.tsx'
+
+# Charge each period [A backend charges a subscription with an access key whose limit resets each period.]
+
+## Overview
+
+At sign-in, the user approves an [access key](/docs/guides/access-keys) whose spending limit resets each period. A backend keeps the [session](/docs/guides/user-session), and charges each period with one transfer that the access key signs.
+
+The Tempo chain refuses a transfer above the period's limit, so no payment protocol is needed. The backend's client ID is its origin, so it needs no registration.
+
+The demo approves 1 OUSD each minute, charges the period from the site's server, and shows the chain's refusal of a second charge in the same minute.
+
+<Demo name="ChargeEachPeriod" source="examples/backend" title="Charge each period" />
+
+## Walkthrough
+
+These steps add a periodic limit, a charge, and a React page to the [`backend`](https://github.com/tempoxyz/accounts/tree/main/examples/backend) example, a Hono server.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts hono react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts hono react react-dom viem
+```
+
+```sh [bun]
+bun add accounts hono react react-dom viem
+```
+
+:::
+
+### Create the instance<StepTag kind="server" />
+
+<SourceLink name="Limit.period" path="src/Permissions.ts">`period`</SourceLink> takes a duration or whole seconds, and the scope makes the merchant the only recipient. `APP_URL` holds the app's origin.
+
+As in [Redirect (Backend)](/docs/guides/backend), the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin keeps each session in a store on the server, since a session holds an access key's private key.
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Addresses, Scopes } from 'viem/tempo'
+
+// The merchant receives each charge, and pays its fee.
+export const merchant = privateKeyToAccount(
+  process.env.MERCHANT_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  // Each access key sends 10 OUSD each 30 days, for 360 days.
+  accessKey: () => ({
+    expiry: '360d',
+    limits: [{ limit: '10', period: '30d', token: 'ousd' }],
+    // The access key sends OUSD only to the merchant.
+    scopes: [
+      Scopes.tip20(Addresses.ousd).transfer({
+        recipients: [merchant.address],
+      }),
+    ],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    viem(),
+  ],
+})
+```
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the sessions in the process, so a restart signs each user out. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+### Sign the user in<StepTag kind="server" />
+
+<SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> serves the sign-in routes under `/api/auth`. Tempo ID's approval page shows the limit and its period.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw)) // [!code hl]
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Addresses, Scopes } from 'viem/tempo'
+
+// The merchant receives each charge, and pays its fee.
+export const merchant = privateKeyToAccount(
+  process.env.MERCHANT_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  // Each access key sends 10 OUSD each 30 days, for 360 days.
+  accessKey: () => ({
+    expiry: '360d',
+    limits: [{ limit: '10', period: '30d', token: 'ousd' }],
+    // The access key sends OUSD only to the merchant.
+    scopes: [
+      Scopes.tip20(Addresses.ousd).transfer({
+        recipients: [merchant.address],
+      }),
+    ],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    viem(),
+  ],
+})
+```
+
+:::
+
+### Read the session<StepTag kind="client" />
+
+`/api/auth/session` returns the cookie's session, or `null`.
+
+```tsx [App.tsx]
+import { useState } from 'react'
+
+type Subscriber = { user: { email?: string } }
+
+export function App() {
+  const [subscriber, setSubscriber] = useState<Subscriber>()
+
+  async function subscribe() {
+    const response = await fetch('/api/auth/session')
+    const body = (await response.json()) as { session: Subscriber | null }
+    if (!body.session) return location.assign('/api/auth/login')
+    setSubscriber(body.session)
+  }
+
+  if (!subscriber)
+    return (
+      <button onClick={subscribe} type="button">
+        Subscribe
+      </button>
+    )
+
+  return <p>Subscribed as {subscriber.user.email}</p>
+}
+```
+
+### Charge the period<StepTag kind="server" />
+
+<SourceLink name="viem" path="src/plugins/viem.ts">`accounts.viem({ session })`</SourceLink> returns a Viem client that signs with that session's access key. The merchant pays the fee, since the chain charges fees to the access key's limit, which holds only the charge.
+
+The limit bounds one access key, not the user, and a new sign-in starts with an unspent period. So record each charge by user ID, and check the record before each charge.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { csrf } from 'hono/csrf'
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts, merchant } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+// Another site cannot post a charge with the session cookie.
+app.use(csrf())
+
+app.post('/charge', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'tempo-id' || !session.accessKey)
+    return c.json({ error: 'invalid_session' }, 401)
+
+  // [!code hl:start]
+  const { receipt } = await accounts.viem({ session }).token.transferSync({
+    amount: parseUnits('10', 6),
+    feePayer: merchant,
+    to: merchant.address,
+    token: Addresses.ousd,
+  })
+  // [!code hl:end]
+  return c.json({ reference: receipt.transactionHash })
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Addresses, Scopes } from 'viem/tempo'
+
+// The merchant receives each charge, and pays its fee.
+export const merchant = privateKeyToAccount(
+  process.env.MERCHANT_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  // Each access key sends 10 OUSD each 30 days, for 360 days.
+  accessKey: () => ({
+    expiry: '360d',
+    limits: [{ limit: '10', period: '30d', token: 'ousd' }],
+    // The access key sends OUSD only to the merchant.
+    scopes: [
+      Scopes.tip20(Addresses.ousd).transfer({
+        recipients: [merchant.address],
+      }),
+    ],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    viem(),
+  ],
+})
+```
+
+:::
+
+### Handle a refused charge<StepTag kind="server" />
+
+Viem's `AccessKeySpendingLimitExceededError` names the period's end as `periodEnd`.
+
+A transfer above the balance fails with the node's `InsufficientBalance` instead, which Viem's `ExecutionError.from` reads.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { csrf } from 'hono/csrf'
+import { parseUnits } from 'viem'
+import { type Actions, Addresses } from 'viem/tempo'
+import { accounts, merchant } from './tempo.config.js'
+
+type Refusal = Actions.accessKey.AccessKeySpendingLimitExceededError
+
+/** Returns the refusal of a spent limit among `error` and its causes. */
+function spent(error: unknown) {
+  for (let cause = error; cause instanceof Error; cause = cause.cause)
+    if (cause.name === 'AccessKeySpendingLimitExceededError')
+      return cause as Refusal
+  return undefined
+}
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+// Another site cannot post a charge with the session cookie.
+app.use(csrf())
+
+app.post('/charge', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'tempo-id' || !session.accessKey)
+    return c.json({ error: 'invalid_session' }, 401)
+
+  const { receipt } = await accounts.viem({ session }).token.transferSync({
+    amount: parseUnits('10', 6),
+    feePayer: merchant,
+    to: merchant.address,
+    token: Addresses.ousd,
+  })
+  return c.json({ reference: receipt.transactionHash })
+})
+
+// [!code hl:start]
+app.onError((error, c) => {
+  const refusal = spent(error)
+  if (!refusal) throw error
+
+  // `periodEnd` is the end of the period, in Unix seconds.
+  return c.json(
+    { error: 'limit_exceeded', periodEnd: Number(refusal.periodEnd) },
+    409,
+  )
+})
+// [!code hl:end]
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Addresses, Scopes } from 'viem/tempo'
+
+// The merchant receives each charge, and pays its fee.
+export const merchant = privateKeyToAccount(
+  process.env.MERCHANT_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  // Each access key sends 10 OUSD each 30 days, for 360 days.
+  accessKey: () => ({
+    expiry: '360d',
+    limits: [{ limit: '10', period: '30d', token: 'ousd' }],
+    // The access key sends OUSD only to the merchant.
+    scopes: [
+      Scopes.tip20(Addresses.ousd).transfer({
+        recipients: [merchant.address],
+      }),
+    ],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    viem(),
+  ],
+})
+```
+
+:::
+
+### Handle the expiry<StepTag kind="client" />
+
+Once the access key expires, <SourceLink name="session.get" path="src/Accounts.ts">`session.get`</SourceLink> returns `undefined`, and the page signs the user in again for a new access key.
+
+```tsx [Charge.tsx]
+export function Charge() {
+  return (
+    <button
+      onClick={async () => {
+        const response = await fetch('/charge', { method: 'POST' })
+        if (response.status === 401) location.assign('/api/auth/login')
+      }}
+      type="button"
+    >
+      Charge the period
+    </button>
+  )
+}
+```
+
+::::
+
+## Use cases
+
+Each use case reads or ends a session of the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, whose access key signs each charge through <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.viem({ session })`</SourceLink>.
+
+### Charge from a schedule
+
+A scheduled job charges without a request, so it reads each session with <SourceLink name="get" path="src/plugins/backend.ts">`backend.get`</SourceLink>, by the session ID of the session cookie.
+
+:::code-group
+
+```ts [schedule.ts]
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts, merchant } from './tempo.config.js'
+
+/** Charges the period of the session `id`, and returns the transaction hash. */
+export async function charge(id: string) {
+  const session = await accounts.backend.get({ id }) // [!code hl]
+  if (session?.method !== 'tempo-id' || !session.accessKey) return undefined
+
+  const { receipt } = await accounts.viem({ session }).token.transferSync({
+    amount: parseUnits('10', 6),
+    feePayer: merchant,
+    to: merchant.address,
+    token: Addresses.ousd,
+  })
+  return receipt.transactionHash
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Addresses, Scopes } from 'viem/tempo'
+
+// The merchant receives each charge, and pays its fee.
+export const merchant = privateKeyToAccount(
+  process.env.MERCHANT_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  // Each access key sends 10 OUSD each 30 days, for 360 days.
+  accessKey: () => ({
+    expiry: '360d',
+    limits: [{ limit: '10', period: '30d', token: 'ousd' }],
+    // The access key sends OUSD only to the merchant.
+    scopes: [
+      Scopes.tip20(Addresses.ousd).transfer({
+        recipients: [merchant.address],
+      }),
+    ],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    viem(),
+  ],
+})
+```
+
+:::
+
+:::warning
+Without a registration, Tempo ID ends a session 30 days after its last refresh. Each <SourceLink name="get" path="src/plugins/backend.ts">`backend.get`</SourceLink> refreshes an expired access token. With a period of 30 days or more, read each session between two charges, such as each day.
+:::
+
+### End a subscription
+
+<SourceLink name="end" path="src/plugins/backend.ts">`backend.end`</SourceLink> revokes the session's refresh token, and deletes the session with its access key. The backend then holds no access key to charge with, so the subscription ends.
+
+:::code-group
+
+```ts [cancel.ts]
+import { accounts } from './tempo.config.js'
+
+/** Ends the subscription of the session `id`. */
+export async function cancel(id: string) {
+  await accounts.backend.end({ id }) // [!code hl]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Addresses, Scopes } from 'viem/tempo'
+
+// The merchant receives each charge, and pays its fee.
+export const merchant = privateKeyToAccount(
+  process.env.MERCHANT_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  // Each access key sends 10 OUSD each 30 days, for 360 days.
+  accessKey: () => ({
+    expiry: '360d',
+    limits: [{ limit: '10', period: '30d', token: 'ousd' }],
+    // The access key sends OUSD only to the merchant.
+    scopes: [
+      Scopes.tip20(Addresses.ousd).transfer({
+        recipients: [merchant.address],
+      }),
+    ],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    viem(),
+  ],
+})
+```
+
+:::
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Pay a merchant that charges each period with its own access key."
+    icon="repeat"
+    title="Pay MPP subscriptions"
+    to="/docs/guides/subscriptions/mpp"
+  />
+  <PageCard
+    description="Send a payment with the access key of a session."
+    icon="arrow-up-right"
+    title="Send payments"
+    to="/docs/guides/payments/self-managed"
+  />
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Hold the session of each user on a server."
+    icon="server"
+    title="Redirect (Backend)"
+    to="/docs/guides/backend"
+  />
+</Cards>

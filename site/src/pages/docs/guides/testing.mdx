@@ -1,0 +1,332 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# End-to-end tests [An app's end-to-end tests sign in with no dialog, and send transactions on Tempo testnet.]
+
+## Overview
+
+A test in a browser cannot sign in through Tempo ID's dialog. The <SourceLink name="dialog" path="src/test/dialog.ts">`dialog`</SourceLink> plugin of `accounts/test` replaces the `dialog` plugin in a test build. Its sign-in shows no dialog, and sends no request to Tempo ID.
+
+A local Tempo Account signs the key authorization of a new [access key](/docs/guides/access-keys), as Tempo ID's cloud wallet does after a sign-in. The [session](/docs/guides/user-session) then holds the access key, and the app sends transactions on the chain as it does in production.
+
+The demo signs in with the plugin, funds the new Tempo Account from the testnet faucet, and sends 1 OUSD.
+
+<Demo name="EndToEndTests" title="Sign in with no dialog" />
+
+:::warning
+The session holds a placeholder access token, so each request to Tempo ID fails, such as `accounts.account.get` and `session.fetch`. Import `accounts/test` only in a test build.
+:::
+
+## Walkthrough
+
+These steps test a React app built with Vite, with [Playwright](https://playwright.dev).
+
+::::steps
+
+### Install the packages
+
+`@playwright/test` runs the tests in a browser.
+
+:::code-group
+
+```sh [npm]
+npm install accounts react react-dom viem
+npm install --save-dev @playwright/test
+```
+
+```sh [pnpm]
+pnpm add accounts react react-dom viem
+pnpm add --save-dev @playwright/test
+```
+
+```sh [bun]
+bun add accounts react react-dom viem
+bun add --dev @playwright/test
+```
+
+:::
+
+### Swap the dialog plugin
+
+A build with `VITE_E2E` uses the <SourceLink name="dialog" path="src/test/dialog.ts">`dialog`</SourceLink> plugin of `accounts/test`. It has the ID `dialog`, so `accounts.dialog.signIn` signs in with it, and the app's code stays the same. Vite replaces `import.meta.env.VITE_E2E` at build time, so a production bundle holds none of `accounts/test`.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+import * as test from 'accounts/test' // [!code ++]
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [
+    react(),
+    import.meta.env.VITE_E2E ? test.dialog() : dialog(), // [!code ++]
+    viem(),
+  ],
+})
+```
+
+### Sign in from a click
+
+<SourceLink name="dialog.signIn" path="src/test/dialog.ts">`accounts.dialog.signIn`</SourceLink> creates the access key, sets the session, and runs the plugins' `afterSignIn` hooks, as a sign-in in the dialog does. Each sign-in of the same instance signs in the same Tempo Account.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  // [!code hl:start]
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in
+      </button>
+    )
+  // [!code hl:end]
+
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+import * as test from 'accounts/test'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [
+    react(),
+    import.meta.env.VITE_E2E ? test.dialog() : dialog(),
+    viem(),
+  ],
+})
+```
+
+:::
+
+### Serve the test build
+
+Playwright's `webServer` builds the app with `VITE_E2E`, and serves the build before the tests run.
+
+```ts [playwright.config.ts]
+import { defineConfig } from '@playwright/test'
+
+export default defineConfig({
+  testDir: 'e2e',
+  use: { baseURL: 'http://localhost:4173' },
+  // [!code hl:start]
+  webServer: {
+    command: 'VITE_E2E=true vite build && vite preview --port 4173',
+    url: 'http://localhost:4173',
+  },
+  // [!code hl:end]
+})
+```
+
+### Write the test
+
+The test clicks the app's own button, and reads the session that the page shows.
+
+```ts [e2e/sign-in.test.ts]
+import { expect, test } from '@playwright/test'
+
+test('signs in', async ({ page }) => {
+  await page.goto('/')
+
+  await page.getByRole('button', { name: 'Sign in' }).click()
+
+  await expect(page.getByText('Signed in as test@example.com')).toBeVisible()
+})
+```
+
+::::
+
+## Use cases
+
+Each use case sets an option of the <SourceLink name="dialog" path="src/test/dialog.ts">`dialog`</SourceLink> plugin of `accounts/test`, or of its sign-in, except the last, which signs in through Tempo ID's dialog.
+
+### Use a funded account
+
+<SourceLink name="dialog.privateKey" path="src/test/dialog.ts">`privateKey`</SourceLink> names the Tempo Account's private key, such as one that a global setup funded. Without it, each instance signs in a new account, and each page load creates a new instance.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+import * as test from 'accounts/test'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [
+    import.meta.env.VITE_E2E
+      ? test.dialog({ privateKey: import.meta.env.VITE_E2E_PRIVATE_KEY }) // [!code hl]
+      : dialog(),
+    viem(),
+  ],
+})
+```
+
+:::warning
+A build holds the private key in its bundle. Use an account that holds only testnet funds.
+:::
+
+### Name the user
+
+<SourceLink name="dialog.user" path="src/test/dialog.ts">`user`</SourceLink> sets the signed-in user. Without it, the email is `test@example.com`, and the ID is `test:` followed by the account's address.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+import * as test from 'accounts/test'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [
+    import.meta.env.VITE_E2E
+      ? test.dialog({ user: { email: 'ada@example.com', id: 'user_ada' } }) // [!code hl]
+      : dialog(),
+  ],
+})
+```
+
+### Request an access key without bounds
+
+<SourceLink name="dialog.signIn" path="src/test/dialog.ts">`accessKey`</SourceLink> of a sign-in names the access key's permissions, in place of the instance's. An access key with `scopes: 'any'` and no `limits` makes any call and spends any amount, so a test needs no new access key for each contract. Tempo ID refuses such an access key on a page, so only a test build requests it.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+import * as test from 'accounts/test'
+
+export const accounts = Accounts.create({
+  // [!code hl:start]
+  accessKey: import.meta.env.VITE_E2E
+    ? { expiry: '1h', scopes: 'any' }
+    : { expiry: '1d', limits: [{ limit: '100', token: 'ousd' }] },
+  // [!code hl:end]
+  chain: 'testnet',
+  plugins: [import.meta.env.VITE_E2E ? test.dialog() : dialog(), viem()],
+})
+```
+
+### Turn off the retry of transactions
+
+The <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin's <SourceLink name="viem.retry" path="src/plugins/viem.ts">`retry`</SourceLink> signs in again for a refused transaction, such as a transfer above the limit. That sign-in opens Tempo ID's dialog, which a test cannot complete. A test build sets `retry: false`, so the transaction rejects with the node's error.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+import * as test from 'accounts/test'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [
+    import.meta.env.VITE_E2E ? test.dialog() : dialog(),
+    viem({ retry: !import.meta.env.VITE_E2E }), // [!code hl]
+  ],
+})
+```
+
+### Sign in without an access key
+
+`accessKey: false` signs in with no access key. The session still holds the Tempo Account, which signs nothing.
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() => accounts.dialog.signIn({ accessKey: false })} // [!code hl]
+      type="button"
+    >
+      Sign in
+    </button>
+  )
+}
+```
+
+### Connect wagmi
+
+The <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId`</SourceLink> connector takes the plugin among its `plugins`. Its `connect` signs in with the plugin's `dialog.signIn`.
+
+```ts [config.ts]
+import { dialog } from 'accounts/plugins'
+import * as test from 'accounts/test'
+import { tempoId } from 'accounts/wagmi'
+import { tempoModerato } from 'viem/tempo/chains'
+import { createConfig, http } from 'wagmi'
+
+export const config = createConfig({
+  chains: [tempoModerato],
+  connectors: [
+    tempoId({
+      plugins: [import.meta.env.VITE_E2E ? test.dialog() : dialog()], // [!code hl]
+    }),
+  ],
+  transports: { [tempoModerato.id]: http() },
+})
+```
+
+### Sign in at a local Tempo ID
+
+A test that covers Tempo ID's dialog itself signs in at an `id-dev` instance of Tempo ID, whose inbox returns each sign-in code. `accounts/test/playwright` holds the selectors of the dialog. <SourceLink name="dialog" path="src/test/playwright.ts">`dialog`</SourceLink> returns the dialog's frame once it holds still, <SourceLink name="signIn" path="src/test/playwright.ts">`signIn`</SourceLink> completes the sign-in form, and <SourceLink name="code" path="src/test/playwright.ts">`code`</SourceLink> reads the inbox.
+
+```ts [e2e/dialog.test.ts]
+import { expect, test } from '@playwright/test'
+import { code, dialog, signIn } from 'accounts/test/playwright'
+
+test('signs in through the dialog', async ({ page }) => {
+  const email = `test+${crypto.randomUUID()}@example.org`
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+
+  // [!code hl:start]
+  await signIn(await dialog(page), {
+    code: (email) => code({ email, url: 'http://localhost:8787' }),
+    email,
+  })
+  // [!code hl:end]
+
+  await expect(page.getByText(`Signed in as ${email}`)).toBeVisible()
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Sign a user in through Tempo ID's dialog."
+    icon="browser-window"
+    title="Dialog"
+    to="/docs/guides/dialog"
+  />
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Connect a wagmi app to Tempo ID, and send with the access key of the connection."
+    icon="wagmi"
+    title="Wagmi"
+    to="/docs/guides/wagmi"
+  />
+</Cards>

@@ -1,0 +1,415 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Pay MPP subscriptions [A page approves the access key of a merchant once, and the merchant charges each period.]
+
+## Overview
+
+A Machine Payments Protocol (MPP) subscription lets a merchant other than the app, such as an API, charge each period. The merchant's route responds with an HTTP 402 challenge that names its own [access key](/docs/guides/access-keys), the amount, the period, and the expiry.
+
+<SourceLink name="mpp.fetch" path="src/mpp/index.ts">`accounts.fetch`</SourceLink> opens Tempo ID's dialog, where the user approves that access key once. The merchant then charges each period itself, and the chain enforces the approved limit.
+
+Only a browser page subscribes, since the approval needs the dialog.
+
+The demo subscribes to 1 OUSD each minute for 10 minutes, and shows each charge.
+
+<Demo name="PayMppSubscriptions" source="examples/mpp-subscription" title="Pay an MPP subscription" />
+
+## Walkthrough
+
+The [`mpp-subscription`](https://github.com/tempoxyz/accounts/tree/main/examples/mpp-subscription) example runs a subscription against its own merchant, with the session on its backend, as [Pay for a backend's session](#pay-for-a-backends-session) shows.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts mppx react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts mppx react react-dom viem
+```
+
+```sh [bun]
+bun add accounts mppx react react-dom viem
+```
+
+:::
+
+### Create the instance
+
+The <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin adds <SourceLink name="mpp.fetch" path="src/mpp/index.ts">`accounts.fetch`</SourceLink>. <SourceLink name="mpp.maxAmount" path="src/mpp/index.ts">`maxAmount`</SourceLink> caps the cost of one period.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // `accounts.fetch` needs an access key. A subscription never spends it.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // A period of a subscription may charge at most 10 OUSD.
+  plugins: [mpp({ maxAmount: '10' }), react()],
+})
+```
+
+### Sign the user in
+
+<SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> opens Tempo ID's dialog on the page, and sets the [session](/docs/guides/user-session).
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  // [!code hl:start]
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+  // [!code hl:end]
+
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // `accounts.fetch` needs an access key. A subscription never spends it.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // A period of a subscription may charge at most 10 OUSD.
+  plugins: [mpp({ maxAmount: '10' }), react()],
+})
+```
+
+:::
+
+### Subscribe
+
+Tempo ID's dialog shows the challenge's amount, period, and expiry. After the approval, the request sends again with the approval as its credential, and the merchant charges the first period. The session keeps its own access key.
+
+The merchant serves the route with the subscription method of mppx's server, as [`api.ts`](https://github.com/tempoxyz/accounts/blob/main/examples/mpp-subscription/api.ts) of the example shows. The dialog can approve with any Tempo Account of the user, so the merchant checks that the credential's signer belongs to its user.
+
+:::code-group
+
+```tsx [Subscribe.tsx]
+import { Receipt } from 'mppx'
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+const url = 'https://merchant.example/api/subscription'
+
+export function Subscribe() {
+  const [reference, setReference] = useState<string>()
+
+  if (reference) return <p>Charged in {reference}</p>
+
+  return (
+    <button
+      onClick={async () => {
+        const response = await accounts.fetch(url) // [!code hl]
+        if (!response.ok)
+          throw new Error(`The merchant failed with ${response.status}.`)
+
+        // The receipt names the transaction of the first charge.
+        setReference(Receipt.fromResponse(response).reference)
+      }}
+      type="button"
+    >
+      Subscribe
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // `accounts.fetch` needs an access key. A subscription never spends it.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // A period of a subscription may charge at most 10 OUSD.
+  plugins: [mpp({ maxAmount: '10' }), react()],
+})
+```
+
+:::
+
+### Handle a refused subscription
+
+<SourceLink name="mpp.fetch" path="src/mpp/index.ts">`accounts.fetch`</SourceLink> rejects before any payment: with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> for a denial, and with <SourceLink name="MaxAmountError" path="src/mpp/index.ts">`MaxAmountError`</SourceLink> for a period above <SourceLink name="mpp.maxAmount" path="src/mpp/index.ts">`maxAmount`</SourceLink>.
+
+:::code-group
+
+```tsx [Subscribe.tsx]
+import { Accounts } from 'accounts'
+import { MaxAmountError } from 'accounts/mpp'
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+const url = 'https://merchant.example/api/subscription'
+
+export function Subscribe() {
+  const [refusal, setRefusal] = useState<string>()
+
+  return (
+    <>
+      <button
+        onClick={async () => {
+          try {
+            await accounts.fetch(url)
+          } catch (error) {
+            // [!code hl:start]
+            if (error instanceof Accounts.RequestError)
+              setRefusal(`Tempo ID refused the subscription: ${error.code}.`)
+            else if (error instanceof MaxAmountError)
+              setRefusal('A period costs more than `maxAmount`.')
+            // [!code hl:end]
+            else throw error
+          }
+        }}
+        type="button"
+      >
+        Subscribe
+      </button>
+      {refusal && <p role="alert">{refusal}</p>}
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // `accounts.fetch` needs an access key. A subscription never spends it.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // A period of a subscription may charge at most 10 OUSD.
+  plugins: [mpp({ maxAmount: '10' }), react()],
+})
+```
+
+:::
+
+### Handle the expiry
+
+The subscription ends at its challenge's expiry, and the route responds with 402 again. A plain `fetch` reads that status with no payment.
+
+```tsx [Status.tsx]
+import { useState } from 'react'
+
+const url = 'https://merchant.example/api/subscription'
+
+export function Status() {
+  const [active, setActive] = useState<boolean>()
+
+  async function check() {
+    const response = await fetch(url)
+    setActive(response.status !== 402) // [!code hl]
+  }
+
+  if (active === undefined)
+    return (
+      <button onClick={check} type="button">
+        Check subscription
+      </button>
+    )
+
+  return <p>{active ? 'Subscribed' : 'No active subscription'}</p>
+}
+```
+
+::::
+
+## Use cases
+
+Each use case sets an option of the <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin, or of one payer.
+
+### Pay for a backend's session
+
+A page whose backend holds the session has no access key. <SourceLink name="mpp.account" path="src/mpp/index.ts">`accounts.mpp({ account })`</SourceLink> pays the subscription for the Tempo Account that the backend names. Such a payer pays only subscriptions, in a browser.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  async function subscribe() {
+    // The backend names the Tempo Account of its session.
+    const response = await fetch('/v1/me')
+    if (!response.ok) return location.assign('/login')
+    const me = (await response.json()) as { account: `0x${string}` }
+
+    await accounts
+      .mpp({ account: me.account }) // [!code hl]
+      .fetch(new URL('/v1/subscription', location.origin))
+  }
+
+  return (
+    <button onClick={subscribe} type="button">
+      Subscribe
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+
+// The backend holds the session, so the page's instance requests no access key.
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [mpp({ maxAmount: '10' })],
+})
+```
+
+:::
+
+### Pay only subscriptions
+
+A route can offer a one-time charge beside a subscription. <SourceLink name="mpp.orderChallenges" path="src/mpp/index.ts">`orderChallenges`</SourceLink> filters and sorts the offers before any payment, and the payer pays the first that it returns.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // `accounts.fetch` needs an access key. A subscription never spends it.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [
+    mpp({
+      maxAmount: '10',
+      // [!code hl:start]
+      orderChallenges: (candidates) =>
+        candidates.filter(
+          (candidate) => candidate.challenge.intent === 'subscription',
+        ),
+      // [!code hl:end]
+    }),
+    react(),
+  ],
+})
+```
+
+### Identify the user to the merchant
+
+<SourceLink name="mpp.identity" path="src/mpp/index.ts">`identity`</SourceLink> sends the session's access token and ID token with each request to the origins of its scope. A merchant that verifies them with mppx's Tempo ID extension then keys the subscription by user.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // `accounts.fetch` needs an access key. A subscription never spends it.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [
+    mpp({
+      identity: { scope: ['https://merchant.example'] }, // [!code hl]
+      maxAmount: '10',
+    }),
+    react(),
+  ],
+})
+```
+
+:::warning
+Each origin of the scope receives tokens that act for the user. Name only merchants that verify Tempo ID.
+:::
+
+### Skip the deposit page
+
+The merchant charges the first period at once, and refuses an unfunded account only after the approval, with a generic error. So for a balance below the first period, Tempo ID's deposit page shows before the dialog.
+
+<SourceLink name="mpp.retry" path="src/mpp/index.ts">`retry`</SourceLink> with `balance: false` turns that page off, such as for an app with its own deposit flow.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // `accounts.fetch` needs an access key. A subscription never spends it.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // A period of a subscription may charge at most 10 OUSD.
+  plugins: [mpp({ maxAmount: '10', retry: { balance: false } }), react()], // [!code hl]
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Charge a subscription from a backend, with a limit that resets each period."
+    icon="repeat"
+    title="Charge each period"
+    to="/docs/guides/subscriptions/self-managed"
+  />
+  <PageCard
+    description="Pay the 402 charge of a route with the access key."
+    icon="arrow-up-right"
+    title="Pay MPP charges"
+    to="/docs/guides/payments/mpp"
+  />
+  <PageCard
+    description="Pay each request of a metered route with a voucher."
+    icon="pulse"
+    title="Pay with sessions"
+    to="/docs/guides/sessions/mpp"
+  />
+  <PageCard
+    description="Hold the session of each user on a server."
+    icon="server"
+    title="Redirect (Backend)"
+    to="/docs/guides/backend"
+  />
+</Cards>

@@ -1,0 +1,12 @@
+# Lets the workflows of `tempoxyz/id` mint a short-lived token that reads this repository, so they
+# check out its `accounts` submodule. Jobs in an environment, such as `preview` and `production`,
+# present the environment form of the subject. `tempoxyz/id` builds its production Workers with the
+# Cloudflare Deploy Broker's build workflow, which runs as a job of an `id` workflow, at a commit of
+# `tempoxyz/gh-actions`. Its checkout holds no Git credentials, so its build checks out the
+# submodule with a token of this policy.
+subject_pattern: repo:tempoxyz@211589300/id@1414265934:(ref:refs/heads/.+|pull_request|environment:(preview|production))
+claim_pattern:
+  job_workflow_ref: (tempoxyz/id/\.github/workflows/[\w-]+\.yml@.+|tempoxyz/gh-actions/\.github/workflows/cloudflare-deploy-broker-build\.yml@[0-9a-f]{40})
+  workflow_ref: tempoxyz/id/\.github/workflows/[\w-]+\.yml@.+
+permissions:
+  contents: read

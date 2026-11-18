@@ -1,0 +1,559 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# Errors [An app catches each refusal of Tempo ID, and branches on its reason.]
+
+## Overview
+
+Each call throws <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> when Tempo ID refuses a request. Its <SourceLink name="RequestError.reason" path="src/Accounts.ts">`reason`</SourceLink> is the refusal's stable name, its <SourceLink name="RequestError.code" path="src/Accounts.ts">`code`</SourceLink> the OAuth error code, and its message the fault and the fix.
+
+The demo reads the user of an [access token](/docs/guides/api-authentication/authenticate-requests) that Tempo ID did not issue, and shows the error. The read needs no sign-in, and changes nothing.
+
+<Demo name="Errors" title="Read a refusal" />
+
+## Walkthrough
+
+::::steps
+
+### Create the instance
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+### Catch the error
+
+The handler throws again each error that is not an <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>, such as <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink> without a session. It returns the message of each refusal that it does not handle.
+
+:::code-group
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+export async function readConnection() {
+  try {
+    const { accessKeys } = await accounts.connection.get()
+    return `The app holds ${accessKeys.length} access keys.`
+  } catch (error) {
+    if (!(error instanceof Accounts.RequestError)) throw error // [!code hl]
+    return error.message // [!code hl]
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+:::
+
+### Branch on the reason
+
+A message's wording may change, and a <SourceLink name="RequestError.reason" path="src/Accounts.ts">`reason`</SourceLink> does not. `invalid_token` refuses an expired or revoked access token, or another app's. [Reasons](#reasons) lists each reason.
+
+:::code-group
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+export async function readConnection() {
+  try {
+    const { accessKeys } = await accounts.connection.get()
+    return `The app holds ${accessKeys.length} access keys.`
+  } catch (error) {
+    if (!(error instanceof Accounts.RequestError)) throw error
+    if (error.reason === 'invalid_token') return 'Sign in again.' // [!code ++]
+    return error.message
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+:::
+
+### Retry a temporary failure
+
+A rate limit and a failed service have different reasons, and share the code `temporarily_unavailable`. A branch on the <SourceLink name="RequestError.code" path="src/Accounts.ts">`code`</SourceLink> handles both.
+
+:::code-group
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+export async function readConnection() {
+  try {
+    const { accessKeys } = await accounts.connection.get()
+    return `The app holds ${accessKeys.length} access keys.`
+  } catch (error) {
+    if (!(error instanceof Accounts.RequestError)) throw error
+    if (error.reason === 'invalid_token') return 'Sign in again.'
+    if (error.code === 'temporarily_unavailable') return 'Try again later.' // [!code ++]
+    return error.message
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case reads one property of <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>, or catches another error class of the package.
+
+### Handle a refusal without a reason
+
+Tempo ID's OAuth endpoints return no <SourceLink name="RequestError.reason" path="src/Accounts.ts">`reason`</SourceLink>, so the app branches on the <SourceLink name="RequestError.code" path="src/Accounts.ts">`code`</SourceLink>. A refresh with a revoked or expired refresh token fails with `invalid_grant`.
+
+<SourceLink name="userInfo" path="src/plugins/tokens.ts">`tokens.userInfo`</SourceLink> sets the reason `invalid_token` itself, for each access token that Tempo ID refuses.
+
+:::code-group
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+export async function refresh() {
+  try {
+    await accounts.session.refresh()
+  } catch (error) {
+    if (!(error instanceof Accounts.RequestError)) throw error
+    if (error.code === 'invalid_grant') console.log('Sign in again.') // [!code hl]
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+:::
+
+### Detect a refusal before a request
+
+The package refuses some options, such as a past <SourceLink name="expiry" path="src/Permissions.ts">`expiry`</SourceLink>, before any request. The error holds Tempo ID's reason, and <SourceLink name="RequestError.status" path="src/Accounts.ts">`status`</SourceLink> 0.
+
+:::code-group
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+export async function signIn() {
+  try {
+    await accounts.dialog.signIn({
+      accessKey: { expiry: 1, limits: [{ limit: '100', token: 'ousd' }] },
+    })
+  } catch (error) {
+    if (!(error instanceof Accounts.RequestError)) throw error
+    console.log(error.reason, error.status) // 'expiry_passed', 0
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+:::
+
+### Show the field at fault
+
+<SourceLink name="RequestError.field" path="src/Accounts.ts">`field`</SourceLink> names the request field at fault as a dotted path, such as the limit of an access key. A form shows the message beside that field.
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+
+export function fieldError(error: Accounts.RequestError, name: string) {
+  return error.field === name ? error.message : undefined // [!code hl]
+}
+```
+
+### Wait out a rate limit
+
+<SourceLink name="RequestError.meta" path="src/Accounts.ts">`meta`</SourceLink> holds the values that the refusal compared. For `rate_limited`, it holds the seconds to wait, if Tempo ID knows them.
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+
+export function wait(error: Accounts.RequestError) {
+  if (error.reason !== 'rate_limited') return undefined
+  return Number(error.meta?.retryAfter ?? 60) // [!code hl]
+}
+```
+
+### Link the explanation
+
+<SourceLink name="RequestError.uri" path="src/Accounts.ts">`uri`</SourceLink> holds the link to Tempo ID's description of the error, as the [Reasons](#reasons) table shows. A support page or a log shows it beside the message.
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+
+export function describe(error: Accounts.RequestError) {
+  if (!error.uri) return error.message
+  return `${error.message} See ${error.uri}.` // [!code hl]
+}
+```
+
+### Restart a failed sign-in
+
+A sign-in can fail after the user's code or passkey verified, such as when Tempo ID refuses the authorization. The error then has <SourceLink name="RequestError.signedIn" path="src/Accounts.ts">`signedIn`</SourceLink>, and the instance empties its session.
+
+The emailed code verified already, so the app requests a new one. Without `signedIn`, the session stays as it was.
+
+:::code-group
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+export async function signIn(email: string, code: string) {
+  try {
+    await accounts.email.signIn({ code, email })
+  } catch (error) {
+    if (!(error instanceof Accounts.RequestError)) throw error
+    if (error.signedIn) await accounts.email.sendCode({ email }) // [!code hl]
+    return error.message
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { email } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [email()],
+})
+```
+
+:::
+
+### Ignore a closed dialog
+
+A closed dialog is no refusal. <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> throws a `DOMException` named `AbortError` for it, and for a sign-in that a later one replaces. A closed passkey prompt is none either: <SourceLink name="signIn" path="src/plugins/passkey.ts">`passkey.signIn`</SourceLink> and <SourceLink name="register" path="src/plugins/passkey.ts">`passkey.register`</SourceLink> throw an `Error` named `AbortError` for it, since React Native has no `DOMException`. The app checks the name alone.
+
+If another sign-in or a sign-out completes first, it throws <SourceLink name="SupersededError" path="src/Accounts.ts">`Accounts.SupersededError`</SourceLink>. The app ignores both.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { Accounts } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  async function signIn() {
+    try {
+      await accounts.dialog.signIn()
+    } catch (error) {
+      // [!code hl:start]
+      if (error instanceof Error && error.name === 'AbortError') return
+      if (error instanceof Accounts.SupersededError) return
+      // [!code hl:end]
+      throw error
+    }
+  }
+
+  return (
+    <button onClick={signIn} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+:::
+
+### Send only when signed in
+
+A transaction without a session throws <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink>. If a refused refresh token ended the session, its `cause` holds that refusal.
+
+A transaction from a session without an access key throws <SourceLink name="AccessKeyRequiredError" path="src/Accounts.ts">`Accounts.AccessKeyRequiredError`</SourceLink>. The app then signs the user in with an [access key](/docs/guides/access-keys/authorize-access-keys).
+
+:::code-group
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export async function send() {
+  try {
+    await accounts.token.transferSync({
+      amount: parseUnits('1', 6),
+      to: '0x000000000000000000000000000000000000dEaD',
+      token: Addresses.ousd,
+    })
+  } catch (error) {
+    // [!code hl:start]
+    if (error instanceof Accounts.SignedOutError) return 'Sign in to send.'
+    if (error instanceof Accounts.AccessKeyRequiredError)
+      return 'Sign in with an access key to send.'
+    // [!code hl:end]
+    throw error
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [viem()],
+})
+```
+
+:::
+
+### Handle an ended retry
+
+If a transaction fails for its access key, its limit, or its balance, the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin shows a screen that resolves it, then sends again. If the user closes the screen, the call throws <SourceLink name="RetryClosedError" path="src/plugins/viem.ts">`Plugins.viem.RetryClosedError`</SourceLink>.
+
+If the sign-in for a new access key returns another account, the call throws <SourceLink name="RetryAccountError" path="src/plugins/viem.ts">`Plugins.viem.RetryAccountError`</SourceLink>. The app matches both by name.
+
+:::code-group
+
+```ts [main.ts]
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export async function send() {
+  try {
+    await accounts.token.transferSync({
+      amount: parseUnits('1', 6),
+      to: '0x000000000000000000000000000000000000dEaD',
+      token: Addresses.ousd,
+    })
+  } catch (error) {
+    // [!code hl:start]
+    const { name } = error as Error
+    if (name === 'Plugins.viem.RetryClosedError') return 'The transaction did not send.'
+    if (name === 'Plugins.viem.RetryAccountError') return 'Sign in with the same account.'
+    // [!code hl:end]
+    throw error
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [viem()],
+})
+```
+
+:::
+
+### Ignore a revoked access key
+
+<SourceLink name="accessKey" path="src/plugins/viem.ts">`accessKey.revokeSync`</SourceLink> throws <SourceLink name="RevokedError" path="src/Accounts.ts">`Accounts.RevokedError`</SourceLink> if the chain holds the access key revoked already. A sign-out ignores it, since the access key signs nothing.
+
+:::code-group
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+export async function signOut() {
+  const { session } = accounts.session.status.get()
+  const accessKey = session?.accessKey?.keyAuthorization.keyId
+
+  try {
+    if (accessKey) await accounts.accessKey.revokeSync({ accessKey })
+  } catch (error) {
+    if (!(error instanceof Accounts.RevokedError)) throw error // [!code hl]
+  }
+  await accounts.signOut()
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [viem()],
+})
+```
+
+:::
+
+## Reasons
+
+The table lists each <SourceLink name="RequestError.reason" path="src/Accounts.ts">`RequestError.Reason`</SourceLink>. Each links Tempo ID's description, which names its <SourceLink name="RequestError.code" path="src/Accounts.ts">`code`</SourceLink>, <SourceLink name="RequestError.field" path="src/Accounts.ts">`field`</SourceLink>, and <SourceLink name="RequestError.meta" path="src/Accounts.ts">`meta`</SourceLink>.
+
+The error's <SourceLink name="RequestError.uri" path="src/Accounts.ts">`uri`</SourceLink> holds the same link, as [Link the explanation](#link-the-explanation) shows. Each call's TSDoc lists its reasons.
+
+| Reason                                                                                                                             | Fault                                                                                                                                                                          | Fix                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`access_key_changing`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#access_key_changing)                               | Another request changes the same limit or the scopes.                                                                                                                          | Retry after it ends.                                                                                                                             |
+| [`access_key_endpoint_failed`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#access_key_endpoint_failed)                 | An API's access key endpoint failed at the approval.                                                                                                                           | Approve again.                                                                                                                                   |
+| [`access_key_taken`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#access_key_taken)                                     | Another app holds the access key for the Tempo Account.                                                                                                                        | Request a new access key.                                                                                                                        |
+| [`allowance_redeemed`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#allowance_redeemed)                                 | The API redeemed the connection's allowance for another access key.                                                                                                            | Use the access key of `meta.address`.                                                                                                            |
+| [`already_decided`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#already_decided)                                       | The user already approved or denied the device code.                                                                                                                           | Request a new code.                                                                                                                              |
+| [`app_exists`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#app_exists)                                                 | Another OAuth app has the client ID.                                                                                                                                           | Choose another client ID.                                                                                                                        |
+| [`authorization_expired`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#authorization_expired)                           | The authorization request that a Tempo ID page continues is forged or expired.                                                                                                 | Start the sign-in again.                                                                                                                         |
+| [`backend_sign_in_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#backend_sign_in_not_permitted)           | The app has no client secret or keys, or no backend sign-in.                                                                                                                   | Sign in through a redirect.                                                                                                                      |
+| [`body_too_large`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#body_too_large)                                         | The body exceeds 65,536 bytes, or a pushed request 8,192 bytes.                                                                                                                | Send a smaller body.                                                                                                                             |
+| [`challenge_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#challenge_not_permitted)                       | A headless request holds a challenge without the `tempo-id:sign` scope.                                                                                                        | Send the challenge through a redirect.                                                                                                           |
+| [`config_conflict`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#config_conflict)                                       | The chain's account configuration differs from Tempo ID's.                                                                                                                     | Read the account again.                                                                                                                          |
+| [`configurable_accounts_disabled`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#configurable_accounts_disabled)         | The deployment has no configurable accounts on the chain.                                                                                                                      | Select a chain of `meta.configured`.                                                                                                             |
+| [`connection_mismatch`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#connection_mismatch)                               | A redemption's `nonce` or public key does not match the prepared access key.                                                                                                   | Send the newest `nonce` and its public key.                                                                                                      |
+| [`consent_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#consent_required)                                     | A redirect requests an access key with `prompt=none`, which shows no approval page.                                                                                            | Remove `prompt=none`.                                                                                                                            |
+| [`cross_site_request`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#cross_site_request)                                 | A form, or a write without a body, came from another site.                                                                                                                     | Send JSON from an allowed origin.                                                                                                                |
+| [`duplicate_limit`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#duplicate_limit)                                       | Two limits name one token.                                                                                                                                                     | Limit each token once.                                                                                                                           |
+| [`duplicate_scope`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#duplicate_scope)                                       | Two scopes name one call on one target.                                                                                                                                        | Name each call once.                                                                                                                             |
+| [`embed_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#embed_not_permitted)                               | A native or device app frames the embedded sign-in.                                                                                                                            | Sign in through a redirect.                                                                                                                      |
+| [`employee_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#employee_required)                                   | An employee app's request holds no active employee identity.                                                                                                                   | Send an admitted request's identity assertion.                                                                                                   |
+| [`empty_limits`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#empty_limits)                                             | <SourceLink name="limits" path="src/Permissions.ts">`limits`</SourceLink> is empty.                                                                                            | Name a token.                                                                                                                                    |
+| [`empty_scopes`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#empty_scopes)                                             | <SourceLink name="scopes" path="src/Permissions.ts">`scopes`</SourceLink> is empty.                                                                                            | Name a call.                                                                                                                                     |
+| [`expiry_exceeds_maximum`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#expiry_exceeds_maximum)                         | A headless access key lasts longer than a year.                                                                                                                                | Use an earlier expiry.                                                                                                                           |
+| [`expiry_passed`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#expiry_passed)                                           | The expiry is in the past.                                                                                                                                                     | Use a future time, or a duration.                                                                                                                |
+| [`foreign_account`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#foreign_account)                                       | The user holds no such Tempo Account in the app's realms.                                                                                                                      | Name one of the user's Tempo Accounts.                                                                                                           |
+| [`funding_unavailable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#funding_unavailable)                               | The deployment sells no MACH.                                                                                                                                                  | Choose another deposit method.                                                                                                                   |
+| [`google_unavailable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#google_unavailable)                                 | The deployment offers no Google sign-in.                                                                                                                                       | Sign in with an emailed code or a passkey.                                                                                                       |
+| [`insufficient_balance`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#insufficient_balance)                             | The Tempo Account cannot pay the network fee to revoke or change an access key.                                                                                                | Add funds.                                                                                                                                       |
+| [`invalid_access_key_endpoint`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_access_key_endpoint)               | An access key endpoint is not an `https` URL on its resource's origin.                                                                                                         | Register such a URL.                                                                                                                             |
+| [`invalid_app`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_app)                                               | An OAuth app value is not valid.                                                                                                                                               | Fix the value that the message names.                                                                                                            |
+| [`invalid_chain`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_chain)                                           | The chain ID is 0.                                                                                                                                                             | Use a Tempo chain ID.                                                                                                                            |
+| [`invalid_client`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_client)                                         | The app is unknown or disabled, or its credentials are missing or wrong.                                                                                                       | Send an enabled app's credentials.                                                                                                               |
+| [`invalid_client_attestation`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_client_attestation)                 | A native app's client attestation is missing, or does not verify.                                                                                                              | Attest the instance key again.                                                                                                                   |
+| [`invalid_client_metadata`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_client_metadata)                       | A dynamic client registration names a value that Tempo ID refuses.                                                                                                             | Leave out the value that <SourceLink name="RequestError.field" path="src/Accounts.ts">`field`</SourceLink> names.                                |
+| [`invalid_code`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_code)                                             | The emailed code is wrong, expired, or used.                                                                                                                                   | Request a new code.                                                                                                                              |
+| [`invalid_dpop_proof`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_dpop_proof)                                 | A DPoP proof is missing, invalid, or replayed.                                                                                                                                 | Send a new proof, or sign in again.                                                                                                              |
+| [`invalid_expiry`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_expiry)                                         | The expiry is 0, not a whole number of seconds, or in milliseconds.                                                                                                            | Use a future time in whole seconds, or a duration.                                                                                               |
+| [`invalid_field`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_field)                                           | A request field is missing or malformed.                                                                                                                                       | Fix the field that <SourceLink name="RequestError.field" path="src/Accounts.ts">`field`</SourceLink> names.                                      |
+| [`invalid_id_token_hint`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_id_token_hint)                           | A logout's hint is not an ID token that Tempo ID signed for the app.                                                                                                           | Send the app's ID token.                                                                                                                         |
+| [`invalid_origin`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_origin)                                         | A headless request came from an origin that the app does not allow.                                                                                                            | Call from a page on the app's origin.                                                                                                            |
+| [`invalid_period`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_period)                                         | A limit's period is not a whole number of seconds.                                                                                                                             | Use whole seconds, a duration, or 0 for a one-time limit.                                                                                        |
+| [`invalid_public_key`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_public_key)                                 | The public key is not a valid point.                                                                                                                                           | Send an uncompressed public key, or an address.                                                                                                  |
+| [`invalid_realm`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_realm)                                           | A realm value is not valid.                                                                                                                                                    | Fix the value that the message names.                                                                                                            |
+| [`invalid_recipients`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_recipients)                                 | A scope names the zero address, one address twice, or recipients on a call that takes none.                                                                                    | Name each recipient once.                                                                                                                        |
+| [`invalid_redirect_uri`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_redirect_uri)                             | A dynamic client registration names no redirect URI, more than 10, or one that Tempo ID refuses.                                                                               | Name a public `https` URI.                                                                                                                       |
+| [`invalid_resource`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_resource)                                     | A registered resource's value is not valid.                                                                                                                                    | Fix the value that the message names.                                                                                                            |
+| [`invalid_target`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_target)                                         | <SourceLink name="Config.resource" path="src/Accounts.ts">`resource`</SourceLink> is unregistered, disabled, or outside the grant.                                             | Name a resource of the grant.                                                                                                                    |
+| [`invalid_token`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_token)                                           | The access token is malformed, expired, revoked, or another app's.                                                                                                             | Refresh the tokens, or sign in again.                                                                                                            |
+| [`limit_exceeds_maximum`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#limit_exceeds_maximum)                           | A headless access key's limit exceeds its token's ceiling.                                                                                                                     | Lower the limit.                                                                                                                                 |
+| [`localhost_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#localhost_not_permitted)                       | The deployment refuses a localhost client ID.                                                                                                                                  | Use a registered client ID.                                                                                                                      |
+| [`logout_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#logout_not_permitted)                             | The app is disabled, or not registered for logout.                                                                                                                             | Register the app's post-logout redirect URIs.                                                                                                    |
+| [`malformed_body`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#malformed_body)                                         | The body is not valid JSON.                                                                                                                                                    | Send a JSON object.                                                                                                                              |
+| [`missing_key`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#missing_key)                                               | The request names no access key, or the zero address.                                                                                                                          | Send an address or a public key.                                                                                                                 |
+| [`missing_permissions`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#missing_permissions)                               | The request leaves out <SourceLink name="limits" path="src/Permissions.ts">`limits`</SourceLink> or <SourceLink name="scopes" path="src/Permissions.ts">`scopes`</SourceLink>. | Send both.                                                                                                                                       |
+| [`not_configurable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#not_configurable)                                     | The Tempo Account is not configurable yet.                                                                                                                                     | Upgrade the account, then add the owner.                                                                                                         |
+| [`origin_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#origin_required)                                       | A request without `Origin` names an app by its client ID alone.                                                                                                                | Send it from the app's page.                                                                                                                     |
+| [`owner_app_taken`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#owner_app_taken)                                       | Another realm holds the server owner's app.                                                                                                                                    | Give each realm its own app.                                                                                                                     |
+| [`owner_exists`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#owner_exists)                                             | The Tempo Account already holds the owner, or is already configurable.                                                                                                         | Use the account as it is.                                                                                                                        |
+| [`owner_unavailable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#owner_unavailable)                                   | The user's cloud wallet fails a check to join the Tempo Account.                                                                                                               | Upgrade without <SourceLink name="upgradeAccount.addOwner" path="src/internal/Core.ts">`addOwner`</SourceLink>.                                  |
+| [`passkey_limit`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#passkey_limit)                                           | The user holds 10 passkeys, the maximum.                                                                                                                                       | Sign in with one of them.                                                                                                                        |
+| [`passkey_link_expired`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#passkey_link_expired)                             | The link to a wallet.tempo passkey expired after 5 minutes.                                                                                                                    | Send the code again without the link.                                                                                                            |
+| [`passkey_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#passkey_not_permitted)                           | No realm of the request holds passkeys whose relying party covers the page.                                                                                                    | Sign in with an emailed code.                                                                                                                    |
+| [`passkey_register_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#passkey_register_not_permitted)         | No app at the page's origin holds the `tempo-id:sign` scope.                                                                                                                   | Register the passkey on Tempo ID's account page.                                                                                                 |
+| [`payment_declined`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#payment_declined)                                     | The card issuer or the payment provider declined the payment.                                                                                                                  | Pay with another card.                                                                                                                           |
+| [`payment_pending`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#payment_pending)                                       | Another request sends the same payment, or the chain has not confirmed it.                                                                                                     | Wait, then read the payment.                                                                                                                     |
+| [`payment_reverted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#payment_reverted)                                     | The chain reverted the payment's transfer.                                                                                                                                     | Pay with another token, or to another recipient.                                                                                                 |
+| [`post_logout_redirect_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#post_logout_redirect_not_permitted) | The URI is none of the app's post-logout redirect URIs.                                                                                                                        | Use a registered URI.                                                                                                                            |
+| [`public_app`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#public_app)                                                 | The app has no client secret to rotate.                                                                                                                                        | Name an app with a client secret.                                                                                                                |
+| [`pushed_authorization_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#pushed_authorization_required)           | The app requires pushed requests, and the URL holds the access key.                                                                                                            | Pass <SourceLink name="par" path="src/Accounts.ts">`par: true`</SourceLink> to the flow's plugin.                                                |
+| [`quote_changed`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#quote_changed)                                           | The payment costs more than the approval page showed.                                                                                                                          | Request the payment again.                                                                                                                       |
+| [`rate_limited`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rate_limited)                                             | The request exceeded a rate limit.                                                                                                                                             | Wait for `meta.retryAfter` seconds.                                                                                                              |
+| [`realm_exists`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#realm_exists)                                             | A realm with the ID exists.                                                                                                                                                    | Choose another ID.                                                                                                                               |
+| [`realm_in_use`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#realm_in_use)                                             | An app names the realm.                                                                                                                                                        | Remove the realm from each app first.                                                                                                            |
+| [`recipient_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#recipient_not_permitted)                       | The token's transfer policy refuses the recipient.                                                                                                                             | Pay with another token, or to another recipient.                                                                                                 |
+| [`registrar_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#registrar_required)                                 | The app may not register third-party apps.                                                                                                                                     | Authenticate as a registrar.                                                                                                                     |
+| [`rejected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#rejected)                                                     | Tempo ID refused the authorization request, such as a third-party app's headless request.                                                                                      | Check the request against the app's registration.                                                                                                |
+| [`relying_party_taken`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#relying_party_taken)                               | Another realm holds the passkeys' relying party.                                                                                                                               | Give each realm its own relying party.                                                                                                           |
+| [`resource_exists`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#resource_exists)                                       | Another resource has the identifier.                                                                                                                                           | Choose another identifier.                                                                                                                       |
+| [`scope_without_limit`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#scope_without_limit)                               | A scope calls a token that no limit names.                                                                                                                                     | Add a limit for the token.                                                                                                                       |
+| [`session_changed`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#session_changed)                                       | The signed-in session differs from the one that the approval page showed.                                                                                                      | Reload the page.                                                                                                                                 |
+| [`session_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#session_required)                                     | The request has no Tempo ID session, or one older than its `max_age`.                                                                                                          | Sign the user in.                                                                                                                                |
+| [`sign_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#sign_not_permitted)                                 | The page may not sign as the cloud wallet.                                                                                                                                     | Sign from a first-party app's page with `tempo-id:sign`.                                                                                         |
+| [`sign_out_link_expired`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#sign_out_link_expired)                           | A security email's sign-out link is unknown, spent, or older than 7 days.                                                                                                      | Sign in on a new browser, which sends a new link.                                                                                                |
+| [`signing_key_in_use`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#signing_key_in_use)                                 | A revocation names a signing key that signs tokens.                                                                                                                            | Send `ifSigning: "rotate"` with the revocation.                                                                                                  |
+| [`too_many_signing_keys`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#too_many_signing_keys)                           | 100 signing keys are live, or in their grace period.                                                                                                                           | Rotate again after the oldest grace period.                                                                                                      |
+| [`unexpected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unexpected)                                                 | Tempo ID failed unexpectedly.                                                                                                                                                  | Retry the request.                                                                                                                               |
+| [`unknown_allowance`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_allowance)                                   | The connection holds no unexpired allowance for the API.                                                                                                                       | Authorize the app for the API again.                                                                                                             |
+| [`unknown_app`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_app)                                               | No registered OAuth app has the client ID.                                                                                                                                     | Name a registered app.                                                                                                                           |
+| [`unknown_code`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_code)                                             | The device grant's user code is wrong or expired.                                                                                                                              | Check the code.                                                                                                                                  |
+| [`unknown_endpoint`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_endpoint)                                     | No route matches the method and the path.                                                                                                                                      | Check both against Tempo ID's OpenAPI document.                                                                                                  |
+| [`unknown_key`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_key)                                               | The user holds no live access key with the address on the Tempo Account and the chain.                                                                                         | Name a live access key.                                                                                                                          |
+| [`unknown_order`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_order)                                           | No MACH order matches the ID and the order token.                                                                                                                              | Start a new purchase.                                                                                                                            |
+| [`unknown_realm`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_realm)                                           | No realm has the ID.                                                                                                                                                           | Name a realm of the deployment.                                                                                                                  |
+| [`unknown_resource`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_resource)                                     | No resource has the identifier.                                                                                                                                                | Name a registered resource.                                                                                                                      |
+| [`unknown_screening`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_screening)                                   | The user has no screening of the address.                                                                                                                                      | Name a screened address.                                                                                                                         |
+| [`unknown_session`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_session)                                       | The user has no session with the ID.                                                                                                                                           | Read the sessions again.                                                                                                                         |
+| [`unknown_signing_key`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_signing_key)                               | No unrevoked signing key has the ID.                                                                                                                                           | Name a live signing key.                                                                                                                         |
+| [`unknown_user`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_user)                                             | No user has the ID.                                                                                                                                                            | Name a user of the deployment.                                                                                                                   |
+| [`unsupported_call`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unsupported_call)                                     | A scope names a call that Tempo ID does not recognize.                                                                                                                         | Name a recognized call.                                                                                                                          |
+| [`unsupported_token`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unsupported_token)                                   | The token is no supported Tempo token on the chain.                                                                                                                            | Use a supported token, such as OUSD.                                                                                                             |
+| [`upgrade_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#upgrade_required)                                     | The access key's Tempo Account needs an upgrade first.                                                                                                                         | Upgrade the account, or authorize through a redirect.                                                                                            |
+| [`upstream_unavailable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#upstream_unavailable)                             | A service that Tempo ID depends on failed.                                                                                                                                     | Retry later.                                                                                                                                     |
+| [`webauthn_rejected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#webauthn_rejected)                                   | A passkey ceremony's challenge is unknown, spent, or expired, or its response does not verify.                                                                                 | Start the passkey sign-in again.                                                                                                                 |
+| [`webauthn_required`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#webauthn_required)                                   | A request without a page names a Tempo Account that a passkey owns.                                                                                                            | Pass <SourceLink name="authorize.passkey" path="src/internal/Core.ts">`passkey: true`</SourceLink> from a page, or authorize through a redirect. |
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Sign a user in through Tempo ID's dialog."
+    icon="browser-window"
+    title="Dialog"
+    to="/docs/guides/dialog"
+  />
+  <PageCard
+    description="Restore the session of a user, and read its status."
+    icon="id-card"
+    title="User session"
+    to="/docs/guides/user-session/restore-sessions"
+  />
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Read the user of a session."
+    icon="user"
+    title="Identity"
+    to="/docs/guides/identity/read-users"
+  />
+</Cards>

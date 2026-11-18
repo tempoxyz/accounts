@@ -1,0 +1,2 @@
+# Copy to `.dev.vars`, which git ignores. The Tempo API key needs the `rpc-relay:sponsor` scope.
+TEMPO_API_KEY=

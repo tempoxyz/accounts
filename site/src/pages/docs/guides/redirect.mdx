@@ -1,0 +1,404 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# Redirect (Web) [An app signs a user in on Tempo ID's pages, and completes the sign-in on return.]
+
+## Overview
+
+The <SourceLink name="redirect" path="src/plugins/redirect.ts">`redirect`</SourceLink> plugin runs an OAuth authorization code flow with PKCE in the page's own window: the browser leaves for Tempo ID's pages, and returns to the redirect URI with a code. It needs no registration.
+
+Among the sign-in flows, choose it over the [dialog](/docs/guides/dialog) for a full-page sign-in with no frame or popup. To keep the session on a server, use the [backend](/docs/guides/backend) flow.
+
+The demo leaves this page for Tempo ID's sign-in, returns through the site's root, and shows the user.
+
+<Demo name="Redirect" title="Sign in through a redirect" />
+
+## Walkthrough
+
+The steps build the demo's flow in a browser app.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts react react-dom viem
+```
+
+```sh [bun]
+bun add accounts react react-dom viem
+```
+
+:::
+
+### Create the instance
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { redirect } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), redirect()],
+})
+```
+
+The page's origin is the client ID, and its root is the default redirect URI.
+
+### Sign the user in
+
+<SourceLink name="signIn" path="src/plugins/redirect.ts">`redirect.signIn`</SourceLink> leaves the page. On the return, the first render of <SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession`</SourceLink> redeems the code, saves the [session](/docs/guides/user-session), and removes the callback's parameters from the address bar. Read the session before any routing that reads the URL.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { isPending, session } = accounts.useSession() // [!code hl]
+
+  // The sign-in completes, or the saved session loads.
+  if (isPending) return <p>Loading…</p>
+
+  // [!code hl:start]
+  if (!session)
+    return (
+      <button onClick={() => accounts.redirect.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+  // [!code hl:end]
+
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { redirect } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), redirect()],
+})
+```
+
+:::
+
+### Sign the user out
+
+<SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink> ends the app's session. The browser keeps its Tempo ID session, so the next sign-in returns with no prompt.
+
+:::code-group
+
+```tsx [SignOut.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignOut() {
+  return (
+    <button onClick={() => accounts.signOut()} type="button">
+      Sign out
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { redirect } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), redirect()],
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case sets one option of <SourceLink name="signIn" path="src/plugins/redirect.ts">`redirect.signIn`</SourceLink>, of the <SourceLink name="redirect" path="src/plugins/redirect.ts">`redirect`</SourceLink> plugin, or of the instance.
+
+### Request an access key
+
+<SourceLink name="signIn.accessKey" path="src/plugins/redirect.ts">`accessKey`</SourceLink> requests an [access key](/docs/guides/access-keys) with the sign-in. The user approves its limits on Tempo ID's page, so they may exceed the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling) of a sign-in with no page. Without it, the sign-in takes the instance's <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink>, if the instance sets one.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() =>
+        accounts.redirect.signIn({
+          // [!code hl:start]
+          // The access key sends up to 100 OUSD for a day.
+          accessKey: {
+            expiry: '1d',
+            limits: [{ limit: '100', token: 'ousd' }],
+          },
+          // [!code hl:end]
+        })
+      }
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { redirect } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), redirect()],
+})
+```
+
+:::
+
+### Bind a challenge
+
+<SourceLink name="signIn.challenge" path="src/plugins/redirect.ts">`challenge`</SourceLink> has the user sign a server's message at the sign-in. On the return, the session's <SourceLink name="challengeSignature" path="src/Session.ts">`challengeSignature`</SourceLink> holds the signature, which the server checks, as [Sign challenges](/docs/guides/account-proof/sign-challenges) shows.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  async function signIn() {
+    // The server issues the message to sign.
+    const response = await fetch('/challenge', { method: 'POST' })
+    await accounts.redirect.signIn({ challenge: await response.text() }) // [!code hl]
+  }
+
+  return (
+    <button onClick={signIn} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { redirect } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), redirect()],
+})
+```
+
+:::
+
+### Ask for funds
+
+<SourceLink name="signIn.funding" path="src/plugins/redirect.ts">`funding`</SourceLink> names the amount that the app needs in the user's Tempo Account. If the account holds less, Tempo ID's deposit page opens after the approval, before the return.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() =>
+        accounts.redirect.signIn({
+          funding: { amount: '10', currency: 'USD' }, // [!code hl]
+        })
+      }
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { redirect } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), redirect()],
+})
+```
+
+:::
+
+### Fill in the email
+
+<SourceLink name="signIn.loginHint" path="src/plugins/redirect.ts">`loginHint`</SourceLink> fills in the email field of Tempo ID's sign-in page, and the user can still change it. It defaults to the saved session's email, so an app passes it only for a session that ended, such as after a refused refresh.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() =>
+        accounts.redirect.signIn({
+          loginHint: 'alice@example.com', // [!code hl]
+        })
+      }
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { redirect } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), redirect()],
+})
+```
+
+:::
+
+### Sign in for an API
+
+<SourceLink name="signIn.resource" path="src/plugins/redirect.ts">`resource`</SourceLink> names a [registered resource](https://github.com/tempoxyz/id/blob/main/docs/resources.md), such as an MCP server. Each access token then names it as its audience, so only that API accepts the token.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() =>
+        accounts.redirect.signIn({
+          resource: 'https://mcp.example.com/mcp', // [!code hl]
+        })
+      }
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { redirect } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), redirect()],
+})
+```
+
+:::
+
+### Push each request
+
+<SourceLink name="redirect.par" path="src/plugins/redirect.ts">`par: true`</SourceLink> sends each request to Tempo ID first, so the URL holds only a reference to it, as [Pushed authorization requests](https://github.com/tempoxyz/id/blob/main/docs/pushed-authorization-requests.md) describes. A pushed request names at most one resource.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { redirect } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), redirect({ par: true })], // [!code hl]
+})
+```
+
+### Return to another page
+
+Tempo ID returns only to a redirect URI that matches one of the app's exactly. For another URI, it shows an error page.
+
+| Client ID                     | Redirect URIs of the app                                 |
+| ----------------------------- | -------------------------------------------------------- |
+| An `https` origin             | The root, or the `redirect_uris` of its web app manifest |
+| A localhost origin            | Each path of the origin, on the same port                |
+| The client ID of an OAuth app | The redirect URIs of its registration                    |
+
+To return to another page of an `https` origin, list it in the [web app manifest](https://github.com/tempoxyz/id/blob/main/docs/apps.md#origin-client-id) that the origin's root links. The list replaces the root, so keep the root in it if the app uses it.
+
+```json [manifest.webmanifest]
+{
+  "redirect_uris": ["https://app.example/", "https://app.example/callback"]
+}
+```
+
+Pass the same URI as <SourceLink name="Config.redirectUri" path="src/Accounts.ts">`redirectUri`</SourceLink>, and render <SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession`</SourceLink> on that page.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { redirect } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), redirect()],
+  redirectUri: 'https://app.example/callback', // [!code hl]
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Sign a user in through a dialog on the page."
+    icon="browser-window"
+    title="Dialog"
+    to="/docs/guides/dialog"
+  />
+  <PageCard
+    description="Complete the redirect on a server, and keep the session there."
+    icon="server"
+    title="Redirect (Backend)"
+    to="/docs/guides/backend"
+  />
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Read, restore, and refresh the session of a user."
+    icon="id-card"
+    title="User session"
+    to="/docs/guides/user-session/restore-sessions"
+  />
+</Cards>

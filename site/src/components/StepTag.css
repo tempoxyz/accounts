@@ -1,0 +1,26 @@
+/*
+ * The tag of a step, which follows Vocs' inline code. Vocs' Tailwind reads only Vocs' own source, so
+ * these rules use Vocs' variables. Vocs has no orange, so the server's color follows Vocs' scheme
+ * with `light-dark`.
+ */
+[data-step-tag] {
+  background: color-mix(in oklch, var(--step-tag-color) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--step-tag-color) 35%, transparent);
+  border-radius: 9999px;
+  color: var(--step-tag-color);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.25rem;
+  margin-inline-start: 0.625rem;
+  padding: 0 0.5rem;
+  white-space: nowrap;
+}
+
+[data-step-tag='client'] {
+  --step-tag-color: var(--vocs-color-blue);
+}
+
+[data-step-tag='server'] {
+  --step-tag-color: light-dark(oklch(62% 0.19 50), oklch(78% 0.16 55));
+}

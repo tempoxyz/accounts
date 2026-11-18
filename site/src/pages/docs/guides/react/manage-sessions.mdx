@@ -1,0 +1,306 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Manage sessions [A React app signs a user in, renders the session, and signs the user out.]
+
+## Overview
+
+The <SourceLink name="react" path="src/react/index.ts">`react`</SourceLink> plugin of `accounts/react` adds <SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession`</SourceLink>, a hook that returns the [session](/docs/guides/user-session) and its status, and renders the component again at each change. This guide builds a component that signs a user in and out with it.
+
+The demo shows each status of the session as it signs a user in and out.
+
+<Demo name="ManageSessions" source="examples/web" title="Manage a session" />
+
+## Walkthrough
+
+The [`web`](https://github.com/tempoxyz/accounts/tree/main/examples/web) example reads the session with the same hook.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts react react-dom viem
+```
+
+```sh [bun]
+bun add accounts react react-dom viem
+```
+
+:::
+
+### Create the instance
+
+Create one instance for the page, outside any render, since the instance holds the session.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+### Read the session
+
+The hook's first render restores the saved session.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Account() {
+  const { status } = accounts.useSession() // [!code hl]
+
+  return <p>status = {status}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Add the sign-in button
+
+<SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> opens Tempo ID's dialog, and the status changes to `signedIn`.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Account() {
+  const { status } = accounts.useSession() // [!code --]
+  const { session, status } = accounts.useSession() // [!code ++]
+
+  return <p>status = {status}</p> // [!code --]
+  return ( // [!code ++]
+    <main> {/* [!code ++] */}
+      <p>status = {status}</p> {/* [!code ++] */}
+      {!session && ( // [!code ++]
+        <button onClick={() => accounts.dialog.signIn()} type="button"> {/* [!code ++] */}
+          Sign in {/* [!code ++] */}
+        </button> // [!code ++]
+      )} {/* [!code ++] */}
+    </main> // [!code ++]
+  ) // [!code ++]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Add the sign-out button
+
+<SourceLink name="signOut" path="src/Accounts.ts">`accounts.signOut`</SourceLink> empties the session at once, and the status changes to `signedOut`. The user stays signed in to Tempo ID.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Account() {
+  const { session, status } = accounts.useSession()
+
+  return (
+    <main>
+      <p>status = {status}</p>
+      {!session && (
+        <button onClick={() => accounts.dialog.signIn()} type="button">
+          Sign in
+        </button>
+      )}
+      {session && ( // [!code ++]
+        <> {/* [!code ++] */}
+          <p>Signed in as {session.user.email}</p> {/* [!code ++] */}
+          <button onClick={() => accounts.signOut()} type="button"> {/* [!code ++] */}
+            Sign out {/* [!code ++] */}
+          </button> {/* [!code ++] */}
+        </> // [!code ++]
+      )} {/* [!code ++] */}
+    </main>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Show the pending state
+
+The status is `pending` until the instance reads the saved session. Disable the sign-in button meanwhile, so a signed-in user starts no second sign-in.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Account() {
+  const { session, status } = accounts.useSession() // [!code --]
+  const { isPending, session, status } = accounts.useSession() // [!code ++]
+
+  return (
+    <main>
+      <p>status = {status}</p>
+      {!session && (
+        <button onClick={() => accounts.dialog.signIn()} type="button"> {/* [!code --] */}
+        <button // [!code ++]
+          disabled={isPending} // [!code ++]
+          onClick={() => accounts.dialog.signIn()} // [!code ++]
+          type="button" // [!code ++]
+        > {/* [!code ++] */}
+          Sign in
+        </button>
+      )}
+      {session && (
+        <>
+          <p>Signed in as {session.user.email}</p>
+          <button onClick={() => accounts.signOut()} type="button">
+            Sign out
+          </button>
+        </>
+      )}
+    </main>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case sets an option of the <SourceLink name="react" path="src/react/index.ts">`react`</SourceLink> plugin, or reads a member that <SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession`</SourceLink> returns.
+
+### Show a renewal
+
+<SourceLink name="useSession.isReauthorizing" path="src/react/index.ts">`isReauthorizing`</SourceLink> is `true` while an authorization renews a session whose access key expired. The hook returns the expired session meanwhile, so the page keeps the user on screen.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Account() {
+  const { isReauthorizing, session } = accounts.useSession() // [!code hl]
+
+  if (!session) return null
+  return (
+    <p>
+      Signed in as {session.user.email}
+      {isReauthorizing ? ' (renewing the access key…)' : null}
+    </p>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Renew without an access key
+
+On a page of a [first-party app](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps), the first render renews a missing or expired session from the browser's Tempo ID session. An object as <SourceLink name="react.reauthorizeOnMount" path="src/react/index.ts">`reauthorizeOnMount`</SourceLink> passes the parameters of that authorization, such as no access key.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react({ reauthorizeOnMount: { accessKey: false } })], // [!code hl]
+})
+```
+
+### Turn off the renewal
+
+<SourceLink name="react.reauthorizeOnMount" path="src/react/index.ts">`reauthorizeOnMount: false`</SourceLink> restores only the saved session, so a first-party page without one shows its sign-in. Other apps renew nothing by default, since they hold no grant to read the Tempo ID session.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react({ reauthorizeOnMount: false })], // [!code hl]
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Restore the session at load, and read its status."
+    icon="id-card"
+    title="Restore sessions"
+    to="/docs/guides/user-session/restore-sessions"
+  />
+  <PageCard
+    description="Sign a user in through Tempo ID's dialog."
+    icon="browser-window"
+    title="Dialog"
+    to="/docs/guides/dialog"
+  />
+  <PageCard
+    description="Sign in through a wagmi connector, and send with wagmi hooks."
+    icon="wagmi"
+    title="Wagmi"
+    to="/docs/guides/wagmi"
+  />
+</Cards>

@@ -1,0 +1,225 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# End all sessions [A first-party app ends the user's Tempo ID session, which signs the user out of every app.]
+
+## Overview
+
+The user's Tempo ID session in the browser signs the user in to every app, as single sign-on. <SourceLink name="signOut" path="src/Accounts.ts">`accounts.signOut({ everywhere: true })`</SourceLink> ends the app's [session](/docs/guides/user-session) and that Tempo ID session.
+
+Tempo ID revokes every app's tokens on it, and the next sign-in asks for the user again. Only a first-party app may do this, since it signs the user out of every app:
+
+| App                                            | Call                                                                                                                                                                                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First-party app, which the Admin API registers | <SourceLink name="signOut" path="src/Accounts.ts">`accounts.signOut({ everywhere: true })`</SourceLink>                                                                                                                   |
+| App with post-logout redirect URIs             | [RP-initiated logout](#end-the-tempo-id-session-with-the-id-token)                                                                                                                                                        |
+| Any other app                                  | None. <SourceLink name="signOut.everywhere" path="src/Accounts.ts">`everywhere`</SourceLink> throws <SourceLink name="EverywhereNotAllowedError" path="src/Accounts.ts">`Accounts.EverywhereNotAllowedError`</SourceLink> |
+
+The demo's client ID is this page's origin, so the instance refuses its sign-out of every app, and the demo signs out of the app only.
+
+<Demo name="EndAllSessions" source="examples/web" title="End all sessions" />
+
+## Walkthrough
+
+These steps change the sign-out of the [`web`](https://github.com/tempoxyz/accounts/tree/main/examples/web) example for a first-party app.
+
+::::steps
+
+### Create the instance
+
+Pass the first-party app's <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink>. Tempo ID accepts the logout only from an origin of the app's registration.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'example-app',
+})
+```
+
+### Sign the user out of every app
+
+<SourceLink name="signOut.everywhere" path="src/Accounts.ts">`everywhere`</SourceLink> revokes the app's refresh token, then ends the Tempo ID session with `POST /v1/auth/logout`.
+
+:::code-group
+
+```tsx [SignOut.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignOut() {
+  async function signOut() {
+    await accounts.signOut({ everywhere: true }) // [!code hl]
+  }
+
+  return (
+    <button onClick={signOut} type="button">
+      Sign out of every app
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'example-app',
+})
+```
+
+:::
+
+A Tempo ID session of the user in another browser stays.
+
+### Handle the refusal
+
+From any other app, <SourceLink name="signOut.everywhere" path="src/Accounts.ts">`everywhere`</SourceLink> throws <SourceLink name="EverywhereNotAllowedError" path="src/Accounts.ts">`Accounts.EverywhereNotAllowedError`</SourceLink> before any request. Sign out of the app in its place.
+
+:::code-group
+
+```tsx [SignOut.tsx]
+import { Accounts } from 'accounts' // [!code ++]
+import { accounts } from './tempo.config.js'
+
+export function SignOut() {
+  async function signOut() {
+    await accounts.signOut({ everywhere: true }) // [!code --]
+    await accounts.signOut({ everywhere: true }).catch((error: unknown) => { // [!code ++]
+      if (!(error instanceof Accounts.EverywhereNotAllowedError)) throw error // [!code ++]
+      return accounts.signOut() // [!code ++]
+    }) // [!code ++]
+  }
+
+  return (
+    <button onClick={signOut} type="button">
+      Sign out of every app
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'example-app',
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case ends the Tempo ID session where <SourceLink name="signOut.everywhere" path="src/Accounts.ts">`everywhere`</SourceLink> does not apply, beside <SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink>.
+
+### End the Tempo ID session with the ID token
+
+An app with registered post-logout redirect URIs uses OpenID Connect RP-Initiated Logout, which no action of the package runs. Read the <SourceLink name="idToken" path="src/internal/Tokens.ts">`idToken`</SourceLink> of the session for `id_token_hint` before <SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink> empties the session.
+
+:::code-group
+
+```tsx [SignOut.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignOut() {
+  async function signOut() {
+    const session = await accounts.session.get() // [!code hl]
+    const idToken = session?.idToken // [!code hl]
+
+    await accounts.signOut()
+
+    // [!code hl:start]
+    if (idToken) {
+      const url = new URL('/oauth2/end-session', accounts.config.url)
+      url.searchParams.set('id_token_hint', idToken)
+      url.searchParams.set('post_logout_redirect_uri', 'https://app.example/')
+      location.assign(url)
+    }
+    // [!code hl:end]
+  }
+
+  return (
+    <button onClick={signOut} type="button">
+      Sign out of every app
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'example-app',
+})
+```
+
+:::
+
+Tempo ID ends the hinted session if the browser holds it, then redirects to `post_logout_redirect_uri`. Other apps receive 403 [`logout_not_permitted`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#logout_not_permitted). A refresh can omit the ID token, so a session can hold none.
+
+### Sign out of a native app
+
+With the <SourceLink name="redirect" path="src/plugins/redirect.ts">`redirect`</SourceLink> plugin and <SourceLink name="open" path="src/plugins/redirect.ts">`open`</SourceLink>, a native app signs in through the system browser, whose Tempo ID session <SourceLink name="signOut.everywhere" path="src/Accounts.ts">`everywhere`</SourceLink> does not end, since the logout sends the app's cookies. After <SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink>, the next <SourceLink name="signIn" path="src/plugins/redirect.ts">`signIn`</SourceLink> asks Tempo ID for a new login, so Tempo ID shows its sign-in page.
+
+:::code-group
+
+```tsx [SignOut.tsx]
+import { Button } from 'react-native'
+import { accounts } from './tempo.config.js'
+
+export function SignOut() {
+  return <Button onPress={() => accounts.signOut()} title="Sign out" /> // [!code hl]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { expo } from 'accounts/expo'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  // The client ID of the app's registration.
+  clientId: 'example-mobile',
+  plugins: [expo({ redirectUri: 'com.example.app:/callback' })],
+})
+```
+
+:::
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Sign the user out of one app, and revoke the access key."
+    icon="log-out"
+    title="End app sessions"
+    to="/docs/guides/sign-out/end-app-sessions"
+  />
+  <PageCard
+    description="End a session that a backend holds."
+    icon="server"
+    title="End backend sessions"
+    to="/docs/guides/sign-out/end-backend-sessions"
+  />
+  <PageCard
+    description="Sign in through the system browser of a native app."
+    icon="smartphone"
+    title="Redirect (Mobile)"
+    to="/docs/guides/mobile"
+  />
+  <PageCard
+    description="Catch an error of the package, and branch on its reason."
+    icon="alert-circle"
+    title="Errors"
+    to="/docs/guides/errors"
+  />
+</Cards>

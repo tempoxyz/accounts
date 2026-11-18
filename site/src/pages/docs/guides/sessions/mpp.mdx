@@ -1,0 +1,596 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+import { StepTag } from '../../../../components/StepTag.tsx'
+
+# Pay with sessions [An app pays a metered endpoint in an MPP session, with vouchers of the access key.]
+
+## Overview
+
+Here a "session" is an MPP payment session over a payment channel, not the package's sign-in [session](/docs/guides/user-session).
+
+The [Machine Payments Protocol](https://mpp.dev) (MPP) prices HTTP endpoints with status 402 Payment Required: an endpoint answers an unpaid request with a 402 challenge, and serves the content once the retry carries a payment credential.
+
+An MPP session pays for metered use through a payment channel. The first request opens the channel with a deposit, each later request pays with an offchain voucher of the [access key](/docs/guides/access-keys), and the close settles the channel and returns the rest.
+
+The <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin runs the session through [mppx](https://github.com/wevm/mppx), MPP's TypeScript SDK. [Open payment channels](/docs/guides/sessions/self-managed) builds the same flow without MPP.
+
+The demo starts a session that deposits at most 0.05 OUSD on Tempo testnet, pays 0.001 OUSD for each fortune, and after the close shows what the server received.
+
+<Demo
+  name="PayWithSessions"
+  source="examples/mpp-session"
+  title="Pay with a session"
+/>
+
+## Walkthrough
+
+The [`mpp-session`](https://github.com/tempoxyz/accounts/tree/main/examples/mpp-session) example runs these steps, and also pays over SSE and a WebSocket with the session manager's `sse` and `ws`.
+
+::::steps
+
+### Install the packages
+
+The server serves its route with Hono.
+
+:::code-group
+
+```sh [npm]
+npm install accounts hono mppx react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts hono mppx react react-dom viem
+```
+
+```sh [bun]
+bun add accounts hono mppx react react-dom viem
+```
+
+:::
+
+### Create the instance<StepTag kind="client" />
+
+The <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin adds MPP payments to the instance.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem(), mpp()], // [!code hl]
+})
+```
+
+Without <SourceLink name="Permissions.scopes" path="src/Permissions.ts">`scopes`</SourceLink>, the access key may open and top up a channel on the chain's TIP-1034 channel reserve, and each deposit counts against its token's limit.
+
+### Sign the user in<StepTag kind="client" />
+
+<SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> opens Tempo ID's dialog over the page.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  // [!code hl:start]
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+  // [!code hl:end]
+
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem(), mpp()],
+})
+```
+
+:::
+
+### Start the payment session<StepTag kind="client" />
+
+<SourceLink name="mpp.mcp.session" path="src/mpp/index.ts">`accounts.mpp.session`</SourceLink> returns a session manager, which holds the channel in memory and opens none yet. <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> caps the first deposit, each automatic top-up, and the session's total.
+
+:::code-group
+
+```tsx [Start.tsx]
+import type { mpp } from 'accounts/mpp'
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+export function Start() {
+  const [manager, setManager] = useState<mpp.SessionManager>()
+
+  // The manager opens no channel before its first request.
+  if (manager) return <p>Session started</p>
+
+  return (
+    <button
+      onClick={() => setManager(accounts.mpp.session({ maxDeposit: '0.05' }))} // [!code hl]
+      type="button"
+    >
+      Start a session
+    </button>
+  )
+}
+```
+
+```tsx [App.tsx]
+import { Start } from './Start.js'
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return <Start /> // [!code hl]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem(), mpp()],
+})
+```
+
+:::
+
+### Pay each request<StepTag kind="client" />
+
+The manager's `fetch` pays each request with no prompt. The first opens the channel with the endpoint's suggested deposit, up to <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>, and each later one pays with a voucher.
+
+:::code-group
+
+```tsx [Pay.tsx]
+import type { mpp } from 'accounts/mpp'
+import { useState } from 'react'
+import { formatUnits } from 'viem'
+
+export function Pay(props: Pay.Props) {
+  const { manager } = props
+  const [fortune, setFortune] = useState<string>()
+  // The total that the vouchers of the session pay, in base units.
+  const [spent, setSpent] = useState(0n)
+
+  return (
+    <>
+      <button
+        onClick={async () => {
+          // [!code hl:start]
+          const response = await manager.fetch(
+            'https://api.example.com/fortune',
+          )
+          // [!code hl:end]
+          const { fortune } = (await response.json()) as { fortune: string }
+
+          setFortune(fortune)
+          setSpent(manager.cumulative)
+        }}
+        type="button"
+      >
+        Pay 0.001 OUSD
+      </button>
+      <p>{fortune}</p>
+      <p>Spent {formatUnits(spent, 6)} OUSD</p>
+    </>
+  )
+}
+
+export declare namespace Pay {
+  type Props = {
+    /** The manager of the session. */
+    manager: mpp.SessionManager
+  }
+}
+```
+
+```tsx [Start.tsx]
+import type { mpp } from 'accounts/mpp'
+import { useState } from 'react'
+import { Pay } from './Pay.js'
+import { accounts } from './tempo.config.js'
+
+export function Start() {
+  const [manager, setManager] = useState<mpp.SessionManager>()
+
+  // [!code hl:start]
+  if (manager) return <Pay manager={manager} />
+  // [!code hl:end]
+
+  return (
+    <button
+      onClick={() => setManager(accounts.mpp.session({ maxDeposit: '0.05' }))}
+      type="button"
+    >
+      Start a session
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem(), mpp()],
+})
+```
+
+:::
+
+A request that needs a voucher above <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> throws before any payment.
+
+### Close the payment session<StepTag kind="client" />
+
+`close` settles the channel at the last voucher, and returns the endpoint's receipt. If the app drops the manager before `close`, the deposit stays in the channel.
+
+:::code-group
+
+```tsx [Close.tsx]
+import type { mpp } from 'accounts/mpp'
+import { useState } from 'react'
+
+export function Close(props: Close.Props) {
+  const { manager } = props
+  const [hash, setHash] = useState<string>()
+
+  return (
+    <>
+      <button
+        onClick={async () => {
+          const receipt = await manager.close() // [!code hl]
+          setHash(receipt?.txHash)
+        }}
+        type="button"
+      >
+        Close the session
+      </button>
+      <p>{hash}</p>
+    </>
+  )
+}
+
+export declare namespace Close {
+  type Props = {
+    /** The manager of the session. */
+    manager: mpp.SessionManager
+  }
+}
+```
+
+```tsx [Start.tsx]
+import type { mpp } from 'accounts/mpp'
+import { useState } from 'react'
+import { Close } from './Close.js'
+import { Pay } from './Pay.js'
+import { accounts } from './tempo.config.js'
+
+export function Start() {
+  const [manager, setManager] = useState<mpp.SessionManager>()
+
+  // [!code hl:start]
+  if (manager)
+    return (
+      <>
+        <Pay manager={manager} />
+        <Close manager={manager} />
+      </>
+    )
+  // [!code hl:end]
+
+  return (
+    <button
+      onClick={() => setManager(accounts.mpp.session({ maxDeposit: '0.05' }))}
+      type="button"
+    >
+      Start a session
+    </button>
+  )
+}
+```
+
+```tsx [Pay.tsx]
+import type { mpp } from 'accounts/mpp'
+import { useState } from 'react'
+import { formatUnits } from 'viem'
+
+export function Pay(props: Pay.Props) {
+  const { manager } = props
+  const [fortune, setFortune] = useState<string>()
+  // The total that the vouchers of the session pay, in base units.
+  const [spent, setSpent] = useState(0n)
+
+  return (
+    <>
+      <button
+        onClick={async () => {
+          const response = await manager.fetch(
+            'https://api.example.com/fortune',
+          )
+          const { fortune } = (await response.json()) as { fortune: string }
+
+          setFortune(fortune)
+          setSpent(manager.cumulative)
+        }}
+        type="button"
+      >
+        Pay 0.001 OUSD
+      </button>
+      <p>{fortune}</p>
+      <p>Spent {formatUnits(spent, 6)} OUSD</p>
+    </>
+  )
+}
+
+export declare namespace Pay {
+  type Props = {
+    /** The manager of the session. */
+    manager: mpp.SessionManager
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem(), mpp()],
+})
+```
+
+:::
+
+A session that paid no request holds no channel, so `close` returns `undefined`.
+
+A handler that pays a run of requests closes its session in a `finally` block, so the deposit returns also if a request throws.
+
+### Serve the metered route<StepTag kind="server" />
+
+The endpoint is an mppx route. `tempo.session` verifies each voucher, and closes the channel with the payee's account, which pays the fee and thus holds OUSD.
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { Mppx, tempo } from 'mppx/hono'
+import { Store } from 'mppx/server'
+import type { Hex } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { tempoModerato } from 'viem/chains'
+import { Addresses } from 'viem/tempo'
+
+const [session] = tempo.session({
+  account: privateKeyToAccount(process.env.PAYEE_PRIVATE_KEY as Hex),
+  chainId: tempoModerato.id,
+  currencies: [Addresses.ousd],
+  store: Store.memory(),
+})
+
+const mppx = Mppx.create({
+  methods: [session],
+  realm: 'api.example.com',
+  secretKey: process.env.MPP_SECRET_KEY!,
+})
+
+const app = new Hono()
+
+// The close of a session is a POST to the route of its requests.
+app.on(
+  ['GET', 'POST'],
+  '/fortune',
+  mppx.session({
+    amount: '0.001',
+    suggestedDeposit: '0.05',
+    unitType: 'request',
+  }),
+  (c) => c.json({ fortune: 'Pay for what you use.' }),
+)
+
+export default app
+```
+
+`mppx.session` answers a request without a credential with the 402 challenge, and adds the receipt to each paid response.
+
+:::note
+The memory store of mppx keeps the channels in the process, so a restart loses them. In production, use a store of mppx with atomic updates that each replica shares, such as its Postgres or Redis store.
+:::
+
+:::warning
+A payer can close a channel without the endpoint: it calls `requestClose` on the channel reserve, and withdraws the unsettled deposit after 15 minutes. A deployed endpoint thus runs `tempo.session.superviseCloses` on a schedule, as the example describes.
+:::
+
+::::
+
+## Use cases
+
+Each use case sets one option of <SourceLink name="mpp.mcp.session" path="src/mpp/index.ts">`accounts.mpp.session`</SourceLink> or of the <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin, or calls a method of the session manager.
+
+### Top up the channel
+
+A request that needs more than the deposit tops up the channel on its own, up to <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>. Once a request opened the channel, `topUp` adds a deposit ahead of need, such as before a stream. Render `TopUp` beside `Pay`.
+
+```tsx [TopUp.tsx]
+import type { mpp } from 'accounts/mpp'
+
+export function TopUp(props: TopUp.Props) {
+  const { manager } = props
+
+  return (
+    <button onClick={() => manager.topUp('0.01')} type="button"> {/* [!code hl] */}
+      Add 0.01 OUSD
+    </button>
+  )
+}
+
+export declare namespace TopUp {
+  type Props = {
+    /** The manager of the session. */
+    manager: mpp.SessionManager
+  }
+}
+```
+
+`topUp` adds its amount as given, so the deposit can exceed <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>. It throws if the amount plus the session's paid total exceeds the cap.
+
+### Cap every session
+
+The plugin's <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> is the default of every payment session of the instance.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem(), mpp({ maxDeposit: '0.05' })], // [!code hl]
+})
+```
+
+### Turn off the deposit page
+
+On a page, a deposit or a top-up that the balance does not cover opens Tempo ID's deposit page, then sends again. <SourceLink name="mpp.retry" path="src/mpp/index.ts">`retry: { balance: false }`</SourceLink> turns the deposit page off, so the request rejects as it is.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem(), mpp({ retry: { balance: false } })], // [!code hl]
+})
+```
+
+### Swap into the channel's token
+
+<SourceLink name="mpp.autoSwap" path="src/mpp/index.ts">`autoSwap`</SourceLink> swaps another stablecoin into the channel's token on Tempo's exchange before a deposit, if the Tempo Account holds too little of it. The access key's limits must cover the token that the swap sells.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+import { Addresses } from 'viem/tempo'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [
+      { limit: '1', token: 'ousd' },
+      { limit: '1', token: 'pathusd' }, // [!code hl]
+    ],
+  }),
+  chain: 'testnet',
+  plugins: [
+    react(),
+    viem(),
+    // A deposit in OUSD sells pathUSD for the OUSD that the account lacks.
+    mpp({ autoSwap: { fallback: false, tokenIn: [Addresses.pathUsd] } }), // [!code hl]
+  ],
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Open a channel with Viem, and verify each voucher."
+    icon="pulse"
+    title="Open payment channels"
+    to="/docs/guides/sessions/self-managed"
+  />
+  <PageCard
+    description="Pay the 402 charge of a route with one transfer."
+    icon="arrow-up-right"
+    title="Pay MPP charges"
+    to="/docs/guides/payments/mpp"
+  />
+  <PageCard
+    description="Approve a merchant that charges each period."
+    icon="repeat"
+    title="Pay MPP subscriptions"
+    to="/docs/guides/subscriptions/mpp"
+  />
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+</Cards>

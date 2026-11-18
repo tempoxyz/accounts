@@ -1,15 +1,7 @@
 name: Verify
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_call:
   workflow_dispatch:
-
-# Keyed by event too, so a manual run never cancels the push run that Main waits on
-# before publishing and deploying the same commit.
-concurrency:
-  group: verify-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -17,142 +9,322 @@ permissions:
 jobs:
   checks:
     name: Checks
+    # The secure-runner action authenticates with an OIDC token.
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
       - name: Clone repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-          filter: blob:none
           persist-credentials: false
 
       - name: Install dependencies
-        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository]
 
-      - name: Restore turbo cache
-        id: turbo-cache
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: .turbo/cache
-          key: turbo-checks-${{ github.sha }}
-          restore-keys: turbo-checks-
-
-      - name: Select affected packages
-        # Main publishes and deploys only commits whose push run checked every package.
-        if: github.event_name != 'push'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          if [ -n "${BASE//0/}" ] && git merge-base --is-ancestor "$BASE" HEAD 2> /dev/null; then
-            echo "TURBO_SCM_BASE=$BASE" >> "$GITHUB_ENV"
-            echo "AFFECTED=true" >> "$GITHUB_ENV"
-          fi
-
-      - name: Audit dependencies
-        run: pnpm audit
-
+      # Without `--fix`, so unformatted code fails the job.
       - name: Check code
-        run: pnpm check
+        run: pnpm exec vp check
 
       - name: Check types
-        run: pnpm exec tsc -b --noEmit
+        run: pnpm check:types
 
-      - name: Check workspaces
-        run: pnpm turbo run check:types check:markdown --filter='!accounts' ${AFFECTED:+--affected}
-
-      - name: Prune turbo cache
-        run: find .turbo/cache -type f -mtime +3 -delete
-
-      - name: Save turbo cache
-        if: github.ref == 'refs/heads/main' && steps.turbo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: .turbo/cache
-          key: ${{ steps.turbo-cache.outputs.cache-primary-key }}
+      - name: Build
+        run: pnpm build
 
   test:
     name: Test
+    # The secure-runner action authenticates with an OIDC token.
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      TESTCONTAINERS_RYUK_DISABLED: true
+    timeout-minutes: 15
 
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
       - name: Clone repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-          filter: blob:none
           persist-credentials: false
 
       - name: Install dependencies
-        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository] actionlint does not support $/ references yet.
-
-      - name: Restore turbo cache
-        id: turbo-cache
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: .turbo/cache
-          key: turbo-test-${{ github.sha }}
-          restore-keys: turbo-test-
-
-      - name: Select affected packages
-        # Main publishes and deploys only commits whose push run checked every package.
-        if: github.event_name != 'push'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          if [ -n "${BASE//0/}" ] && git merge-base --is-ancestor "$BASE" HEAD 2> /dev/null; then
-            echo "TURBO_SCM_BASE=$BASE" >> "$GITHUB_ENV"
-            echo "AFFECTED=true" >> "$GITHUB_ENV"
-          fi
-
-      - name: Resolve Tempo image digest
-        id: tempo-digest
-        run: |
-          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:latest -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:latest --format '{{.Manifest.Digest}}')
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
-
-      - name: Restore Tempo Docker image
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        id: docker-cache
-        with:
-          path: /tmp/tempo-image.tar
-          key: tempo-image-${{ steps.tempo-digest.outputs.digest }}
-
-      - name: Load cached Tempo image
-        if: "steps.docker-cache.outputs.cache-hit == 'true'"
-        run: docker load -i /tmp/tempo-image.tar
-
-      - name: Pull and cache Tempo image
-        if: "steps.docker-cache.outputs.cache-hit != 'true'"
-        run: |
-          docker pull ghcr.io/tempoxyz/tempo:latest
-          docker save ghcr.io/tempoxyz/tempo:latest -o /tmp/tempo-image.tar
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository]
 
       - name: Run tests
-        run: pnpm turbo run test ${AFFECTED:+--affected} -- --bail=1
+        run: pnpm test
+
+  # Runs one shard of the end-to-end suite: the test apps of `test/apps/` in Chromium against a local
+  # Tempo node and Tempo ID, as `docs/development/e2e.md` describes. Each shard has its own stack, so
+  # the suite ends in the time of its slowest shard. Each shard uploads its part of the proof, also a
+  # failed one, and the `Test (e2e)` job merges the parts.
+  e2e-shard:
+    name: Test (e2e, ${{ matrix.shard }}/${{ strategy.job-total }})
+    # The secure-runner action authenticates with an OIDC token. The image of Tempo ID is a private
+    # package.
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    # The stack, the test apps, and two browsers share the runner's four CPUs, as the two workers of
+    # `playwright.config.ts` assume. The runner's disk holds every image of the suite.
+    runs-on: depot-ubuntu-latest-4
+    strategy:
+      # A failed shard stops no other shard, so the proof holds every test.
+      fail-fast: false
+      matrix:
+        # The last shard runs the tests of the Tempo API, whose image no other shard pulls. Each other
+        # shard runs each test whose position in the list of tests has the shard's remainder. A
+        # change of the count of shards needs no other change.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+    # A shard runs about 13 tests on two workers, after the pull of the images and the install.
+    timeout-minutes: 10
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      - name: Clone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Log in to GHCR
         env:
-          CI: true
-          TEMPO_IMAGE: ${{ steps.tempo-digest.outputs.digest }}
-          VITE_NODE_TAG: latest
-          VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 
-      - name: Prune turbo cache
-        run: find .turbo/cache -type f -mtime +3 -delete
+      # The pull of the images is the longest step of the setup, so it starts first and runs beside
+      # the install, the start of the test apps, and the list of the tests. The processes outlive the
+      # step. Each pull holds a lock file for its image until it ends, also after a failure, and each
+      # service of the suite waits for its image's file through `test/Images.ts`.
+      - name: Start the pull of the images
+        env:
+          COUNT: ${{ strategy.job-total }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          modules=(test/Chain.ts test/TempoId.ts)
+          if [ "$SHARD" = "$COUNT" ]; then modules+=(test/TempoApi.ts); fi
+          grep --extended-regexp --no-filename --only-matching \
+            "'(ghcr\.io/tempoxyz/[a-z-]+|postgres):[0-9a-z.-]+'" "${modules[@]}" \
+            | tr --delete "'" > "$RUNNER_TEMP/images.txt"
+          mkdir --parents "$RUNNER_TEMP/pulls"
+          while read -r image; do
+            lock="$RUNNER_TEMP/pulls/${image//[^A-Za-z0-9._-]/_}"
+            touch "$lock"
+            (
+              trap 'rm --force "$lock"' EXIT
+              docker pull --quiet "$image"
+            ) > /dev/null 2>&1 < /dev/null &
+          done < "$RUNNER_TEMP/images.txt"
 
-      - name: Save turbo cache
-        if: github.ref == 'refs/heads/main' && steps.turbo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository]
+
+      # The download of Chromium takes less time than a lookup of a cache of it, which can stall.
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install chromium
+
+      # The runner image already holds Chromium's libraries, so apt runs only when Chromium does not
+      # start.
+      - name: Install Playwright system dependencies
+        run: |
+          if ! node -e "require('@playwright/test').chromium.launch().then((browser) => browser.close())"; then
+            pnpm exec playwright install-deps chromium
+          fi
+
+      # The proof names the commit that the run tested, which is the pull request's head commit. With
+      # `E2E_SHARD`, the reporter writes the shard's part of the proof. With `E2E_PULLS`, each service
+      # waits for the pull of its image.
+      - name: Run tests
+        id: tests
+        env:
+          COUNT: ${{ strategy.job-total }}
+          E2E_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          E2E_PULLS: ${{ runner.temp }}/pulls
+          E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -o pipefail
+          if [ "$SHARD" = "$COUNT" ]; then
+            pnpm test:e2e --grep @tempo-api
+          else
+            pnpm exec playwright test --list --reporter list --grep-invert @tempo-api \
+              | grep '›' \
+              | awk -v count="$((COUNT - 1))" -v shard="$SHARD" 'NR % count == shard % count' \
+              > "$RUNNER_TEMP/tests.txt"
+            pnpm test:e2e --test-list "$RUNNER_TEMP/tests.txt"
+            # `--test-list` matches each test by its title, and skips a test whose title differs from
+            # its line of the list without an error.
+            listed="$(wc --lines < "$RUNNER_TEMP/tests.txt")"
+            ran="$(jq '.tests | length' "test/e2e/proof/shard-$SHARD.json")"
+            if [ "$ran" != "$listed" ]; then
+              echo "::error::The shard ran $ran of the $listed tests of its list. Remove each \"›\", edge space, and line break from the titles of the tests."
+              exit 1
+            fi
+          fi
+
+      # A run of a shard always writes its part, so its absence fails the job.
+      - name: Upload the shard's part of the proof
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: .turbo/cache
-          key: ${{ steps.turbo-cache.outputs.cache-primary-key }}
+          if-no-files-found: error
+          name: e2e-shard-${{ matrix.shard }}
+          path: test/e2e/proof/shard-${{ matrix.shard }}.json
+          retention-days: 1
 
-      - name: Save Tempo Docker image
-        if: github.ref == 'refs/heads/main' && steps.docker-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      # Playwright's report holds the trace of each failed test.
+      - name: Upload report
+        if: ${{ failure() && steps.tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: /tmp/tempo-image.tar
-          key: ${{ steps.docker-cache.outputs.cache-primary-key }}
+          name: e2e-report-${{ matrix.shard }}
+          path: test/e2e/report
+          retention-days: 7
+
+  # Merges the parts of the shards into one proof, uploads it, and fails if a shard failed. The job
+  # keeps the name of the suite's one check. It runs also after a failed shard, and after a
+  # cancelled one, so a required check never ends as skipped. It installs no dependency, since
+  # `scripts/e2e-proof.ts` imports only Node built-ins.
+  e2e:
+    name: Test (e2e)
+    if: ${{ always() }}
+    needs: e2e-shard
+    # The secure-runner action authenticates with an OIDC token.
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      - name: Clone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # A shard that failed before its tests uploaded no part, and a part expires after one day. The
+      # proof then names the shards that it holds.
+      - name: Download the parts of the proof
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          merge-multiple: true
+          path: test/e2e/proof
+          pattern: e2e-shard-*
+
+      - name: Write proof
+        id: merge
+        run: node scripts/e2e-proof.ts
+
+      # The file loads no other file, so a browser opens it from the artifact's URL as it is. A merge
+      # always writes the file, so its absence fails the job.
+      - name: Upload proof
+        id: proof
+        if: ${{ !cancelled() && steps.merge.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          archive: false
+          if-no-files-found: error
+          path: test/e2e/proof/e2e-proof.html
+          retention-days: 90
+
+      # A run whose every shard fails before its tests leaves no proof. The summary then states that,
+      # so the pull request's comment never shows the proof of an earlier commit as the current one.
+      - name: Write summary
+        if: ${{ !cancelled() }}
+        env:
+          E2E_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          PROOF_URL: ${{ steps.proof.outputs.artifact-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p test/e2e/proof
+          if [ -f test/e2e/proof/summary.md ] && [ -n "$PROOF_URL" ]; then
+            {
+              echo
+              echo "[Open the proof]($PROOF_URL): the video, the steps, and the screenshots of every test."
+            } >> test/e2e/proof/summary.md
+          else
+            {
+              echo '<!-- accounts-e2e-proof -->'
+              echo '## End-to-end proof'
+              echo
+              echo "The run at \`${E2E_COMMIT:0:7}\` holds no proof, since each shard failed before the suite wrote one. [Open the run]($RUN_URL)."
+            } > test/e2e/proof/summary.md
+          fi
+          cat test/e2e/proof/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload summary
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          name: e2e-summary
+          path: test/e2e/proof/summary.md
+          retention-days: 1
+
+      # The proof shows each failed test. The log of a shard that failed outside a test is in the
+      # shard's own job.
+      - name: Fail if a shard failed
+        if: ${{ always() }}
+        env:
+          RESULT: ${{ needs.e2e-shard.result }}
+        run: |
+          if [ "$RESULT" != success ]; then
+            echo "::error::A shard of the end-to-end suite ended with \"$RESULT\". Its job holds the log."
+            exit 1
+          fi
+
+  # Writes the proof's summary to the pull request, also for a failed run. The job runs none of the
+  # pull request's code, and alone may write the comment. A pull request from a fork receives a
+  # read-only token, so its proof stays in the job summary.
+  proof:
+    name: Proof
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: e2e
+    permissions:
+      id-token: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      - name: Download summary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: e2e-summary
+          path: ${{ runner.temp }}/e2e
+
+      # One comment per pull request, which each run updates.
+      - name: Write comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          body="$RUNNER_TEMP/e2e/summary.md"
+          id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- accounts-e2e-proof -->"))) | .id' | head -n 1)"
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" > /dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -F "body=@$body" > /dev/null
+          fi

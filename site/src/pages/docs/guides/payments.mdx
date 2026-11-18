@@ -1,0 +1,27 @@
+import { Cards } from 'vocs'
+import { PageCard } from '../../../components/PageCard.tsx'
+
+# Payments [An app sends a stablecoin payment from the user's Tempo Account.]
+
+## Overview
+
+A payment is a stablecoin transfer from the user's Tempo Account. The session's [access key](/docs/guides/access-keys) signs it with no prompt, within a limit that the user approves once. If no access key can pay, the account owner signs it on Tempo ID's payment page.
+
+An app sends a payment of its own, such as for an order, in one call. An [MPP](https://mpp.dev) endpoint charges with an HTTP 402 response, which the access key pays.
+
+## Guides
+
+<Cards>
+  <PageCard
+    description="Send a payment with the access key, or on Tempo ID's payment page."
+    icon="arrow-up-right"
+    title="Send payments"
+    to="/docs/guides/payments/self-managed"
+  />
+  <PageCard
+    description="Pay the 402 charge of an MPP endpoint with the access key."
+    icon="payment-flow"
+    title="Pay MPP charges"
+    to="/docs/guides/payments/mpp"
+  />
+</Cards>

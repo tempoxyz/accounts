@@ -1,0 +1,7 @@
+# Socket reads the package manifests of the repository. Each trial of the integration bench installs
+# the bench's starters and oracles outside the checkout, so they hold no dependency of the repository.
+version: 2
+
+projectIgnorePaths:
+  - 'test/bench/oracles'
+  - 'test/bench/starters'

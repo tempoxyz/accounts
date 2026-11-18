@@ -1,0 +1,470 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Pay MPP charges [Pay the 402 charge of an MPP endpoint with the access key of the session.]
+
+## Overview
+
+The [Machine Payments Protocol](https://mpp.dev) (MPP) prices HTTP endpoints with status 402 Payment Required: an endpoint answers an unpaid request with a 402 challenge, and serves the content once the retry carries a payment credential. A charge is a one-time payment by one transfer. <SourceLink name="mpp.fetch" path="src/mpp/index.ts">`accounts.fetch`</SourceLink> pays each charge with the session's [access key](/docs/guides/access-keys), with no prompt.
+
+The demo signs a user in for an access key that spends up to 1 OUSD for a day, then fetches a route of this site that charges 0.01 OUSD, and shows the content and the receipt.
+
+<Demo name="PayMppCharges" source="examples/mpp-charge" title="Pay a charge" />
+
+## Walkthrough
+
+The [`mpp-charge`](https://github.com/tempoxyz/accounts/tree/main/examples/mpp-charge) example runs these steps. Its server charges with [mppx](https://github.com/wevm/mppx), MPP's TypeScript SDK.
+
+::::steps
+
+### Install the packages
+
+The <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin pays through mppx, an optional peer dependency.
+
+:::code-group
+
+```sh [npm]
+npm install accounts mppx react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts mppx react react-dom viem
+```
+
+```sh [bun]
+bun add accounts mppx react react-dom viem
+```
+
+:::
+
+### Create the instance
+
+The access key's limit caps the sum of the charges. The <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin adds <SourceLink name="mpp.fetch" path="src/mpp/index.ts">`accounts.fetch`</SourceLink>, which works the same in a CLI, with the session of the <SourceLink name="device" path="src/plugins/device.ts">`device`</SourceLink> plugin.
+
+The plugin pays on the chain and the transport of the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, or of Tempo's own RPC without one. For a local node, [Use another Tempo ID or chain](/docs/guides/viem#use-another-tempo-id-or-chain) sets both.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [mpp(), react()],
+})
+```
+
+### Sign the user in
+
+If the Tempo Account holds less than <SourceLink name="signIn.funding" path="src/plugins/dialog.ts">`funding`</SourceLink>, Tempo ID's deposit page opens after the user approves the limit.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session)
+    return (
+      <button
+        onClick={() =>
+          accounts.dialog.signIn({
+            funding: { amount: '1', token: 'OUSD' }, // [!code hl]
+          })
+        }
+        type="button"
+      >
+        Sign in with Tempo
+      </button>
+    )
+
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [mpp(), react()],
+})
+```
+
+:::
+
+### Fetch the paid content
+
+<SourceLink name="mpp.fetch" path="src/mpp/index.ts">`accounts.fetch`</SourceLink> is `fetch` that pays each 402 charge: the access key signs the charge's transfer, and the endpoint broadcasts it. A response header holds the receipt. The app renders `Fortune` for a signed-in user.
+
+:::code-group
+
+```tsx [Fortune.tsx]
+import { Receipt } from 'mppx'
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+export function Fortune() {
+  const [paid, setPaid] = useState<{ fortune: string; hash: string }>()
+
+  return (
+    <>
+      <button
+        onClick={async () => {
+          // [!code hl:start]
+          const response = await accounts.fetch(
+            'https://api.example.com/fortune',
+          )
+          // [!code hl:end]
+          const { fortune } = (await response.json()) as { fortune: string }
+
+          // The hash of the transaction that paid the charge.
+          const { reference } = Receipt.fromResponse(response)
+          setPaid({ fortune, hash: reference })
+        }}
+        type="button"
+      >
+        Fetch a fortune
+      </button>
+      {paid && (
+        <p>
+          {paid.fortune} Paid in {paid.hash}.
+        </p>
+      )}
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [mpp(), react()],
+})
+```
+
+:::
+
+On a page, if the balance does not cover a charge, Tempo ID's deposit page opens, and the request sends again after the deposit. A spent limit opens the sign-in for a new access key in the same way. If the user closes the screen, the request rejects with <SourceLink name="RetryClosedError" path="src/plugins/viem.ts">`Plugins.viem.RetryClosedError`</SourceLink>.
+
+On a page, Tempo ID's [payment page](/docs/guides/payments/self-managed) also pays a charge that no access key pays, such as one above the access key's whole limit, in mppx's `push` mode. The user approves the transfer there, and a Reject rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> and the code `access_denied`.
+
+The payment page sends one transfer, so a charge of zero or with splits still needs the access key. A backend and <SourceLink name="mpp.mcp" path="src/mpp/index.ts">`mcp`</SourceLink> show no screen, so such a charge rejects with <SourceLink name="LimitError" path="src/mpp/index.ts">`mpp.LimitError`</SourceLink>, or with <SourceLink name="AccessKeyRequiredError" path="src/Accounts.ts">`Accounts.AccessKeyRequiredError`</SourceLink> without an access key. In a CLI, a device code opens the deposit page after its approval, as [Send above the limit or the balance](/docs/guides/cli#send-above-the-limit-or-the-balance) shows.
+
+::::
+
+## Use cases
+
+Each use case sets one option of the <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin, or of the payer that <SourceLink name="mpp" path="src/mpp/index.ts">`accounts.mpp`</SourceLink> returns for one call.
+
+### Cap each charge
+
+<SourceLink name="mpp.maxAmount" path="src/mpp/index.ts">`maxAmount`</SourceLink> caps one charge. A larger charge rejects with <SourceLink name="MaxAmountError" path="src/mpp/index.ts">`mpp.MaxAmountError`</SourceLink> before the access key signs.
+
+:::code-group
+
+```tsx [Fortune.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Fortune() {
+  return (
+    <button
+      onClick={async () => {
+        const response = await accounts
+          .mpp({ maxAmount: '0.05' }) // [!code hl]
+          .fetch('https://api.example.com/fortune')
+        console.log(await response.json())
+      }}
+      type="button"
+    >
+      Fetch a fortune
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [mpp(), react()],
+})
+```
+
+:::
+
+<SourceLink name="mpp.maxAmount" path="src/mpp/index.ts">`mpp({ maxAmount: '0.05' })`</SourceLink> sets it for the instance. On a page, Tempo ID's payment page pays a charge above the access key's whole limit, as [Fetch the paid content](#fetch-the-paid-content) describes. Elsewhere, such a charge rejects with <SourceLink name="LimitError" path="src/mpp/index.ts">`mpp.LimitError`</SourceLink>.
+
+### Turn off the deposit page
+
+<SourceLink name="mpp.retry" path="src/mpp/index.ts">`retry`</SourceLink> names the failures that show a screen of Tempo ID, then pay again. With `balance: false`, a charge that the balance does not cover rejects as it is, with no deposit page.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [mpp({ retry: { balance: false } }), react()], // [!code hl]
+})
+```
+
+### Pay from a backend
+
+With the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, a server holds the session, and <SourceLink name="mpp.session" path="src/mpp/index.ts">`accounts.mpp({ session })`</SourceLink> pays with its access key.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { backend } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() }), mpp()],
+})
+
+const app = new Hono()
+
+// The sign-in routes of the `backend` plugin.
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+app.get('/fortune', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'tempo-id') return c.body(null, 401)
+
+  const response = await accounts
+    .mpp({ session }) // [!code hl]
+    .fetch('https://api.example.com/fortune')
+  return c.json(await response.json())
+})
+
+export default app
+```
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the sessions in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+A backend shows no screen, so a refused charge rejects with its error.
+
+A 402 response whose every Tempo charge names another chain than the access key's rejects with <SourceLink name="ChainError" path="src/mpp/index.ts">`mpp.ChainError`</SourceLink> before the access key signs, on a page as on a backend.
+
+### Prove who pays
+
+An endpoint that verifies Tempo ID with mppx's `mppx/extensions/identity/tempo` reads who the user is, and refuses a payment from an account that the user did not grant to the app. <SourceLink name="mpp.identity.scope" path="src/mpp/index.ts">`identity.scope`</SourceLink> names the origins that receive the session's access token and ID token.
+
+:::code-group
+
+```tsx [Fortune.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Fortune() {
+  return (
+    <button
+      onClick={async () => {
+        // The request carries the session's identity to the endpoint.
+        const response = await accounts.fetch('https://api.example.com/fortune')
+        console.log(await response.json())
+      }}
+      type="button"
+    >
+      Fetch a fortune
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [
+    mpp({ identity: { scope: ['https://api.example.com'] } }), // [!code hl]
+    react(),
+  ],
+})
+```
+
+:::
+
+For a DPoP token, each request carries a new proof of the instance's <SourceLink name="Config.dpop" path="src/Accounts.ts">`dpop`</SourceLink> key. A Bearer token, such as one that the store saved before the app set its <SourceLink name="Config.dpop" path="src/Accounts.ts">`dpop`</SourceLink> key, goes with the Bearer scheme and no proof.
+
+The ID token carries the user's email address when the sign-in requests the email scope. A payer of a fixed <SourceLink name="mpp.session" path="src/mpp/index.ts">`session`</SourceLink> sends no identity.
+
+### Attribute each payment
+
+<SourceLink name="mpp.clientId" path="src/mpp/index.ts">`clientId`</SourceLink> names the app. Each charge's transfer memo then carries its fingerprint, so an endpoint attributes the payment to the app.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [mpp({ clientId: 'example.com' }), react()], // [!code hl]
+})
+```
+
+### Swap into the charged token
+
+<SourceLink name="mpp.autoSwap" path="src/mpp/index.ts">`autoSwap`</SourceLink> swaps another stablecoin into the charged token on Tempo's exchange, if the Tempo Account holds too little of it. The access key's limits must cover the token that the swap sells.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+import { Addresses } from 'viem/tempo'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [
+      { limit: '1', token: 'ousd' },
+      { limit: '1', token: 'pathusd' }, // [!code hl]
+    ],
+  }),
+  chain: 'testnet',
+  plugins: [
+    // A charge in OUSD sells pathUSD for the OUSD that the account lacks.
+    mpp({ autoSwap: { fallback: false, tokenIn: [Addresses.pathUsd] } }), // [!code hl]
+    react(),
+  ],
+})
+```
+
+### Broadcast each charge
+
+<SourceLink name="mpp.mode" path="src/mpp/index.ts">`mode: 'push'`</SourceLink> has the app broadcast each charge's transaction, in place of the endpoint. The credential then names the transaction's hash.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [mpp({ mode: 'push' }), react()], // [!code hl]
+})
+```
+
+### Refuse subscription offers
+
+<SourceLink name="mpp.orderChallenges" path="src/mpp/index.ts">`orderChallenges`</SourceLink> filters and sorts the offers of a 402 response before the access key signs. The payer pays the first offer that it returns, and pays none for an empty array.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that spends up to 1 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '1', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [
+    mpp({
+      // [!code hl:start]
+      orderChallenges: (candidates) =>
+        candidates.filter((candidate) => candidate.challenge.intent === 'charge'),
+      // [!code hl:end]
+    }),
+    react(),
+  ],
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Send a payment with the access key, without an endpoint."
+    icon="arrow-up-right"
+    title="Send payments"
+    to="/docs/guides/payments/self-managed"
+  />
+  <PageCard
+    description="Pay each request of a metered route with a voucher."
+    icon="pulse"
+    title="Pay with sessions"
+    to="/docs/guides/sessions/mpp"
+  />
+  <PageCard
+    description="Approve an access key of a merchant that charges each period."
+    icon="repeat"
+    title="Pay MPP subscriptions"
+    to="/docs/guides/subscriptions/mpp"
+  />
+  <PageCard
+    description="Name the app in the memo of each charge."
+    icon="mpp"
+    title="Attribute payments"
+    to="/docs/guides/mpp/attribute-payments"
+  />
+</Cards>

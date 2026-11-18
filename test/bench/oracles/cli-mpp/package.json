@@ -1,0 +1,18 @@
+{
+  "name": "acme-cli",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cli": "tsx src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "accounts": "1.0.0-alpha.20261112095625-8a78097",
+    "viem": "^2.57.19",
+    "mppx": "0.17.1"
+  }
+}

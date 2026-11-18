@@ -1,0 +1,27 @@
+/* A response of the API route, in the detail of a demo's step. */
+[data-call] {
+  align-items: baseline;
+  column-gap: 0.5rem;
+  display: inline-flex;
+  max-width: 100%;
+}
+
+[data-call-status] {
+  color: var(--vocs-color-red);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+[data-call][data-ok='true'] [data-call-status] {
+  color: var(--vocs-color-green);
+}
+
+[data-call-body] {
+  color: var(--vocs-text-color-secondary);
+  font-family: var(--vocs-font-family-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  /* Vocs pads each `code` element of a page. */
+  padding: 0;
+}

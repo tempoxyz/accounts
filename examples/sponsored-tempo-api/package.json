@@ -1,0 +1,29 @@
+{
+  "name": "example-sponsored-tempo-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "check:types": "tsc",
+    "deploy": "vite build && wrangler deploy",
+    "dev": "vite --port 5193 --strictPort"
+  },
+  "dependencies": {
+    "accounts": "^1.0.0-alpha.2",
+    "hono": "^4.13.16",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "viem": "^2.57.19"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.66.0",
+    "@cloudflare/workers-types": "^5.20261014.1",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.7",
+    "wrangler": "^4.155.0"
+  }
+}

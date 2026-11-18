@@ -1,0 +1,27 @@
+import { Cards } from 'vocs'
+import { PageCard } from '../../../components/PageCard.tsx'
+
+# User session [A session holds the user, the tokens, and the access key of a sign-in.]
+
+## Overview
+
+A sign-in returns a session, which holds the user, the tokens, and the [access key](/docs/guides/access-keys) of the sign-in. The instance saves it to its store, so a later load of the app restores it with no new sign-in.
+
+Each app that signs users in holds a session. Its access token lets the app call its own API as the user, which [verifies the token](/docs/guides/api-authentication/authenticate-requests).
+
+## Guides
+
+<Cards>
+  <PageCard
+    description="Restore the saved session at each load."
+    icon="id-card"
+    title="Restore sessions"
+    to="/docs/guides/user-session/restore-sessions"
+  />
+  <PageCard
+    description="Choose the store of the session on each platform."
+    icon="id-card"
+    title="Store sessions"
+    to="/docs/guides/user-session/store-sessions"
+  />
+</Cards>

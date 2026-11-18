@@ -1,0 +1,4 @@
+# Copy this file to `.dev.vars`. The private key of the fee payer, an account on Tempo testnet with
+# a balance of a fee token. The Worker reads it as a secret. In production, set it with
+# `wrangler secret put FEE_PAYER_PRIVATE_KEY`.
+FEE_PAYER_PRIVATE_KEY=0x

@@ -1,0 +1,224 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Revoke connections [An API revokes the access keys of a connection, and handles a connection that Tempo ID refuses.]
+
+## Overview
+
+A [connection](/docs/guides/connections) gives an API an [access key](/docs/guides/access-keys) for one user of one app. The API revokes its access keys with its own client authentication and no user token, as an OAuth client revokes its own grant. Tempo ID then refuses a new access key for the connection until the user approves the API again.
+
+The demo signs a user in for this site's API, which pays 1 OUSD, revokes the connection, and refuses a second payment with 403.
+
+<Demo name="RevokeConnections" title="Revoke a connection" />
+
+## Walkthrough
+
+The steps add two parts to the API of [Pay for users](/docs/guides/connections/pay-for-users#walkthrough).
+
+::::steps
+
+### Revoke the access keys of a connection
+
+The token that <SourceLink name="connections.connect" path="src/Accounts.ts">`connections.connect`</SourceLink> returns names the connection: the app's client ID and the user's ID. <SourceLink name="connections.revoke" path="src/Accounts.ts">`connections.revoke`</SourceLink> revokes each of the connection's access keys on the chain, and deletes the connection from the store.
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the connections and their access keys in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+```ts [api.ts]
+import { Accounts, Store } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  connections: {
+    metadata: {
+      accessKey: { limits: [{ limit: '25', token: 'ousd' }] },
+      privateKey: JSON.parse(process.env.API_PRIVATE_KEY!),
+    },
+    resource: 'https://api.example/pay',
+    store: Store.memory(),
+  },
+  plugins: [viem()],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+app.get('/.well-known/oauth-protected-resource/*', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+
+app.post('/revoke', async (c) => {
+  const accessToken = c.req.header('authorization')?.replace(/^Bearer /, '')
+  if (!accessToken) return c.json({ error: 'invalid_token' }, 401)
+
+  const { token } = await accounts.connections.connect({ accessToken })
+
+  // [!code hl:start]
+  const receipts = await accounts.connections.revoke({
+    clientId: token.clientId,
+    userId: token.userId,
+  })
+  // [!code hl:end]
+  return c.json({
+    transactionHashes: receipts.map((receipt) => receipt.transactionHash),
+  })
+})
+
+export default app
+```
+
+### Handle a refused connection
+
+<SourceLink name="connections.connect" path="src/Accounts.ts">`connections.connect`</SourceLink> throws for an access token that does not verify, and for a connection that Tempo ID refuses.
+
+| Error                                                                                             | <SourceLink name="RequestError.reason" path="src/Accounts.ts">`reason`</SourceLink> | Cause                                                              | Status |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------ |
+| <SourceLink name="InvalidError" path="src/AccessToken.ts">`AccessToken.InvalidError`</SourceLink> |                                                                                     | The access token does not verify, or names another audience        | 401    |
+| <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>       | `connection_mismatch`                                                               | The approval is for another access key, such as after a revocation | 403    |
+| <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>       | `unknown_allowance`                                                                 | The user approved no connection, or the approval ended             | 403    |
+
+```ts [api.ts]
+import { AccessToken, Accounts, Store } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  connections: {
+    metadata: {
+      accessKey: { limits: [{ limit: '25', token: 'ousd' }] },
+      privateKey: JSON.parse(process.env.API_PRIVATE_KEY!),
+    },
+    resource: 'https://api.example/pay',
+    store: Store.memory(),
+  },
+  plugins: [viem()],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+app.get('/.well-known/oauth-protected-resource/*', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+
+app.post('/revoke', async (c) => {
+  const accessToken = c.req.header('authorization')?.replace(/^Bearer /, '')
+  if (!accessToken) return c.json({ error: 'invalid_token' }, 401)
+
+  const { token } = await accounts.connections.connect({ accessToken })
+
+  const receipts = await accounts.connections.revoke({
+    clientId: token.clientId,
+    userId: token.userId,
+  })
+  return c.json({
+    transactionHashes: receipts.map((receipt) => receipt.transactionHash),
+  })
+})
+
+// [!code hl:start]
+app.onError((error, c) => {
+  if (error instanceof AccessToken.InvalidError)
+    return c.json({ error: 'invalid_token' }, 401)
+
+  if (
+    error instanceof Accounts.RequestError &&
+    (error.reason === 'connection_mismatch' ||
+      error.reason === 'unknown_allowance')
+  )
+    return c.json({ error: error.reason }, 403)
+
+  return c.json({ error: 'server_error' }, 500)
+})
+// [!code hl:end]
+
+export default app
+```
+
+If the API responds with 403, the app signs the user in again with <SourceLink name="signIn.resource" path="src/plugins/dialog.ts">`resource`</SourceLink>. After the approval, the next request redeems a new access key.
+
+::::
+
+## Use cases
+
+Each use case revokes the access keys of a connection with another member of <SourceLink name="connections" path="src/Accounts.ts">`accounts.connections`</SourceLink>.
+
+### Revoke one access key
+
+<SourceLink name="connections.revokeAccessKey" path="src/Accounts.ts">`connections.revokeAccessKey`</SourceLink> revokes one of the connection's access keys. It returns the receipt, or `null` if the connection holds no such access key, or Tempo ID holds it no longer.
+
+```ts [api.ts]
+import { Accounts, Store } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  connections: {
+    metadata: {
+      accessKey: { limits: [{ limit: '25', token: 'ousd' }] },
+      privateKey: JSON.parse(process.env.API_PRIVATE_KEY!),
+    },
+    resource: 'https://api.example/pay',
+    store: Store.memory(),
+  },
+  plugins: [viem()],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+app.get('/.well-known/oauth-protected-resource/*', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+
+app.post('/revoke-access-key', async (c) => {
+  const accessToken = c.req.header('authorization')?.replace(/^Bearer /, '')
+  if (!accessToken) return c.json({ error: 'invalid_token' }, 401)
+
+  const { connection, token } = await accounts.connections.connect({
+    accessToken,
+  })
+
+  // [!code hl:start]
+  const receipt = await accounts.connections.revokeAccessKey({
+    accessKey: connection.accessKey.keyAuthorization.keyId,
+    clientId: token.clientId,
+    userId: token.userId,
+  })
+  // [!code hl:end]
+  return c.json({ transactionHash: receipt?.transactionHash ?? null })
+})
+
+export default app
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Redeem a connection in an API, and pay with its access key."
+    icon="payment-flow"
+    title="Pay for users"
+    to="/docs/guides/connections/pay-for-users"
+  />
+  <PageCard
+    description="Change or revoke the access key of a session in the dialog."
+    icon="key"
+    title="Revoke access keys"
+    to="/docs/guides/access-keys/revoke-access-keys"
+  />
+  <PageCard
+    description="Read the reason of a refusal, and its fix."
+    icon="alert-circle"
+    title="Errors"
+    to="/docs/guides/errors"
+  />
+</Cards>

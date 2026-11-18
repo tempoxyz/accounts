@@ -1,0 +1,32 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // The Worker serves the page's assets, so the page calls the merchant at its own origin.
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/callback", "/login", "/logout", "/v1/*"],
+  },
+  "compatibility_date": "2026-10-01",
+  // `process.env` holds the vars.
+  "compatibility_flags": ["nodejs_compat"],
+  // One object holds every subscription, so mppx updates each atomically. One object for each
+  // session ID holds the session, so its refreshes share one instance.
+  "durable_objects": {
+    "bindings": [
+      { "class_name": "Merchant", "name": "MERCHANT" },
+      { "class_name": "SESSIONS", "name": "SESSIONS" },
+    ],
+  },
+  "main": "./api.ts",
+  "migrations": [
+    { "new_sqlite_classes": ["Merchant"], "tag": "v1" },
+    { "new_sqlite_classes": ["SESSIONS"], "tag": "v2" },
+  ],
+  "name": "tempo-id-example-mpp-subscription",
+  // Each hour charges the subscriptions whose period ended.
+  "triggers": { "crons": ["0 * * * *"] },
+  // Without a registration, the app's origin is its client ID. The secrets `MERCHANT_PRIVATE_KEY`
+  // and `MPP_SECRET_KEY` live in `.dev.vars`, or in `wrangler secret`.
+  "vars": {
+    "APP_URL": "http://localhost:5193",
+  },
+}

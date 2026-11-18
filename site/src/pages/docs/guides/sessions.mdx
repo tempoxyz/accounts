@@ -1,0 +1,27 @@
+import { Cards } from 'vocs'
+import { PageCard } from '../../../components/PageCard.tsx'
+
+# Payment sessions [An app pays for metered use through a payment channel, with vouchers of the access key.]
+
+## Overview
+
+A payment session pays for metered use, such as each request to an API, with one deposit and many offchain vouchers. The Tempo Account deposits in a payment channel, and the [access key](/docs/guides/access-keys) signs a voucher for each unit of use. The payee closes the channel with the highest voucher, and the rest returns to the account.
+
+A payment session is not the [user session](/docs/guides/user-session). It suits many small payments to one payee, since a voucher pays no network fee.
+
+## Guides
+
+<Cards>
+  <PageCard
+    description="Open a channel with Viem, and verify each voucher."
+    icon="pulse"
+    title="Open payment channels"
+    to="/docs/guides/sessions/self-managed"
+  />
+  <PageCard
+    description="Pay a metered MPP endpoint, with no channel code."
+    icon="pulse"
+    title="Pay with sessions"
+    to="/docs/guides/sessions/mpp"
+  />
+</Cards>

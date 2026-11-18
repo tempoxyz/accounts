@@ -1,0 +1,19 @@
+{
+  "name": "test-app-mpp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check:types": "tsc",
+    "start": "node --import tsx index.ts"
+  },
+  "dependencies": {
+    "hono": "catalog:",
+    "mppx": "catalog:",
+    "viem": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,134 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Serve access keys [An API serves the access key endpoint, so that the user signs the access key at the approval.]
+
+## Overview
+
+An [access key endpoint](https://github.com/tempoxyz/id/blob/main/docs/api-access-keys.md#access-key-endpoint) is an API route that returns a new [access key](/docs/guides/access-keys)'s public key. Tempo ID calls it during the approval, so the Tempo Account's owner signs the access key there. A passkey signs only with the user present, so a Tempo Account that only a passkey owns connects only this way.
+
+| Policy                      | Access key                             | Tempo Account that only a passkey owns |
+| --------------------------- | -------------------------------------- | -------------------------------------- |
+| With an access key endpoint | Tempo ID requests it at the approval   | Connects                               |
+| Without one                 | The API creates it at its next request | Refused with `webauthn_required`       |
+
+The demo runs the [Pay for users](/docs/guides/connections/pay-for-users) demo beside a log of this site's access key endpoint, which shows each request of Tempo ID and marks the access key that signs the payment.
+
+<Demo name="ServeAccessKeys" title="Serve an access key" />
+
+## Walkthrough
+
+The API of [Pay for users](/docs/guides/connections/pay-for-users#walkthrough) already serves the endpoint, since the policy of its metadata names the handler's route. The steps show the route and the policy that names it.
+
+::::steps
+
+### Mount the handler
+
+<SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> serves the endpoint at `POST /access-keys`, under <SourceLink name="create.handler.basePath" path="src/Accounts.ts">`basePath`</SourceLink>, which defaults to `/api`. The API's client ID also sits under it, so a new `basePath` makes a new app, which holds none of the earlier connections.
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the connections and their access keys in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+```ts [api.ts]
+import { Accounts, Store } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  connections: {
+    metadata: {
+      accessKey: { limits: [{ limit: '25', token: 'ousd' }] },
+      privateKey: JSON.parse(process.env.API_PRIVATE_KEY!),
+    },
+    resource: 'https://api.example/pay',
+    store: Store.memory(),
+  },
+  plugins: [viem()],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw)) // [!code hl]
+app.get('/.well-known/oauth-protected-resource/*', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+
+export default app
+```
+
+The handler verifies Tempo ID's signed request token, and refuses a repeated one with 401. It then generates an access key, keeps its private key in the store, and returns its public key.
+
+Tempo ID calls the route without the app's session, so no sign-in guards it. Tempo ID waits 5 seconds for the response, and never retries.
+
+### Check the policy
+
+The access key policy of <SourceLink name="Options.metadata" path="src/internal/Connections.ts">`metadata`</SourceLink> names the route's URL as its access key endpoint, such as `https://api.example/api/access-keys`. Tempo ID reads it at the next sign-in after 5 minutes.
+
+The API's routes do not change: <SourceLink name="connections.connect" path="src/Accounts.ts">`connections.connect`</SourceLink> claims the access key that the connection's first access token names.
+
+::::
+
+## Use cases
+
+Each use case sets one property of the <SourceLink name="create.connections" path="src/Accounts.ts">`connections`</SourceLink> option, which the handler's access key endpoint reads.
+
+### Discard unclaimed access keys sooner
+
+The API never learns whether the user approved, so <SourceLink name="Options.pendingLifetime" path="src/internal/Connections.ts">`pendingLifetime`</SourceLink> sets how long, in milliseconds, a prepared access key waits for a token that names it. After it, the store discards the access key, and the user approves again. It defaults to 7 days.
+
+```ts [api.ts]
+import { Accounts, Store } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  connections: {
+    metadata: {
+      accessKey: { limits: [{ limit: '25', token: 'ousd' }] },
+      privateKey: JSON.parse(process.env.API_PRIVATE_KEY!),
+    },
+    pendingLifetime: 24 * 60 * 60 * 1000, // [!code hl]
+    resource: 'https://api.example/pay',
+    store: Store.memory(),
+  },
+  plugins: [viem()],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+app.get('/.well-known/oauth-protected-resource/*', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+
+export default app
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Redeem a connection in an API, and pay with its access key."
+    icon="payment-flow"
+    title="Pay for users"
+    to="/docs/guides/connections/pay-for-users"
+  />
+  <PageCard
+    description="Revoke the access keys of a connection, and handle a refused connection."
+    icon="shield-check"
+    title="Revoke connections"
+    to="/docs/guides/connections/revoke-connections"
+  />
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+</Cards>

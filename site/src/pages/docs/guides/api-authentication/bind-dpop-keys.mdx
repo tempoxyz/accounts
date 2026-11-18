@@ -1,0 +1,266 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+import { StepTag } from '../../../../components/StepTag.tsx'
+
+# Bind DPoP keys [An app binds its tokens to a DPoP key, and an API verifies a proof of the DPoP key with each request.]
+
+## Overview
+
+With a DPoP key on the instance, Tempo ID binds the app's tokens to it ([DPoP](https://github.com/tempoxyz/id/blob/main/docs/dpop.md), RFC 9449). The API's verifier checks each request's proof against the DPoP key that the token names, and the API refuses a repeated proof itself.
+
+The demo calls an API route of the site with a bound access token and a proof, then repeats the proof, which the route refuses with 401.
+
+<Demo name="BindDpopKeys" title="Bind a DPoP key" />
+
+## Walkthrough
+
+The steps add a DPoP key to the app and the API of [Authenticate requests](/docs/guides/api-authentication/authenticate-requests#walkthrough).
+
+::::steps
+
+### Bind the tokens to a DPoP key<StepTag kind="client" />
+
+The <SourceLink name="dpop" path="src/plugins/dpop.ts">`dpop`</SourceLink> plugin gives the instance a DPoP key that the page cannot export. The instance sends a proof with each token request, and Tempo ID binds the session's tokens to the key. Tokens refresh only with the key that bound them, so the plugin keeps it in IndexedDB, beside the session.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dpop } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  plugins: [await dpop(), react()], // [!code ++]
+})
+```
+
+### Call the API<StepTag kind="client" />
+
+<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch`</SourceLink> sends a bound [access token](/docs/guides/api-authentication/authenticate-requests) with the DPoP scheme and a new proof, so the call of the app does not change.
+
+:::code-group
+
+```tsx [App.tsx]
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { isPending, session } = accounts.useSession()
+  const [userId, setUserId] = useState<string>()
+
+  async function call() {
+    // [!code hl:start]
+    const response = await accounts.session.fetch({
+      url: 'https://api.example/me',
+    })
+    // [!code hl:end]
+    const body = (await response.json()) as { userId: string }
+    setUserId(body.userId)
+  }
+
+  if (isPending) return <p>Checking your session…</p>
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in
+      </button>
+    )
+  return (
+    <>
+      <button onClick={call} type="button">
+        Call the API
+      </button>
+      {userId && <p>The API read the user {userId}.</p>}
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dpop } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  plugins: [await dpop(), react()],
+})
+```
+
+:::
+
+### Verify each proof<StepTag kind="server" />
+
+In the API, <SourceLink name="tokens.verifyAccessToken" path="src/plugins/tokens.ts">`tokens.verifyAccessToken`</SourceLink> checks the proof of a bound token against the DPoP key that the token names, over the method and the URL of the request. It reads the DPoP header and the authorization scheme itself, so the instance does not change. It returns `undefined` for a bound token without a valid proof, or with the Bearer scheme.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens()],
+})
+```
+
+:::tip
+Behind a proxy that terminates TLS, the URL of the request is the internal URL. Pass the public origin as <SourceLink name="tokens.url" path="src/plugins/tokens.ts">`url`</SourceLink>, and the path and query of each request apply to it. A function of the request can return the whole public URL instead.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens({ url: 'https://api.example' })], // [!code hl]
+})
+```
+
+:::
+
+### Refuse a repeated proof<StepTag kind="server" />
+
+<SourceLink name="tokens.verifyAccessToken" path="src/plugins/tokens.ts">`tokens.verifyAccessToken`</SourceLink> accepts a proof again within its window of 5 minutes. The API thus records the ID of each <SourceLink name="create.compliance.proof" path="src/AccessToken.ts">`proof`</SourceLink> until the proof expires, and refuses a recorded one. Here Redis records each ID in one atomic step.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+import { createClient } from 'redis'
+
+const redis = await createClient({ url: process.env.REDIS_URL }).connect()
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens()],
+})
+
+export default {
+  async fetch(request: Request) {
+    const token = await accounts.tokens.verifyAccessToken(request)
+    if (!token)
+      return Response.json({ error: 'invalid_token' }, { status: 401 })
+
+    // [!code hl:start]
+    if (token.proof) {
+      // `NX` sets the ID only if Redis holds none, and returns `null` otherwise.
+      const first = await redis.sendCommand([
+        'SET',
+        `dpop:${token.proof.id}`,
+        '1',
+        'NX',
+        'PXAT',
+        String(token.proof.expiresAt),
+      ])
+      if (!first)
+        return Response.json({ error: 'invalid_dpop_proof' }, { status: 401 })
+    }
+    // [!code hl:end]
+
+    return Response.json({ userId: token.userId })
+  },
+}
+```
+
+:::warning
+The store checks and adds an ID in one atomic step, such as `SET` with `NX` in Redis. An eventually consistent store can accept a repeated proof.
+:::
+
+A backend with the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin and its <SourceLink name="backend.accessToken" path="src/plugins/backend.ts">`accessToken`</SourceLink> option verifies each proof too, as [Use session cookies](/docs/guides/api-authentication/use-session-cookies) shows. Its <SourceLink name="session.get" path="src/Accounts.ts">`session.get`</SourceLink> returns the token with its <SourceLink name="create.compliance.proof" path="src/AccessToken.ts">`proof`</SourceLink>, which the backend records in the same way.
+
+The plugin checks each proof against the URL of the request. Behind a proxy that terminates TLS, <SourceLink name="backend.accessToken" path="src/plugins/backend.ts">`accessToken`</SourceLink> takes the public origin as <SourceLink name="backend.accessToken.url" path="src/plugins/backend.ts">`url`</SourceLink>, as the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin does.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [
+    backend({
+      accessToken: { url: 'https://api.example' }, // [!code hl]
+      store: Store.memory(),
+    }),
+  ],
+})
+```
+
+::::
+
+## Use cases
+
+Each use case sets one option of the <SourceLink name="dpop" path="src/plugins/dpop.ts">`dpop`</SourceLink> plugin, or the DPoP key of the instance itself.
+
+### Keep the DPoP key in the app's store
+
+The <SourceLink name="dpop.store" path="src/plugins/dpop.ts">`store`</SourceLink> option names where the DPoP key stays across runs. An instance with its own <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> passes the same store, so the DPoP key stays beside the session, such as for a CLI.
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { device, dpop } from 'accounts/plugins'
+
+// A file in the user's home directory, which only the user reads.
+const store = Store.file('~/.acme/store.json')
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'cli:acme-example',
+  plugins: [
+    device({
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+    await dpop({ store }), // [!code hl]
+  ],
+  store, // [!code hl]
+})
+```
+
+:::warning
+In a browser, the store must keep a `CryptoKey` as it is, as IndexedDB and <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> do. Outside a browser, <SourceLink name="create" path="src/stores/File.ts">`Store.file`</SourceLink> keeps the private key as a JWK, beside the refresh token, so the next run of a CLI refreshes its session. A shared store, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>, keeps no private key, so a session that another process's DPoP key binds never refreshes there.
+:::
+
+Outside a browser, the wagmi connector's `reconnect` skips such a session, and its `connect` signs in again.
+
+### Set the DPoP key of the instance
+
+The instance's <SourceLink name="Config.dpop" path="src/Accounts.ts">`dpop`</SourceLink> sets the DPoP key directly, and wins over the plugin's. A DPoP key of <SourceLink name="create" path="src/internal/Dpop.ts">`Dpop.create`</SourceLink> lasts as long as the process, so a session that it binds refreshes only in that process.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { Dpop } from 'accounts/internal'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  dpop: await Dpop.create(), // [!code hl]
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Verify the access token of each request in an API."
+    icon="shield-check"
+    title="Authenticate requests"
+    to="/docs/guides/api-authentication/authenticate-requests"
+  />
+  <PageCard
+    description="Authenticate the requests of a page with a session cookie, and no token."
+    icon="server"
+    title="Use session cookies"
+    to="/docs/guides/api-authentication/use-session-cookies"
+  />
+  <PageCard
+    description="Read, restore, and refresh the session of a user."
+    icon="id-card"
+    title="Restore sessions"
+    to="/docs/guides/user-session/restore-sessions"
+  />
+  <PageCard
+    description="Handle each refusal of Tempo ID by its reason."
+    icon="alert-circle"
+    title="Errors"
+    to="/docs/guides/errors"
+  />
+</Cards>

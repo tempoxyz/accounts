@@ -1,0 +1,389 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+import { StepTag } from '../../../../components/StepTag.tsx'
+
+# Use session cookies [A backend keeps the tokens of a session, and a session cookie authenticates each request of the page.]
+
+## Overview
+
+If a page's API runs on its own backend, the page needs no token. The <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin signs the user in on the server, keeps the [session](/docs/guides/user-session) in a <SourceLink name="Store" path="src/Store.ts">`Store`</SourceLink>, and sets an HttpOnly session cookie. A deployed origin lists its callback in a web app manifest.
+
+The demo signs in through the site's backend routes, and calls an API route with the cookie. It then signs out, and the same call receives 401.
+
+<Demo
+  name="UseSessionCookies"
+  source="examples/authenticated-api"
+  title="Use a session cookie"
+/>
+
+## Walkthrough
+
+The [`authenticated-api`](https://github.com/tempoxyz/accounts/tree/main/examples/authenticated-api) example runs this flow with Hono, and serves a React app and its API at one origin.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts hono react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts hono react react-dom viem
+```
+
+```sh [bun]
+bun add accounts hono react react-dom viem
+```
+
+:::
+
+### Create the backend<StepTag kind="server" />
+
+The <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin keeps each session in a store on the server, since each session holds a refresh token and an access key's private key. The `APP_URL` variable names the app's origin, its <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink>.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the sessions in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+### Serve the sign-in routes<StepTag kind="server" />
+
+<SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> serves the sign-in, callback, sign-out, and session routes under `/api/auth`. The callback sets the session cookie.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+
+// [!code hl:start]
+const app = new Hono().all('/api/*', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+// [!code hl:end]
+
+export default app
+```
+
+A deployed origin names `/api/auth/callback` in the `redirect_uris` of its [web app manifest](https://github.com/tempoxyz/id/blob/main/docs/apps.md#origin-client-id). Without one, Tempo ID redirects only to the origin's root, so both instances set <SourceLink name="redirectUri" path="src/Accounts.ts">`redirectUri`</SourceLink> to the root.
+
+### Sign the user in<StepTag kind="client" />
+
+With <SourceLink name="backend" path="src/plugins/dialog.ts">`backend`</SourceLink>, the <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin runs the sign-in through the backend's routes, and <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> returns the user.
+
+:::code-group
+
+```tsx [App.tsx]
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+type Session = Awaited<ReturnType<typeof accounts.dialog.signIn>>
+
+export function App() {
+  const [session, setSession] = useState<Session>()
+
+  if (!session)
+    return (
+      <button
+        onClick={async () => setSession(await accounts.dialog.signIn())} // [!code hl]
+        type="button"
+      >
+        Sign in
+      </button>
+    )
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  plugins: [dialog({ backend: true })], // [!code hl]
+})
+```
+
+:::
+
+### Authenticate each request<StepTag kind="server" />
+
+<SourceLink name="session.get" path="src/Accounts.ts">`session.get`</SourceLink> returns the cookie's session, or `undefined`. The cookie is SameSite Lax, so a browser also sends it from another origin of the same site. Hono's CSRF middleware refuses a form post from another origin.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+import { Hono } from 'hono'
+import { csrf } from 'hono/csrf'
+import { createMiddleware } from 'hono/factory'
+
+const accounts = Accounts.create({
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+
+type Variables = { userId: string }
+
+const auth = createMiddleware<{ Variables: Variables }>(async (c, next) => {
+  const session = await accounts.session.get(c.req.raw) // [!code hl]
+  if (session?.method !== 'tempo-id')
+    return c.json({ error: 'invalid_token' }, 401)
+
+  c.set('userId', session.user.id)
+  await next()
+})
+
+const app = new Hono().all('/api/*', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+
+// [!code hl:start]
+app
+  .use('/v1/*', csrf(), auth)
+  .get('/v1/me', (c) => c.json({ userId: c.get('userId') }))
+// [!code hl:end]
+
+export default app
+```
+
+### Call the API<StepTag kind="client" />
+
+The page calls the API at its own origin. A 401 means that the session ended. `App` renders `Me` for a signed-in user.
+
+:::code-group
+
+```tsx [App.tsx]
+import { useState } from 'react'
+import { Me } from './Me.js'
+import { accounts } from './tempo.config.js'
+
+type Session = Awaited<ReturnType<typeof accounts.dialog.signIn>>
+
+export function App() {
+  const [session, setSession] = useState<Session>()
+
+  if (!session)
+    return (
+      <button
+        onClick={async () => setSession(await accounts.dialog.signIn())}
+        type="button"
+      >
+        Sign in
+      </button>
+    )
+  return <Me /> // [!code hl]
+}
+```
+
+```tsx [Me.tsx]
+import { useState } from 'react'
+
+export function Me() {
+  const [status, setStatus] = useState<string>()
+
+  async function call() {
+    const response = await fetch('/v1/me') // [!code hl]
+    if (response.status === 401) return setStatus('The session ended.') // [!code hl]
+
+    const body = (await response.json()) as { userId: string }
+    setStatus(`The API read the session of ${body.userId}.`)
+  }
+
+  return (
+    <>
+      <button onClick={call} type="button">
+        Call the API
+      </button>
+      <p role="status">{status}</p>
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  plugins: [dialog({ backend: true })],
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case sets one option of the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, or uses one more of its reads or routes.
+
+### Accept a cookie or an access token
+
+If the backend also serves other clients, such as a CLI, <SourceLink name="backend.accessToken" path="src/plugins/backend.ts">`accessToken`</SourceLink> accepts both. <SourceLink name="session.get" path="src/Accounts.ts">`session.get`</SourceLink> reads the cookie first, then an [access token](/docs/guides/api-authentication/authenticate-requests) of the app in the authorization header.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+import { Hono } from 'hono'
+import { csrf } from 'hono/csrf'
+import { createMiddleware } from 'hono/factory'
+
+const accounts = Accounts.create({
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({
+      accessToken: true, // [!code hl]
+      store: Store.memory(),
+    }),
+  ],
+})
+
+type Variables = { userId: string }
+
+const auth = createMiddleware<{ Variables: Variables }>(async (c, next) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method === 'tempo-id') c.set('userId', session.user.id)
+  // [!code hl:start]
+  else if (session?.method === 'access-token')
+    c.set('userId', session.token.userId)
+  // [!code hl:end]
+  else return c.json({ error: 'invalid_token' }, 401)
+
+  await next()
+})
+
+const app = new Hono().all('/api/*', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+
+app
+  .use('/v1/*', csrf(), auth)
+  .get('/v1/me', (c) => c.json({ userId: c.get('userId') }))
+
+export default app
+```
+
+<SourceLink name="backend.accessToken" path="src/plugins/backend.ts">`accessToken`</SourceLink> also takes the options of the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin, such as <SourceLink name="create.clientIds" path="src/AccessToken.ts">`clientIds`</SourceLink>, and <SourceLink name="backend.accessToken.url" path="src/plugins/backend.ts">`url`</SourceLink>, the public origin behind a proxy that terminates TLS, which each DPoP proof names.
+
+### Call an API for the user
+
+<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch`</SourceLink> sends a request with the access token of the cookie's session. It returns `undefined` without a session, and sends no request then.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+
+const app = new Hono().all('/api/*', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+
+app.get('/v1/profile', async (c) => {
+  // [!code hl:start]
+  const response = await accounts.session.fetch(c.req.raw, {
+    url: 'https://api.example/me',
+  })
+  // [!code hl:end]
+  if (!response) return c.json({ error: 'invalid_token' }, 401)
+  return c.json(await response.json())
+})
+
+export default app
+```
+
+### Read the session in the page
+
+After a reload, the page holds no session. The session route of <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> returns the cookie's session, or `null`, so the click opens the dialog only without one.
+
+:::code-group
+
+```tsx [App.tsx]
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+type Session = Awaited<ReturnType<typeof accounts.dialog.signIn>>
+
+export function App() {
+  const [session, setSession] = useState<Session>()
+
+  async function signIn() {
+    // [!code hl:start]
+    const response = await fetch('/api/auth/session')
+    const body = (await response.json()) as { session: Session | null }
+    // [!code hl:end]
+    setSession(body.session ?? (await accounts.dialog.signIn()))
+  }
+
+  if (!session)
+    return (
+      <button onClick={signIn} type="button">
+        Sign in
+      </button>
+    )
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  plugins: [dialog({ backend: true })],
+})
+```
+
+:::
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Keep each session on a server, and sign in through its routes."
+    icon="server"
+    title="Redirect (Backend)"
+    to="/docs/guides/backend"
+  />
+  <PageCard
+    description="End the session of a backend, and delete its cookie."
+    icon="log-out"
+    title="End backend sessions"
+    to="/docs/guides/sign-out/end-backend-sessions"
+  />
+  <PageCard
+    description="Verify the access token of each request in an API."
+    icon="shield-check"
+    title="Authenticate requests"
+    to="/docs/guides/api-authentication/authenticate-requests"
+  />
+  <PageCard
+    description="Bind the tokens to a key, so a copied token is of no use."
+    icon="key"
+    title="Bind DPoP keys"
+    to="/docs/guides/api-authentication/bind-dpop-keys"
+  />
+</Cards>

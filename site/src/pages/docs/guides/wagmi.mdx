@@ -1,0 +1,383 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# Wagmi [A wagmi app connects to Tempo ID, and sends a transfer with the access key of the connection.]
+
+## Overview
+
+The <SourceLink name="wagmi" path="src/wagmi/index.ts">`wagmi`</SourceLink> plugin of <SourceLink name="wagmi" path="src/wagmi/index.ts">`accounts/wagmi`</SourceLink> adds a [wagmi](https://wagmi.sh) config whose one connector is the instance, a wallet that Tempo ID backs. A sign-in connects wagmi, a sign-out disconnects it, and wagmi's hooks sign with the session's [access key](/docs/guides/access-keys), with no prompt. The page's origin is its client ID, so the app needs no registration.
+
+The demo connects, sends 1 OUSD on Tempo testnet with a `wagmi/tempo` hook, and disconnects.
+
+<Demo name="Wagmi" source="examples/wagmi" title="Connect Tempo ID" />
+
+## Walkthrough
+
+The [`wagmi`](https://github.com/tempoxyz/accounts/tree/main/examples/wagmi) example runs these steps in a React app.
+
+::::steps
+
+### Install the packages
+
+`@wagmi/core` is an optional peer dependency of `accounts`, so the app installs it beside wagmi.
+
+:::code-group
+
+```sh [npm]
+npm install accounts wagmi @wagmi/core viem @tanstack/react-query react react-dom
+```
+
+```sh [pnpm]
+pnpm add accounts wagmi @wagmi/core viem @tanstack/react-query react react-dom
+```
+
+```sh [bun]
+bun add accounts wagmi @wagmi/core viem @tanstack/react-query react react-dom
+```
+
+:::
+
+### Create the instance
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { wagmi } from 'accounts/wagmi' // [!code ++]
+
+export const accounts = Accounts.create({
+  // Each connection requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [
+    viem(),
+    wagmi(), // [!code ++]
+  ],
+})
+```
+
+### Provide the config
+
+Pass <SourceLink name="wagmi.wagmi" path="src/wagmi/index.ts">`accounts.wagmi`</SourceLink> to wagmi's provider, which restores the connection of a saved [session](/docs/guides/user-session) at mount.
+
+:::code-group
+
+```tsx [main.tsx]
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createRoot } from 'react-dom/client'
+import { WagmiProvider } from 'wagmi'
+import { App } from './App.js'
+import { accounts } from './tempo.config.js'
+
+const queryClient = new QueryClient()
+
+// [!code hl:start]
+createRoot(document.getElementById('root')!).render(
+  <WagmiProvider config={accounts.wagmi}>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </WagmiProvider>,
+)
+// [!code hl:end]
+```
+
+```tsx [App.tsx]
+import { useConnect, useConnection, useConnectors } from 'wagmi'
+
+export function App() {
+  const connection = useConnection()
+  const [connector] = useConnectors()
+  const connect = useConnect()
+
+  if (connection.status !== 'connected')
+    return (
+      <button
+        disabled={connect.isPending}
+        onClick={() => connect.mutate({ connector: connector! })}
+        type="button"
+      >
+        Connect with Tempo
+      </button>
+    )
+
+  return <p>Tempo Account {connection.address}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { wagmi } from 'accounts/wagmi'
+
+export const accounts = Accounts.create({
+  // Each connection requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [viem(), wagmi()],
+})
+```
+
+:::
+
+### Connect from a click
+
+`connect.mutate` opens Tempo ID's dialog, which requests the access key. `useConnection` then returns the Tempo Account's address.
+
+If the user closes the dialog or denies the request, `connect` throws Viem's `UserRejectedRequestError`, and wagmi stays disconnected.
+
+```tsx [App.tsx]
+import { useConnect, useConnection, useConnectors } from 'wagmi'
+
+export function App() {
+  const connection = useConnection()
+  const [connector] = useConnectors()
+  const connect = useConnect()
+
+  if (connection.status !== 'connected')
+    return (
+      <button
+        disabled={connect.isPending}
+        onClick={() => connect.mutate({ connector: connector! })} // [!code hl]
+        type="button"
+      >
+        Connect with Tempo
+      </button>
+    )
+
+  return <p>Tempo Account {connection.address}</p>
+}
+```
+
+### Send a transfer
+
+`Hooks.token.useTransferSync` sends a transfer, and returns its receipt.
+
+An app without React passes <SourceLink name="wagmi.wagmi" path="src/wagmi/index.ts">`accounts.wagmi`</SourceLink> to the actions of `@wagmi/core`, such as `Actions.token.transferSync` of `@wagmi/core/tempo`.
+
+```tsx [App.tsx]
+import { parseUnits } from 'viem' // [!code ++]
+import { Addresses } from 'viem/tempo' // [!code ++]
+import { useConnect, useConnection, useConnectors } from 'wagmi'
+import { Hooks } from 'wagmi/tempo' // [!code ++]
+
+export function App() {
+  const connection = useConnection()
+  const [connector] = useConnectors()
+  const connect = useConnect()
+  const send = Hooks.token.useTransferSync() // [!code ++]
+
+  if (connection.status !== 'connected')
+    return (
+      <button
+        disabled={connect.isPending}
+        onClick={() => connect.mutate({ connector: connector! })}
+        type="button"
+      >
+        Connect with Tempo
+      </button>
+    )
+
+  return (
+    <main>
+      <p>Tempo Account {connection.address}</p>
+      {/* [!code ++:16] */}
+      <button
+        disabled={send.isPending}
+        onClick={() =>
+          send.mutate({
+            amount: parseUnits('1', 6),
+            to: '0x000000000000000000000000000000000000dEaD',
+            token: Addresses.ousd,
+          })
+        }
+        type="button"
+      >
+        Send OUSD
+      </button>
+      <p role="status">
+        {send.data && `Sent in ${send.data.receipt.transactionHash}.`}
+      </p>
+    </main>
+  )
+}
+```
+
+### Disconnect
+
+`disconnect.mutate` signs the user out of the app with <SourceLink name="signOut" path="src/Accounts.ts">`accounts.signOut`</SourceLink>.
+
+```tsx [Disconnect.tsx]
+import { useDisconnect } from 'wagmi'
+
+export function Disconnect() {
+  const disconnect = useDisconnect()
+
+  return (
+    <button
+      onClick={() => disconnect.mutate()} // [!code hl]
+      type="button"
+    >
+      Disconnect
+    </button>
+  )
+}
+```
+
+::::
+
+## Use cases
+
+Each use case sets an option of the <SourceLink name="wagmi" path="src/wagmi/index.ts">`wagmi`</SourceLink> plugin or of its config, or uses the <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId`</SourceLink> connector.
+
+### Connect without an access key
+
+<SourceLink name="tempoId.accessKey" path="src/wagmi/index.ts">`accessKey`</SourceLink> of wagmi's `connect` overrides the instance's access key for one connection. `false` connects with no access key, and signs in again over a held session.
+
+:::code-group
+
+```ts [connect.ts]
+import { connect } from '@wagmi/core'
+import { accounts } from './tempo.config.js'
+
+export function connectWithoutAccessKey() {
+  const [connector] = accounts.wagmi.connectors
+  return connect(accounts.wagmi, { accessKey: false, connector }) // [!code hl]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { wagmi } from 'accounts/wagmi'
+
+export const accounts = Accounts.create({
+  // Each connection requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [viem(), wagmi()],
+})
+```
+
+:::
+
+### Add other wallets
+
+<SourceLink name="wagmi.connectors" path="src/wagmi/index.ts">`connectors`</SourceLink> adds connectors after the instance's, such as an injected wallet. Without it, the config holds only Tempo ID.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { wagmi } from 'accounts/wagmi'
+import { injected } from 'wagmi/connectors'
+
+export const accounts = Accounts.create({
+  // Each connection requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [viem(), wagmi({ connectors: [injected()] })], // [!code hl]
+})
+```
+
+### Render on a server
+
+<SourceLink name="wagmi.wagmi" path="src/wagmi/index.ts">`accounts.wagmi`</SourceLink> called with overrides returns a new config, such as one with wagmi's `ssr` for a page that a server renders. A read without a call returns the default config.
+
+:::code-group
+
+```tsx [Providers.tsx]
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import { WagmiProvider } from 'wagmi'
+import { accounts } from './tempo.config.js'
+
+const config = accounts.wagmi({ ssr: true }) // [!code hl]
+const queryClient = new QueryClient()
+
+export function Providers(props: { children: ReactNode }) {
+  return (
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        {props.children}
+      </QueryClientProvider>
+    </WagmiProvider>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { wagmi } from 'accounts/wagmi'
+
+export const accounts = Accounts.create({
+  // Each connection requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [viem(), wagmi()],
+})
+```
+
+:::
+
+### Add Tempo ID to an existing config
+
+An app with its own wagmi config adds the <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId`</SourceLink> connector, which takes the options of <SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink> but <SourceLink name="from.chain" path="src/Accounts.ts">`chain`</SourceLink>. It creates the instance on the config's first chain, unless its options name another chain of the config.
+
+```ts [config.ts]
+import { tempoId } from 'accounts/wagmi'
+import { createConfig, http } from 'wagmi'
+import { tempoModerato } from 'viem/tempo/chains'
+
+export const config = createConfig({
+  chains: [tempoModerato],
+  connectors: [
+    tempoId({
+      accessKey: () => ({
+        expiry: '1d',
+        limits: [{ limit: '100', token: 'ousd' }],
+      }),
+    }),
+  ],
+  transports: { [tempoModerato.id]: http() },
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Send transactions with the Viem client of the instance."
+    icon="viem"
+    title="Viem"
+    to="/docs/guides/viem"
+  />
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Sign a user in through Tempo ID's dialog."
+    icon="browser-window"
+    title="Dialog"
+    to="/docs/guides/dialog"
+  />
+</Cards>

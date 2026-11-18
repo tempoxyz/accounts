@@ -1,0 +1,4 @@
+# The canonical URL of each page names the production origin. Search engines index no other
+# deployment: the Worker's workers.dev URL, and the preview URL of each version.
+https://:version.:subdomain.workers.dev/*
+  X-Robots-Tag: noindex

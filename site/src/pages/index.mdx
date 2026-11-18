@@ -1,9 +1,836 @@
----
-title: Tempo Accounts SDK
-description: The fastest way to add stablecoins to your application.
-layout: blank
----
+import { Cards, Tab, Tabs } from 'vocs'
+import { CardRows } from '../components/CardRows.tsx'
+import { Demo } from '../components/Demo.tsx'
+import { ExampleCard } from '../components/ExampleCard.tsx'
+import { PageCard } from '../components/PageCard.tsx'
+import { SourceLink } from '../components/SourceLink.tsx'
+import { Forward } from '../demos/redirect/Return.tsx'
 
-import LandingPage from '../landing/page'
+{/* It forwards the callback of the "Redirect" demo before the page renders, so it comes first. */}
 
-<LandingPage />
+<Forward />
+
+# Getting started [Get started with Tempo ID in an app.]
+
+## Overview
+
+The Accounts SDK provides what an app needs to sign users in with Tempo ID, act onchain on [Tempo](https://tempo.xyz), and call the Tempo API.
+
+<CardRows>
+  <PageCard
+    description="Sign users in on the web, on mobile, in a CLI, or on a server."
+    icon="log-in"
+    title="Sign in with Tempo ID"
+    to="/docs/guides/dialog"
+  />
+  <PageCard
+    description="Send payments and transactions within limits that the user approves, with no wallet prompt."
+    icon="viem"
+    title="Act onchain on Tempo"
+    to="/docs/guides/viem"
+  />
+  <PageCard
+    description="Sponsor the fees of users' transactions through the Tempo API."
+    icon="pay-by-hand"
+    title="Use the Tempo API"
+    to="/docs/guides/fee-sponsorship/use-tempo-api"
+  />
+</CardRows>
+
+## Demo
+
+The demo signs in through Tempo ID's dialog, and pays 1 OUSD on Tempo testnet with the sign-in's [access key](/docs/guides/access-keys), with no approval.
+
+<Demo name="SendPayment" source="examples/web" title="Send a payment" />
+
+## Quick prompt
+
+To add the flow of the demo to an app, paste this prompt into a coding agent.
+
+:::prompt
+Read https://accounts.tempo.xyz/llms-full.txt. Then add Tempo ID sign-in to this app with the `accounts` package. Follow the "Getting started" steps of this app's platform.
+:::
+
+## Walkthrough
+
+Each tab builds the flow on one platform, on Tempo testnet.
+
+<Tabs stateKey="platform">
+<Tab title="Web">
+
+The [`web`](https://github.com/tempoxyz/accounts/tree/main/examples/web) example runs these steps in a React app.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts react react-dom viem
+```
+
+```sh [bun]
+bun add accounts react react-dom viem
+```
+
+:::
+
+### Create the instance
+
+Create one instance for the app with <SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink>. Each sign-in requests an [access key](/docs/guides/access-keys) with these limits.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+### Sign the user in
+
+<SourceLink name="useSession" path="src/react/index.ts">`useSession`</SourceLink> returns the session, and renders again when it changes. Without a session, <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> opens Tempo ID's sign-in in a dialog over the page.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  // [!code hl:start]
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+  // [!code hl:end]
+
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Send a payment
+
+<SourceLink name="pay" path="src/Accounts.ts">`pay`</SourceLink> sends 1 OUSD from the user's Tempo Account. If the access key's limits hold the amount, the access key signs it, and the user approves nothing. Otherwise, Tempo ID's payment page asks the user to approve it.
+
+:::code-group
+
+```tsx [Send.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Send() {
+  return (
+    <button
+      onClick={async () => {
+        // [!code hl:start]
+        const { transaction } = await accounts.pay({
+          amount: '1',
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: 'ousd',
+        })
+        // [!code hl:end]
+        console.log(transaction)
+      }}
+      type="button"
+    >
+      Send 1 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+Render the button once the user signs in.
+
+::::
+
+</Tab>
+<Tab title="CLI">
+
+The [`cli`](https://github.com/tempoxyz/accounts/tree/main/examples/cli) example runs these steps as the commands of one CLI.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts viem
+```
+
+```sh [pnpm]
+pnpm add accounts viem
+```
+
+```sh [bun]
+bun add accounts viem
+```
+
+:::
+
+### Create the instance
+
+A CLI names its own client ID, `cli:` and a name, so it needs no registration. The instance saves the session to `~/.tempo/id/store.json`, which only the user can read.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { device, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for 7 days.
+  accessKey: () => ({
+    expiry: '7d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: 'cli:acme-example', // [!code hl]
+  plugins: [
+    device({
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+    viem(),
+  ],
+})
+```
+
+### Sign the user in
+
+The <SourceLink name="device" path="src/plugins/device.ts">`device`</SourceLink> plugin runs the OAuth device authorization grant. <SourceLink name="signIn" path="src/plugins/device.ts">`device.signIn`</SourceLink> passes a code to <SourceLink name="onCode" path="src/plugins/device.ts">`onCode`</SourceLink>, the user approves it in any browser, and the call returns the session.
+
+:::code-group
+
+```ts [login.ts]
+import { accounts } from './tempo.config.js'
+
+const { user } = await accounts.device.signIn() // [!code hl]
+console.log(`Signed in as ${user.email}.`)
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { device, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for 7 days.
+  accessKey: () => ({
+    expiry: '7d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: 'cli:acme-example',
+  plugins: [
+    device({
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+    viem(),
+  ],
+})
+```
+
+:::
+
+### Send a payment
+
+Each later run reads the session from the file, and the access key signs the transfer. <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> resolves once the chain includes the transfer. Without a session, it throws <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink>.
+
+:::code-group
+
+```ts [send.ts]
+import { accounts } from './tempo.config.js'
+
+const session = await accounts.session.get()
+if (!session?.accessKey) throw new Error('Not signed in. Run `login`.')
+// The access key acts for the user's Tempo Account.
+console.log(`${session.user.email} ${session.accessKey.account}`)
+
+const { transaction } = await accounts.pay({ // [!code hl]
+  amount: '1',
+  to: '0x000000000000000000000000000000000000dEaD',
+  token: 'ousd',
+})
+console.log(`Sent in ${transaction}.`)
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { device, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for 7 days.
+  accessKey: () => ({
+    expiry: '7d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: 'cli:acme-example',
+  plugins: [
+    device({
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+    viem(),
+  ],
+})
+```
+
+:::
+
+::::
+
+</Tab>
+<Tab title="React Native">
+
+The [`mobile`](https://github.com/tempoxyz/accounts/tree/main/examples/mobile) example runs these steps in an Expo app.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts viem expo-secure-store expo-web-browser react-native-get-random-values
+```
+
+```sh [pnpm]
+pnpm add accounts viem expo-secure-store expo-web-browser react-native-get-random-values
+```
+
+```sh [bun]
+bun add accounts viem expo-secure-store expo-web-browser react-native-get-random-values
+```
+
+:::
+
+### Set the scheme of the app
+
+Tempo ID returns the user to the app through its custom scheme.
+
+```json [app.json]
+{
+  "expo": {
+    "scheme": "com.example.app"
+  }
+}
+```
+
+A custom scheme needs a [registration](https://github.com/tempoxyz/id/blob/main/docs/apps.md#registration) with Tempo ID, which issues the app's client ID and names its redirect URI.
+
+### Configure Metro
+
+Metro reads the TypeScript source of ox in place of its build, and the bundle fails. This resolver skips the source.
+
+```js [metro.config.js]
+const { getDefaultConfig } = require('expo/metro-config')
+
+const config = getDefaultConfig(__dirname)
+
+config.resolver.resolveRequest = (context, name, platform) =>
+  context.resolveRequest(
+    name.startsWith('ox/')
+      ? {
+          ...context,
+          sourceExts: context.sourceExts.filter((ext) => ext !== 'ts'),
+        }
+      : context,
+    name,
+    platform,
+  )
+
+module.exports = config
+```
+
+The file is CommonJS, as Expo's own template is. Expo's base TypeScript config excludes it, so the type check skips it.
+
+### Create the instance
+
+The <SourceLink name="expo" path="src/plugins/expo.ts">`expo`</SourceLink> plugin opens Tempo ID in the system browser, and keeps the session in the device's secure store.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { expo } from 'accounts/expo'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The client ID of the app's registration.
+  clientId: 'example-mobile',
+  plugins: [
+    expo({ redirectUri: 'com.example.app:/callback' }), // [!code hl]
+    react(),
+    viem(),
+  ],
+})
+```
+
+### Sign the user in
+
+<SourceLink name="signIn" path="src/plugins/redirect.ts">`redirect.signIn`</SourceLink> opens Tempo ID in an authentication sheet, and returns the session. <SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession`</SourceLink> restores it after a restart of the app.
+
+:::code-group
+
+```tsx [App.tsx]
+import { Button, Text } from 'react-native'
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  // [!code hl:start]
+  if (!session?.accessKey)
+    return (
+      <Button
+        onPress={() => accounts.redirect.signIn()}
+        title="Sign in with Tempo"
+      />
+    )
+  // [!code hl:end]
+
+  return (
+    <Text>
+      Signed in as {session.user.email}, with the Tempo Account{' '}
+      {session.accessKey.account}
+    </Text>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { expo } from 'accounts/expo'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The client ID of the app's registration.
+  clientId: 'example-mobile',
+  plugins: [
+    expo({ redirectUri: 'com.example.app:/callback' }),
+    react(),
+    viem(),
+  ],
+})
+```
+
+:::
+
+### Send a payment
+
+The access key signs the transfer, so the user sees no prompt.
+
+:::code-group
+
+```tsx [Send.tsx]
+import { Button } from 'react-native'
+import { accounts } from './tempo.config.js'
+
+export function Send() {
+  return (
+    <Button
+      onPress={async () => {
+        // [!code hl:start]
+        const { transaction } = await accounts.pay({
+          amount: '1',
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: 'ousd',
+        })
+        // [!code hl:end]
+        console.log(transaction)
+      }}
+      title="Send 1 OUSD"
+    />
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { expo } from 'accounts/expo'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The client ID of the app's registration.
+  clientId: 'example-mobile',
+  plugins: [
+    expo({ redirectUri: 'com.example.app:/callback' }),
+    react(),
+    viem(),
+  ],
+})
+```
+
+:::
+
+Render the button once the user signs in.
+
+::::
+
+</Tab>
+<Tab title="Redirect (Backend)">
+
+The server runs the sign-in through a redirect to Tempo ID, and keeps each session with its tokens and access key. The browser holds only a session ID, in an HTTP-only cookie, so the page needs no instance. The [`backend`](https://github.com/tempoxyz/accounts/tree/main/examples/backend) example runs these steps in a Hono server.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts hono viem
+```
+
+```sh [pnpm]
+pnpm add accounts hono viem
+```
+
+```sh [bun]
+bun add accounts hono viem
+```
+
+:::
+
+### Create the instance
+
+The server's instance keeps each session in its store, with the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin. The <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin sends transactions with each session's access key. The app's origin, in `APP_URL`, is its client ID.
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() }), viem()], // [!code hl]
+})
+```
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps sessions in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+:::warning
+Keep the store on the server. Each session holds a refresh token, and the private key of its access key.
+:::
+
+### Serve the sign-in routes
+
+<SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> serves the sign-in routes under `/api/auth`. A deployed origin names the callback route in the `redirect_uris` of its [web app manifest](https://github.com/tempoxyz/id/blob/main/docs/apps.md#origin-client-id).
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw)) // [!code hl]
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() }), viem()],
+})
+```
+
+:::
+
+| Route                    | Result                                                                      |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `GET /api/auth/login`    | Starts a sign-in, and redirects the browser to Tempo ID                     |
+| `GET /api/auth/callback` | Completes the sign-in, sets the session cookie, and redirects to `returnTo` |
+| `POST /api/auth/logout`  | Ends the session, and deletes the session cookie                            |
+
+### Sign the user in
+
+A link to the login route leaves the page for Tempo ID's sign-in. After the sign-in, the callback returns the browser to `returnTo` with the session cookie. <SourceLink name="session.get" path="src/Accounts.ts">`session.get`</SourceLink> returns the session of the request's cookie, or `undefined`.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { html } from 'hono/html'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+app.get('/', async (c) => {
+  // [!code hl:start]
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'tempo-id')
+    return c.html(
+      html`<a href="/api/auth/login?returnTo=/">Sign in with Tempo</a>`,
+    )
+  // [!code hl:end]
+
+  return c.html(html`<p>Signed in as ${session.user.email}</p>`)
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() }), viem()],
+})
+```
+
+:::
+
+### Send a payment
+
+<SourceLink name="pay" path="src/Accounts.ts">`pay`</SourceLink> with <SourceLink name="session" path="src/internal/Payment.ts">`session`</SourceLink> sends 1 OUSD with the access key of the request's session, so the user approves nothing. The server opens no payment page, so a payment above the access key's limits throws.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { csrf } from 'hono/csrf'
+import { html } from 'hono/html'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+// Another site cannot post the app's forms.
+app.use(csrf())
+
+app.get('/', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'tempo-id')
+    return c.html(
+      html`<a href="/api/auth/login?returnTo=/">Sign in with Tempo</a>`,
+    )
+
+  return c.html(html`
+    <p>Signed in as ${session.user.email}</p>
+    <form action="/pay" method="post"><button>Send 1 OUSD</button></form>
+  `)
+})
+
+app.post('/pay', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'tempo-id') return c.redirect('/')
+
+  // [!code hl:start]
+  const { transaction } = await accounts.pay({
+    amount: '1',
+    session,
+    to: '0x000000000000000000000000000000000000dEaD',
+    token: 'ousd',
+  })
+  // [!code hl:end]
+  return c.text(`Sent in ${transaction}.`)
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() }), viem()],
+})
+```
+
+:::
+
+::::
+
+</Tab>
+
+</Tabs>
+
+## Examples
+
+Each example is a small app that installs as it is.
+
+<Cards>
+  <ExampleCard
+    description="Sign-in through a dialog on the page, and a payment with the access key."
+    icon="browser-window"
+    name="web"
+    title="Web"
+  />
+  <ExampleCard
+    description="Sign-in through the device grant, with a code approved in a browser."
+    icon="laptop"
+    name="cli"
+    title="CLI"
+  />
+  <ExampleCard
+    description="Sign-in through the system browser in an Expo app."
+    icon="smartphone"
+    name="mobile"
+    title="Mobile"
+  />
+  <ExampleCard
+    description="Sign-in through a redirect that the server runs, with the session on the server."
+    icon="server"
+    name="backend"
+    title="Redirect (Backend)"
+  />
+  <ExampleCard
+    description="Sign-in through a wagmi connector, with wagmi's hooks."
+    icon="wagmi"
+    name="wagmi"
+    title="Wagmi"
+  />
+</Cards>
+
+The [`examples`](https://github.com/tempoxyz/accounts/tree/main/examples) folder holds the others.
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Read the session in components, with a hook."
+    icon="react"
+    title="React"
+    to="/docs/guides/react/manage-sessions"
+  />
+  <PageCard
+    description="Sign in through a wagmi connector."
+    icon="wagmi"
+    title="Wagmi"
+    to="/docs/guides/wagmi"
+  />
+  <PageCard
+    description="Send transactions and sign messages with the access key."
+    icon="viem"
+    title="Viem"
+    to="/docs/guides/viem"
+  />
+  <PageCard
+    description="Pay the fees of the transactions of users."
+    icon="pay-by-hand"
+    title="Fee sponsorship"
+    to="/docs/guides/fee-sponsorship/use-tempo-api"
+  />
+</Cards>

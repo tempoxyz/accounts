@@ -1,0 +1,28 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // The Worker serves the page's assets, so the page sends to the relay route at its own origin.
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "compatibility_date": "2026-10-01",
+  // `process.env` holds the vars.
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./worker.ts",
+  "name": "tempo-id-example-sponsored-tempo-api",
+  // Each user ID sends at most 10 relay requests a minute. The counter is local to each Cloudflare
+  // location, so the limit is approximate.
+  "ratelimits": [
+    {
+      "name": "RELAY_LIMIT",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 },
+    },
+  ],
+  // The page's origin is its client ID, so the route accepts only that app's access tokens. The
+  // Tempo API key is the secret `TEMPO_API_KEY`: `.dev.vars` in development, `wrangler secret put`
+  // in production.
+  "vars": {
+    "APP_URL": "http://localhost:5193",
+  },
+}

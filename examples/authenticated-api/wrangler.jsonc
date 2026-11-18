@@ -1,0 +1,25 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // The Worker serves the page's assets, so the page calls the API at its own origin.
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/v1/*"],
+  },
+  "compatibility_date": "2026-10-01",
+  // `process.env` holds the vars.
+  "compatibility_flags": ["nodejs_compat"],
+  // One object for each user holds the user's notes, and one for each session ID holds the session.
+  "durable_objects": {
+    "bindings": [
+      { "class_name": "Notes", "name": "NOTES" },
+      { "class_name": "SESSIONS", "name": "SESSIONS" },
+    ],
+  },
+  "main": "./api.ts",
+  "migrations": [{ "new_sqlite_classes": ["Notes", "SESSIONS"], "tag": "v1" }],
+  "name": "tempo-id-example-authenticated-api",
+  // Without a registration, the page's origin is its client ID.
+  "vars": {
+    "APP_URL": "http://localhost:5192",
+  },
+}

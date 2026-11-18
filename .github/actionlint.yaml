@@ -1,0 +1,10 @@
+# actionlint does not know the `queue` key of `concurrency`, which keeps every pending release.
+paths:
+  .github/workflows/main.yml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'
+
+# The shards of the end-to-end suite run on a Depot runner, whose label actionlint does not know.
+self-hosted-runner:
+  labels:
+    - depot-ubuntu-latest-4

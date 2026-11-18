@@ -1,0 +1,20 @@
+{
+  "name": "test-app-cli",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check:types": "tsc"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "accounts": "workspace:*",
+    "mppx": "catalog:",
+    "viem": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}

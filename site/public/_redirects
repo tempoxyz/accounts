@@ -1,0 +1,5 @@
+/docs / 307
+/docs/introduction/getting-started / 307
+/:page.md /assets/md/:page.md 200
+/docs/:group/:page.md /assets/md/docs/:group/:page.md 200
+/docs/:group/:topic/:page.md /assets/md/docs/:group/:topic/:page.md 200

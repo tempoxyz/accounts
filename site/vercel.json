@@ -1,5 +1,19 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm build",
-  "devCommand": "pnpm dev"
+  "buildCommand": "mkdir -p dist/vercel && echo 'Proxied to the Worker.' > dist/vercel/proxy.txt",
+  "framework": null,
+  "headers": [
+    {
+      "headers": [{ "key": "X-Robots-Tag", "value": "all" }],
+      "source": "/(.*)"
+    }
+  ],
+  "installCommand": "",
+  "outputDirectory": "dist/vercel",
+  "rewrites": [
+    {
+      "destination": "https://accounts-site.porto.workers.dev/$1",
+      "source": "/(.*)"
+    }
+  ]
 }

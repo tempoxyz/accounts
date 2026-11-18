@@ -1,0 +1,671 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Send payments [Send a payment from a Tempo Account with the access key of the session, or on Tempo ID's payment page.]
+
+## Overview
+
+<SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> sends one stablecoin transfer from the user's Tempo Account. The session's [access key](/docs/guides/access-keys) signs it with no prompt, within the spending limit that the user approves once at the sign-in.
+
+If no access key can pay, such as for an amount above the limit, the account's owner signs the transfer on Tempo ID's payment page. As an OAuth authorization request returns a code, the page returns to the app's redirect URI with the hash of the transaction.
+
+The demo signs a user in for an access key that sends up to 10 OUSD for a day. It pays 1 OUSD with the access key, then 12 OUSD on the payment page, and links each transaction.
+
+<Demo name="SendPayments" source="examples/web" title="Send a payment" />
+
+## Walkthrough
+
+The [`web`](https://github.com/tempoxyz/accounts/tree/main/examples/web) example runs these steps.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts react react-dom viem
+```
+
+```sh [bun]
+bun add accounts react react-dom viem
+```
+
+:::
+
+### Create the instance
+
+<SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> sets the permissions that each sign-in requests. With the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, the access key sends each payment that its limits hold, in place of the payment page.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 10 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The `viem` plugin sends each payment within the limit with the access key.
+  plugins: [react(), viem()],
+})
+```
+
+### Sign the user in
+
+The payment comes from the [session's](/docs/guides/user-session) Tempo Account. If the Tempo Account holds less than <SourceLink name="signIn.funding" path="src/plugins/dialog.ts">`funding`</SourceLink>, Tempo ID's deposit page opens after the user approves the limit.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session)
+    return (
+      <button
+        onClick={() =>
+          accounts.dialog.signIn({
+            funding: { amount: '10', token: 'OUSD' }, // [!code hl]
+          })
+        }
+        type="button"
+      >
+        Sign in with Tempo
+      </button>
+    )
+
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 10 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The `viem` plugin sends each payment within the limit with the access key.
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Send the payment
+
+<SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> resolves with <SourceLink name="pay.transaction" path="src/actions/account.ts">`transaction`</SourceLink> once the chain includes the transfer. The app renders `Pay` for a signed-in user.
+
+:::code-group
+
+```tsx [Pay.tsx]
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+export function Pay() {
+  const [transaction, setTransaction] = useState<string>()
+
+  return (
+    <>
+      <button
+        onClick={async () => {
+          // [!code hl:start]
+          const { transaction } = await accounts.pay({
+            // A decimal string in whole units.
+            amount: '1',
+            to: '0x000000000000000000000000000000000000dEaD',
+            // A symbol in any case, or an address.
+            token: 'ousd',
+          })
+          // [!code hl:end]
+          setTransaction(transaction)
+        }}
+        type="button"
+      >
+        Pay 1 OUSD
+      </button>
+      {transaction && <p>Paid in {transaction}.</p>}
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 10 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The `viem` plugin sends each payment within the limit with the access key.
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+The access key sends the transfer if it signs on the payment's chain, acts for the account, and its limits hold the amount. Its transaction pays its own fee, so the limit of the fee token must also hold 0.1 for the fee. The fee token is the plugin's `feeToken`, else the payment's token if it is a USD stablecoin other than MACH.
+
+Otherwise the payment page opens in a frame in a dialog. The dialog shows at once with a loading state while the access key sends, so the page also shows at once after a transfer that the chain refuses, such as for a spent limit. The page returns to the instance's <SourceLink name="Config.redirectUri" path="src/Accounts.ts">`redirectUri`</SourceLink>, or to the root of the page's origin.
+
+An <SourceLink name="pay.amount" path="src/actions/account.ts">`amount`</SourceLink> that is not a decimal above 0 with at most 6 decimal places rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> and the reason `invalid_field`, before any transfer. Without a session, the call rejects with <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink>.
+
+A Reject on the page, or a close of the dialog, rejects <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink>, and the transfer does not send:
+
+| The user           | The error                                                                                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Selects **Reject** | An <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the <SourceLink name="RequestError.code" path="src/Accounts.ts">`code`</SourceLink> `access_denied` |
+| Closes the dialog  | A `DOMException` with the name `AbortError`                                                                                                                                                             |
+
+::::
+
+## Use cases
+
+Each use case sets one option of <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink>, or of the instance that it runs on.
+
+### Attach a memo
+
+<SourceLink name="pay.memo" path="src/actions/account.ts">`memo`</SourceLink> is the transfer's memo, which the chain records, such as an order ID: text, sent as its UTF-8 bytes, or hex, of 1 to 32 bytes. A value is hex only if it is `0x` and an even count of hex digits. A memo over 32 bytes rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> and the code `invalid_request`, before any transfer.
+
+:::code-group
+
+```tsx [PayOrder.tsx]
+import { accounts } from './tempo.config.js'
+
+export function PayOrder() {
+  return (
+    <button
+      onClick={() =>
+        accounts.pay({
+          amount: '5',
+          memo: 'order-123', // [!code hl]
+          to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+          token: 'ousd',
+        })
+      }
+      type="button"
+    >
+      Pay 5 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 10 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The `viem` plugin sends each payment within the limit with the access key.
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Add a note
+
+<SourceLink name="pay.note" path="src/actions/account.ts">`note`</SourceLink> states what the payment is for, in at most 140 characters. Only the payment page shows the note, and the chain records none.
+
+:::code-group
+
+```tsx [PayPlan.tsx]
+import { accounts } from './tempo.config.js'
+
+export function PayPlan() {
+  return (
+    <button
+      onClick={() =>
+        accounts.pay({
+          amount: '50',
+          note: 'Pro plan, November', // [!code hl]
+          to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+          token: 'ousd',
+        })
+      }
+      type="button"
+    >
+      Pay 50 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 10 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The `viem` plugin sends each payment within the limit with the access key.
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Sponsor the fee
+
+<SourceLink name="viem.relay" path="src/plugins/viem.ts">`relay`</SourceLink> sends each transfer of the access key through the app's relay route, whose fee payer pays the fee. The fee then counts against no limit. A sponsoring <SourceLink name="viem.relay.transport" path="src/plugins/viem.ts">`transport`</SourceLink> counts as no relay. [Use Tempo API](/docs/guides/fee-sponsorship/use-tempo-api) serves the route.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 10 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem({ relay: '/api/relay' })], // [!code hl]
+})
+```
+
+### Pay without an access key
+
+An instance without the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin sends each payment on the payment page, and the user approves each one there. Without <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink>, the sign-in requests no access key. The payment page of a third-party app then pays from the account selected for the app, else the user's oldest.
+
+With the plugin, the payment page also sends `accounts.token.transfer` and `transferSync` on a page, for a session whose access keys sign no transaction on the chain, and that no sign-in renews. Only the amount, the memo, the recipient, and the token apply, and the action returns what Viem's own action returns.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+// No `accessKey` and no `viem` plugin, so the payment page sends each payment.
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+### Open a popup
+
+<SourceLink name="pay.mode" path="src/actions/account.ts">`mode: 'popup'`</SourceLink> opens the payment page in a popup window. A frame without a Tempo ID session signs the user in on its own page, as <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> does, and creates a new user's passkey account there.
+
+A frame that the app's page covers, or whose sign-in cannot show the payment, such as in a browser that keeps no frame cookie, requests a popup. A deposit by card does the same, and opens Buy MACH in the popup. The popup opens at once within the click, else the dialog offers it.
+
+A popup opens only within a click, so call <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> in a click handler. If the browser blocks the popup, the call rejects with <SourceLink name="BlockedError" path="src/actions/account.ts">`Actions.account.BlockedError`</SourceLink>.
+
+:::code-group
+
+```tsx [PayInPopup.tsx]
+import { accounts } from './tempo.config.js'
+
+export function PayInPopup() {
+  return (
+    <button
+      // The popup opens within the click, before any other `await`.
+      onClick={() =>
+        accounts.pay({
+          amount: '50',
+          mode: 'popup', // [!code hl]
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: 'ousd',
+        })
+      }
+      type="button"
+    >
+      Pay 50 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 10 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The `viem` plugin sends each payment within the limit with the access key.
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+:::note
+A page that sends `Cross-Origin-Opener-Policy: same-origin` has no handle to the popup. The call then stays pending until its <SourceLink name="pay.signal" path="src/actions/account.ts">`signal`</SourceLink> aborts.
+:::
+
+### Pay on another chain
+
+<SourceLink name="pay.chainId" path="src/actions/account.ts">`chainId`</SourceLink> names the payment's chain, in place of the instance's. Pass <SourceLink name="pay.account" path="src/actions/account.ts">`account`</SourceLink> too, so the call reads no account before the page opens.
+
+Without <SourceLink name="pay.account" path="src/actions/account.ts">`account`</SourceLink>, the payment comes from the session's Tempo Account, or the account of its access key. If the session holds neither, the instance reads the account, which only a first-party app can do from its page.
+
+:::code-group
+
+```tsx [PayOnMainnet.tsx]
+import { accounts } from './tempo.config.js'
+
+// The user's Tempo Account on Tempo mainnet, such as from the app's server.
+const account = '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326'
+
+export function PayOnMainnet() {
+  return (
+    <button
+      onClick={() =>
+        accounts.pay({
+          // [!code hl:start]
+          account,
+          chainId: 4217,
+          // [!code hl:end]
+          amount: '1',
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: 'usdc.e',
+        })
+      }
+      type="button"
+    >
+      Pay 1 USDC.e
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 10 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The `viem` plugin sends each payment within the limit with the access key.
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Pay and sign in
+
+An app that does not know the user yet passes a Sign-In with Ethereum message as <SourceLink name="pay.challenge" path="src/actions/account.ts">`challenge`</SourceLink>, and no <SourceLink name="pay.account" path="src/actions/account.ts">`account`</SourceLink>. Tempo ID's page signs the user in if needed, and pays from the account selected for the app, else the user's oldest. The access key never sends such a payment.
+
+**Pay** has the account sign the message, then sends the transfer, so the app knows who paid from one approval. The call resolves with <SourceLink name="pay.address" path="src/actions/account.ts">`address`</SourceLink> and <SourceLink name="pay.challengeSignature" path="src/actions/account.ts">`challengeSignature`</SourceLink> beside <SourceLink name="pay.transaction" path="src/actions/account.ts">`transaction`</SourceLink>. The approval grants the app no tokens and no access key.
+
+The message must name the redirect URI's origin and the payment's chain, with no resources, as <SourceLink name="siwe.start" path="src/plugins/siwe.ts">`siwe.start`</SourceLink> of the <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe`</SourceLink> plugin issues it. [Sign-in with a payment](https://github.com/tempoxyz/id/blob/main/docs/payments.md#sign-in-with-a-payment) describes the rules.
+
+On the page, the <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe`</SourceLink> plugin's <SourceLink name="siwe.auth" path="src/plugins/siwe.ts">`auth`</SourceLink> names the server's two routes. A payment without <SourceLink name="pay.account" path="src/actions/account.ts">`account`</SourceLink>, while the instance holds no session, then requests the message at the click, while the dialog or the popup opens, so the user waits for neither in turn. After **Pay**, the instance posts the signature to the verify route, and the call returns the route's JSON object as <SourceLink name="PayAuth.auth" path="src/Accounts.ts">`auth`</SourceLink>.
+
+:::code-group
+
+```tsx [PayAndSignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function PayAndSignIn() {
+  return (
+    <button
+      onClick={async () => {
+        // [!code hl:start]
+        const { address, auth, authError, transaction } = await accounts.pay({
+          amount: '1',
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: 'ousd',
+        })
+        // [!code hl:end]
+        // The transfer landed also when the verification failed, so sign the user in again then.
+        if (authError) return
+        // `auth` is the verify route's JSON object, such as `{ session }`, or `{ token }` of a
+        // server in token mode, which the page keeps for its requests and never logs.
+        console.log(address, transaction, auth !== undefined)
+      }}
+      type="button"
+    >
+      Pay 1 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { siwe } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [
+    react(),
+    // The backend's routes of the `siwe` plugin: `POST /api/auth/siwe/challenge` and
+    // `POST /api/auth/siwe`.
+    siwe({ auth: '/api/auth/siwe' }),
+  ],
+})
+```
+
+:::
+
+| Route     | Receives                                                                        | Returns                                                                                                 |
+| --------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Challenge | `{ chainId }`                                                                   | `{ message }`, or `{ id, message }`                                                                     |
+| Verify    | `{ address, id, message, signature }`, without `id` for a challenge without one | Any JSON object, returned as <SourceLink name="PayAuth.auth" path="src/Accounts.ts">`auth`</SourceLink> |
+
+If the challenge route fails, the dialog or the popup closes, and the call rejects before any transfer. A <SourceLink name="pay.challenge" path="src/actions/account.ts">`challenge`</SourceLink> function does the same without the plugin: it runs at the click, and the call returns <SourceLink name="pay.challengeSignature" path="src/actions/account.ts">`challengeSignature`</SourceLink> for the app to verify.
+
+### Cancel a payment
+
+To end a payment from the page, such as after a time limit, pass a <SourceLink name="pay.signal" path="src/actions/account.ts">`signal`</SourceLink>. Its abort closes the dialog or the popup, and rejects the call with the signal's reason.
+
+:::code-group
+
+```tsx [PayWithTimeout.tsx]
+import { accounts } from './tempo.config.js'
+
+export function PayWithTimeout() {
+  return (
+    <button
+      onClick={() =>
+        accounts.pay({
+          amount: '50',
+          // The dialog closes after two minutes without an answer.
+          signal: AbortSignal.timeout(120_000), // [!code hl]
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: 'ousd',
+        })
+      }
+      type="button"
+    >
+      Pay 50 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 10 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The `viem` plugin sends each payment within the limit with the access key.
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Send with Viem's token actions
+
+`accounts.token.transferSync` is Viem's `Actions.token.transferSync`, signed by the access key. It takes Viem's parameters, such as an amount in the token's units, and resolves with the receipt.
+
+Each transfer and its network fee count against the limit. On a page, a transfer above what is left opens Tempo ID's sign-in for a new access key, in place of the payment page, then sends again. If the user closes the sign-in, the transfer rejects with <SourceLink name="RetryClosedError" path="src/plugins/viem.ts">`Plugins.viem.RetryClosedError`</SourceLink>. With <SourceLink name="viem.retry" path="src/plugins/viem.ts">`retry: { limit: false }`</SourceLink>, the transfer rejects with the chain's error, with no sign-in.
+
+In a CLI, a device code takes the place of the sign-in, as [Send above the limit or the balance](/docs/guides/cli#send-above-the-limit-or-the-balance) shows.
+
+:::code-group
+
+```tsx [Send.tsx]
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function Send() {
+  return (
+    <button
+      onClick={() =>
+        // [!code hl:start]
+        accounts.token.transferSync({
+          amount: parseUnits('1', 6),
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: Addresses.ousd,
+        })
+        // [!code hl:end]
+      }
+      type="button"
+    >
+      Send 1 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 10 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  // The `viem` plugin sends each payment within the limit with the access key.
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Send from a backend
+
+With the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, a server holds the session. <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> with that <SourceLink name="pay" path="src/Accounts.ts">`session`</SourceLink> sends with its access key, as the [`backend`](https://github.com/tempoxyz/accounts/tree/main/examples/backend) example shows.
+
+A backend shows no payment page, so the access key sends any amount within the whole limit. A payment that the access key does not send rejects with <SourceLink name="PageRequiredError" path="src/actions/account.ts">`Actions.account.PageRequiredError`</SourceLink>. A session without a live access key on the chain rejects with <SourceLink name="AccessKeyRequiredError" path="src/Accounts.ts">`Accounts.AccessKeyRequiredError`</SourceLink>, before any request.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() }), viem()],
+})
+
+const app = new Hono()
+
+// The sign-in routes of the `backend` plugin.
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+app.post('/pay', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'tempo-id') return c.body(null, 401)
+
+  const { transaction } = await accounts.pay({
+    amount: '1',
+    session, // [!code hl]
+    to: '0x000000000000000000000000000000000000dEaD',
+    token: 'ousd',
+  })
+  return c.json({ transaction })
+})
+
+export default app
+```
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the sessions in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Pay the 402 charge of an MPP endpoint with the access key."
+    icon="payment-flow"
+    title="Pay MPP charges"
+    to="/docs/guides/payments/mpp"
+  />
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Send transactions with the Viem client of the instance."
+    icon="viem"
+    title="Viem"
+    to="/docs/guides/viem"
+  />
+  <PageCard
+    description="Pay the fees of the transactions of users."
+    icon="pay-by-hand"
+    title="Use Tempo API"
+    to="/docs/guides/fee-sponsorship/use-tempo-api"
+  />
+</Cards>

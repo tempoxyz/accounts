@@ -1,0 +1,361 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Read users [A session holds the user of a sign-in: an ID and a verified email address.]
+
+## Overview
+
+Each [session](/docs/guides/user-session) holds its user: an ID and a verified email address. The ID stays the same at every sign-in and in every app.
+
+The demo signs a user in through Tempo ID's dialog, and shows the session's user.
+
+<Demo name="ReadUsers" source="examples/web" title="Read the user" />
+
+## Walkthrough
+
+The [`web`](https://github.com/tempoxyz/accounts/tree/main/examples/web) example runs these steps in a React app.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts react react-dom viem
+```
+
+```sh [bun]
+bun add accounts react react-dom viem
+```
+
+:::
+
+### Create the instance
+
+The <SourceLink name="react" path="src/react/index.ts">`react`</SourceLink> plugin adds <SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession`</SourceLink>.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+### Sign the user in
+
+<SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> returns the session.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  async function signIn() {
+    const session = await accounts.dialog.signIn() // [!code hl]
+    console.log(session.user)
+    // { email: 'user@example.com', id: 'user_01M76GM8JG5NG1TZVQF63YM2MS' }
+  }
+
+  return (
+    <button onClick={() => void signIn()} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+| Property                                                                       | Value                                                          |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| <SourceLink name="email" path="src/internal/User.ts">`user.email`</SourceLink> | The user's verified email address                              |
+| <SourceLink name="id" path="src/internal/User.ts">`user.id`</SourceLink>       | The user's ID, `user_` and a ULID. Each token's `sub` holds it |
+
+Key the app's data by <SourceLink name="id" path="src/internal/User.ts">`user.id`</SourceLink>, not by <SourceLink name="email" path="src/internal/User.ts">`email`</SourceLink>.
+
+### Render the user
+
+<SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession`</SourceLink> also returns a session restored on a later visit. Without React, <SourceLink name="session.get" path="src/Accounts.ts">`accounts.session.get()`</SourceLink> returns it.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+async function signIn() {
+  const session = await accounts.dialog.signIn()
+  console.log(session.user)
+}
+
+export function App() {
+  const { isPending, session } = accounts.useSession() // [!code hl]
+
+  if (isPending) return <p>Checking the session…</p>
+  if (!session)
+    return (
+      <button onClick={() => void signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Identify the user to a server
+
+A server reads the user only from a token that it verifies:
+
+| Token        | Session property                                                                        | Names                                    | Lifetime  |
+| ------------ | --------------------------------------------------------------------------------------- | ---------------------------------------- | --------- |
+| ID token     | <SourceLink name="idToken" path="src/internal/Tokens.ts">`idToken`</SourceLink>         | The ID and the email address, to the app | 10 hours  |
+| Access token | <SourceLink name="accessToken" path="src/internal/Tokens.ts">`accessToken`</SourceLink> | The ID, to an API                        | 5 minutes |
+
+The app's server [verifies the ID token](/docs/guides/identity/verify-id-tokens). An API verifies the [access token](/docs/guides/api-authentication/authenticate-requests), which <SourceLink name="session.fetch" path="src/Accounts.ts">`accounts.session.fetch`</SourceLink> sends.
+
+:::code-group
+
+```tsx [Me.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Me() {
+  return (
+    <button
+      onClick={async () => {
+        // [!code hl:start]
+        const response = await accounts.session.fetch({
+          url: 'https://api.example/me',
+        })
+        // [!code hl:end]
+        console.log(await response.json())
+      }}
+      type="button"
+    >
+      Ask the API who I am
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+:::warning
+A page can send any ID or email address, so a server never reads the user from a request field.
+:::
+
+::::
+
+## Use cases
+
+Each use case reads one property of the session, or the user of an access token with the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin.
+
+### Read the account of the access key
+
+<SourceLink name="account" path="src/internal/AccessKey.ts">`session.accessKey.account`</SourceLink> holds the Tempo Account that the session's access key acts for. It is present only if the instance names <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink>, since each sign-in then requests an access key.
+
+:::code-group
+
+```tsx [Account.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Account() {
+  const { session } = accounts.useSession()
+
+  return <p>Tempo Account {session?.accessKey?.account}</p> // [!code hl]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // [!code hl:start]
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  // [!code hl:end]
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Read the selected Tempo Account
+
+<SourceLink name="account" path="src/Session.ts">`session.account`</SourceLink> holds the Tempo Account that Tempo ID selects for the app. A sign-in through a redirect, a dialog, or a device reads none, so <SourceLink name="account.get" path="src/Accounts.ts">`accounts.account.get`</SourceLink> reads it, and saves it in the session.
+
+:::code-group
+
+```tsx [Account.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Account() {
+  async function read() {
+    const account = await accounts.account.get() // [!code hl]
+    console.log(account?.address)
+  }
+
+  return (
+    <button onClick={() => void read()} type="button">
+      Read the Tempo Account
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Read the signer of a challenge
+
+<SourceLink name="address" path="src/Session.ts">`session.address`</SourceLink> holds the Tempo Account that signed the challenge of a sign-in, such as of [Sign-In With Ethereum](/docs/guides/siwe). After a sign-in without a challenge, it is absent. A server trusts it only after it verifies the signature, as [Sign challenges](/docs/guides/account-proof/sign-challenges) shows.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  async function signIn() {
+    const session = await accounts.dialog.signIn({
+      challenge: async (signal) => {
+        const response = await fetch('/challenge', { method: 'POST', signal })
+        return response.text()
+      },
+    })
+    console.log(session.address) // [!code hl]
+  }
+
+  return (
+    <button onClick={() => void signIn()} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Read the user on an API
+
+An access token holds no email address. An API reads the user with <SourceLink name="userInfo" path="src/plugins/tokens.ts">`tokens.userInfo`</SourceLink>, from the token that <SourceLink name="verifyAccessToken" path="src/plugins/tokens.ts">`tokens.verifyAccessToken`</SourceLink> returns, as [Authenticate requests](/docs/guides/api-authentication/authenticate-requests#read-the-user) shows.
+
+A refused access token throws <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the reason `invalid_token`.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens()],
+})
+
+const app = new Hono()
+
+app.get('/me', async (c) => {
+  const token = await accounts.tokens.verifyAccessToken(c.req.raw)
+  if (!token) return c.json({ error: 'invalid_token' }, 401)
+
+  const user = await accounts.tokens.userInfo({ accessToken: token }) // [!code hl]
+  // { email: 'user@example.com', id: 'user_01M76GM8JG5NG1TZVQF63YM2MS' }
+  return c.json(user)
+})
+
+export default app
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Verify the ID token of a sign-in on a server."
+    icon="user"
+    title="Verify ID tokens"
+    to="/docs/guides/identity/verify-id-tokens"
+  />
+  <PageCard
+    description="Verify the access token of a request on an API."
+    icon="shield-check"
+    title="Authenticate requests"
+    to="/docs/guides/api-authentication/authenticate-requests"
+  />
+  <PageCard
+    description="Read the saved session on a later visit."
+    icon="id-card"
+    title="Restore sessions"
+    to="/docs/guides/user-session/restore-sessions"
+  />
+  <PageCard
+    description="Prove the Tempo Account of a user with a signature."
+    icon="signed-file"
+    title="Sign challenges"
+    to="/docs/guides/account-proof/sign-challenges"
+  />
+</Cards>

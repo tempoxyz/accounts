@@ -2,7 +2,8 @@
 .env
 .env.*
 !.env.example
-.turbo
+.dev.vars*
+!.dev.vars.example
 .wrangler
 .vercel
 .vocs
@@ -11,6 +12,7 @@ dist
 node_modules
 tmp
 tsconfig*.tsbuildinfo
+/waterfall/
 tasks/
 tsbuildinfo
 .DS_Store
@@ -26,3 +28,9 @@ _TODO
 worker-configuration.d.ts
 _TODO
 .pnpm-store
+.dev.vars
+
+# The end-to-end suite writes its results, its report, and its proof.
+test/e2e/proof
+test/e2e/report
+test/e2e/results
