@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "mkdir -p dist/vercel",
+  "framework": null,
+  "headers": [
+    {
+      "headers": [{ "key": "X-Robots-Tag", "value": "all" }],
+      "source": "/(.*)"
+    }
+  ],
+  "installCommand": "",
+  "outputDirectory": "dist/vercel",
+  "rewrites": [
+    {
+      "destination": "https://accounts-site.porto.workers.dev/$1",
+      "source": "/(.*)"
+    }
+  ]
+}

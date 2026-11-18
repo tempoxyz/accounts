@@ -41,6 +41,8 @@ The deploy job checks out no code. The build job thus bundles the Worker to `dis
 
 The Worker holds no Durable Object, since Cloudflare gives a Worker with one no preview URL.
 
+Until `wrangler.json` names a route, Vercel serves `accounts.tempo.xyz`. `vercel.json` builds nothing and proxies each path to the Worker's workers.dev URL. Its `X-Robots-Tag` header replaces the `noindex` that `public/_headers` sets for workers.dev.
+
 `renderStrategy: 'full-static'` in `vocs.config.ts` writes each page as a file. A static build has no server for the redirects of `vocs.config.ts`, from `/docs` and the former path of "Getting started" to `/`, so `public/_redirects` repeats them for Cloudflare. It also serves the Markdown of a page at the page's path with `.md`.
 
 ## Sidebar
