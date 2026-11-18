@@ -1,6 +1,7 @@
 ---
 title: 'Changing a viem override re-resolves peers and adds a real vite@8.3.5'
 severity: 'minor'
+issue: 'tempoxyz/accounts#945'
 ---
 
 ## Expected Behavior
