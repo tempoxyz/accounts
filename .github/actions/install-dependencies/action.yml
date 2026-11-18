@@ -1,49 +1,31 @@
 name: 'Install dependencies'
 description: 'Prepare repository and all dependencies'
 
-inputs:
-  skip-cache:
-    description: 'Skip package manager cache restore/save'
-    required: false
-    default: 'false'
-
 runs:
   using: 'composite'
   steps:
     - name: Set up Node
-      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
-        node-version: '24'
-        package-manager-cache: false
+        node-version: 24
 
     - name: Set up pnpm
-      id: pnpm
+      # The organization allows only GitHub-owned actions, so pnpm comes from npm at the pinned version.
       shell: bash
-      run: |
-        corepack enable
-        echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      run: npm install --global "pnpm@$(node -p "require('./package.json').packageManager.split('@')[1]")" # zizmor: ignore[adhoc-packages]
 
-    - name: Restore pnpm store
-      id: cache
-      if: inputs.skip-cache != 'true'
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+    - name: Locate pnpm store
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    # A cached store keeps each job from downloading every tarball from the registry again.
+    - name: Cache pnpm store
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ steps.pnpm.outputs.store }}
         key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-        restore-keys: pnpm-store-${{ runner.os }}-
+        path: ${{ steps.pnpm-store.outputs.path }}
 
     - name: Install dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
-
-    - name: Prune pnpm store
-      if: inputs.skip-cache != 'true' && steps.cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: pnpm store prune
-
-    - name: Save pnpm store
-      if: inputs.skip-cache != 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-      with:
-        path: ${{ steps.pnpm.outputs.store }}
-        key: ${{ steps.cache.outputs.cache-primary-key }}

@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-<p align="center"><b>Tempo Accounts SDK for apps and wallets building stablecoin experiences on Tempo.</b></p>
+<p align="center"><b>Accounts SDK for Apps building on Tempo</b></p>
 
 <p align="center">
   <a href="https://accounts.tempo.xyz">Website</a> · <a href="https://accounts.tempo.xyz/docs">Docs</a> · <a href="#install">Install</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a>
@@ -14,31 +14,55 @@
 
 ---
 
+> [!WARNING]
+> `accounts@1` is in alpha, under the `alpha` dist-tag. Its API is not stable yet.
+
 ## Quick Prompt
 
 Prompt your agent:
 
 ```
-Read accounts.tempo.xyz/docs and integrate Tempo Wallet into my application
+Read accounts.tempo.xyz and integrate Tempo into my application
 ```
 
 ## Install
 
 ```bash
-npm i accounts
+npm i accounts@alpha viem
 ```
 
 ```bash
-pnpm i accounts
+pnpm i accounts@alpha viem
 ```
 
 ```bash
-bun i accounts
+bun i accounts@alpha viem
+```
+
+## Usage
+
+Create an instance with `Accounts.create`, and add a plugin from `accounts/plugins` for each sign-in method. Without a sign-in plugin, users sign in through Tempo ID in a dialog on the page:
+
+```ts
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  // Each sign-in requests an access key that may spend up to 10 OUSD for a day.
+  accessKey: {
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  },
+  plugins: [viem()],
+})
+
+await accounts.dialog.signIn()
+await accounts.pay({ amount, to, token })
 ```
 
 ## Documentation
 
-Start at [accounts.tempo.xyz](https://accounts.tempo.xyz) for the product overview, live demos, and integration guides. The documentation lives at [accounts.tempo.xyz/docs](https://accounts.tempo.xyz/docs).
+Start at [accounts.tempo.xyz](https://accounts.tempo.xyz) for the product overview and integration guides. The documentation lives at [accounts.tempo.xyz/docs](https://accounts.tempo.xyz/docs).
 
 ## Getting Help
 
@@ -48,66 +72,63 @@ Join the Telegram group to chat with the team and other devs: [@mpp_devs](https:
 
 ## Examples
 
-| Example                                                       | Description                                                                      |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| [basic](./examples/basic)                                     | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallet.  |
-| [deposits](./examples/deposits)                               | Open the deposit UI with optional pre-filled fields.                             |
-| [cli](./examples/cli)                                         | Minimal CLI setup to connect and authorize local keys using Tempo Wallet.        |
-| [webauthn](./examples/webauthn)                               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.           |
-| [access-key](./examples/access-key)                           | Authorize access keys using Tempo Wallet to submit transactions without prompts. |
-| [access-key-and-webauthn](./examples/access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                               |
-| [fee-payer](./examples/fee-payer)                             | Sponsor transactions via Tempo Wallet.                                           |
-| [fee-payer-and-webauthn](./examples/fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.       |
-| [mpp](./examples/mpp)                                         | Auto-pay HTTP `402` responses served by a Hono server using `mppx/hono`.         |
+| Example                                                   | Description                                                                                      |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [web](./examples/web)                                     | Sign in through a dialog on the page, and send OUSD with the access key.                         |
+| [authenticated-api](./examples/authenticated-api)         | Sign in through a dialog that the backend runs, call the app's API with a cookie, and pay OUSD.  |
+| [wagmi](./examples/wagmi)                                 | Sign in through wagmi's `connect`, with the `tempoId` connector.                                 |
+| [backend](./examples/backend)                             | Sign in through a redirect, with the session on a Cloudflare Worker.                             |
+| [siwe](./examples/siwe)                                   | Sign in with a SIWE message that a Worker issues, and approve a deletion with another message.   |
+| [siwe-pay](./examples/siwe-pay)                           | Pay and sign in with one click, with the `siwe` plugin's `auth` and a Worker in token mode.      |
+| [mpp-subscription](./examples/mpp-subscription)           | Approve an MPP subscription once, which a merchant's Worker charges each period.                 |
+| [sponsored-self-hosted](./examples/sponsored-self-hosted) | Send OUSD whose fees the app's own fee payer pays, through a guarded relay route.                |
+| [sponsored-tempo-api](./examples/sponsored-tempo-api)     | Send OUSD whose fees the sponsor of the app's Tempo API key pays, through a guarded relay route. |
+| [cli](./examples/cli)                                     | Sign in through the device grant, with a code approved in a browser.                             |
+| [mobile](./examples/mobile)                               | Sign in through the system browser in an Expo app.                                               |
+| [mpp-charge](./examples/mpp-charge)                       | Pay an MPP charge once, with a transfer that the access key signs.                               |
+| [mpp-session](./examples/mpp-session)                     | Pay a metered API in an MPP session, over HTTP, SSE, and a WebSocket.                            |
+| [mcp](./examples/mcp)                                     | Sign an agent in once for a paid MCP server, and pay each tool call with the access key.         |
+
+## Playgrounds
+
+[`tempoxyz/id`](https://github.com/tempoxyz/id) holds one playground per flow, which uses `accounts`, deployed beside `https://id.tempo.xyz`.
+
+| Playground   | Directory                                                                                     | URL                                                                              |
+| ------------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| API          | [`playgrounds/api`](https://github.com/tempoxyz/id/tree/main/playgrounds/api)                 | [id-playground-api.tempo.xyz/me](https://id-playground-api.tempo.xyz/me)         |
+| Backend      | [`playgrounds/backend`](https://github.com/tempoxyz/id/tree/main/playgrounds/backend)         | [id-playground-backend.tempo.xyz](https://id-playground-backend.tempo.xyz)       |
+| CLI          | [`playgrounds/cli`](https://github.com/tempoxyz/id/tree/main/playgrounds/cli)                 | none                                                                             |
+| Mobile       | [`playgrounds/mobile`](https://github.com/tempoxyz/id/tree/main/playgrounds/mobile)           | none                                                                             |
+| Third-party  | [`playgrounds/third-party`](https://github.com/tempoxyz/id/tree/main/playgrounds/third-party) | none                                                                             |
+| Wagmi        | [`playgrounds/wagmi`](https://github.com/tempoxyz/id/tree/main/playgrounds/wagmi)             | [id-playground-wagmi.tempo.xyz](https://id-playground-wagmi.tempo.xyz)           |
+| Web          | [`playgrounds/web`](https://github.com/tempoxyz/id/tree/main/playgrounds/web)                 | [id-playground-web.tempo.xyz](https://id-playground-web.tempo.xyz)               |
+| Web (Cash)   | [`playgrounds/web`](https://github.com/tempoxyz/id/tree/main/playgrounds/web)                 | [id-playground-web-cash.tempo.xyz](https://id-playground-web-cash.tempo.xyz)     |
+| Web (Shared) | [`playgrounds/web`](https://github.com/tempoxyz/id/tree/main/playgrounds/web)                 | [id-playground-web-shared.tempo.xyz](https://id-playground-web-shared.tempo.xyz) |
+
+Web (Cash) signs in to the Tempo Cash realm, and Web (Shared) to both realms.
+
+To run the CLI playground against `https://id.tempo.xyz`, run its `main` prerelease with `pnpx`:
+
+```sh
+export TEMPO_ID_URL=https://id.tempo.xyz
+pnpx @tempoxyz/example-id-cli@main login   # approve the code on /device
+pnpx @tempoxyz/example-id-cli@main whoami  # print the signed-in account
+pnpx @tempoxyz/example-id-cli@main fund    # fund the Tempo Account from the testnet faucet
+pnpx @tempoxyz/example-id-cli@main send 0x000000000000000000000000000000000000dEaD 0.01
+```
 
 ## Development
 
-Requires [Docker](https://docs.docker.com/get-docker/) and [OrbStack](https://orbstack.dev/) (recommended on macOS for automatic HTTPS `.accounts.local` domains).
-
 ```sh
-pnpm dev              # start all dev services via docker compose
 pnpm build            # build library
 pnpm check            # lint + format
 pnpm check:types      # type checks
 pnpm test             # run tests
 ```
 
-### Services
+### Releases
 
-| Service          | OrbStack URL                        |
-| ---------------- | ----------------------------------- |
-| Playground       | `https://playground.accounts.local` |
-| Dialog Reference | `https://dialog-ref.accounts.local` |
-| Docs             | `https://docs.accounts.local`       |
-| Wagmi Playground | `https://wagmi.accounts.local`      |
-
-## Deployment
-
-The docs site is configured for Vercel as a monorepo project.
-
-| Setting        | Value        |
-| -------------- | ------------ |
-| Root Directory | `site`       |
-| Build Command  | `pnpm build` |
-| Dev Command    | `pnpm dev`   |
-
-Set `VITE_BASE_URL` to the production docs origin when using a custom domain.
-
-### Playgrounds
-
-| Playground                   | Command          | Description                                  |
-| ---------------------------- | ---------------- | -------------------------------------------- |
-| [web](./playgrounds/web)     | `pnpm dev`       | Web playground for dialog + adapter testing. |
-| [wagmi](./playgrounds/wagmi) | `pnpm dev:wagmi` | Wagmi-based playground with connectors.      |
-| [cli](./playgrounds/cli)     | `pnpm dev:cli`   | CLI playground for device-code auth flow.    |
-
-### Reference Implementations
-
-The `ref-impls/` directory contains reference implementations for building with Tempo Accounts SDK:
-
-| Directory           | Description                                                                                                                                                                              |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ref-impls/dialog/` | Minimal, unstyled embed dialog app demonstrating how to build a custom embed using the `Remote` API. Select `dialogRefImpl` in the web playground's adapter dropdown to test against it. |
+Each push to `main` publishes to npm through trusted publishing, from `.github/workflows/release.yml`, as `<breaking>.<commit time>.0-<short SHA>` under `alpha`, such as `1.20261118194700.0-86519034c`, so `accounts@alpha` installs the current commit of `main`. A breaking pull request title, such as `feat!:`, raises `<breaking>`. `scripts/release.ts` picks the version. `latest` stays at `0.21.1` until 1.0.
 
 ## License
 

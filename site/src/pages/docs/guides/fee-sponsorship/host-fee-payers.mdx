@@ -1,0 +1,589 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Host fee payers [An account of the app's server pays the fees of the transactions of users.]
+
+## Overview
+
+Here the [fee payer](/docs/guides/fee-sponsorship/use-tempo-api#overview) is an account whose private key the app's server holds, so the app needs no Tempo API key. Nothing outside the app limits its spending, so the relay route checks the caller, the sender, and the transaction before it co-signs.
+
+The demo sends 1 OUSD through the site's relay route, which sponsors 3 payments a minute for each user, and shows the server's account that paid the fee.
+
+<Demo
+  name="HostFeePayers"
+  source="examples/sponsored-self-hosted"
+  title="Send with the site's fee payer"
+/>
+
+## Walkthrough
+
+The [`sponsored-self-hosted`](https://github.com/tempoxyz/accounts/tree/main/examples/sponsored-self-hosted) example runs these steps. It uses the page of [Use Tempo API](/docs/guides/fee-sponsorship/use-tempo-api#add-the-relay-route-to-the-page).
+
+::::steps
+
+### Add the fee payer
+
+Pass the account to the <SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink> plugin, whose route then co-signs each transaction through Viem's `Relay.feePayer`. With the <SourceLink name="create.handler.relay" path="src/Accounts.ts">`relay`</SourceLink> option of <SourceLink name="create.handler" path="src/Accounts.ts">`handler`</SourceLink>, <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> serves the route.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { relay } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const feePayer = privateKeyToAccount(
+  process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  handler: { relay: true }, // [!code hl]
+  plugins: [relay({ account: feePayer })], // [!code hl]
+})
+```
+
+:::warning
+Keep the private key in a server secret, and fund the account only with what the app can lose.
+:::
+
+### Check the sender
+
+<SourceLink name="relay.authorize" path="src/plugins/relay.ts">`authorize`</SourceLink> receives a copy of the request and its [access token](/docs/guides/api-authentication/authenticate-requests)'s claims. The fee payer signs at the fill, whose body names the sender. The token's <SourceLink name="accessKeys" path="src/AccessToken.ts">`accessKeys`</SourceLink> name the Tempo Account of each [access key](/docs/guides/access-keys) that Tempo ID signed for the app.
+
+Refuse each request that is not a fill, and each fill whose sender is none of these accounts, so a user cannot sponsor another account's transactions.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+export default new Hono().all('/api/relay', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { relay } from 'accounts/plugins'
+import { TempoAddress } from 'ox/tempo'
+import { isAddressEqual } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const feePayer = privateKeyToAccount(
+  process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  handler: { relay: true },
+  plugins: [
+    relay({
+      account: feePayer,
+      async authorize(options) {
+        // [!code hl:start]
+        const body = (await options.request.json().catch(() => undefined)) as
+          | { method?: unknown; params?: readonly { from?: unknown }[] }
+          | undefined
+        const sender = (() => {
+          const from = body?.params?.[0]?.from
+          if (typeof from !== 'string') return undefined
+          try {
+            return TempoAddress.resolve(from as TempoAddress.Address)
+          } catch {
+            return undefined
+          }
+        })()
+
+        if (
+          body?.method !== 'eth_fillTransaction' ||
+          !sender ||
+          !options.token.accessKeys.some(
+            (accessKey) =>
+              accessKey.chainId === accounts.config.chainId &&
+              isAddressEqual(accessKey.account, sender),
+          )
+        )
+          return Response.json({ error: 'forbidden' }, { status: 403 })
+        // [!code hl:end]
+      },
+    }),
+  ],
+})
+```
+
+:::
+
+### Limit each user
+
+Each signed-in user can spend the fee payer's balance, so <SourceLink name="relay.authorize" path="src/plugins/relay.ts">`authorize`</SourceLink> refuses a request above its user's limit. The sender then pays its own fee.
+
+Here a count in a <SourceLink name="Store" path="src/Store.ts">`Store`</SourceLink> allows 10 requests a minute for each user. It takes two store calls, so concurrent requests can pass the limit. For an exact limit, count in one atomic database step.
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the counts in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+export default new Hono().all('/api/relay', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { relay } from 'accounts/plugins'
+import { TempoAddress } from 'ox/tempo'
+import { isAddressEqual } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const feePayer = privateKeyToAccount(
+  process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+)
+
+const store = Store.memory() // [!code hl]
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  handler: { relay: true },
+  plugins: [
+    relay({
+      account: feePayer,
+      async authorize(options) {
+        const body = (await options.request.json().catch(() => undefined)) as
+          | { method?: unknown; params?: readonly { from?: unknown }[] }
+          | undefined
+        const sender = (() => {
+          const from = body?.params?.[0]?.from
+          if (typeof from !== 'string') return undefined
+          try {
+            return TempoAddress.resolve(from as TempoAddress.Address)
+          } catch {
+            return undefined
+          }
+        })()
+
+        if (
+          body?.method !== 'eth_fillTransaction' ||
+          !sender ||
+          !options.token.accessKeys.some(
+            (accessKey) =>
+              accessKey.chainId === accounts.config.chainId &&
+              isAddressEqual(accessKey.account, sender),
+          )
+        )
+          return Response.json({ error: 'forbidden' }, { status: 403 })
+
+        // [!code hl:start]
+        const minute = Math.floor(Date.now() / 60_000)
+        const key = `relay-limit:${options.token.userId}:${minute}`
+        const count = Number((await store.getItem(key)) ?? 0)
+        if (count >= 10)
+          return Response.json({ error: 'slow_down' }, { status: 429 })
+        await store.setItem(key, count + 1, { expiresAt: (minute + 1) * 60_000 })
+        // [!code hl:end]
+      },
+    }),
+  ],
+})
+```
+
+:::
+
+### Limit what the fee payer signs
+
+Viem's `Relay.feePayer` takes `validate`, which accepts or refuses each filled transaction. Pass the plugin in <SourceLink name="relay.plugins" path="src/plugins/relay.ts">`plugins`</SourceLink>, in place of <SourceLink name="relay.account" path="src/plugins/relay.ts">`account`</SourceLink>. Here its own module holds it, and it allows only OUSD transfers within a gas limit and a fee cap.
+
+The sender pays the fee of a refused transaction. An access key's first transaction carries its key authorization and takes about 5 million gas, so the gas limit allows it.
+
+:::warning
+
+<SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink> throws if <SourceLink name="relay.plugins" path="src/plugins/relay.ts">`plugins`</SourceLink> comes with <SourceLink name="relay.account" path="src/plugins/relay.ts">`account`</SourceLink> or <SourceLink name="relay.apiKey" path="src/plugins/relay.ts">`apiKey`</SourceLink>. The plugins run in order, and `Relay.feePayer` answers a raw transaction or a complete fill without the plugins after it. Put each fee payer limit in `validate`, or in a plugin before `Relay.feePayer`.
+:::
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+export default new Hono().all('/api/relay', (c) =>
+  accounts.handler.fetch(c.req.raw),
+)
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { relay } from 'accounts/plugins'
+import { TempoAddress } from 'ox/tempo'
+import { isAddressEqual } from 'viem'
+import { feePayer } from './fee-payer.js'
+
+const store = Store.memory()
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  handler: { relay: true },
+  plugins: [
+    relay({
+      async authorize(options) {
+        const body = (await options.request.json().catch(() => undefined)) as
+          | { method?: unknown; params?: readonly { from?: unknown }[] }
+          | undefined
+        const sender = (() => {
+          const from = body?.params?.[0]?.from
+          if (typeof from !== 'string') return undefined
+          try {
+            return TempoAddress.resolve(from as TempoAddress.Address)
+          } catch {
+            return undefined
+          }
+        })()
+
+        if (
+          body?.method !== 'eth_fillTransaction' ||
+          !sender ||
+          !options.token.accessKeys.some(
+            (accessKey) =>
+              accessKey.chainId === accounts.config.chainId &&
+              isAddressEqual(accessKey.account, sender),
+          )
+        )
+          return Response.json({ error: 'forbidden' }, { status: 403 })
+
+        const minute = Math.floor(Date.now() / 60_000)
+        const key = `relay-limit:${options.token.userId}:${minute}`
+        const count = Number((await store.getItem(key)) ?? 0)
+        if (count >= 10)
+          return Response.json({ error: 'slow_down' }, { status: 429 })
+        await store.setItem(key, count + 1, { expiresAt: (minute + 1) * 60_000 })
+      },
+      plugins: [feePayer], // [!code hl]
+    }),
+  ],
+})
+```
+
+```ts [fee-payer.ts]
+import { TempoAddress } from 'ox/tempo'
+import { decodeFunctionData, isAddressEqual } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Abis, Addresses, Relay } from 'viem/tempo'
+
+// [!code hl:start]
+const maxGas = 6_000_000n
+const maxFeePerGas = 10_000_000_000n
+// [!code hl:end]
+
+export const feePayer = Relay.feePayer({
+  account: privateKeyToAccount(
+    process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+  ),
+  // [!code hl:start]
+  validate(request) {
+    if (!request.gas || request.gas > maxGas) return false
+    if (!request.maxFeePerGas || request.maxFeePerGas > maxFeePerGas)
+      return 'tx_fee_limit_exceeded'
+
+    const calls = request.calls ?? [
+      { data: request.data, to: request.to, value: request.value },
+    ]
+    return (
+      calls.length > 0 &&
+      calls.every((call) => {
+        if (
+          !call.to ||
+          !isAddressEqual(TempoAddress.resolve(call.to), Addresses.ousd)
+        )
+          return false
+        if (call.value) return false
+
+        const { functionName } = (() => {
+          try {
+            return decodeFunctionData({
+              abi: Abis.tip20,
+              data: call.data ?? '0x',
+            })
+          } catch {
+            return { functionName: undefined }
+          }
+        })()
+        return (
+          functionName === 'transfer' || functionName === 'transferWithMemo'
+        )
+      })
+    )
+  },
+  // [!code hl:end]
+})
+```
+
+:::
+
+### Limit the body
+
+The route reads at most 1 MiB of a body, and returns 413 with the reason `body_too_large` above it. It parses the body before <SourceLink name="relay.authorize" path="src/plugins/relay.ts">`authorize`</SourceLink> runs, also for a caller that <SourceLink name="relay.authorize" path="src/plugins/relay.ts">`authorize`</SourceLink> refuses.
+
+A fill of one transfer takes about 1 KiB, so refuse a body above a smaller limit, or without a length, before the route reads it.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+const maxBodySize = 16 * 1024 // [!code hl]
+
+export default new Hono().all('/api/relay', async (c) => {
+  // [!code hl:start]
+  const length = Number(c.req.header('content-length'))
+  if (c.req.method === 'POST' && (!length || length > maxBodySize))
+    return c.json({ error: 'invalid_request' }, 413)
+  // [!code hl:end]
+  return accounts.handler.fetch(c.req.raw)
+})
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { relay } from 'accounts/plugins'
+import { TempoAddress } from 'ox/tempo'
+import { isAddressEqual } from 'viem'
+import { feePayer } from './fee-payer.js'
+
+const store = Store.memory()
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  handler: { relay: true },
+  plugins: [
+    relay({
+      async authorize(options) {
+        const body = (await options.request.json().catch(() => undefined)) as
+          | { method?: unknown; params?: readonly { from?: unknown }[] }
+          | undefined
+        const sender = (() => {
+          const from = body?.params?.[0]?.from
+          if (typeof from !== 'string') return undefined
+          try {
+            return TempoAddress.resolve(from as TempoAddress.Address)
+          } catch {
+            return undefined
+          }
+        })()
+
+        if (
+          body?.method !== 'eth_fillTransaction' ||
+          !sender ||
+          !options.token.accessKeys.some(
+            (accessKey) =>
+              accessKey.chainId === accounts.config.chainId &&
+              isAddressEqual(accessKey.account, sender),
+          )
+        )
+          return Response.json({ error: 'forbidden' }, { status: 403 })
+
+        const minute = Math.floor(Date.now() / 60_000)
+        const key = `relay-limit:${options.token.userId}:${minute}`
+        const count = Number((await store.getItem(key)) ?? 0)
+        if (count >= 10)
+          return Response.json({ error: 'slow_down' }, { status: 429 })
+        await store.setItem(key, count + 1, { expiresAt: (minute + 1) * 60_000 })
+      },
+      plugins: [feePayer],
+    }),
+  ],
+})
+```
+
+```ts [fee-payer.ts]
+import { TempoAddress } from 'ox/tempo'
+import { decodeFunctionData, isAddressEqual } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Abis, Addresses, Relay } from 'viem/tempo'
+
+const maxGas = 6_000_000n
+const maxFeePerGas = 10_000_000_000n
+
+export const feePayer = Relay.feePayer({
+  account: privateKeyToAccount(
+    process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+  ),
+  validate(request) {
+    if (!request.gas || request.gas > maxGas) return false
+    if (!request.maxFeePerGas || request.maxFeePerGas > maxFeePerGas)
+      return 'tx_fee_limit_exceeded'
+
+    const calls = request.calls ?? [
+      { data: request.data, to: request.to, value: request.value },
+    ]
+    return (
+      calls.length > 0 &&
+      calls.every((call) => {
+        if (
+          !call.to ||
+          !isAddressEqual(TempoAddress.resolve(call.to), Addresses.ousd)
+        )
+          return false
+        if (call.value) return false
+
+        const { functionName } = (() => {
+          try {
+            return decodeFunctionData({
+              abi: Abis.tip20,
+              data: call.data ?? '0x',
+            })
+          } catch {
+            return { functionName: undefined }
+          }
+        })()
+        return (
+          functionName === 'transfer' || functionName === 'transferWithMemo'
+        )
+      })
+    )
+  },
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case sets one option of the <SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink> plugin, or serves its route.
+
+### Serve the route without the handler
+
+<SourceLink name="relay.relay" path="src/plugins/relay.ts">`accounts.relay`</SourceLink> is the route's own handler, so a server can serve it with no <SourceLink name="create.handler.relay" path="src/Accounts.ts">`handler.relay`</SourceLink> option. Its <SourceLink name="fetch" path="src/internal/Handler.ts">`fetch`</SourceLink> serves the route at any path.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+export default new Hono().post('/api/relay', (c) =>
+  accounts.relay.fetch(c.req.raw), // [!code hl]
+)
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { relay } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const feePayer = privateKeyToAccount(
+  process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [relay({ account: feePayer })],
+})
+```
+
+:::
+
+### Serve the route behind a proxy
+
+Each DPoP proof (RFC 9449) names the route's public URL. Behind a proxy that terminates TLS, the request's URL is the internal URL, so pass the public one as <SourceLink name="relay.url" path="src/plugins/relay.ts">`url`</SourceLink>.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { relay } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const feePayer = privateKeyToAccount(
+  process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  handler: { relay: true },
+  plugins: [
+    relay({
+      account: feePayer,
+      url: 'https://app.example/api/relay', // [!code hl]
+    }),
+  ],
+})
+```
+
+### Accept the tokens of a resource
+
+<SourceLink name="relay.verify" path="src/plugins/relay.ts">`verify`</SourceLink> also takes the options of the route's token verifier. If the app's access tokens name a [registered resource](https://github.com/tempoxyz/id/blob/main/docs/resources.md), set it as <SourceLink name="create.audience" path="src/AccessToken.ts">`audience`</SourceLink>. The route then also accepts each token that the resource's API holds, so that API can spend the fee payer's balance.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { relay } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const feePayer = privateKeyToAccount(
+  process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  handler: { relay: true },
+  plugins: [
+    relay({
+      account: feePayer,
+      verify: { audience: 'https://mcp.example.com/mcp' }, // [!code hl]
+    }),
+  ],
+})
+```
+
+### Allow a slow fill
+
+The <SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink> plugin also takes Viem's relay options, such as `timeout`, the time in milliseconds that a fill may take, with its callbacks. It defaults to 10 seconds, so raise it for a `validate` that reads a slow service.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { relay } from 'accounts/plugins'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const feePayer = privateKeyToAccount(
+  process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+)
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  handler: { relay: true },
+  plugins: [
+    relay({
+      account: feePayer,
+      timeout: 20_000, // [!code hl]
+    }),
+  ],
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Verify the access token of a request on the app's API."
+    icon="shield-check"
+    title="Authenticate requests"
+    to="/docs/guides/api-authentication/authenticate-requests"
+  />
+</Cards>

@@ -1,0 +1,415 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Authorize access keys [Name what an access key may spend and when it expires, and request it at sign-in or later.]
+
+## Overview
+
+An access key signs for the user's Tempo Account within the limits and the expiry that the user approves on Tempo ID's approval page. An app requests it at sign-in, or later for a signed-in user, such as at the first payment. The [session](/docs/guides/user-session) then holds the access key.
+
+| Request                                                                             | Call                                                                                                                                                                                                  | Tempo ID shows                    |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| [At sign-in](#request-the-access-key-at-sign-in)                                    | <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink>, with the instance's <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink>          | The sign-in and the approval page |
+| [After sign-in](#authorize-an-access-key-after-sign-in)                             | <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink>, with the call's <SourceLink name="signIn.method.accessKey" path="src/plugins/dialog.ts">`accessKey`</SourceLink> | Only the approval page            |
+| [After sign-in, in a first-party app](#authorize-with-no-page-in-a-first-party-app) | <SourceLink name="authorize" path="src/Accounts.ts">`accounts.authorize`</SourceLink>                                                                                                                 | No page                           |
+
+The demo signs a user in with an access key of the selected limit and expiry, then authorizes a new access key for the signed-in user.
+
+<Demo
+  name="AuthorizeAccessKeys"
+  source="examples/web"
+  title="Authorize an access key"
+/>
+
+## Walkthrough
+
+The [`web`](https://github.com/tempoxyz/accounts/tree/main/examples/web) example runs these steps in a React app.
+
+::::steps
+
+### Name the permissions
+
+The <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> option of <SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink> returns each sign-in's permissions. A duration counts from the sign-in, and a limit is in the token's units.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+| Property                                                                              | Value                                                                                                                                                        |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| <SourceLink name="Permissions.expiry" path="src/Permissions.ts">`expiry`</SourceLink> | A duration, or Unix seconds. Absent, Tempo ID fills its [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry)        |
+| <SourceLink name="Permissions.limits" path="src/Permissions.ts">`limits`</SourceLink> | The amount of each token that the access key may spend, in total or for each <SourceLink name="Limit.period" path="src/Permissions.ts">`period`</SourceLink> |
+| <SourceLink name="Permissions.scopes" path="src/Permissions.ts">`scopes`</SourceLink> | The calls that the access key may make. Absent, the package fills transfers of each token of the limits                                                      |
+
+Tempo ID refuses an [access key without bounds](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#access-keys-without-bounds), such as one without <SourceLink name="Permissions.limits" path="src/Permissions.ts">`limits`</SourceLink>.
+
+### Request the access key at sign-in
+
+Call <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> in a click handler, since a popup opens only within a user gesture. If the user approves the limits and the expiry on Tempo ID's approval page, the call returns the session.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button onClick={() => accounts.dialog.signIn()} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+If the user denies the access key, the call rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>, whose <SourceLink name="RequestError.code" path="src/Accounts.ts">`code`</SourceLink> is `access_denied`.
+
+### Read the access key
+
+<SourceLink name="fromAccessKey" path="src/Permissions.ts">`Permissions.fromAccessKey`</SourceLink> returns the key authorization's limits and scopes, with each limit in base units.
+
+:::code-group
+
+```tsx [App.tsx]
+import { Permissions } from 'accounts'
+import { formatUnits } from 'viem'
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session?.accessKey)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  const { account, keyAuthorization } = session.accessKey
+  const { limits } = Permissions.fromAccessKey(session.accessKey) // [!code hl]
+  // The expiry is in Unix seconds.
+  const expiry = new Date(Number(keyAuthorization.expiry) * 1000)
+
+  return (
+    <ul>
+      <li>Tempo Account {account}</li>
+      <li>Access key {keyAuthorization.keyId}</li>
+      <li>Expires {expiry.toLocaleString()}</li>
+      {limits?.map((entry) => (
+        <li key={entry.token}>
+          Sends up to {formatUnits(BigInt(entry.limit), 6)} of {entry.token}
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case sets one property of the <SourceLink name="Permissions" path="src/Permissions.ts">`Permissions`</SourceLink> that <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> returns, or requests the access key with another call.
+
+### Authorize an access key after sign-in
+
+An app can sign a user in without an access key, and request one at the first payment. An instance without <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> requests none at sign-in. On an instance with one, pass `false` as the sign-in's <SourceLink name="signIn.method.accessKey" path="src/plugins/dialog.ts">`accessKey`</SourceLink>.
+
+A second button calls <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> with <SourceLink name="signIn.method.accessKey" path="src/plugins/dialog.ts">`accessKey`</SourceLink>, which overrides the instance's. The user holds a Tempo ID session, so the dialog opens on the approval page only, and the returned session replaces the instance's session.
+
+:::code-group
+
+```tsx [App.tsx]
+import { Permissions } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+// Sends up to 10 OUSD each day, for 30 days.
+const daily = Permissions.from({
+  expiry: '30d',
+  limits: [{ limit: '10', period: '1d', token: 'ousd' }],
+})
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  // [!code hl:start]
+  if (!session.accessKey)
+    return (
+      <button
+        onClick={() => accounts.dialog.signIn({ accessKey: daily })}
+        type="button"
+      >
+        Authorize payments
+      </button>
+    )
+  // [!code hl:end]
+
+  return <p>Tempo Account {session.accessKey.account}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({ chain: 'testnet', plugins: [react()] })
+```
+
+:::
+
+### Authorize with no page in a first-party app
+
+<SourceLink name="authorize" path="src/Accounts.ts">`accounts.authorize`</SourceLink> requests an access key for the browser's Tempo ID session, and shows no page. The access key must fit the [headless ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling), unless the app holds the `tempo-id:sign` scope. A third-party app receives the reason `rejected`, so the handler falls back to the dialog.
+
+:::code-group
+
+```tsx [Authorize.tsx]
+import { Accounts, Permissions } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+const permissions = Permissions.from({
+  expiry: '1d',
+  limits: [{ limit: '10', token: 'ousd' }],
+})
+
+export function Authorize() {
+  async function authorize() {
+    try {
+      await accounts.authorize({ accessKey: permissions }) // [!code hl]
+    } catch (error) {
+      if (
+        !(error instanceof Accounts.RequestError) ||
+        error.reason !== 'rejected'
+      )
+        throw error
+      await accounts.dialog.signIn({ accessKey: permissions })
+    }
+  }
+
+  return (
+    <button onClick={authorize} type="button">
+      Authorize payments
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({ chain: 'testnet', plugins: [react()] })
+```
+
+:::
+
+Without a Tempo ID session, the call returns `undefined`, and empties the instance's session.
+
+### Sign with a passkey on the page
+
+If a passkey owns the Tempo Account, <SourceLink name="authorize" path="src/Accounts.ts">`accounts.authorize`</SourceLink> rejects with the reason `webauthn_required`. With <SourceLink name="authorize.passkey" path="src/internal/Core.ts">`passkey`</SourceLink> set to `true`, the passkey's ceremony runs on the page, so the call needs a click.
+
+:::code-group
+
+```tsx [Authorize.tsx]
+import { Permissions } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+const permissions = Permissions.from({
+  expiry: '1d',
+  limits: [{ limit: '10', token: 'ousd' }],
+})
+
+export function Authorize() {
+  return (
+    <button
+      onClick={() =>
+        accounts.authorize({ accessKey: permissions, passkey: true }) // [!code hl]
+      }
+      type="button"
+    >
+      Authorize payments
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({ chain: 'testnet', plugins: [react()] })
+```
+
+:::
+
+### Reset a limit each period
+
+<SourceLink name="Limit.period" path="src/Permissions.ts">`period`</SourceLink> resets a limit after each period, such as each day. Without it, the limit is a total for the life of the access key.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '30d',
+    limits: [{ limit: '10', period: '1d', token: 'ousd' }], // [!code hl]
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+### Approve a spender
+
+<SourceLink name="Limit.spenders" path="src/Permissions.ts">`spenders`</SourceLink> names the contracts that the access key may approve to spend the token. Without it, the filled scopes hold no approval.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [
+      {
+        limit: '100',
+        spenders: ['0x000000000000000000000000000000000000bEEF'], // [!code hl]
+        token: 'ousd',
+      },
+    ],
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+### Name the scopes
+
+Named <SourceLink name="Permissions.scopes" path="src/Permissions.ts">`scopes`</SourceLink>, built with Viem's `Scopes`, replace the filled ones. This access key sends OUSD to one recipient only.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+import { Addresses, Scopes } from 'viem/tempo'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+    // [!code hl:start]
+    scopes: [
+      Scopes.tip20(Addresses.ousd).transfer({
+        recipients: ['0x000000000000000000000000000000000000dEaD'],
+      }),
+    ],
+    // [!code hl:end]
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+### Pay fees without a stablecoin limit
+
+Tempo charges an access key's fees to its limit of the fee token, so limits without a stablecoin, such as MACH alone, pay no fee. For such limits with named <SourceLink name="Permissions.scopes" path="src/Permissions.ts">`scopes`</SourceLink>, the package adds a fee allowance: 0.1 of each fee stablecoin on the chain, which no scope can send.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+import { Scopes } from 'viem/tempo'
+
+const mach = '0x20c000000000000000000000f37de3740adec032'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '2', token: 'mach' }], // [!code hl]
+    scopes: [Scopes.tip20(mach).transferWithMemo()], // [!code hl]
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+Filled scopes receive no allowance, since they call the payment channel reserve, which could spend it. Without named scopes, add a stablecoin limit that holds the fees.
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Change the limits of an access key, or revoke it."
+    icon="key"
+    title="Revoke access keys"
+    to="/docs/guides/access-keys/revoke-access-keys"
+  />
+  <PageCard
+    description="Send a payment that the access key signs."
+    icon="payment-flow"
+    title="Send payments"
+    to="/docs/guides/payments/self-managed"
+  />
+  <PageCard
+    description="Pay the fees of the transactions of users."
+    icon="pay-by-hand"
+    title="Use Tempo API"
+    to="/docs/guides/fee-sponsorship/use-tempo-api"
+  />
+  <PageCard
+    description="Read, restore, and refresh the session of a user."
+    icon="id-card"
+    title="Restore sessions"
+    to="/docs/guides/user-session/restore-sessions"
+  />
+</Cards>

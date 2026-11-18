@@ -1,0 +1,8 @@
+{
+  "expo": {
+    "name": "Acme",
+    "scheme": "bench.expo",
+    "slug": "acme",
+    "version": "1.0.0"
+  }
+}

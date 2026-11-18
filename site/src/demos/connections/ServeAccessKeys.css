@@ -1,0 +1,67 @@
+/*
+ * The log of the access key endpoint, under the steps of the demo. The rules use Vocs' variables,
+ * which follow the color scheme.
+ */
+[data-connections-log] {
+  background: var(--vocs-background-color-surfaceTint);
+  border: 1px solid var(--vocs-border-color-primary);
+  border-radius: 0.375rem;
+  color: var(--vocs-text-color-secondary);
+  font-size: 0.8125rem;
+  margin-top: 0.25rem;
+}
+
+[data-connections-log-title] {
+  align-items: center;
+  border-bottom: 1px solid var(--vocs-border-color-primary);
+  column-gap: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+}
+
+[data-connections-log-title] span {
+  color: var(--vocs-text-color-heading);
+  font-weight: 500;
+}
+
+[data-connections-log] code,
+[data-connections-log] time {
+  font-family: var(--vocs-font-family-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  /* Vocs pads each `code` element of a page. */
+  padding: 0;
+}
+
+[data-connections-log] p,
+[data-connections-log] li {
+  padding: 0.5rem 0.75rem;
+}
+
+[data-connections-log] li {
+  align-items: baseline;
+  column-gap: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+}
+
+[data-connections-log] li + li {
+  border-top: 1px solid var(--vocs-border-color-primary);
+}
+
+[data-connections-log] li span:first-of-type {
+  color: var(--vocs-text-color-primary);
+  flex: 1;
+  min-width: 12rem;
+}
+
+[data-connections-log-mark] {
+  border: 1px solid currentColor;
+  border-radius: 0.25rem;
+  color: var(--vocs-color-green);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 0.0625rem 0.375rem;
+}

@@ -1,0 +1,311 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+import { StepTag } from '../../../../components/StepTag.tsx'
+
+# Authenticate requests [An app sends the access token of a session to an API, and the API verifies the token.]
+
+## Overview
+
+An app sends the session's access token, a JWT that names the user and the app. The API verifies it with the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin, against Tempo ID's key set, with no call to Tempo ID for each request.
+
+The demo calls a route of the site with the session's access token, and the route returns the token's user ID. A call without the access token receives 401.
+
+<Demo name="AuthenticateRequests" title="Authenticate a request" />
+
+## Walkthrough
+
+The steps build a React app and the API that it calls.
+
+::::steps
+
+### Install the packages
+
+Install `accounts` with Viem, in the app and in the API.
+
+:::code-group
+
+```sh [npm]
+npm install accounts@alpha react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts@alpha react react-dom viem
+```
+
+```sh [bun]
+bun add accounts@alpha react react-dom viem
+```
+
+:::
+
+### Send the access token<StepTag kind="client" />
+
+<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch`</SourceLink> sends the access token as a Bearer token, and refreshes it first if it expires soon. The <SourceLink name="react" path="src/react/index.ts">`react`</SourceLink> plugin adds <SourceLink name="useSession" path="src/react/index.ts">`useSession`</SourceLink>.
+
+:::code-group
+
+```tsx [App.tsx]
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { isPending, session } = accounts.useSession()
+  const [userId, setUserId] = useState<string>()
+
+  async function call() {
+    // [!code hl:start]
+    const response = await accounts.session.fetch({
+      url: 'https://api.example/me',
+    })
+    // [!code hl:end]
+    const body = (await response.json()) as { userId: string }
+    setUserId(body.userId)
+  }
+
+  if (isPending) return <p>Checking your session…</p>
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in
+      </button>
+    )
+  return (
+    <>
+      <button onClick={call} type="button">
+        Call the API
+      </button>
+      {userId && <p>The API read the user {userId}.</p>}
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({ plugins: [react()] })
+```
+
+:::
+
+:::note
+A browser sends a cross-origin request only if the API's CORS policy allows the page's origin.
+:::
+
+### Create the instance<StepTag kind="server" />
+
+In the API, the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin adds <SourceLink name="tokens.verifyAccessToken" path="src/plugins/tokens.ts">`tokens.verifyAccessToken`</SourceLink>. It accepts only the access tokens of the app's <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink>, such as the page's origin. Create the instance once, since it caches Tempo ID's key set for 10 minutes.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens()],
+})
+```
+
+### Read the user<StepTag kind="server" />
+
+<SourceLink name="tokens.verifyAccessToken" path="src/plugins/tokens.ts">`tokens.verifyAccessToken`</SourceLink> reads the token of the authorization header, and checks its signature, type, issuer, audience, expiry, and app. It returns the verified token, or `undefined` if the request holds no token that verifies.
+
+Without a verified token, the API answers 401. The API also refuses a DPoP token, which names a <SourceLink name="create.boundTo" path="src/AccessToken.ts">`boundTo`</SourceLink>, until it refuses a repeated proof, as [Bind DPoP keys](/docs/guides/api-authentication/bind-dpop-keys#refuse-a-repeated-proof) shows.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens()],
+})
+
+export default {
+  async fetch(request: Request) {
+    const token = await accounts.tokens.verifyAccessToken(request) // [!code hl]
+    if (!token || token.boundTo)
+      return Response.json({ error: 'invalid_token' }, { status: 401 })
+
+    return Response.json({ userId: token.userId })
+  },
+}
+```
+
+If the key set cannot be fetched, the call throws <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with status 0. The token can still be valid, so the API answers 503, and the app keeps its session, as [Limit the fetch of the key set](#limit-the-fetch-of-the-key-set) shows.
+
+The token, never a request field, names whose data the API reads or changes:
+
+| Property                                                                                      | Names                                                                                              |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| <SourceLink name="create.accessKeys" path="src/AccessToken.ts">`accessKeys`</SourceLink>      | The user's live [access keys](/docs/guides/access-keys) for the app, from the `access_keys` claim  |
+| <SourceLink name="create.accounts" path="src/AccessToken.ts">`accounts`</SourceLink>          | The user's Tempo Account addresses, from `tempo_accounts`. Empty for a third-party app             |
+| <SourceLink name="create.accounts.clientId" path="src/AccessToken.ts">`clientId`</SourceLink> | The app that received the token                                                                    |
+| <SourceLink name="create.compliance" path="src/AccessToken.ts">`compliance`</SourceLink>      | The [screening state](https://github.com/tempoxyz/id/blob/main/docs/compliance.md) of each address |
+| <SourceLink name="create.scope" path="src/AccessToken.ts">`scope`</SourceLink>                | The scopes that the app received                                                                   |
+| <SourceLink name="create.userId" path="src/AccessToken.ts">`userId`</SourceLink>              | The user, from `sub`                                                                               |
+
+::::
+
+## Use cases
+
+Each use case sets one option of the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin, which <SourceLink name="tokens.verifyAccessToken" path="src/plugins/tokens.ts">`tokens.verifyAccessToken`</SourceLink> uses, or calls another member of the plugin.
+
+### Accept the tokens of several apps
+
+<SourceLink name="create.clientIds" path="src/AccessToken.ts">`clientIds`</SourceLink> names each app whose tokens the API accepts. The token's <SourceLink name="create.accounts.clientId" path="src/AccessToken.ts">`clientId`</SourceLink> names the app of each request.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [
+    tokens({
+      clientIds: ['https://app.example', 'https://admin.app.example'], // [!code hl]
+    }),
+  ],
+})
+```
+
+### Accept the tokens of every app
+
+A [registered resource](https://github.com/tempoxyz/id/blob/main/docs/resources.md) that any app may call, such as an MCP server, sets <SourceLink name="create.clientIds" path="src/AccessToken.ts">`clientIds`</SourceLink> to `'any'`. It then names itself in <SourceLink name="create.audience" path="src/AccessToken.ts">`audience`</SourceLink>, so it accepts only the tokens issued for it. [Charge tool calls](/docs/guides/mcp/charge-tool-calls) shows such a server.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://mcp.example.com',
+  plugins: [
+    // [!code hl:start]
+    tokens({ audience: 'https://mcp.example.com/mcp', clientIds: 'any' }),
+    // [!code hl:end]
+  ],
+})
+```
+
+### Refuse a removed signing key sooner
+
+<SourceLink name="create.maxAge" path="src/AccessToken.ts">`maxAge`</SourceLink> sets how long the instance keeps the key set, in milliseconds. A shorter time refuses the tokens of a [removed signing key](https://github.com/tempoxyz/id/blob/main/docs/access-tokens.md#signing-key-revocation) sooner. Defaults to 10 minutes.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens({ maxAge: 60_000 })], // [!code hl]
+})
+```
+
+### Reach Tempo ID at an internal address
+
+If the instance's <SourceLink name="from.url" path="src/Accounts.ts">`url`</SourceLink> reaches Tempo ID at another address, such as an internal host, <SourceLink name="create.issuer" path="src/AccessToken.ts">`issuer`</SourceLink> names Tempo ID's public origin. Each token names that origin as its issuer.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens({ issuer: 'https://id.tempo.xyz' })], // [!code hl]
+  url: 'http://tempo-id.internal',
+})
+```
+
+### Limit the fetch of the key set
+
+<SourceLink name="create.timeout" path="src/AccessToken.ts">`timeout`</SourceLink> sets how long a fetch of the key set may take, in milliseconds. Defaults to 5 seconds. A slower or failed fetch throws <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with status 0, which the API answers with 503.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens({ timeout: 2_000 })], // [!code hl]
+})
+
+export default {
+  async fetch(request: Request) {
+    const token = await accounts.tokens
+      .verifyAccessToken(request)
+      .catch((error: unknown) => {
+        // [!code hl:start]
+        if (error instanceof Accounts.RequestError && error.status === 0)
+          return error
+        // [!code hl:end]
+        throw error
+      })
+    if (token instanceof Accounts.RequestError)
+      return Response.json(
+        { error: 'temporarily_unavailable' },
+        { status: 503 },
+      )
+    if (!token || token.boundTo)
+      return Response.json({ error: 'invalid_token' }, { status: 401 })
+
+    return Response.json({ userId: token.userId })
+  },
+}
+```
+
+### Read the email address
+
+An access token holds no email address. <SourceLink name="userInfo" path="src/plugins/tokens.ts">`tokens.userInfo`</SourceLink> reads the user of a verified token from Tempo ID, as [Read users](/docs/guides/identity/read-users#read-the-user-on-an-api) shows.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens()],
+})
+
+export default {
+  async fetch(request: Request) {
+    const token = await accounts.tokens.verifyAccessToken(request)
+    if (!token || token.boundTo)
+      return Response.json({ error: 'invalid_token' }, { status: 401 })
+
+    const user = await accounts.tokens.userInfo({ accessToken: token }) // [!code hl]
+    return Response.json({ email: user.email })
+  },
+}
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Authenticate the requests of a page with a session cookie, and no token."
+    icon="server"
+    title="Use session cookies"
+    to="/docs/guides/api-authentication/use-session-cookies"
+  />
+  <PageCard
+    description="Bind the tokens to a key, so a copied token is of no use."
+    icon="key"
+    title="Bind DPoP keys"
+    to="/docs/guides/api-authentication/bind-dpop-keys"
+  />
+  <PageCard
+    description="Read the profile of the signed-in user."
+    icon="user"
+    title="Read users"
+    to="/docs/guides/identity/read-users"
+  />
+  <PageCard
+    description="Handle each refusal of Tempo ID by its reason."
+    icon="alert-circle"
+    title="Errors"
+    to="/docs/guides/errors"
+  />
+</Cards>

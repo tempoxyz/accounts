@@ -1,0 +1,553 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Revoke access keys [Change the limits of an access key, or revoke it, on Tempo ID's approval page.]
+
+## Overview
+
+The chain accepts a change to an [access key](/docs/guides/access-keys) only from the account owner. An app thus changes or revokes its own access key on Tempo ID's approval page, in the dialog, where the owner signs.
+
+The demo signs a user in with an access key that sends up to 10 OUSD, then lowers the limit to 5 OUSD or revokes the access key.
+
+<Demo name="RevokeAccessKeys" title="Revoke an access key" />
+
+## Walkthrough
+
+::::steps
+
+### Sign the user in with an access key
+
+The <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin adds the transaction actions of the last step.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session?.accessKey)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return <p>Tempo Account {session.accessKey.account}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Change the limits
+
+<SourceLink name="updateAccessKey" path="src/plugins/dialog.ts">`dialog.updateAccessKey`</SourceLink> returns the hash of the change's transaction. Each limit sets the amount that the access key can still spend, in base units, and keeps its period. A token that the list leaves out keeps its limit.
+
+:::code-group
+
+```tsx [AccessKey.tsx]
+import { useState } from 'react'
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function AccessKey() {
+  const [status, setStatus] = useState<string>()
+
+  async function change() {
+    // [!code hl:start]
+    const { transaction } = await accounts.dialog.updateAccessKey({
+      limits: [{ limit: parseUnits('5', 6), token: Addresses.ousd }],
+    })
+    // [!code hl:end]
+    setStatus(`Changed in ${transaction}.`)
+  }
+
+  return (
+    <>
+      <button onClick={change} type="button">
+        Lower the limit to 5 OUSD
+      </button>
+      <p role="status">{status}</p>
+    </>
+  )
+}
+```
+
+```tsx [App.tsx]
+import { AccessKey } from './AccessKey.js'
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session?.accessKey)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return <AccessKey /> // [!code hl]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+The app renders the access key component once the user signs in. The later steps grow that component.
+
+### Revoke the access key
+
+A second button of the same component calls <SourceLink name="dialog.revokeAccessKey" path="src/plugins/dialog.ts">`dialog.revokeAccessKey`</SourceLink>. The returned transaction is `null` if the chain already held the access key revoked.
+
+:::code-group
+
+```tsx [AccessKey.tsx]
+import { useState } from 'react'
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function AccessKey() {
+  const [status, setStatus] = useState<string>()
+
+  async function change() {
+    const { transaction } = await accounts.dialog.updateAccessKey({
+      limits: [{ limit: parseUnits('5', 6), token: Addresses.ousd }],
+    })
+    setStatus(`Changed in ${transaction}.`)
+  }
+
+  // [!code hl:start]
+  async function revoke() {
+    const { transaction } = await accounts.dialog.revokeAccessKey()
+    setStatus(transaction ? `Revoked in ${transaction}.` : 'Revoked before.')
+  }
+  // [!code hl:end]
+
+  return (
+    <>
+      <button onClick={change} type="button">
+        Lower the limit to 5 OUSD
+      </button>
+      <button onClick={revoke} type="button">
+        Revoke the access key
+      </button>
+      <p role="status">{status}</p>
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+The session stays, but its access key signs no further transaction.
+
+### Handle a refused change
+
+**Cancel** rejects each call with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>, whose <SourceLink name="RequestError.code" path="src/Accounts.ts">`code`</SourceLink> is `access_denied`. A closed dialog rejects with an `AbortError`.
+
+:::code-group
+
+```tsx [AccessKey.tsx]
+import { Accounts } from 'accounts'
+import { useState } from 'react'
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function AccessKey() {
+  const [status, setStatus] = useState<string>()
+
+  async function change() {
+    const { transaction } = await accounts.dialog.updateAccessKey({
+      limits: [{ limit: parseUnits('5', 6), token: Addresses.ousd }],
+    })
+    setStatus(`Changed in ${transaction}.`)
+  }
+
+  async function revoke() {
+    // [!code hl:start]
+    try {
+      const { transaction } = await accounts.dialog.revokeAccessKey()
+      setStatus(transaction ? `Revoked in ${transaction}.` : 'Revoked before.')
+    } catch (error) {
+      if (
+        error instanceof Accounts.RequestError &&
+        error.code === 'access_denied'
+      )
+        return setStatus('The access key stays.')
+      throw error
+    }
+    // [!code hl:end]
+  }
+
+  return (
+    <>
+      <button onClick={change} type="button">
+        Lower the limit to 5 OUSD
+      </button>
+      <button onClick={revoke} type="button">
+        Revoke the access key
+      </button>
+      <p role="status">{status}</p>
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Handle a revoked access key
+
+If the node refuses a revoked access key's transaction, the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin signs in for a new access key with the same limits and scopes, and sends again. If the user closes that sign-in, the call rejects with <SourceLink name="RetryClosedError" path="src/plugins/viem.ts">`Plugins.viem.RetryClosedError`</SourceLink>, matched by its name.
+
+:::code-group
+
+```tsx [Send.tsx]
+import { useState } from 'react'
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function Send() {
+  const [status, setStatus] = useState<string>()
+
+  async function send() {
+    try {
+      await accounts.token.transferSync({
+        amount: parseUnits('1', 6),
+        to: '0x000000000000000000000000000000000000dEaD',
+        token: Addresses.ousd,
+      })
+    } catch (error) {
+      // [!code hl:start]
+      if (
+        error instanceof Error &&
+        error.name === 'Plugins.viem.RetryClosedError'
+      )
+        return setStatus('The transaction did not send.')
+      // [!code hl:end]
+      throw error
+    }
+  }
+
+  return (
+    <>
+      <button onClick={send} type="button">
+        Send 1 OUSD
+      </button>
+      <p role="status">{status}</p>
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case sets one option of <SourceLink name="updateAccessKey" path="src/plugins/dialog.ts">`dialog.updateAccessKey`</SourceLink> or <SourceLink name="dialog.revokeAccessKey" path="src/plugins/dialog.ts">`dialog.revokeAccessKey`</SourceLink>, or of the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin.
+
+### Change the scopes
+
+<SourceLink name="updateAccessKey.scopes" path="src/actions/account.ts">`scopes`</SourceLink> replaces the calls that the access key may make. Without it, the scopes stay.
+
+:::code-group
+
+```tsx [Scopes.tsx]
+import { Addresses, Scopes } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function ChangeScopes() {
+  async function change() {
+    // [!code hl:start]
+    await accounts.dialog.updateAccessKey({
+      scopes: [
+        Scopes.tip20(Addresses.ousd).transfer({
+          recipients: ['0x000000000000000000000000000000000000dEaD'],
+        }),
+      ],
+    })
+    // [!code hl:end]
+  }
+
+  return (
+    <button onClick={change} type="button">
+      Send to one recipient only
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Show the approval page in a popup
+
+<SourceLink name="chainId.mode" path="src/plugins/dialog.ts">`mode: 'popup'`</SourceLink> shows the approval page in a popup window, with no frame. A popup opens only within a click. Without it, the call takes the plugin's <SourceLink name="dialog.mode" path="src/plugins/dialog.ts">`mode`</SourceLink>.
+
+:::code-group
+
+```tsx [Revoke.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Revoke() {
+  return (
+    <button
+      onClick={() => accounts.dialog.revokeAccessKey({ mode: 'popup' })} // [!code hl]
+      type="button"
+    >
+      Revoke the access key
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Cancel a revocation
+
+<SourceLink name="chainId.signal" path="src/plugins/dialog.ts">`signal`</SourceLink> ends a change or a revocation from the page, such as after a time limit. Its abort closes the dialog or the popup, and rejects the call with the signal's reason.
+
+:::code-group
+
+```tsx [Revoke.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Revoke() {
+  return (
+    <button
+      onClick={() =>
+        accounts.dialog.revokeAccessKey({
+          // The dialog closes after two minutes without an approval.
+          signal: AbortSignal.timeout(120_000), // [!code hl]
+        })
+      }
+      type="button"
+    >
+      Revoke the access key
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Reject in place of a new sign-in
+
+The <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin's <SourceLink name="viem.retry" path="src/plugins/viem.ts">`retry`</SourceLink>, with <SourceLink name="retry.accessKey" path="src/plugins/viem.ts">`accessKey`</SourceLink> set to `false`, turns off the sign-in for a new access key. The transaction then rejects with the node's refusal, `KeyAlreadyRevoked`.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem({ retry: { accessKey: false } })], // [!code hl]
+})
+```
+
+### Revoke an access key that a server holds
+
+Each call takes the <SourceLink name="accessKey" path="src/plugins/dialog.ts">`accessKey`</SourceLink> and <SourceLink name="account" path="src/plugins/dialog.ts">`account`</SourceLink> of another of the app's access keys. An access key on several other chains also needs <SourceLink name="chainId" path="src/plugins/dialog.ts">`chainId`</SourceLink>.
+
+:::code-group
+
+```tsx [Revoke.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Revoke() {
+  async function revoke() {
+    // [!code hl:start]
+    await accounts.dialog.revokeAccessKey({
+      accessKey: '0x9f10aF4d1a3F1a2bD3C6f1B8e7a5D2c4E6b80f08',
+      account: '0xe8Eb65558c6c437bC38F07cF0D66CF74E87fD946',
+    })
+    // [!code hl:end]
+  }
+
+  return (
+    <button onClick={revoke} type="button">
+      Revoke the server's access key
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+If Tempo ID did not sign that access key for the app, the call rejects with [`unknown_key`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_key).
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Sign out of the app, and revoke the access key."
+    icon="log-out"
+    title="End app sessions"
+    to="/docs/guides/sign-out/end-app-sessions"
+  />
+  <PageCard
+    description="Revoke the access keys of a connection."
+    icon="link"
+    title="Revoke connections"
+    to="/docs/guides/connections/revoke-connections"
+  />
+  <PageCard
+    description="Send transactions with the access key, and retry a refused one."
+    icon="viem"
+    title="Viem"
+    to="/docs/guides/viem"
+  />
+  <PageCard
+    description="Branch on the reason of each refusal."
+    icon="alert-circle"
+    title="Errors"
+    to="/docs/guides/errors"
+  />
+</Cards>

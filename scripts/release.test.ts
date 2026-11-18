@@ -1,0 +1,225 @@
+/** Resolves release versions and notes from real commits in temporary git repositories. @module */
+import * as ChildProcess from 'node:child_process'
+import * as Fs from 'node:fs'
+import * as Os from 'node:os'
+import * as Path from 'node:path'
+
+import { afterEach, describe, expect, test } from 'vite-plus/test'
+
+import * as Release from './release.ts'
+
+const repositories: string[] = []
+
+afterEach(() => {
+  for (const cwd of repositories.splice(0))
+    Fs.rmSync(cwd, { force: true, recursive: true })
+})
+
+/** Creates a repository whose commits have fixed identities and times, so their SHAs are stable. */
+function repository() {
+  const cwd = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'ds-release-'))
+  repositories.push(cwd)
+  let minute = 0
+  const env = (time: string) => ({
+    ...process.env,
+    // A developer's git config, such as commit signing, would change each SHA.
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_AUTHOR_DATE: time,
+    GIT_AUTHOR_EMAIL: 'ci@tempo.xyz',
+    GIT_AUTHOR_NAME: 'CI',
+    GIT_COMMITTER_DATE: time,
+    GIT_COMMITTER_EMAIL: 'ci@tempo.xyz',
+    GIT_COMMITTER_NAME: 'CI',
+  })
+  const git = (args: string[], time = '2026-11-18T19:00:00Z') =>
+    ChildProcess.execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      env: env(time),
+    }).trim()
+  git(['init', '--quiet', '--initial-branch=main'])
+  return {
+    cwd,
+    /** Commits `message` a minute after the last commit and returns its SHA. */
+    commit: (message: string) => {
+      minute += 1
+      const time = new Date(Date.UTC(2026, 10, 18, 19, minute)).toISOString()
+      git(['commit', '--quiet', '--allow-empty', '--message', message], time)
+      return git(['rev-parse', 'HEAD'])
+    },
+  }
+}
+
+describe('resolve', () => {
+  test('moves the first release after 0.x to 1', () => {
+    const { commit, cwd } = repository()
+    const base = commit('chore: version packages (#353)')
+    commit('ci: publish each main commit (#354)')
+    const sha = commit('feat(marketing): add Nav (#355)')
+
+    const resolved = Release.resolve({ base, cwd, latest: '0.21.1', sha })
+
+    expect(resolved?.version).toMatchInlineSnapshot(
+      `"1.20261118190300.0-d0e3b646"`,
+    )
+    expect(resolved?.notes).toMatchInlineSnapshot(`
+      "- feat(marketing): add Nav (#355) (d0e3b64)
+      - ci: publish each main commit (#354) (f5ac1ef)
+      "
+    `)
+  })
+
+  test('keeps the breaking number for a feature or fix', () => {
+    const { commit, cwd } = repository()
+    const base = commit('feat: add Tab (#1)')
+    commit('fix: pad Tab (#2)')
+    const sha = commit('Revert "feat: add Tab" (#3)')
+
+    expect(
+      Release.resolve({ base, cwd, latest: '1.20261118190100.0-abcdef12', sha })
+        ?.version,
+    ).toMatchInlineSnapshot(`"1.20261118190300.0-71cd2a89"`)
+  })
+
+  test('raises the breaking number for a breaking title or body', () => {
+    const { commit, cwd } = repository()
+    const first = commit('feat: add Tab (#1)')
+    const title = commit('feat(web)!: rename Tab (#2)')
+    const body = commit('refactor: drop Tab (#3)\n\nBREAKING CHANGE: use Tabs.')
+
+    expect(
+      Release.resolve({
+        base: first,
+        cwd,
+        latest: '1.20261118190100.0-abcdef12',
+        sha: title,
+      })?.version,
+    ).toMatchInlineSnapshot(`"2.20261118190200.0-51e59c83"`)
+    expect(
+      Release.resolve({
+        base: title,
+        cwd,
+        latest: '2.20261118190200.0-abcdef12',
+        sha: body,
+      })?.version,
+    ).toMatchInlineSnapshot(`"3.20261118190300.0-9c61dfa9"`)
+  })
+
+  test('reads a breaking title past its dogfood prefix', () => {
+    const { commit, cwd } = repository()
+    const base = commit('dogfood: fix: pad Tab (#1)')
+    const sha = commit('dogfood: feat(dialog)!: rename Tab (#2)')
+
+    expect(
+      Release.resolve({ base, cwd, latest: '1.20261118190100.0-abcdef12', sha })
+        ?.version,
+    ).toMatchInlineSnapshot(`"2.20261118190200.0-d4050180"`)
+  })
+
+  test('reads a commit body that holds separators', () => {
+    const { commit, cwd } = repository()
+    const base = commit('fix: pad Tab (#1)')
+    const sha = commit(
+      'feat: add Tab (#2)\n\nKeeps \x1e and \x1f as they are.\x1eBREAKING CHANGE: no.',
+    )
+
+    expect(
+      Release.resolve({ base, cwd, latest: '1.20261118190100.0-abcdef12', sha })
+        ?.notes,
+    ).toMatchInlineSnapshot(`
+      "- feat: add Tab (#2) (8856317)
+      "
+    `)
+  })
+
+  test('releases nothing for only CI and test commits', () => {
+    const { commit, cwd } = repository()
+    const base = commit('feat: add Tab (#1)')
+    commit('ci: shard tests (#2)')
+    const sha = commit('test(web): cover Tab (#3)')
+
+    expect(
+      Release.resolve({
+        base,
+        cwd,
+        latest: '1.20261118190100.0-abcdef12',
+        sha,
+      }),
+    ).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test('releases only CI and test commits when forced', () => {
+    const { commit, cwd } = repository()
+    const base = commit('feat: add Tab (#1)')
+    const sha = commit('ci: shard tests (#2)')
+
+    expect(
+      Release.resolve({ base, cwd, force: true, latest: '0.21.1', sha })
+        ?.version,
+    ).toMatchInlineSnapshot(`"1.20261118190200.0-827ab2ac"`)
+  })
+
+  test('lists only its own commit without a base', () => {
+    const { commit, cwd } = repository()
+    commit('feat: add Tab (#1)')
+    const sha = commit('docs: fix a link (#2)')
+
+    expect(Release.resolve({ cwd, latest: '0.21.1', sha })?.notes)
+      .toMatchInlineSnapshot(`
+      "- docs: fix a link (#2) (29bdc40)
+      "
+    `)
+  })
+
+  test('extends a short SHA of digits until a letter', () => {
+    const { commit, cwd } = repository()
+    // The first of these titles whose commit's first 8 characters are digits.
+    let sha = ''
+    for (let index = 1; !/^\d{8}/.test(sha); index++)
+      sha = commit(`fix: pad Tab ${index}`)
+
+    expect(
+      Release.resolve({ cwd, latest: '1.20261118190100.0-abcdef12', sha })
+        ?.version,
+    ).toMatchInlineSnapshot(`"1.20261118193700.0-561645865f"`)
+  })
+
+  test('refuses a pull request prerelease as the latest version', () => {
+    const { commit, cwd } = repository()
+    const sha = commit('fix: pad Tab (#1)')
+
+    expect(() =>
+      Release.resolve({ cwd, latest: '0.0.0-pr-1-20261118000000', sha }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[Error: npm's latest version 0.0.0-pr-1-20261118000000 is not a release version.]`,
+    )
+  })
+})
+
+describe('previous', () => {
+  test('finds the release npm took before a resumed one, by publish time', () => {
+    // npm lists same-second releases by their SHA, so `cccc3333` sorts after `bbbb2222` but came first.
+    const times = {
+      created: '2026-11-01T00:00:00.000Z',
+      modified: '2026-11-18T19:05:00.000Z',
+      '0.21.1': '2026-11-01T00:00:00.000Z',
+      '1.0.0-alpha.20261118202233-e426ab8': '2026-11-18T18:00:00.000Z',
+      '1.20261118190100.0-aaaa1111': '2026-11-18T19:02:00.000Z',
+      '1.20261118190200.0-cccc3333': '2026-11-18T19:03:00.000Z',
+      '1.20261118190200.0-bbbb2222': '2026-11-18T19:04:00.000Z',
+      // A patch of the 0.x line, published later, never counts.
+      '0.21.2': '2026-11-18T19:03:30.000Z',
+    }
+
+    expect(
+      Release.previous(times, { latest: '1.20261118190200.0-bbbb2222' }),
+    ).toMatchInlineSnapshot(`"1.20261118190200.0-cccc3333"`)
+    expect(
+      Release.previous(times, { latest: '1.20261118190200.0-cccc3333' }),
+    ).toMatchInlineSnapshot(`"1.20261118190100.0-aaaa1111"`)
+    expect(Release.previous(times, { latest: '0.21.1' })).toMatchInlineSnapshot(
+      `undefined`,
+    )
+  })
+})

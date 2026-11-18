@@ -1,0 +1,879 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# Viem [An app sends transactions and signs messages on Tempo with a Viem client whose account follows the session.]
+
+## Overview
+
+The <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin adds a [Viem](https://viem.sh) client to the instance. A sign-in sets the client's account to the user's Tempo Account, and a sign-out empties it, so no action names an account.
+
+The [session](/docs/guides/user-session)'s [access key](/docs/guides/access-keys) signs each transaction and message with no prompt. The instance also holds each action of the client, so an app calls them on the instance itself.
+
+The demo signs a user in, and sends 1 OUSD on Tempo testnet. It then signs a message with the access key, and verifies the signature.
+
+<Demo name="Viem" source="examples/web" title="Send and sign with Viem" />
+
+## Walkthrough
+
+The [`web`](https://github.com/tempoxyz/accounts/tree/main/examples/web) example runs these steps in a React app.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts@alpha react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts@alpha react react-dom viem
+```
+
+```sh [bun]
+bun add accounts@alpha react react-dom viem
+```
+
+:::
+
+### Create the instance
+
+Add the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin. The client uses the chain and the RPC of the instance. [Use another Tempo ID or chain](#use-another-tempo-id-or-chain) changes them.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()], // [!code hl]
+})
+```
+
+### Sign the user in
+
+<SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> sets the account of the client. Its address is the user's Tempo Account. Without a session, a read of the account throws <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink>.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return (
+    // [!code hl:start]
+    <p>
+      Tempo Account {accounts.viem.account.address} on {accounts.viem.chain.name}
+    </p>
+    // [!code hl:end]
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Send a transaction
+
+Viem's [`token.transfer`](https://viem.sh/tempo/actions/token.transfer) action sends 1 OUSD, and the access key signs it. The sync form waits for the receipt.
+
+:::code-group
+
+```tsx [Send.tsx]
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function Send() {
+  return (
+    <button
+      onClick={async () => {
+        // [!code hl:start]
+        const { receipt } = await accounts.viem.token.transferSync({
+          amount: parseUnits('1', 6),
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: Addresses.ousd,
+        })
+        // [!code hl:end]
+        console.log(receipt.transactionHash)
+      }}
+      type="button"
+    >
+      Send 1 OUSD
+    </button>
+  )
+}
+```
+
+```tsx [App.tsx]
+import { Send } from './Send.js' // [!code ++]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return (
+    <main>
+      <p>
+        Tempo Account {accounts.viem.account.address} on{' '}
+        {accounts.viem.chain.name}
+      </p>
+      <Send /> {/* [!code ++] */}
+    </main>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+Viem's docs list the client's [Tempo](https://viem.sh/tempo/actions), [public](https://viem.sh/docs/actions/public/introduction), and [wallet](https://viem.sh/docs/actions/wallet/introduction) actions. The instance holds the same actions, so the call above also works without the client.
+
+The chain lets the access key make only the calls of its scopes. With limits alone, it transfers each limited token, approves each limit's spenders, and opens and tops up TIP-1034 channels. Another call rejects with Viem's `AccessKeyCallNotAllowedError`.
+
+::::
+
+## Use cases
+
+Each use case calls an action of the client of the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, or sets one option of the plugin or of a call of its client.
+
+### Send several calls
+
+Viem's [`sendTransactionSync`](https://viem.sh/docs/actions/wallet/sendTransactionSync) sends several calls in one transaction, which the access key signs once. Each Tempo action of Viem builds one call.
+
+:::code-group
+
+```tsx [SendBoth.tsx]
+import { parseUnits } from 'viem'
+import { Actions, Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function SendBoth() {
+  return (
+    <button
+      onClick={async () => {
+        // [!code hl:start]
+        const receipt = await accounts.sendTransactionSync({
+          calls: [
+            Actions.token.transfer.call({
+              amount: parseUnits('1', 6),
+              to: '0x000000000000000000000000000000000000dEaD',
+              token: Addresses.ousd,
+            }),
+            Actions.token.transfer.call({
+              amount: parseUnits('2', 6),
+              to: '0x000000000000000000000000000000000000bEEF',
+              token: Addresses.ousd,
+            }),
+          ],
+        })
+        // [!code hl:end]
+        console.log(receipt.transactionHash)
+      }}
+      type="button"
+    >
+      Send 3 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Pass the client to an action
+
+A standalone Viem action takes <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.viem`</SourceLink> as its client, and the access key signs.
+
+:::code-group
+
+```tsx [Send.tsx]
+import { parseUnits } from 'viem'
+import { Actions, Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function Send() {
+  return (
+    <button
+      onClick={async () => {
+        // [!code hl:start]
+        const { receipt } = await Actions.token.transferSync(accounts.viem, {
+          amount: parseUnits('1', 6),
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: Addresses.ousd,
+        })
+        // [!code hl:end]
+        console.log(receipt.transactionHash)
+      }}
+      type="button"
+    >
+      Send 1 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Send on another chain
+
+A call of the client with <SourceLink name="viem.chainId" path="src/plugins/viem.ts">`chainId`</SourceLink> returns the client of that chain, whose account keeps its address. That address is the Tempo Account there only if both chains have configurable accounts, or neither does. An access key signs on one chain, so on a page the first transaction shows Tempo ID's sign-in for an access key there, and elsewhere it throws <SourceLink name="AccessKeyRequiredError" path="src/Accounts.ts">`Accounts.AccessKeyRequiredError`</SourceLink>.
+
+:::code-group
+
+```tsx [SendOnMainnet.tsx]
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { tempo } from 'viem/tempo/chains'
+import { accounts } from './tempo.config.js'
+
+export function SendOnMainnet() {
+  return (
+    <button
+      onClick={async () => {
+        const mainnet = accounts.viem({ chainId: tempo.id }) // [!code hl]
+
+        const { receipt } = await mainnet.token.transferSync({
+          amount: parseUnits('1', 6),
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: Addresses.ousd,
+        })
+        console.log(receipt.transactionHash)
+      }}
+      type="button"
+    >
+      Send 1 OUSD on mainnet
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Retry a refused transaction
+
+On a page, the client retries a transaction that the node refuses for these reasons. Tempo ID's screen shows first, then the transaction sends again.
+
+| Kind        | Refusal                                                             | Screen       |
+| ----------- | ------------------------------------------------------------------- | ------------ |
+| `accessKey` | The chain does not hold the access key, or it expired or is revoked | Sign-in      |
+| `balance`   | The Tempo Account holds too little of the token or of the fee token | Deposit page |
+| `limit`     | The access key spent its limit                                      | Sign-in      |
+
+If the user closes the screen, the action rejects with <SourceLink name="RetryClosedError" path="src/plugins/viem.ts">`Plugins.viem.RetryClosedError`</SourceLink>, and sends nothing.
+
+:::code-group
+
+```tsx [Send.tsx]
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function Send() {
+  return (
+    <button
+      onClick={async () => {
+        try {
+          await accounts.token.transferSync({
+            amount: parseUnits('1', 6),
+            to: '0x000000000000000000000000000000000000dEaD',
+            token: Addresses.ousd,
+          })
+        } catch (error) {
+          if ((error as Error).name !== 'Plugins.viem.RetryClosedError') // [!code hl]
+            throw error
+          console.log('The transaction did not send.')
+        }
+      }}
+      type="button"
+    >
+      Send 1 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Turn off a retry
+
+The plugin's <SourceLink name="viem.retry" path="src/plugins/viem.ts">`retry`</SourceLink> turns off kinds for every client. The <SourceLink name="viem.chainId.retry" path="src/plugins/viem.ts">`retry`</SourceLink> of a client call turns them off for that client, and `false` turns off every kind.
+
+:::code-group
+
+```tsx [Send.tsx]
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function Send() {
+  return (
+    <button
+      onClick={async () => {
+        const client = accounts.viem({ retry: false }) // [!code hl]
+
+        const { receipt } = await client.token.transferSync({
+          amount: parseUnits('1', 6),
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: Addresses.ousd,
+        })
+        console.log(receipt.transactionHash)
+      }}
+      type="button"
+    >
+      Send 1 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem({ retry: { limit: false } })], // [!code hl]
+})
+```
+
+:::
+
+### Stop waiting on a retry
+
+The <SourceLink name="viem.retry.signal" path="src/plugins/viem.ts">`signal`</SourceLink> of a client call's retry rejects the call with the signal's reason, and ends its wait on the screen. The screen closes once no call waits on it.
+
+:::code-group
+
+```tsx [Send.tsx]
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function Send() {
+  return (
+    <button
+      onClick={async () => {
+        // The call stops its wait on a screen after two minutes.
+        const client = accounts.viem({
+          retry: { signal: AbortSignal.timeout(120_000) }, // [!code hl]
+        })
+
+        const { receipt } = await client.token.transferSync({
+          amount: parseUnits('1', 6),
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: Addresses.ousd,
+        })
+        console.log(receipt.transactionHash)
+      }}
+      type="button"
+    >
+      Send 1 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Sponsor fees
+
+The plugin's <SourceLink name="viem.relay" path="src/plugins/viem.ts">`relay`</SourceLink> sends each transaction through the app's relay route, whose fee payer pays its fee. [Use Tempo API](/docs/guides/fee-sponsorship/use-tempo-api) serves the route.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem({ relay: '/api/relay' })], // [!code hl]
+})
+```
+
+### Relay through another origin
+
+Each request to a relay route at the app's origin carries the session's access token, so the route can verify its caller. With <SourceLink name="viem.relay.credentials" path="src/plugins/viem.ts">`credentials: 'include'`</SourceLink>, a route on another origin, such as the app's API, also receives it.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [
+    react(),
+    viem({
+      // [!code hl:start]
+      relay: { credentials: 'include', url: 'https://api.example.com/relay' },
+      // [!code hl:end]
+    }),
+  ],
+})
+```
+
+### Set the options of each chain
+
+A function in place of the options of <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> returns the options of each chain, such as a transport to the app's RPC provider.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+import { http } from 'viem'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [
+    react(),
+    viem((chainId) => ({ transport: http(`https://rpc.example/${chainId}`) })), // [!code hl]
+  ],
+})
+```
+
+### Sign a message as the Tempo Account
+
+The access key signs a keychain envelope for the Tempo Account, with no prompt. A verifier accepts it only after the chain holds the access key, such as after the [walkthrough's](#send-a-transaction) first transaction.
+
+:::code-group
+
+```tsx [Sign.tsx]
+import { accounts } from './tempo.config.js'
+
+const message = 'Hello from Tempo ID'
+
+export function Sign() {
+  return (
+    <button
+      onClick={async () => {
+        // [!code hl:start]
+        const signature = await accounts.signMessage({ message })
+
+        const valid = await accounts.verifyMessage({
+          accessToken: await accounts.session.accessToken(),
+          address: accounts.viem.account.address,
+          message,
+          signature,
+        })
+        // [!code hl:end]
+        console.log(valid)
+      }}
+      type="button"
+    >
+      Sign a message
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+The verification counts the signature only if the session's [access token](/docs/guides/api-authentication/authenticate-requests) names the access key that signed. Without an access token, it returns `false`, and an access token that does not verify throws <SourceLink name="InvalidError" path="src/AccessToken.ts">`AccessToken.InvalidError`</SourceLink>.
+
+:::warning
+A Viem client without the package verifies with the allowAccessKey mode of [`verifyMessage`](https://viem.sh/docs/actions/public/verifyMessage). That mode accepts each access key that the chain holds for the Tempo Account, also another app's access key.
+:::
+
+### Sign typed data
+
+Viem's [`signTypedData`](https://viem.sh/docs/actions/wallet/signTypedData) and its verification follow the same rules for EIP-712 typed data.
+
+:::code-group
+
+```tsx [Sign.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Sign() {
+  return (
+    <button
+      onClick={async () => {
+        const typedData = {
+          domain: { chainId: accounts.viem.chain.id, name: 'Example' },
+          message: { contents: 'Hello from Tempo ID' },
+          primaryType: 'Note',
+          types: { Note: [{ name: 'contents', type: 'string' }] },
+        } as const
+
+        // [!code hl:start]
+        const signature = await accounts.signTypedData(typedData)
+
+        const valid = await accounts.verifyTypedData({
+          ...typedData,
+          accessToken: await accounts.session.accessToken(),
+          address: accounts.viem.account.address,
+          signature,
+        })
+        // [!code hl:end]
+        console.log(valid)
+      }}
+      type="button"
+    >
+      Sign a note
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Accept the tokens of several apps
+
+The plugin's <SourceLink name="viem.accessTokens" path="src/plugins/viem.ts">`accessTokens`</SourceLink> takes the options of the verifier of the access tokens that a verification reads. With <SourceLink name="create.clientIds" path="src/AccessToken.ts">`clientIds`</SourceLink>, a server counts the access keys of each named app, as [Verify signed messages](/docs/guides/account-proof/verify-signed-messages#accept-the-tokens-of-several-apps) shows.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'https://app.example',
+  plugins: [
+    viem({
+      // [!code hl:start]
+      accessTokens: {
+        clientIds: ['https://app.example', 'https://admin.example'],
+      },
+      // [!code hl:end]
+    }),
+  ],
+})
+```
+
+### Check the registration
+
+Viem's [`accessKey.getMetadata`](https://viem.sh/tempo/actions/accessKey.getMetadata) reads the access key from the chain. The chain returns the zero address for an access key that it does not hold, and marks a revoked one.
+
+:::code-group
+
+```tsx [Registration.tsx]
+import { isAddressEqual } from 'viem'
+import { accounts } from './tempo.config.js'
+
+export function Registration() {
+  const { session } = accounts.useSession()
+
+  if (!session?.accessKey) return null
+
+  const { account, keyAuthorization } = session.accessKey
+
+  return (
+    <button
+      onClick={async () => {
+        // [!code hl:start]
+        const metadata = await accounts.accessKey.getMetadata({
+          accessKey: keyAuthorization.keyId,
+          account,
+        })
+        // [!code hl:end]
+        const registered =
+          !metadata.isRevoked &&
+          isAddressEqual(metadata.address, keyAuthorization.keyId)
+        console.log(registered)
+      }}
+      type="button"
+    >
+      Check the access key
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Send with a server's session
+
+With the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, a server holds the session, and the <SourceLink name="viem.chainId.session" path="src/plugins/viem.ts">`session`</SourceLink> of a client call signs with its access key. A server shows no screen, so a refused transaction rejects with its error.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, viem } from 'accounts/plugins'
+import { Hono } from 'hono'
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+
+const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() }), viem()],
+})
+
+const app = new Hono()
+
+// The sign-in routes of the `backend` plugin.
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+app.post('/send', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'tempo-id') return c.body(null, 401)
+
+  const { receipt } = await accounts.viem({ session }).token.transferSync({ // [!code hl]
+    amount: parseUnits('1', 6),
+    to: '0x000000000000000000000000000000000000dEaD',
+    token: Addresses.ousd,
+  })
+  return c.json({ hash: receipt.transactionHash })
+})
+
+export default app
+```
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the sessions in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+### Use another Tempo ID or chain
+
+The guides use Tempo ID's own origin, and Tempo testnet with its own RPC. Three options change them.
+
+| Option                                                                                                                                                                                         | Sets                                                                 | Default                              |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------ |
+| <SourceLink name="from.url" path="src/Accounts.ts">`url`</SourceLink>                                                                                                                          | The origin of Tempo ID, such as a self-hosted or a local deployment  | `https://id.tempo.xyz`               |
+| <SourceLink name="from.chain" path="src/Accounts.ts">`chain`</SourceLink>                                                                                                                      | `'mainnet'`, `'testnet'`, or the ID of another chain, such as `1337` | `'mainnet'`                          |
+| <SourceLink name="viem.chain" path="src/plugins/viem.ts">`viem({ chain })`</SourceLink>, <SourceLink name="viem.relay.transport" path="src/plugins/viem.ts">`viem({ transport })`</SourceLink> | The Viem chain of that ID, and the transport of its RPC              | Tempo's chain of the ID, and its RPC |
+
+The instance's chain is an ID, not a Viem chain. Viem's chain of a local node uses an RPC on port 8545, so a node at another URL needs a transport.
+
+The <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin reads the chain and the transport of the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin. Token symbols such as OUSD resolve on mainnet, testnet, devnet, and a local node.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { http } from 'viem'
+import { tempoLocalnet } from 'viem/tempo/chains'
+
+export const accounts = Accounts.create({
+  chain: tempoLocalnet.id,
+  plugins: [
+    viem({ chain: tempoLocalnet, transport: http('http://localhost:9545/1') }),
+  ],
+  url: 'http://localhost:8787',
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Verify a message that the access key signs, on a server."
+    icon="signed-file"
+    title="Verify signed messages"
+    to="/docs/guides/account-proof/verify-signed-messages"
+  />
+  <PageCard
+    description="Send a payment with an access key that holds a limit."
+    icon="arrow-up-right"
+    title="Send payments"
+    to="/docs/guides/payments/self-managed"
+  />
+  <PageCard
+    description="Pay the fees of the transactions of users."
+    icon="pay-by-hand"
+    title="Use Tempo API"
+    to="/docs/guides/fee-sponsorship/use-tempo-api"
+  />
+</Cards>

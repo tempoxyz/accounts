@@ -1,0 +1,21 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // The Worker serves the page's assets, so the page calls the API at its own origin.
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/v1/*"],
+  },
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // One object holds the state of every channel of the payee.
+  "durable_objects": {
+    "bindings": [{ "class_name": "Payee", "name": "PAYEE" }],
+  },
+  "main": "./api.ts",
+  "migrations": [{ "new_sqlite_classes": ["Payee"], "tag": "v1" }],
+  "name": "tempo-id-example-mpp-session",
+  // The realm of each challenge is the host of the page.
+  "vars": {
+    "APP_URL": "http://localhost:5193",
+  },
+}

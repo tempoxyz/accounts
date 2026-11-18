@@ -1,19 +1,78 @@
 # accounts
 
+## 1.0.0-alpha.2
+
+### Minor Changes
+
+- f562817: Added `accessKey` to `passkey.register` and `Actions.passkey.register`. The new passkey's proof signs the access key for the account that it owns, so a sign-up after an emailed code takes two prompts: the creation, then the proof. `Actions.passkey.register` returns the authorization in `authorization`, and `passkey.register` sets the session and returns it, as `passkey.signIn` does.
+  
+  ```ts
+  await accounts.email.signIn({ accessKey: false, code, email })
+  
+  const session = await accounts.passkey.register({ accessKey: permissions })
+  ```
+- 05f577b: Added `chainId` to `tempoId` of `accounts/wagmi`. The connector's instance, `getChainId`, `switchChain`, and wagmi's connection use the config's chain of `chainId`, which defaults to the config's first chain. A `chainId` that names no chain of the config throws `wagmi.ChainNotConfiguredError`.
+  
+  ```ts
+  import { createConfig, http } from '@wagmi/core'
+  import { tempoId } from 'accounts/wagmi'
+  import { tempo, tempoDevnet } from 'viem/tempo/chains'
+  
+  const config = createConfig({
+    chains: [tempo, tempoDevnet],
+    connectors: [tempoId({ chainId: tempoDevnet.id })],
+    transports: { [tempo.id]: http(), [tempoDevnet.id]: http() },
+  })
+  ```
+
+## 1.0.0-alpha.1
+
+### Major Changes
+
+- Initial release.
+
+### Minor Changes
+
+- e698723: Added `audience` to `AccessToken.create` of `accounts/internal`, which verifies the access tokens of a registered resource, such as an MCP server, whose `aud` names the resource's identifier. `Actions.oauth.introspect` returns the token's `aud` as `audience`.
+- 2e01ee5: Added `redirect`, `redirectUri`, and `state` to `Actions.account.revokeAccessKey` of `accounts/internal`. With `redirect: true`, it returns the `url` of Tempo ID's approval page at `/access-keys/revoke`, where any owner of the account signs the revocation, a passkey included.
+  
+  ```ts
+  import { Actions } from 'accounts/internal'
+  
+  const { url } = await Actions.account.revokeAccessKey(accounts.config, {
+    accessKey: session.key.keyAuthorization.keyId,
+    account: session.key.account,
+    chainId: 4217,
+    redirect: true,
+  })
+  ```
+
+### Patch Changes
+
+- 690f13b: Added `allowance_redeemed` and `unknown_allowance` to `Accounts.RequestError.Reason`, the refusals of Tempo ID's `POST /v1/access-keys/connect`.
+
+## 1.0.0-alpha.0
+
+### Major Changes
+
+- dcdbf50: Initial release.
+
 ## 0.21.1
 
 ### Patch Changes
 
 - b2535d3: Reclaim expired in-memory KV entries on writes and propagate finite cache TTLs to backing storage. Capacity remains unlimited by default; opt in with `Kv.memory({ maxEntries })` to reject new keys at a chosen capacity without evicting live authentication state. Deployments must size an explicit cap and apply admission controls to avoid blocking legitimate writes.
-  
+
   Validate the current adapter account before local access-key transaction paths and discard keys belonging to accounts omitted by a new wallet selection. Privy revocation now waits for successful execution before deleting local key state, retaining keys on pending or failed revocations.
-  
+
   Upgrade Hono to 4.13.11 to fix double-decoding of static paths that could bypass middleware.
+
 - 00b6ee3: Updated `viem` to 2.57.12 and `ox` to 0.14.59, which derive configurable account addresses from the hash of the initial config. The `viem` peer range now starts at 2.57.12, since an earlier Viem derives other addresses.
 - 80bdb13: `Handler.relay` no longer signs as its own fee payer when a request names an app's fee payer URL and that relay returns an unsigned fill. It answers with an invalid-params error instead, so an app's URL can no longer make the relay's fee payer pay without its `validate`.
 - b38af80: Treat a retried `eth_sendRawTransaction` or `eth_sendRawTransactionSync` that the node rejects with `already known` or `nonce too low` as successful when the node knows the transaction's hash. viem's transports retry a submission after a timeout, a network error or a 5xx response, so a transaction that landed on the first attempt could previously fail the send.
-  
+
   An access-key send that times out or loses its response no longer falls back to signing the same calls with the root account, which could send them twice.
+
 - 581bf10: Fixed `Handler` listeners to respond with a 400 to requests with an unparseable `Host` header or request target.
 - 9c6dee1: Fixed Node request listeners to safely cancel oversized uploads and close unfinished connections after sending the response.
 - 51f3b65: Added `handoff` to the postMessage `tempoWallet()` adapter and `Handoff.read()`. Tempo Wallet shows a QR code so someone without a passkey on the computer can approve the request with their phone. By default the requesting tab receives the result. With `handoff.url`, the phone's browser opens that page on the app's origin instead, and it receives the result and an access key the phone generated, which `Handoff.read()` returns. `handoff: false` hides the QR code.
@@ -24,8 +83,9 @@
 - 7b24e3e: Added `WebAuthnCeremony.deferred`, a `WebAuthnCeremony.server` variant that answers registration as soon as the passkey is created and verifies it with the server in the background, retrying requests that fail in transit. The `webAuthn` adapter makes logins and disconnects wait for that verification for up to 10 s, then cancels it, so it can't replace the session that follows. A registration whose server-parsed public key differs from the client's is refused, and one acknowledged without its session ends the session in place. If the server rejects the registration while the page is open, the adapter removes the account and its access keys and keeps the public key in storage; a later login with the passkey restores the account. `WebAuthnCeremony.server` now also ends its session on `wallet_disconnect` when passed as `ceremony`. `WebAuthnCeremony.server`'s `logout` now fails on an error response other than 404. `Handler.webAuthn`'s `/register` revokes the session presented with it when it issues a new one, and answers a retry after a stored registration with `Credential already exists` even when the challenge was already used.
 - 904e9b0: `WebAuthnCeremony.deferred` now also answers a login with a known passkey as soon as its signature checks out against the stored public key, and verifies it with the server (`POST /login`) in the background. `verifyAuthentication` takes an optional `credential` (the signed challenge, public key and RP ID) and `signal`, and may return `verified`, which resolves `{ session }`. The `webAuthn` adapter passes its stored credential and makes later logins, sign-ups and disconnects wait for the verification. A login the server refuses (it doesn't know the credential, the signature fails, or a hook denies it with 401 or 403) ends the session in place and drops the account. A login whose outcome stays unknown (it failed in transit, a retry found its challenge consumed, or the server failed for another reason) ends the session in place (retrying the logout until it succeeds or a later login, sign-up or disconnect cancels it) and keeps the account. `WebAuthnCeremony.server`'s `verifyAuthentication` now returns only its declared fields. Signing a digest with the latest registration's own credential (e.g. an access key authorized right after sign-up) no longer waits for that registration to land, since it needs no server login. `verifyAuthentication` also takes `ready`, a promise a server-backed ceremony waits for before sending `/login`: the adapter passes its wait for earlier registrations, so a deferred login answers at once and only its background `/login` waits. `verifyRegistration` takes `ready` too: a sign-up answers at once, and its background `/register` waits for logins and registrations still verifying, so it still sets the session last.
 - 84d2087: Added `prefetch` to `WebAuthnCeremony.server` and `WebAuthnCeremony.deferred`. It fetches a login and a registration challenge ahead of the ceremonies that use them, so their options are built locally instead of waiting for the server to store a challenge. Each challenge taken is replaced in the background. The `webAuthn` adapter's login with a known passkey uses a prefetched challenge (`takeChallenge`) instead of registering a random one. `Handler.webAuthn`'s `/register/options` issues a challenge without a `name`, and `/register` then takes the name sent with the credential. It binds a random `userId` when none is sent, so `Provider` no longer generates one for `wallet_connect` sign-ups; `WebAuthnCeremony.local`, and `WebAuthnCeremony.server` when it requests its own options, generate a random one instead. The `webAuthn` adapter still passes a random one to ceremonies that don't prefetch.
-  
+
   `Handler.webAuthn`'s `/register/options` and `/login/options` now return the challenge `ttl` (seconds) alongside `options`, and `/register` rejects a login challenge.
+
 - 6a163eb: `Handler.webAuthn`: `/register` reads the challenge and checks for a duplicate credential in parallel, and deletes the challenge after responding when the runtime exposes `waitUntil` (pass the execution context to `handler.fetch`). Stores with `take` (e.g. `Kv.memory`, `Kv.durableObject`) now consume register and login challenges atomically, so each is single-use.
 
 ## 0.21.0
@@ -33,8 +93,9 @@
 ### Minor Changes
 
 - a60b2c6: Added `provider.ready()`, which resolves once the provider has loaded its stored state and rejects with `Store.HydrationError` when the storage read fails or takes longer than the new `hydrationTimeout` option (default 10 seconds). `request` now waits for the load instead of continuing with an empty store after 100ms, and rejects with an `RpcResponse.InternalError` caused by the `Store.HydrationError` when the load fails. `getAccount` throws `Store.HydrationError` until the load finishes instead of reporting no accounts.
-  
+
   The default storage now uses IndexedDB only where `indexedDB` exists, so React Native gets memory storage, and keeps state in memory when IndexedDB fails.
+
 - 4008d21: Add an optional `chainId` to `wallet_revokeAccessKey` so callers can revoke an access key on a specific chain. The provider rejects a chain it is not configured for. Local, Privy, dialog, device-code (including CLI), postMessage and mobile web auth revocations target that chain and remove the local key for it only after the revocation succeeds. Other JSON-RPC adapters reject a `chainId` other than the active chain. Omitting `chainId` keeps revoking on the active chain.
 
 ### Patch Changes
@@ -963,7 +1024,7 @@
 
 ### Patch Changes
 
-- 7341ffc: Added `TrustedHosts.match()` with wildcard pattern support (e.g. `*.porto.workers.dev`).
+- 7341ffc: Added `TrustedHosts.match()` with wildcard pattern support (e.g. `*.example.workers.dev`).
 
 ## 0.4.10
 

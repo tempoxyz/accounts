@@ -1,0 +1,377 @@
+import { Cards, Tab, Tabs } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Store sessions [An app chooses the store that keeps the session on each platform.]
+
+## Overview
+
+An instance saves its [session](/docs/guides/user-session) to its <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink>, which decides where the session lives, and for how long.
+
+| Platform     | Store                                                                                        | Keeps the session                   |
+| ------------ | -------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Web          | IndexedDB, the default                                                                       | Across loads and tabs of the origin |
+| CLI          | <SourceLink name="create" path="src/stores/File.ts">`Store.file()`</SourceLink>, the default | In a file that only the user reads  |
+| React Native | <SourceLink name="expo" path="src/plugins/expo.ts">`expo()`</SourceLink> of `accounts/expo`  | In the secure store of the device   |
+| Backend      | <SourceLink name="backend" path="src/plugins/backend.ts">`backend({ store })`</SourceLink>   | On the server, one for each browser |
+
+The demo signs a user in on two instances, one with a memory store and one with the default store. After a reload, only the default store returns its session.
+
+<Demo name="StoreSessions" title="Store a session" />
+
+## Walkthrough
+
+<Tabs stateKey="platform">
+<Tab title="Web">
+
+::::steps
+
+### Use the default store
+
+In a browser, an instance without <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> uses IndexedDB. It keeps the session's [access key](/docs/guides/access-keys) across loads as a non-extractable `CryptoKey`, whose private key no script reads.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  // A reload renders this branch again, with no sign-in.
+  return <p>Signed in as {session.user.email}</p> // [!code hl]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Keep the session in memory
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the session until the page unloads, such as for a test. A reload leaves no session to sign out, so request no refresh token.
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+  // Without `offline_access`, Tempo ID issues no refresh token.
+  scope: 'openid', // [!code hl]
+  store: Store.memory(), // [!code hl]
+})
+```
+
+::::
+
+</Tab>
+<Tab title="CLI">
+
+The [`cli`](https://github.com/tempoxyz/accounts/tree/main/examples/cli) example runs these steps.
+
+::::steps
+
+### Save the session to a file
+
+Outside a browser, an instance with a `cli:` client ID saves its session to `~/.tempo/id/store.json`, with no <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> option. Every CLI of the user shares the file, which has mode `0600`. If the save of a sign-in replaces a later session that another instance's sign-in saved, such as in two runs of a login at once, the instance takes that session back and revokes its own refresh token. Any other instance holds a session only with a store.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { device } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'cli:acme-example', // [!code hl]
+  plugins: [
+    device({
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+  ],
+})
+```
+
+:::tip
+To keep the session in another file, pass <SourceLink name="create" path="src/stores/File.ts">`store: Store.file(path)`</SourceLink>.
+:::
+
+### Read the saved session
+
+:::code-group
+
+```ts [index.ts]
+import { accounts } from './tempo.config.js'
+
+const session = await accounts.session.get() // [!code hl]
+if (!session) console.log('Not signed in.')
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { device } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'cli:acme-example',
+  plugins: [
+    device({
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+  ],
+})
+```
+
+:::
+
+::::
+
+</Tab>
+<Tab title="React Native">
+
+The [`mobile`](https://github.com/tempoxyz/accounts/tree/main/examples/mobile) example runs these steps.
+
+::::steps
+
+### Add the `expo` plugin
+
+The plugin sets the instance's store to the device's secure store, from `expo-secure-store`, which the app installs.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { expo } from 'accounts/expo'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  // The client ID of the app's registration.
+  clientId: 'example-mobile',
+  plugins: [expo({ redirectUri: 'com.example.app:/callback' })], // [!code hl]
+})
+```
+
+::::
+
+</Tab>
+<Tab title="Backend">
+
+The [`backend`](https://github.com/tempoxyz/accounts/tree/main/examples/backend) example runs these steps.
+
+::::steps
+
+### Pass a store to the `backend` plugin
+
+A backend's instance serves many users, so it holds no session of its own. The <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin keeps one session for each session cookie in its store.
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })], // [!code hl]
+})
+```
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the sessions in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+| Store                                                                                                               | Use                                                                                |
+| ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory()`</SourceLink>                                 | One process, such as in development                                                |
+| <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres(client)`</SourceLink>                       | A `pg` pool. The store creates its table                                           |
+| <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis(client)`</SourceLink>                             | A `redis` client                                                                   |
+| <SourceLink name="durableObject" path="src/cloudflare/Sessions.ts">`Sessions.durableObject(namespace)`</SourceLink> | One Durable Object for each session                                                |
+| <SourceLink name="create" path="src/stores/DurableObject.ts">`Store.durableObject(storage)`</SourceLink>            | The storage of the app's own Durable Object                                        |
+| <SourceLink name="create" path="src/stores/WorkersKv.ts">`Store.workersKv(namespace)`</SourceLink>                  | A Workers KV namespace. Another location can read a sign-out up to 60 seconds late |
+
+Each stored session holds a refresh token and an access key's private key. Give no other role access to the store.
+
+### Read the session of a request
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+app.get('/me', async (c) => {
+  const session = await accounts.session.get(c.req.raw) // [!code hl]
+  if (session?.method !== 'tempo-id') return c.text('Signed out', 401)
+
+  return c.json(session.user)
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+::::
+
+</Tab>
+</Tabs>
+
+## Use cases
+
+Each use case sets the <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> option, or builds a store with <SourceLink name="from" path="src/Store.ts">`Store.from`</SourceLink>.
+
+### Write a store
+
+<SourceLink name="from" path="src/Store.ts">`Store.from`</SourceLink> instantiates a store over any storage. This one keeps a backend's sessions in a SQLite file.
+
+```ts [store.ts]
+import { DatabaseSync } from 'node:sqlite'
+import { Store } from 'accounts'
+import { Json } from 'ox'
+
+const database = new DatabaseSync('sessions.db')
+database.exec(
+  'create table if not exists store (key text primary key, value text not null, expires_at integer)',
+)
+
+export const store = Store.from({
+  async getItem(key) {
+    const row = database
+      .prepare(
+        'select value from store where key = ? and (expires_at is null or expires_at > ?)',
+      )
+      .get(key, Date.now())
+    return row ? Json.parse(String(row.value)) : undefined
+  },
+  async removeItem(key) {
+    database.prepare('delete from store where key = ?').run(key)
+  },
+  async setItem(key, value, options = {}) {
+    database
+      .prepare('insert or replace into store values (?, ?, ?)')
+      .run(key, Json.stringify(value), options.expiresAt ?? null)
+  },
+})
+```
+
+| Member                                                                      | Contract                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| <SourceLink name="getItem" path="src/Store.ts">`getItem`</SourceLink>       | Resolves with the value of the key, or `undefined`                                                                                                                                                                                                                                                                                                                |
+| <SourceLink name="local" path="src/Store.ts">`local`</SourceLink>           | Optional. `true` for a store of one process alone, such as one in the memory of a page, which a page load empties. A refused refresh then throws at once, and <SourceLink name="signIn" path="src/plugins/redirect.ts">`redirect.signIn`</SourceLink> without <SourceLink name="signIn.open" path="src/plugins/redirect.ts">`open`</SourceLink> refuses the store |
+| <SourceLink name="removeItem" path="src/Store.ts">`removeItem`</SourceLink> | Deletes the value of the key                                                                                                                                                                                                                                                                                                                                      |
+| <SourceLink name="setItem" path="src/Store.ts">`setItem`</SourceLink>       | Writes the value. With <SourceLink name="setItem.expiresAt" path="src/Store.ts">`options.expiresAt`</SourceLink>, in milliseconds, the entry may then expire                                                                                                                                                                                                      |
+| <SourceLink name="takeItem" path="src/Store.ts">`takeItem`</SourceLink>     | Optional. Reads and deletes the value in one atomic step                                                                                                                                                                                                                                                                                                          |
+
+- A store that serializes uses ox's `Json`, which keeps a `bigint`.
+- A browser's access key has no serialized form, so keep a browser's session in the default store.
+
+### Separate the sessions of two instances
+
+A saved session's key names the Tempo ID deployment, the client ID, and the chain. Instances that differ in <SourceLink name="Config.url" path="src/Accounts.ts">`url`</SourceLink>, <SourceLink name="Config.clientId" path="src/Accounts.ts">`clientId`</SourceLink>, or <SourceLink name="from.chain" path="src/Accounts.ts">`chain`</SourceLink> thus share one store, and each reads only its own session.
+
+:::code-group
+
+```tsx [App.tsx]
+import { testnet } from './tempo.config.js'
+
+export function App() {
+  const { session } = testnet.useSession()
+
+  return <p>{session ? session.user.email : 'Signed out on testnet'}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const mainnet = Accounts.create({ chain: 'mainnet', plugins: [react()] }) // [!code hl]
+export const testnet = Accounts.create({ chain: 'testnet', plugins: [react()] }) // [!code hl]
+```
+
+:::
+
+### Hold no session in a service
+
+A service that signs in many users with a `cli:` client ID, such as a bot, holds no session of its own. <SourceLink name="create.store" path="src/Accounts.ts">`store: false`</SourceLink> refuses the file of the default store, so each sign-in only returns its session.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { device } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'cli:acme-bot',
+  plugins: [
+    device({
+      onCode: (code) =>
+        console.log(`Open ${code.verificationUriComplete} to sign in.`),
+    }),
+  ],
+  store: false, // [!code hl]
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Restore the saved session at each load."
+    icon="id-card"
+    title="Restore sessions"
+    to="/docs/guides/user-session/restore-sessions"
+  />
+  <PageCard
+    description="Sign in from a CLI, and save the session to a file."
+    icon="laptop"
+    title="CLI"
+    to="/docs/guides/cli"
+  />
+  <PageCard
+    description="Sign in from an Expo app, with the session in the secure store."
+    icon="smartphone"
+    title="Mobile"
+    to="/docs/guides/mobile"
+  />
+  <PageCard
+    description="Sign in on a server, which holds the session of each browser."
+    icon="server"
+    title="Redirect (Backend)"
+    to="/docs/guides/backend"
+  />
+</Cards>

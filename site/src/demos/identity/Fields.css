@@ -1,0 +1,34 @@
+/* The rows of `Fields`, and a code in prose, in the detail of a demo's step. The rules use Vocs' variables. */
+[data-identity-fields] {
+  display: grid;
+  gap: 0.125rem 0.75rem;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin-top: 0.25rem;
+}
+
+[data-identity-field] {
+  display: contents;
+}
+
+[data-identity-field-name] {
+  color: var(--vocs-text-color-secondary);
+  font-family: var(--vocs-font-family-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  /* Vocs pads each `code` element of a page. */
+  padding: 0;
+}
+
+[data-identity-field-value] {
+  color: var(--vocs-text-color-primary);
+  font-family: var(--vocs-font-family-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+/* A code in the prose of a step's detail, such as the reason of a refusal. */
+[data-identity-code] {
+  font-family: var(--vocs-font-family-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  /* Vocs pads each `code` element of a page. */
+  padding: 0;
+}

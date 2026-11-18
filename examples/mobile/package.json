@@ -1,0 +1,25 @@
+{
+  "name": "example-mobile",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "check:types": "tsc",
+    "ios": "expo run:ios",
+    "start": "expo start"
+  },
+  "dependencies": {
+    "accounts": "^1.0.0-alpha.2",
+    "expo": "^58.0.20",
+    "expo-secure-store": "^58.0.2",
+    "expo-web-browser": "^58.0.7",
+    "react": "~19.3.1",
+    "react-native": "^0.88.1",
+    "react-native-get-random-values": "^2.1.0",
+    "viem": "^2.57.19"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/react": "~19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

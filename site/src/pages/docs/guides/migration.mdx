@@ -1,0 +1,1264 @@
+import { Cards } from 'vocs'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# Migration from v0 [Replace each API of version 0 of the package with its API of version 1.]
+
+Version 0 of `accounts` connects an app to Tempo Wallet through an EIP-1193 provider. The app sends RPC methods, such as `wallet_connect` and `eth_sendTransaction`, and Tempo Wallet's dialog signs each call that no access key covers.
+
+Version 1 is the SDK of Tempo ID, an OAuth 2.0 and OpenID Connect provider. A sign-in returns a [session](/docs/guides/user-session) with the user, the tokens, and an [access key](/docs/guides/access-keys) that signs each transaction within the limits that the user approved. <SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink> returns an instance in place of a provider, and plugins add its members.
+
+[Notable changes](#notable-changes) covers what affects most apps, and [Quick reference](#quick-reference) lists each API of version 0. In each diff, removed lines are code of version 0, and added lines code of version 1.
+
+## Installation
+
+Version 1 publishes under the `alpha` tag. Viem is a peer dependency.
+
+:::code-group
+
+```sh [npm]
+npm install accounts@alpha viem
+```
+
+```sh [pnpm]
+pnpm add accounts@alpha viem
+```
+
+```sh [bun]
+bun add accounts@alpha viem
+```
+
+:::
+
+## Notable changes
+
+### Instance creation
+
+<SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink> replaces `Provider.create`, and <SourceLink name="from.chain" path="src/Accounts.ts">`chain`</SourceLink> replaces `testnet`. A web app needs no registration, since the page's origin is its client ID. See [Instance](#instance).
+
+```ts [tempo.config.ts]
+import { Provider, tempoWallet } from 'accounts' // [!code --]
+import { Accounts } from 'accounts' // [!code ++]
+import { dialog, viem } from 'accounts/plugins' // [!code ++]
+
+const provider = Provider.create({ // [!code --]
+  adapter: tempoWallet(), // [!code --]
+  testnet: true, // [!code --]
+}) // [!code --]
+export const accounts = Accounts.create({ // [!code ++]
+  chain: 'testnet', // [!code ++]
+  plugins: [dialog(), viem()], // [!code ++]
+}) // [!code ++]
+```
+
+### Sign-in plugins
+
+A sign-in plugin replaces each adapter, and its <SourceLink name="signIn" path="src/plugins/dialog.ts">`signIn`</SourceLink> replaces `wallet_connect`. <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> shows Tempo ID's sign-in over the page, as `tempoWallet` showed Tempo Wallet. See [Sign-in](#sign-in).
+
+:::code-group
+
+```ts [signIn.ts]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export async function signIn() {
+  const result = await provider.request({ method: 'wallet_connect' }) // [!code --]
+  const address = result.accounts[0]?.address // [!code --]
+  const session = await accounts.dialog.signIn() // [!code ++]
+  const address = session.accessKey?.account // [!code ++]
+  return address
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog(), viem()],
+})
+```
+
+:::
+
+<SourceLink name="Session.accessKey" path="src/Session.ts">`session.accessKey.account`</SourceLink> is the address of the Tempo Account that the access key acts for, not the access key's address. Without the <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> option, a sign-in requests no access key, and <SourceLink name="account.get" path="src/Accounts.ts">`accounts.account.get()`</SourceLink> reads the Tempo Account from Tempo ID.
+
+:::code-group
+
+```ts [account.ts]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export async function getAddress() { // [!code ++]
+  const account = await accounts.account.get() // [!code ++]
+  return account?.address // [!code ++]
+} // [!code ++]
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog(), viem()],
+})
+```
+
+:::
+
+### Sessions
+
+One session, which <SourceLink name="session" path="src/Accounts.ts">`accounts.session`</SourceLink> reads, replaces the accounts of `provider.store`. An instance does not read version 0's stored state, so each user signs in once after the upgrade. See [Session and storage](#session-and-storage).
+
+:::code-group
+
+```ts [session.ts]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export async function watch(render: (address: string | undefined) => void) {
+  await provider.ready() // [!code --]
+  const [address] = await provider.request({ method: 'eth_accounts' }) // [!code --]
+  const session = await accounts.session.get() // [!code ++]
+  const address = session?.accessKey?.account // [!code ++]
+  render(address)
+
+  provider.on('accountsChanged', ([address]) => render(address)) // [!code --]
+  accounts.session.subscribe((session) => render(session?.accessKey?.account)) // [!code ++]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog(), viem()],
+})
+```
+
+:::
+
+### Access key requests
+
+The app requests an access key at each sign-in with the <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> option, which replaces `accessKey.authorize`. It takes a duration, a decimal limit, and a token symbol. See [Access keys](#access-keys).
+
+```ts [tempo.config.ts]
+import { Expiry } from 'accounts' // [!code --]
+import { Addresses } from 'viem/tempo' // [!code --]
+import { Accounts } from 'accounts' // [!code ++]
+import { dialog, viem } from 'accounts/plugins' // [!code ++]
+
+const provider = Provider.create({ // [!code --]
+  accessKey: { // [!code --]
+    authorize: { // [!code --]
+      expiry: Expiry.days(1), // [!code --]
+      limits: [{ limit: 100_000_000n, token: Addresses.ousd }], // [!code --]
+    }, // [!code --]
+  }, // [!code --]
+}) // [!code --]
+export const accounts = Accounts.create({ // [!code ++]
+  accessKey: () => ({ // [!code ++]
+    expiry: '1d', // [!code ++]
+    limits: [{ limit: '100', token: 'ousd' }], // [!code ++]
+  }), // [!code ++]
+  chain: 'testnet', // [!code ++]
+  plugins: [dialog(), viem()], // [!code ++]
+}) // [!code ++]
+```
+
+### Instance methods
+
+A method of the instance replaces each RPC method. <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> replaces `wallet_transfer`, with the same decimal amount, and the access key signs with no prompt. The <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin's actions take Viem's values, such as an amount in base units. See [RPC methods](#rpc-methods).
+
+:::code-group
+
+```ts [send.ts]
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js' // [!code ++]
+
+const to = '0x000000000000000000000000000000000000dEaD'
+
+export async function send() {
+  await provider.request({ // [!code --]
+    method: 'wallet_transfer', // [!code --]
+    params: [{ amount: '1', to, token: Addresses.ousd }], // [!code --]
+  }) // [!code --]
+  const { transaction } = await accounts.pay({ // [!code ++]
+    amount: '1', // [!code ++]
+    to, // [!code ++]
+    token: Addresses.ousd, // [!code ++]
+  }) // [!code ++]
+  return transaction // [!code ++]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [dialog(), viem()],
+})
+```
+
+:::
+
+### Wagmi connector
+
+The <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId`</SourceLink> connector of `accounts/wagmi` replaces `tempoWallet` of `wagmi/connectors`, and takes the options of <SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink>. The hooks of Viem's actions replace `Hooks.wallet`, which sends Tempo Wallet's RPC methods. See [Wagmi](#wagmi).
+
+```ts
+import { tempoId } from 'accounts/wagmi' // [!code ++]
+import { createConfig, http } from 'wagmi'
+import { tempoModerato } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors' // [!code --]
+
+export const config = createConfig({
+  chains: [tempoModerato],
+  connectors: [tempoWallet()], // [!code --]
+  connectors: [ // [!code ++]
+    // The page's origin is a third-party client ID, whose connection needs an access key. // [!code ++]
+    tempoId({ accessKey: { expiry: '1d', limits: [{ limit: '100', token: 'ousd' }] } }), // [!code ++]
+  ], // [!code ++]
+  transports: { [tempoModerato.id]: http() },
+})
+```
+
+### Server plugins
+
+One server instance replaces each `Handler` of `accounts/server`, and the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin replaces `Handler.auth`. The backend holds the session and its access key, and the page holds only a cookie. See [Server](#server).
+
+```ts [server.ts]
+import { Handler, Kv } from 'accounts/server' // [!code --]
+import { Accounts, Store } from 'accounts' // [!code ++]
+import { backend } from 'accounts/plugins' // [!code ++]
+
+const auth = Handler.auth({ path: '/api/auth', store: Kv.memory() }) // [!code --]
+const accounts = Accounts.create({ // [!code ++]
+  clientId: 'https://app.example', // [!code ++]
+  plugins: [backend({ store: Store.memory() })], // [!code ++]
+}) // [!code ++]
+
+export default {
+  fetch: (request: Request) => auth.fetch(request), // [!code --]
+  fetch: (request: Request) => accounts.handler.fetch(request), // [!code ++]
+}
+```
+
+### Fee relay
+
+The <SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink> plugin replaces `Handler.relay`, and the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin's <SourceLink name="viem.relay" path="src/plugins/viem.ts">`relay`</SourceLink> option replaces `feePayer`. A relay is a JSON-RPC proxy whose fee payer co-signs each transaction.
+
+Version 0's route checks no caller, and version 1's verifies each request's access token. See [Fee sponsorship](#fee-sponsorship).
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts' // [!code ++]
+import { dialog, viem } from 'accounts/plugins' // [!code ++]
+
+const provider = Provider.create({ // [!code --]
+  adapter: tempoWallet(), // [!code --]
+  feePayer: '/api/relay', // [!code --]
+}) // [!code --]
+export const accounts = Accounts.create({ // [!code ++]
+  chain: 'testnet', // [!code ++]
+  plugins: [dialog(), viem({ relay: '/api/relay' })], // [!code ++]
+}) // [!code ++]
+```
+
+### Removed adapters
+
+Version 1 has no replacement for the adapters that hold an owner key in the app: `local`, `secp256k1`, `webAuthn`, `turnkey`, and `privy`. The app holds only an access key, never a Tempo Account's owner key. See [Removed APIs](#removed-apis).
+
+### Removed surface
+
+The root entry exports no EIP-1193 provider and no RPC schema, and only the wagmi connector's <SourceLink name="tempoId.getProvider" path="src/wagmi/index.ts">`getProvider`</SourceLink> returns a provider. Version 1 has no wallet-side module, such as `Remote` and `Messenger`, since Tempo ID is the only wallet side, and no handler for a flow that Tempo ID serves. See [Removed APIs](#removed-apis).
+
+## Quick reference
+
+Each export, option, member, and RPC method of version 0, in alphabetical order. An option belongs to `Provider.create` or to its adapter.
+
+| Version 0                                 | Version 1                                                                                                                                                                                                                              | Section                                     |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `accessKey.authorize` (option)            | <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink>                                                                                                                                                    | [Access keys](#access-keys)                 |
+| `accessKey.keystores` (option)            | Removed. The instance creates and keeps the access key                                                                                                                                                                                 | [Access keys](#access-keys)                 |
+| `Adapter`                                 | Removed. <SourceLink name="from" path="src/Plugin.ts">`Plugin.from`</SourceLink> extends an instance                                                                                                                                   | [Removed APIs](#removed-apis)               |
+| `adapter` (option)                        | <SourceLink name="create.plugins" path="src/Accounts.ts">`plugins`</SourceLink>                                                                                                                                                        | [Instance](#instance)                       |
+| `asyncStorage`                            | Removed. <SourceLink name="expo" path="src/plugins/expo.ts">`expo`</SourceLink> sets the store, or <SourceLink name="from" path="src/Store.ts">`Store.from`</SourceLink> wraps one                                                     | [React Native](#react-native)               |
+| `auth` (option)                           | <SourceLink name="dialog.backend" path="src/plugins/dialog.ts">`dialog({ backend: true })`</SourceLink>                                                                                                                                | [Backend sessions](#backend-sessions)       |
+| `authorizeAccessKey` (option)             | <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink>                                                                                                                                                    | [Access keys](#access-keys)                 |
+| `chains` (option)                         | <SourceLink name="create.chains" path="src/Accounts.ts">`chains`</SourceLink>, as chain IDs                                                                                                                                            | [Instance](#instance)                       |
+| `cli`                                     | <SourceLink name="device" path="src/plugins/device.ts">`device`</SourceLink>                                                                                                                                                           | [CLI](#cli)                                 |
+| `CliAuth`                                 | Removed. Tempo ID serves the device grant                                                                                                                                                                                              | [Removed APIs](#removed-apis)               |
+| `Connector`                               | <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId`</SourceLink>                                                                                                                                                            | [Wagmi](#wagmi)                             |
+| `dangerous_secp256k1`                     | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `deviceCode`                              | <SourceLink name="device" path="src/plugins/device.ts">`device`</SourceLink>                                                                                                                                                           | [CLI](#cli)                                 |
+| `Dialog`                                  | Removed. The <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin owns the dialog                                                                                                                       | [Removed APIs](#removed-apis)               |
+| `dialog`                                  | <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> of `accounts/plugins`                                                                                                                                     | [Sign-in](#sign-in)                         |
+| `eth_accounts`                            | <SourceLink name="Session.accessKey" path="src/Session.ts">`session.accessKey?.account`</SourceLink>, or <SourceLink name="account.get" path="src/Accounts.ts">`accounts.account.get()`</SourceLink>                                   | [RPC methods](#rpc-methods)                 |
+| `eth_chainId`                             | <SourceLink name="chain" path="src/Accounts.ts">`accounts.chain.get()`</SourceLink>                                                                                                                                                    | [RPC methods](#rpc-methods)                 |
+| `eth_fillTransaction`                     | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.fillTransaction`</SourceLink>                                                                                                                                             | [RPC methods](#rpc-methods)                 |
+| `eth_requestAccounts`                     | <SourceLink name="signIn" path="src/plugins/dialog.ts">`accounts.dialog.signIn()`</SourceLink>                                                                                                                                         | [Sign-in](#sign-in)                         |
+| `eth_sendTransaction`                     | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.sendTransaction`</SourceLink>                                                                                                                                             | [RPC methods](#rpc-methods)                 |
+| `eth_sendTransactionSync`                 | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.sendTransactionSync`</SourceLink>                                                                                                                                         | [RPC methods](#rpc-methods)                 |
+| `eth_signTransaction`                     | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.signTransaction`</SourceLink>                                                                                                                                             | [RPC methods](#rpc-methods)                 |
+| `eth_signTypedData_v4`                    | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.signTypedData`</SourceLink>                                                                                                                                               | [RPC methods](#rpc-methods)                 |
+| `ExecutionError`                          | `ExecutionError` of `viem/tempo`                                                                                                                                                                                                       | [Errors](#errors)                           |
+| `Expiry`                                  | A duration, such as `'1d'`, or `Expiry` of `viem/tempo`                                                                                                                                                                                | [Access keys](#access-keys)                 |
+| `feePayer` (option)                       | <SourceLink name="viem.relay" path="src/plugins/viem.ts">`viem({ relay })`</SourceLink>                                                                                                                                                | [Fee sponsorship](#fee-sponsorship)         |
+| `getOrCreateMmkvEncryptionKey`            | Removed                                                                                                                                                                                                                                | [React Native](#react-native)               |
+| `Handler.auth`                            | <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink>                                                                                                                                                        | [Backend sessions](#backend-sessions)       |
+| `Handler.codeAuth`                        | Removed. Tempo ID serves the device grant                                                                                                                                                                                              | [Removed APIs](#removed-apis)               |
+| `Handler.compose`                         | <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink>                                                                                                                                                      | [Backend sessions](#backend-sessions)       |
+| `Handler.deviceCode`                      | Removed. Tempo ID serves the device grant                                                                                                                                                                                              | [Removed APIs](#removed-apis)               |
+| `Handler.exchange`                        | Removed. <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.dex`</SourceLink> reads each quote                                                                                                                               | [Removed APIs](#removed-apis)               |
+| `Handler.from`                            | <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink>                                                                                                                                                      | [Backend sessions](#backend-sessions)       |
+| `Handler.oidcProvider`                    | Removed. Tempo ID issues each token                                                                                                                                                                                                    | [Removed APIs](#removed-apis)               |
+| `Handler.relay`                           | <SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink>                                                                                                                                                              | [Fee sponsorship](#fee-sponsorship)         |
+| `Handler.webAuthn`                        | Removed. Tempo ID runs each passkey ceremony                                                                                                                                                                                           | [Removed APIs](#removed-apis)               |
+| `Handoff`                                 | Removed. Version 1 has no phone handoff                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `handoff` (option)                        | Removed. Version 1 has no phone handoff                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `hc`                                      | Removed. Import it from `hono/client`                                                                                                                                                                                                  | [Removed APIs](#removed-apis)               |
+| `Hooks.wallet.useDeposit`                 | <SourceLink name="open" path="src/plugins/funding.ts">`accounts.funding.open()`</SourceLink> of an instance                                                                                                                            | [Wagmi](#wagmi)                             |
+| `Hooks.wallet.useSwap`                    | `Hooks.dex.useSellSync`, `Hooks.dex.useBuySync`                                                                                                                                                                                        | [Wagmi](#wagmi)                             |
+| `Hooks.wallet.useTransfer`                | `Hooks.token.useTransferSync`                                                                                                                                                                                                          | [Wagmi](#wagmi)                             |
+| `hydrationTimeout` (option)               | Removed                                                                                                                                                                                                                                | [Session and storage](#session-and-storage) |
+| `icon`, `name`, `rdns`, `theme` (options) | Removed. Tempo ID names the app                                                                                                                                                                                                        | [Sign-in](#sign-in)                         |
+| `Identity`                                | Removed. The session holds the verified <SourceLink name="Session.user" path="src/Session.ts">`user`</SourceLink>                                                                                                                      | [Removed APIs](#removed-apis)               |
+| `identity` (option)                       | Removed. The session holds the verified <SourceLink name="Session.user" path="src/Session.ts">`user`</SourceLink>                                                                                                                      | [Removed APIs](#removed-apis)               |
+| `IntersectionObserver`                    | Removed. The <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin reads the support of the browser                                                                                                      | [Removed APIs](#removed-apis)               |
+| `Keystore`                                | Removed. The instance creates and keeps the access key                                                                                                                                                                                 | [Access keys](#access-keys)                 |
+| `Kv.cloudflare`                           | <SourceLink name="create" path="src/stores/WorkersKv.ts">`Store.workersKv`</SourceLink> of `accounts/cloudflare`                                                                                                                       | [Stores](#stores)                           |
+| `Kv.durableObject`                        | <SourceLink name="durableObject" path="src/cloudflare/Sessions.ts">`Sessions.durableObject`</SourceLink>, or <SourceLink name="create" path="src/stores/DurableObject.ts">`Store.durableObject`</SourceLink>, of `accounts/cloudflare` | [Stores](#stores)                           |
+| `Kv.from`                                 | <SourceLink name="from" path="src/Store.ts">`Store.from`</SourceLink>                                                                                                                                                                  | [Stores](#stores)                           |
+| `Kv.memory`                               | <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink>                                                                                                                                                      | [Stores](#stores)                           |
+| `Kv.NonceStorage`                         | <SourceLink name="sessions" path="src/cloudflare/DurableObject.ts">`DurableObject.sessions`</SourceLink> of `accounts/cloudflare`                                                                                                      | [Stores](#stores)                           |
+| `local`                                   | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `Mach.fund`                               | <SourceLink name="open" path="src/plugins/funding.ts">`accounts.funding.open`</SourceLink>                                                                                                                                             | [RPC methods](#rpc-methods)                 |
+| `Mach.getFundingUrl`                      | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `Mach.token`                              | Removed. A limit names the token as `'mach'`                                                                                                                                                                                           | [Access keys](#access-keys)                 |
+| `maxAccounts` (option)                    | Removed. An instance holds one session                                                                                                                                                                                                 | [Session and storage](#session-and-storage) |
+| `Messenger`                               | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `mobileWebAuth`                           | <SourceLink name="expo" path="src/plugins/expo.ts">`expo`</SourceLink> of `accounts/expo`                                                                                                                                              | [React Native](#react-native)               |
+| `Mount`                                   | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `mpp` (option)                            | <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> of `accounts/mpp`                                                                                                                                                    | [MPP](#mpp)                                 |
+| `openAuthSession`                         | <SourceLink name="expo" path="src/plugins/expo.ts">`expo`</SourceLink> of `accounts/expo`                                                                                                                                              | [React Native](#react-native)               |
+| `persistCredentials` (option)             | Removed                                                                                                                                                                                                                                | [Session and storage](#session-and-storage) |
+| `personal_sign`                           | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.signMessage`</SourceLink>, or <SourceLink name="signMessage" path="src/plugins/dialog.ts">`accounts.dialog.signMessage`</SourceLink>                                      | [RPC methods](#rpc-methods)                 |
+| `postMessage`                             | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `privy`                                   | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `PromptError`                             | Removed. <SourceLink name="onCode" path="src/plugins/device.ts">`onCode`</SourceLink> shows the code                                                                                                                                   | [CLI](#cli)                                 |
+| `provider.chains`                         | <SourceLink name="chain" path="src/Accounts.ts">`accounts.chain.get()`</SourceLink>, for the selected chain                                                                                                                            | [Instance](#instance)                       |
+| `Provider.create`                         | <SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink>                                                                                                                                                        | [Instance](#instance)                       |
+| `provider.getAccessKeyStatus`             | <SourceLink name="Session.accessKey" path="src/Session.ts">`session.accessKey`</SourceLink>, <SourceLink name="expired" path="src/Session.ts">`Session.expired`</SourceLink>                                                           | [Access keys](#access-keys)                 |
+| `provider.getAccount`                     | Removed. No Viem action takes `account`                                                                                                                                                                                                | [Instance](#instance)                       |
+| `provider.getClient`                      | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.viem`</SourceLink>                                                                                                                                                        | [Instance](#instance)                       |
+| `provider.getMppxParameters`              | <SourceLink name="mpp" path="src/mpp/index.ts">`accounts.mpp()`</SourceLink>, a payer                                                                                                                                                  | [MPP](#mpp)                                 |
+| `provider.on`                             | <SourceLink name="session.subscribe" path="src/Accounts.ts">`accounts.session.subscribe`</SourceLink>, <SourceLink name="chain" path="src/Accounts.ts">`accounts.chain.subscribe`</SourceLink>                                         | [Session and storage](#session-and-storage) |
+| `provider.ready`                          | <SourceLink name="session.get" path="src/Accounts.ts">`accounts.session.get`</SourceLink>                                                                                                                                              | [Session and storage](#session-and-storage) |
+| `provider.request`                        | A method of the instance                                                                                                                                                                                                               | [RPC methods](#rpc-methods)                 |
+| `provider.store`                          | <SourceLink name="session" path="src/Accounts.ts">`accounts.session`</SourceLink>                                                                                                                                                      | [Session and storage](#session-and-storage) |
+| `ProviderRequest`                         | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `relay` (option)                          | <SourceLink name="viem.chain.transport" path="src/plugins/viem.ts">`transport`</SourceLink> of <SourceLink name="viem" path="src/plugins/viem.ts">`viem()`</SourceLink>                                                                | [Instance](#instance)                       |
+| `Remote`                                  | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `Rpc`                                     | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `Schema`                                  | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `secp256k1`                               | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `secureMmkv`                              | Removed. <SourceLink name="expo" path="src/plugins/expo.ts">`expo`</SourceLink> sets the store, or <SourceLink name="from" path="src/Store.ts">`Store.from`</SourceLink> wraps one                                                     | [React Native](#react-native)               |
+| `storage` (option)                        | <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink>                                                                                                                                                            | [Session and storage](#session-and-storage) |
+| `Storage.combine`                         | Removed                                                                                                                                                                                                                                | [Session and storage](#session-and-storage) |
+| `Storage.cookie`                          | Removed                                                                                                                                                                                                                                | [Session and storage](#session-and-storage) |
+| `Storage.filesystem`                      | <SourceLink name="create" path="src/stores/File.ts">`Store.file`</SourceLink>                                                                                                                                                          | [CLI](#cli)                                 |
+| `Storage.from`                            | <SourceLink name="from" path="src/Store.ts">`Store.from`</SourceLink>                                                                                                                                                                  | [Session and storage](#session-and-storage) |
+| `Storage.idb`                             | The default <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> of a browser                                                                                                                                   | [Session and storage](#session-and-storage) |
+| `Storage.localStorage`                    | Removed                                                                                                                                                                                                                                | [Session and storage](#session-and-storage) |
+| `Storage.memory`                          | <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink>                                                                                                                                                      | [Session and storage](#session-and-storage) |
+| `Store.HydrationError`                    | Removed                                                                                                                                                                                                                                | [Session and storage](#session-and-storage) |
+| `Store.waitForHydration`                  | <SourceLink name="session.get" path="src/Accounts.ts">`accounts.session.get`</SourceLink>                                                                                                                                              | [Session and storage](#session-and-storage) |
+| `tempoWallet`                             | <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> of `accounts/plugins`, <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId`</SourceLink> of `accounts/wagmi`                                    | [Sign-in](#sign-in)                         |
+| `testnet` (option)                        | <SourceLink name="from.chain" path="src/Accounts.ts">`chain: 'testnet'`</SourceLink>                                                                                                                                                   | [Instance](#instance)                       |
+| `TimeoutError`                            | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>, with `expired_token`                                                                                                                      | [CLI](#cli)                                 |
+| `transports` (option)                     | <SourceLink name="viem.chain.transport" path="src/plugins/viem.ts">`transport`</SourceLink> of <SourceLink name="viem" path="src/plugins/viem.ts">`viem()`</SourceLink>                                                                | [Instance](#instance)                       |
+| `TrustedHosts`                            | Tempo ID's verification of the app, which skips the frame's visibility check                                                                                                                                                           | [Sign-in](#sign-in)                         |
+| `turnkey`                                 | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `wallet_authorizeAccessKey`               | <SourceLink name="signIn" path="src/plugins/dialog.ts">`accounts.dialog.signIn({ accessKey })`</SourceLink>                                                                                                                            | [Access keys](#access-keys)                 |
+| `wallet_connect`                          | <SourceLink name="signIn" path="src/plugins/dialog.ts">`accounts.dialog.signIn()`</SourceLink>                                                                                                                                         | [Sign-in](#sign-in)                         |
+| `wallet_deposit`                          | <SourceLink name="open" path="src/plugins/funding.ts">`accounts.funding.open()`</SourceLink>                                                                                                                                           | [RPC methods](#rpc-methods)                 |
+| `wallet_depositZone`                      | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.zone.deposit`</SourceLink>                                                                                                                                                | [RPC methods](#rpc-methods)                 |
+| `wallet_disconnect`                       | <SourceLink name="signOut" path="src/Accounts.ts">`accounts.signOut()`</SourceLink>                                                                                                                                                    | [RPC methods](#rpc-methods)                 |
+| `wallet_getBalances`                      | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.token.getBalance`</SourceLink>                                                                                                                                            | [RPC methods](#rpc-methods)                 |
+| `wallet_getCallsStatus`                   | The receipt of a `Sync` action                                                                                                                                                                                                         | [RPC methods](#rpc-methods)                 |
+| `wallet_getCapabilities`                  | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `wallet_revokeAccessKey`                  | <SourceLink name="dialog" path="src/plugins/dialog.ts">`accounts.dialog.revokeAccessKey()`</SourceLink>                                                                                                                                | [Access keys](#access-keys)                 |
+| `wallet_sendCalls`                        | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.sendTransactionSync`</SourceLink>, with `calls`                                                                                                                           | [RPC methods](#rpc-methods)                 |
+| `wallet_swap`                             | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.dex.sellSync`</SourceLink>, <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.dex.buySync`</SourceLink>                                                        | [RPC methods](#rpc-methods)                 |
+| `wallet_switchEthereumChain`              | <SourceLink name="switchChain" path="src/Accounts.ts">`accounts.switchChain`</SourceLink>                                                                                                                                              | [RPC methods](#rpc-methods)                 |
+| `wallet_transfer`                         | <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink>                                                                                                                                                              | [RPC methods](#rpc-methods)                 |
+| `wallet_updateAccessKey`                  | <SourceLink name="updateAccessKey" path="src/plugins/dialog.ts">`accounts.dialog.updateAccessKey`</SourceLink>                                                                                                                         | [Access keys](#access-keys)                 |
+| `wallet_withdrawZone`                     | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.zone.requestWithdrawal`</SourceLink>                                                                                                                                      | [RPC methods](#rpc-methods)                 |
+| `webAuthn`                                | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `WebAuthnCeremony`                        | Removed. Tempo ID runs each passkey ceremony                                                                                                                                                                                           | [Removed APIs](#removed-apis)               |
+
+## Entrypoints
+
+Plugins move to `accounts/plugins`, and each optional platform has its own entry.
+
+| Version 0                                 | Version 1                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accounts`                                | `accounts`: <SourceLink name="Accounts" path="src/Accounts.ts">`Accounts`</SourceLink>, <SourceLink name="Permissions" path="src/Permissions.ts">`Permissions`</SourceLink>, <SourceLink name="Plugin" path="src/Plugin.ts">`Plugin`</SourceLink>, <SourceLink name="Session" path="src/Session.ts">`Session`</SourceLink>, <SourceLink name="Store" path="src/Store.ts">`Store`</SourceLink> |
+| `accounts`, for each adapter              | `accounts/plugins` ([Sign-in](#sign-in))                                                                                                                                                                                                                                                                                                                                                      |
+| `accounts/cli`, `accounts/deviceCode`     | <SourceLink name="device" path="src/plugins/device.ts">`device`</SourceLink> of `accounts/plugins` ([CLI](#cli))                                                                                                                                                                                                                                                                              |
+| `accounts/mobileWebAuth`                  | `accounts/expo` ([React Native](#react-native))                                                                                                                                                                                                                                                                                                                                               |
+| `accounts/postMessage`                    | Removed ([Removed APIs](#removed-apis))                                                                                                                                                                                                                                                                                                                                                       |
+| `accounts/react`, with `Remote`           | Removed. `accounts/react` now exports the <SourceLink name="react" path="src/react/index.ts">`react`</SourceLink> plugin, which adds <SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession()`</SourceLink>                                                                                                                                                             |
+| `accounts/react/privy`                    | Removed ([Removed APIs](#removed-apis))                                                                                                                                                                                                                                                                                                                                                       |
+| `accounts/react-native/async-storage`     | Removed ([React Native](#react-native))                                                                                                                                                                                                                                                                                                                                                       |
+| `accounts/react-native/expo-secure-store` | Removed ([React Native](#react-native))                                                                                                                                                                                                                                                                                                                                                       |
+| `accounts/react-native/expo-web-browser`  | `accounts/expo` ([React Native](#react-native))                                                                                                                                                                                                                                                                                                                                               |
+| `accounts/react-native/secure-mmkv`       | Removed ([React Native](#react-native))                                                                                                                                                                                                                                                                                                                                                       |
+| `accounts/server`                         | `accounts/plugins`, and `accounts/cloudflare` for a Worker ([Server](#server))                                                                                                                                                                                                                                                                                                                |
+| `accounts/wagmi`                          | `accounts/wagmi`: <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId`</SourceLink>, <SourceLink name="wagmi" path="src/wagmi/index.ts">`wagmi`</SourceLink> ([Wagmi](#wagmi))                                                                                                                                                                                                      |
+
+The <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin has its own entry, `accounts/mpp` ([MPP](#mpp)).
+
+## Instance
+
+<SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink> takes these options in place of those of `Provider.create`. [Instance creation](#instance-creation) holds the main example.
+
+| Version 0                                                           | Version 1                                                                                                                                                               |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accessKey.authorize`, `authorizeAccessKey`                         | <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> ([Access keys](#access-keys))                                                       |
+| `adapter`                                                           | <SourceLink name="create.plugins" path="src/Accounts.ts">`plugins`</SourceLink> ([Sign-in](#sign-in))                                                                   |
+| `auth`                                                              | <SourceLink name="dialog.backend" path="src/plugins/dialog.ts">`dialog({ backend: true })`</SourceLink> ([Server](#server))                                             |
+| `chains`, as chain definitions                                      | <SourceLink name="create.chains" path="src/Accounts.ts">`chains`</SourceLink>, as chain IDs                                                                             |
+| `feePayer`                                                          | <SourceLink name="viem.relay" path="src/plugins/viem.ts">`viem({ relay })`</SourceLink> ([Fee sponsorship](#fee-sponsorship))                                           |
+| `mpp`                                                               | <SourceLink name="mpp" path="src/mpp/index.ts">`mpp()`</SourceLink> of `accounts/mpp` ([MPP](#mpp))                                                                     |
+| `relay`, `transports`                                               | <SourceLink name="viem.chain.transport" path="src/plugins/viem.ts">`transport`</SourceLink> of <SourceLink name="viem" path="src/plugins/viem.ts">`viem()`</SourceLink> |
+| `storage`                                                           | <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> ([Session and storage](#session-and-storage))                                               |
+| `testnet: true`                                                     | <SourceLink name="from.chain" path="src/Accounts.ts">`chain: 'testnet'`</SourceLink>                                                                                    |
+| `hydrationTimeout`, `identity`, `maxAccounts`, `persistCredentials` | Removed                                                                                                                                                                 |
+
+An instance needs a client ID. In a browser, <SourceLink name="Config.clientId" path="src/Accounts.ts">`clientId`</SourceLink> defaults to the page's origin. A CLI passes a `cli:` name, and a backend its public origin.
+
+The <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin takes the transport of the instance's chain, or a function that returns the options of each chain.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts' // [!code ++]
+import { dialog, viem } from 'accounts/plugins' // [!code ++]
+import { http } from 'viem'
+import { tempo, tempoModerato } from 'viem/chains' // [!code --]
+
+const provider = Provider.create({ // [!code --]
+  chains: [tempoModerato, tempo], // [!code --]
+  transports: { // [!code --]
+    [tempo.id]: http('https://rpc.example/tempo'), // [!code --]
+    [tempoModerato.id]: http('https://rpc.example/moderato'), // [!code --]
+  }, // [!code --]
+}) // [!code --]
+export const accounts = Accounts.create({ // [!code ++]
+  chain: 'testnet', // [!code ++]
+  plugins: [ // [!code ++]
+    dialog(), // [!code ++]
+    viem((chainId) => ({ // [!code ++]
+      transport: http(`https://rpc.example/${chainId}`), // [!code ++]
+    })), // [!code ++]
+  ], // [!code ++]
+}) // [!code ++]
+```
+
+The provider's members map to the instance's:
+
+| Version 0                       | Version 1                                                                                                                                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider.chains`               | <SourceLink name="chain" path="src/Accounts.ts">`accounts.chain.get()`</SourceLink>, the ID of the selected chain                                                                              |
+| `provider.getAccessKeyStatus()` | <SourceLink name="Session.accessKey" path="src/Session.ts">`session.accessKey`</SourceLink>, <SourceLink name="expired" path="src/Session.ts">`Session.expired(session)`</SourceLink>          |
+| `provider.getAccount()`         | Removed. No Viem action of the instance takes `account`                                                                                                                                        |
+| `provider.getClient()`          | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.viem`</SourceLink>                                                                                                                |
+| `provider.getMppxParameters()`  | <SourceLink name="mpp" path="src/mpp/index.ts">`accounts.mpp()`</SourceLink>, a payer of the <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin                          |
+| `provider.on(event)`            | <SourceLink name="session.subscribe" path="src/Accounts.ts">`accounts.session.subscribe`</SourceLink>, <SourceLink name="chain" path="src/Accounts.ts">`accounts.chain.subscribe`</SourceLink> |
+| `provider.ready()`              | <SourceLink name="session.get" path="src/Accounts.ts">`accounts.session.get()`</SourceLink>                                                                                                    |
+| `provider.request({ method })`  | A method of the instance ([RPC methods](#rpc-methods))                                                                                                                                         |
+| `provider.store`                | <SourceLink name="session" path="src/Accounts.ts">`accounts.session`</SourceLink>                                                                                                              |
+
+## Sign-in
+
+A Tempo ID sign-in plugin replaces each adapter that reaches Tempo Wallet. An instance without a sign-in plugin receives <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink>.
+
+| Version 0                                                      | Version 1                                                                                                |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `tempoWallet()`, `dialog()`, or no `adapter`                   | <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog()`</SourceLink>                           |
+| `cli()`, `deviceCode()`                                        | <SourceLink name="device" path="src/plugins/device.ts">`device()`</SourceLink> ([CLI](#cli))             |
+| `mobileWebAuth()`, `tempoWallet()` of `accounts/mobileWebAuth` | <SourceLink name="expo" path="src/plugins/expo.ts">`expo()`</SourceLink> ([React Native](#react-native)) |
+| `local()`, `secp256k1()`, `turnkey()`, `webAuthn()`, `privy()` | Removed ([Removed APIs](#removed-apis))                                                                  |
+| `postMessage()`                                                | Removed ([Removed APIs](#removed-apis))                                                                  |
+
+These adapter options have no replacement:
+
+| Adapter       | Options                                           |
+| ------------- | ------------------------------------------------- |
+| `dialog`      | `dialog`, `host`, `icon`, `name`, `rdns`, `theme` |
+| `tempoWallet` | `handoff`, `icon`, `mount`, `theme`               |
+
+Tempo ID's approval page names the app: the host for an origin client ID, or the name of the app's [registration](https://github.com/tempoxyz/id/blob/main/docs/apps.md#registration).
+
+Tempo ID's [verification](https://github.com/tempoxyz/id/blob/main/docs/apps.md#verification) of a registered app replaces `TrustedHosts`. In Safari and Firefox, which lack IntersectionObserver v2, the dialog frames Tempo ID's pages only for a first-party or verified app. Any other app's pages open in a popup.
+
+The sign-in's parameters replace the capabilities of `wallet_connect`:
+
+| Version 0, `capabilities`                              | Version 1, <SourceLink name="signIn" path="src/plugins/dialog.ts">`accounts.dialog.signIn`</SourceLink>                                                                                                                                                                                      |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth`                                                 | <SourceLink name="dialog.backend" path="src/plugins/dialog.ts">`backend`</SourceLink> of <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog()`</SourceLink>, with <SourceLink name="dialog.method" path="src/plugins/dialog.ts">`method: 'siwe'`</SourceLink> for a SIWE message |
+| `authorizeAccessKey`                                   | <SourceLink name="dialog.method.accessKey" path="src/plugins/dialog.ts">`accessKey`</SourceLink>                                                                                                                                                                                             |
+| `personalSign`, `digest`                               | <SourceLink name="dialog.method.challenge" path="src/plugins/dialog.ts">`challenge`</SourceLink>, whose signature is <SourceLink name="Session.challengeSignature" path="src/Session.ts">`session.challengeSignature`</SourceLink>                                                           |
+| `showDeposit`                                          | <SourceLink name="dialog.method.funding" path="src/plugins/dialog.ts">`funding`</SourceLink>                                                                                                                                                                                                 |
+| `identity`                                             | Removed. <SourceLink name="Session.user" path="src/Session.ts">`session.user`</SourceLink> holds the verified email                                                                                                                                                                          |
+| `method: 'register'`, `name`, `userId`, `credentialId` | Removed. Tempo ID's page selects the sign-in or the registration                                                                                                                                                                                                                             |
+
+:::code-group
+
+```ts [signIn.ts]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export async function signIn(message: string) {
+  const result = await provider.request({ // [!code --]
+    method: 'wallet_connect', // [!code --]
+    params: [{ capabilities: { personalSign: { message } } }], // [!code --]
+  }) // [!code --]
+  const signature = result.accounts[0]?.capabilities.signature // [!code --]
+  const session = await accounts.dialog.signIn({ challenge: message }) // [!code ++]
+  const signature = session.challengeSignature // [!code ++]
+  return signature
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog(), viem()],
+})
+```
+
+:::
+
+### CLI
+
+The <SourceLink name="device" path="src/plugins/device.ts">`device`</SourceLink> plugin, the OAuth device authorization grant (RFC 8628), replaces `Provider.create` of `accounts/cli`. Version 0 opens the browser itself. In version 1, <SourceLink name="onCode" path="src/plugins/device.ts">`onCode`</SourceLink> shows the code and its URL.
+
+A `cli:` client ID needs no registration, and its instance saves the session to `~/.tempo/id/store.json` with no <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> option. <SourceLink name="create" path="src/stores/File.ts">`Store.file`</SourceLink> replaces `Storage.filesystem` for another file.
+
+:::code-group
+
+```ts [index.ts]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+await provider.request({ method: 'wallet_connect' }) // [!code --]
+const session = await accounts.device.signIn() // [!code ++]
+```
+
+```ts [tempo.config.ts]
+import { Provider } from 'accounts/cli' // [!code --]
+import { Accounts } from 'accounts' // [!code ++]
+import { device, viem } from 'accounts/plugins' // [!code ++]
+
+const provider = Provider.create({ testnet: true }) // [!code --]
+export const accounts = Accounts.create({ // [!code ++]
+  accessKey: () => ({ // [!code ++]
+    expiry: '7d', // [!code ++]
+    limits: [{ limit: '100', token: 'ousd' }], // [!code ++]
+  }), // [!code ++]
+  chain: 'testnet', // [!code ++]
+  clientId: 'cli:acme', // [!code ++]
+  plugins: [ // [!code ++]
+    device({ // [!code ++]
+      onCode: (code) => console.log(code.verificationUriComplete), // [!code ++]
+    }), // [!code ++]
+    viem(), // [!code ++]
+  ], // [!code ++]
+}) // [!code ++]
+```
+
+:::
+
+| Version 0                                  | Version 1                                                                                                                                                      |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `host`, `name`, `rdns`                     | <SourceLink name="Config.clientId" path="src/Accounts.ts">`clientId`</SourceLink>                                                                              |
+| `open`                                     | <SourceLink name="onCode" path="src/plugins/device.ts">`onCode`</SourceLink> of <SourceLink name="device" path="src/plugins/device.ts">`device()`</SourceLink> |
+| `Storage.filesystem()`                     | The default <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> of a `cli:` client ID                                                  |
+| `TimeoutError` of `accounts/deviceCode`    | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>, with `expired_token`                                              |
+| `PromptError` of `accounts/deviceCode`     | Removed. <SourceLink name="onCode" path="src/plugins/device.ts">`onCode`</SourceLink> shows the code                                                           |
+| `pollingInterval`, `retryCount`, `timeout` | Removed. Tempo ID sets the interval and the expiry                                                                                                             |
+
+### React Native
+
+The <SourceLink name="expo" path="src/plugins/expo.ts">`expo`</SourceLink> preset of `accounts/expo` replaces `accounts/mobileWebAuth` and the `accounts/react-native` entries. It keeps the session in the device's secure store, and signs in on Tempo ID's pages in the system browser. A native app passes its registration's client ID, since the registration names the app's custom scheme.
+
+:::code-group
+
+```tsx [App.tsx]
+import { Button } from 'react-native'
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export function App() {
+  async function signIn() {
+    await provider.request({ method: 'wallet_connect' }) // [!code --]
+    await accounts.redirect.signIn() // [!code ++]
+  }
+
+  return <Button onPress={signIn} title="Sign in with Tempo" />
+}
+```
+
+```ts [tempo.config.ts]
+import { Provider } from 'accounts' // [!code --]
+import { tempoWallet } from 'accounts/mobileWebAuth' // [!code --]
+import { asyncStorage } from 'accounts/react-native/async-storage' // [!code --]
+import { openAuthSession } from 'accounts/react-native/expo-web-browser' // [!code --]
+import { Accounts } from 'accounts' // [!code ++]
+import { expo } from 'accounts/expo' // [!code ++]
+
+const redirectUri = 'com.example.app:/callback'
+
+const provider = Provider.create({ // [!code --]
+  adapter: tempoWallet({ // [!code --]
+    baseUrl: 'https://app.example', // [!code --]
+    openAuthSession, // [!code --]
+    redirectUri, // [!code --]
+  }), // [!code --]
+  storage: asyncStorage(), // [!code --]
+}) // [!code --]
+export const accounts = Accounts.create({ // [!code ++]
+  clientId: 'client_…', // [!code ++]
+  plugins: [expo({ redirectUri })], // [!code ++]
+}) // [!code ++]
+```
+
+:::
+
+| Version 0                        | Version 1                                                                                                                                                                                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`                        | <SourceLink name="Config.clientId" path="src/Accounts.ts">`clientId`</SourceLink>                                                                                                                                                                   |
+| `openAuthSession`                | Removed. <SourceLink name="expo" path="src/plugins/expo.ts">`expo`</SourceLink> opens the system browser                                                                                                                                            |
+| `asyncStorage()`, `secureMmkv()` | The secure store of <SourceLink name="expo" path="src/plugins/expo.ts">`expo`</SourceLink>, or <SourceLink name="from" path="src/Store.ts">`Store.from`</SourceLink> as <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> |
+| `getOrCreateMmkvEncryptionKey()` | Removed                                                                                                                                                                                                                                             |
+
+## Session and storage
+
+<SourceLink name="session" path="src/Accounts.ts">`accounts.session`</SourceLink> replaces `provider.store`, version 0's Zustand store. [Sessions](#sessions) holds the main example.
+
+| Version 0                                             | Version 1                                                                                                                  |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `provider.store.getState().accounts`                  | <SourceLink name="session.get" path="src/Accounts.ts">`accounts.session.get()`</SourceLink>                                |
+| `provider.store.subscribe`                            | <SourceLink name="session.subscribe" path="src/Accounts.ts">`accounts.session.subscribe`</SourceLink>                      |
+| `provider.ready()`, `Store.waitForHydration`          | <SourceLink name="session.get" path="src/Accounts.ts">`accounts.session.get()`</SourceLink>, which loads the saved session |
+| `Store.HydrationError`, `hydrationTimeout`            | Removed                                                                                                                    |
+| `provider.on('accountsChanged')`                      | <SourceLink name="session.subscribe" path="src/Accounts.ts">`accounts.session.subscribe`</SourceLink>                      |
+| `provider.on('chainChanged')`                         | <SourceLink name="chain" path="src/Accounts.ts">`accounts.chain.subscribe`</SourceLink>                                    |
+| `provider.on('connect')`, `provider.on('disconnect')` | <SourceLink name="session.status" path="src/Accounts.ts">`accounts.session.status`</SourceLink>                            |
+| `maxAccounts`                                         | Removed. An instance holds one session                                                                                     |
+| `persistCredentials`                                  | Removed. The <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> holds the whole session           |
+
+<SourceLink name="session.status" path="src/Accounts.ts">`accounts.session.status`</SourceLink> holds `pending`, `reauthorizing`, `signedIn`, or `signedOut`.
+
+:::code-group
+
+```ts [status.ts]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export function watch(render: (status: string) => void) {
+  provider.on('connect', () => render('connected')) // [!code --]
+  provider.on('disconnect', () => render('disconnected')) // [!code --]
+  accounts.session.status.subscribe(() => { // [!code ++]
+    render(accounts.session.status.get().status) // [!code ++]
+  }) // [!code ++]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog(), viem()],
+})
+```
+
+:::
+
+The <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> option replaces `storage`. A store holds values without serializing them, since a browser's access key is a non-extractable `CryptoKey`.
+
+| Version 0                                                         | Version 1                                                                                            |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Storage.idb()`                                                   | The default <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink> of a browser |
+| `Storage.memory()`                                                | <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory()`</SourceLink>                  |
+| `Storage.from()`                                                  | <SourceLink name="from" path="src/Store.ts">`Store.from()`</SourceLink>                              |
+| `Storage.filesystem()` of `accounts/cli`                          | <SourceLink name="create" path="src/stores/File.ts">`Store.file()`</SourceLink>                      |
+| `Storage.combine()`, `Storage.cookie()`, `Storage.localStorage()` | Removed                                                                                              |
+
+Outside a browser, an instance with a `cli:` client ID saves its session to the file of <SourceLink name="create" path="src/stores/File.ts">`Store.file()`</SourceLink>. Any other instance holds a session only with a <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink>.
+
+## Access keys
+
+The <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> option replaces `accessKey.authorize` and `authorizeAccessKey`. [Access key requests](#access-key-requests) holds the main example.
+
+| Version 0                                  | Version 1                                                                                                                |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `expiry: Expiry.days(1)`                   | <SourceLink name="Permissions.expiry" path="src/Permissions.ts">`expiry: '1d'`</SourceLink>, or Unix seconds             |
+| `limits: [{ limit: 100_000_000n, token }]` | <SourceLink name="Permissions.limits" path="src/Permissions.ts">`limits: [{ limit: '100', token: 'ousd' }]`</SourceLink> |
+| `Expiry.months()`, `Expiry.years()`        | `Expiry` of `viem/tempo`. A duration has no such unit                                                                    |
+| `Mach.token`                               | <SourceLink name="Limit.token" path="src/Permissions.ts">`token: 'mach'`</SourceLink>                                    |
+| `accessKey.keystores`, `Keystore`, `reuse` | Removed. The instance creates and keeps the access key                                                                   |
+
+Without <SourceLink name="Permissions.scopes" path="src/Permissions.ts">`scopes`</SourceLink>, the instance fills them from <SourceLink name="Permissions.limits" path="src/Permissions.ts">`limits`</SourceLink>. Size <SourceLink name="Permissions.limits" path="src/Permissions.ts">`limits`</SourceLink> for the app's transactions, since no dialog signs a transaction outside them. Tempo ID's approval page, in the dialog, replaces each RPC method of an access key, and each call defaults to the session's access key.
+
+:::code-group
+
+```ts [revoke.ts]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export async function revoke() {
+  await provider.request({ // [!code --]
+    method: 'wallet_revokeAccessKey', // [!code --]
+    params: [{ accessKeyAddress, address }], // [!code --]
+  }) // [!code --]
+  await accounts.dialog.revokeAccessKey() // [!code ++]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [dialog(), viem()],
+})
+```
+
+:::
+
+| Version 0                       | Version 1                                                                                                                                                                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `wallet_authorizeAccessKey`     | <SourceLink name="signIn" path="src/plugins/dialog.ts">`accounts.dialog.signIn({ accessKey })`</SourceLink>                                                                                                      |
+| `wallet_updateAccessKey`        | <SourceLink name="updateAccessKey" path="src/plugins/dialog.ts">`accounts.dialog.updateAccessKey({ limits })`</SourceLink>                                                                                       |
+| `wallet_revokeAccessKey`        | <SourceLink name="dialog" path="src/plugins/dialog.ts">`accounts.dialog.revokeAccessKey()`</SourceLink>, or <SourceLink name="accessKey" path="src/plugins/viem.ts">`accounts.accessKey.revokeSync`</SourceLink> |
+| `provider.getAccessKeyStatus()` | <SourceLink name="Session.accessKey" path="src/Session.ts">`session.accessKey`</SourceLink>, and <SourceLink name="expired" path="src/Session.ts">`Session.expired(session)`</SourceLink>                        |
+
+The session replaces the access key's status. <SourceLink name="session.get" path="src/Accounts.ts">`accounts.session.get()`</SourceLink> empties a saved session whose access key expired.
+
+:::code-group
+
+```ts [usable.ts]
+import { Session } from 'accounts' // [!code ++]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export async function isUsable() {
+  const status = await provider.getAccessKeyStatus() // [!code --]
+  const usable = status === 'pending' || status === 'published' // [!code --]
+  const session = await accounts.session.get() // [!code ++]
+  const usable = !!session?.accessKey && !Session.expired(session) // [!code ++]
+  return usable
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [dialog(), viem()],
+})
+```
+
+:::
+
+## RPC methods
+
+A method of the instance replaces each RPC method of `provider.request`. [Instance methods](#instance-methods) holds the main example.
+
+| Version 0                                     | Version 1                                                                                                                                                                                            |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eth_accounts`                                | <SourceLink name="Session.accessKey" path="src/Session.ts">`session.accessKey?.account`</SourceLink>, or <SourceLink name="account.get" path="src/Accounts.ts">`accounts.account.get()`</SourceLink> |
+| `eth_chainId`                                 | <SourceLink name="chain" path="src/Accounts.ts">`accounts.chain.get()`</SourceLink>                                                                                                                  |
+| `eth_fillTransaction`, `eth_signTransaction`  | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.fillTransaction`</SourceLink>, <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.signTransaction`</SourceLink>               |
+| `eth_requestAccounts`, `wallet_connect`       | <SourceLink name="signIn" path="src/plugins/dialog.ts">`accounts.dialog.signIn()`</SourceLink> ([Sign-in](#sign-in))                                                                                 |
+| `eth_sendTransaction`                         | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.sendTransaction`</SourceLink>                                                                                                           |
+| `eth_sendTransactionSync`, `wallet_sendCalls` | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.sendTransactionSync`</SourceLink>, with `calls`                                                                                         |
+| `eth_signTypedData_v4`                        | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.signTypedData`</SourceLink>                                                                                                             |
+| `personal_sign`                               | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.signMessage`</SourceLink>, or <SourceLink name="signMessage" path="src/plugins/dialog.ts">`accounts.dialog.signMessage`</SourceLink>    |
+| `wallet_deposit`, `Mach.fund`                 | <SourceLink name="open" path="src/plugins/funding.ts">`accounts.funding.open()`</SourceLink>                                                                                                         |
+| `wallet_depositZone`, `wallet_withdrawZone`   | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.zone.deposit`</SourceLink>, <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.zone.requestWithdrawal`</SourceLink>           |
+| `wallet_disconnect`                           | <SourceLink name="signOut" path="src/Accounts.ts">`accounts.signOut()`</SourceLink>                                                                                                                  |
+| `wallet_getBalances`                          | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.token.getBalance`</SourceLink>, for each token                                                                                          |
+| `wallet_getCallsStatus`                       | The receipt of a `Sync` action, or <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.waitForTransactionReceipt`</SourceLink>                                                              |
+| `wallet_getCapabilities`                      | Removed                                                                                                                                                                                              |
+| `wallet_swap`                                 | <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.dex.sellSync`</SourceLink>, <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.dex.buySync`</SourceLink>                      |
+| `wallet_switchEthereumChain`                  | <SourceLink name="switchChain" path="src/Accounts.ts">`accounts.switchChain({ chainId })`</SourceLink>                                                                                               |
+| `wallet_transfer`                             | <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink>                                                                                                                            |
+
+[Access keys](#access-keys) lists the RPC methods of an access key.
+
+The access key signs each transaction. Without one, a transaction throws <SourceLink name="AccessKeyRequiredError" path="src/Accounts.ts">`Accounts.AccessKeyRequiredError`</SourceLink>, except <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.token.transfer`</SourceLink> and <SourceLink name="viem" path="src/plugins/viem.ts">`transferSync`</SourceLink> on a page, which Tempo ID's [payment page](/docs/guides/payments/self-managed#pay-without-an-access-key) sends. On a page, if the node refuses a transaction for a low balance or a spent limit, Tempo ID's screen fixes it, and the transaction sends again.
+
+<SourceLink name="viem" path="src/plugins/viem.ts">`accounts.signMessage`</SourceLink> signs with the access key, in a keychain envelope for the Tempo Account. <SourceLink name="signMessage" path="src/plugins/dialog.ts">`accounts.dialog.signMessage`</SourceLink> shows the message on Tempo ID's page, and the Tempo Account signs it, as `personal_sign` did.
+
+:::code-group
+
+```ts [sign.ts]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export async function sign(message: string) {
+  const signature = await provider.request({ // [!code --]
+    method: 'personal_sign', // [!code --]
+    params: [Hex.fromString(message), address], // [!code --]
+  }) // [!code --]
+  const { signature } = await accounts.dialog.signMessage({ message }) // [!code ++]
+  return signature
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog(), viem()],
+})
+```
+
+:::
+
+`wallet_sendCalls` returns an ID for `wallet_getCallsStatus`. A `Sync` action returns the receipt itself.
+
+:::code-group
+
+```ts [send.ts]
+import { parseUnits } from 'viem'
+import { Actions, Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js' // [!code ++]
+
+const calls = [
+  Actions.token.transfer.call({
+    amount: parseUnits('1', 6),
+    to: '0x000000000000000000000000000000000000dEaD',
+    token: Addresses.ousd,
+  }),
+]
+
+export async function send() {
+  const { id } = await provider.request({ // [!code --]
+    method: 'wallet_sendCalls', // [!code --]
+    params: [{ calls }], // [!code --]
+  }) // [!code --]
+  const { receipts } = await provider.request({ // [!code --]
+    method: 'wallet_getCallsStatus', // [!code --]
+    params: [id], // [!code --]
+  }) // [!code --]
+  const receipt = await accounts.sendTransactionSync({ calls }) // [!code ++]
+  return receipt // [!code ++]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [dialog(), viem()],
+})
+```
+
+:::
+
+## Wagmi
+
+<SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId`</SourceLink> replaces `tempoWallet`, and takes the options of <SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink>, with the config's `chains` and `transports`. [Wagmi connector](#wagmi-connector) holds the main example.
+
+```ts
+import { viem } from 'accounts/plugins' // [!code ++]
+import { tempoId } from 'accounts/wagmi' // [!code ++]
+import { Expiry } from 'accounts' // [!code --]
+import { Addresses } from 'viem/tempo' // [!code --]
+import { tempoWallet } from 'wagmi/connectors' // [!code --]
+
+const connector = tempoWallet({ // [!code --]
+  authorizeAccessKey: () => ({ // [!code --]
+    expiry: Expiry.days(1), // [!code --]
+    limits: [{ limit: 100_000_000n, token: Addresses.ousd }], // [!code --]
+  }), // [!code --]
+  feePayer: '/api/relay', // [!code --]
+}) // [!code --]
+const connector = tempoId({ // [!code ++]
+  accessKey: () => ({ // [!code ++]
+    expiry: '1d', // [!code ++]
+    limits: [{ limit: '100', token: 'ousd' }], // [!code ++]
+  }), // [!code ++]
+  plugins: [viem({ relay: '/api/relay' })], // [!code ++]
+}) // [!code ++]
+```
+
+| Version 0                                                | Version 1                                                                                                                                                                                  |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tempoWallet()` of `wagmi/connectors`                    | <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId()`</SourceLink> of `accounts/wagmi`                                                                                          |
+| `Connector`, `dialog`, `tempoWallet` of `accounts/wagmi` | <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId()`</SourceLink> of `accounts/wagmi`                                                                                          |
+| `webAuthn`, `dangerous_secp256k1` of `accounts/wagmi`    | Removed ([Removed APIs](#removed-apis))                                                                                                                                                    |
+| `Hooks.wallet.useTransfer` of `wagmi/tempo`              | `Hooks.token.useTransferSync` of `wagmi/tempo`                                                                                                                                             |
+| `Hooks.wallet.useSwap` of `wagmi/tempo`                  | `Hooks.dex.useSellSync`, `Hooks.dex.useBuySync` of `wagmi/tempo`                                                                                                                           |
+| `Hooks.wallet.useDeposit` of `wagmi/tempo`               | <SourceLink name="open" path="src/plugins/funding.ts">`accounts.funding.open()`</SourceLink> of an instance                                                                                |
+| `capabilities` of `connect`                              | <SourceLink name="tempoId.accessKey" path="src/wagmi/index.ts">`accessKey`</SourceLink> and <SourceLink name="tempoId.signIn" path="src/wagmi/index.ts">`signIn`</SourceLink> of `connect` |
+
+The <SourceLink name="wagmi" path="src/wagmi/index.ts">`wagmi`</SourceLink> plugin of `accounts/wagmi` adds <SourceLink name="wagmi" path="src/wagmi/index.ts">`accounts.wagmi`</SourceLink>, a wagmi config for an instance that the app creates itself.
+
+## Server
+
+One instance replaces each `Handler` of `accounts/server`. <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> serves each server plugin's routes, so it replaces `Handler.compose` and `Handler.from`.
+
+### Backend sessions
+
+<SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> serves the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin's routes under `/api/auth`, and <SourceLink name="session.get" path="src/Accounts.ts">`accounts.session.get`</SourceLink> reads a request's session. On the page, <SourceLink name="dialog.backend" path="src/plugins/dialog.ts">`dialog({ backend: true })`</SourceLink> replaces the `auth` option.
+
+:::code-group
+
+```ts [server.ts]
+import { Handler, Kv } from 'accounts/server' // [!code --]
+import { Accounts, Store } from 'accounts' // [!code ++]
+import { backend } from 'accounts/plugins' // [!code ++]
+import { Hono } from 'hono'
+
+const auth = Handler.auth({ path: '/api/auth', store: Kv.memory() }) // [!code --]
+const accounts = Accounts.create({ // [!code ++]
+  accessKey: () => ({ // [!code ++]
+    expiry: '1d', // [!code ++]
+    limits: [{ limit: '100', token: 'ousd' }], // [!code ++]
+  }), // [!code ++]
+  chain: 'testnet', // [!code ++]
+  clientId: 'https://app.example', // [!code ++]
+  plugins: [backend({ store: Store.memory() })], // [!code ++]
+}) // [!code ++]
+
+const app = new Hono()
+
+app.all('/api/*', (c) => auth.fetch(c.req.raw)) // [!code --]
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw)) // [!code ++]
+
+app.get('/me', async (c) => {
+  const session = await auth.getSession(c.req.raw) // [!code --]
+  if (!session) return c.json({ error: 'unauthenticated' }, 401) // [!code --]
+  return c.json({ address: session.address }) // [!code --]
+  const session = await accounts.session.get(c.req.raw) // [!code ++]
+  if (session?.method !== 'tempo-id') // [!code ++]
+    return c.json({ error: 'unauthenticated' }, 401) // [!code ++]
+  return c.json({ address: session.accessKey?.account }) // [!code ++]
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts' // [!code ++]
+import { dialog } from 'accounts/plugins' // [!code ++]
+
+const provider = Provider.create({ // [!code --]
+  adapter: tempoWallet(), // [!code --]
+  auth: '/api/auth', // [!code --]
+}) // [!code --]
+export const accounts = Accounts.create({ // [!code ++]
+  chain: 'testnet', // [!code ++]
+  plugins: [dialog({ backend: true })], // [!code ++]
+}) // [!code ++]
+```
+
+:::
+
+The session names a Tempo Account only through its access key, so the backend's instance sets <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink>. A deployed origin lists `/api/auth/callback` in the `redirect_uris` of its [web app manifest](https://github.com/tempoxyz/id/blob/main/docs/apps.md#origin-client-id).
+
+| Version 0                                              | Version 1                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/auth/challenge`, `/api/auth`, `/api/auth/logout` | `/api/auth/login`, `/api/auth/callback`, `/api/auth/session`, `/api/auth/logout`                                                                                                                                                                                           |
+| The EIP-4361 message that the user signs               | <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe()`</SourceLink>, with <SourceLink name="signIn" path="src/plugins/dialog.ts">`signIn({ method: 'siwe' })`</SourceLink> of the <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin |
+| `auth.getSession(request)`                             | <SourceLink name="session.get" path="src/Accounts.ts">`accounts.session.get(request)`</SourceLink>                                                                                                                                                                         |
+| `session.address`, `session.email`                     | <SourceLink name="Session.accessKey" path="src/Session.ts">`session.accessKey?.account`</SourceLink>, <SourceLink name="Session.user" path="src/Session.ts">`session.user.email`</SourceLink>                                                                              |
+| `Handler.compose`, `Handler.from`                      | <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink>                                                                                                                                                                                          |
+
+### Fee sponsorship
+
+The <SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink> plugin replaces `Handler.relay`, and <SourceLink name="relay.relay" path="src/plugins/relay.ts">`accounts.relay.fetch`</SourceLink> serves its route. [Fee relay](#fee-relay) shows the page's change.
+
+```ts [server.ts]
+import { Handler } from 'accounts/server' // [!code --]
+import { Accounts } from 'accounts' // [!code ++]
+import { relay } from 'accounts/plugins' // [!code ++]
+import { Hono } from 'hono'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const account = privateKeyToAccount(
+  process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+)
+
+const handler = Handler.relay({ feePayer: { account }, path: '/api/relay' }) // [!code --]
+const accounts = Accounts.create({ // [!code ++]
+  chain: 'testnet', // [!code ++]
+  clientId: 'https://app.example', // [!code ++]
+  plugins: [relay({ account })], // [!code ++]
+}) // [!code ++]
+
+const app = new Hono()
+
+app.post('/api/relay', (c) => handler.fetch(c.req.raw)) // [!code --]
+app.post('/api/relay', (c) => accounts.relay.fetch(c.req.raw)) // [!code ++]
+
+export default app
+```
+
+:::warning
+Version 0's route checks no caller. Version 1's route verifies each request's access token, so only the app's signed-in users spend the fee payer's balance. Limit each user with <SourceLink name="relay.authorize" path="src/plugins/relay.ts">`authorize`</SourceLink>.
+:::
+
+| Version 0                                                                 | Version 1                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoSwap`                                                                | `Relay.autoSwap()` of `viem/tempo`, in <SourceLink name="relay.plugins" path="src/plugins/relay.ts">`plugins`</SourceLink>                                                                                 |
+| `cacheTtl`, `kv`                                                          | Removed                                                                                                                                                                                                    |
+| `chains`, `transports`                                                    | The chain of the instance, and the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin                                                                                           |
+| `feePayer.account`                                                        | <SourceLink name="relay.account" path="src/plugins/relay.ts">`account`</SourceLink>, or <SourceLink name="relay.apiKey" path="src/plugins/relay.ts">`apiKey`</SourceLink> for the sponsor of the Tempo API |
+| `feePayer.feeToken`, `feePayer.name`, `feePayer.url`, `feePayer.validate` | The options of `Relay.feePayer()` of `viem/tempo`, in <SourceLink name="relay.plugins" path="src/plugins/relay.ts">`plugins`</SourceLink>                                                                  |
+| `features: 'all'`                                                         | The relay plugins of `viem/tempo`, in <SourceLink name="relay.plugins" path="src/plugins/relay.ts">`plugins`</SourceLink>                                                                                  |
+| `onRequest`                                                               | <SourceLink name="relay.authorize" path="src/plugins/relay.ts">`authorize`</SourceLink>, which receives the request and its verified token                                                                 |
+| `path`                                                                    | The path of the app's own route, or <SourceLink name="create.handler.relay" path="src/Accounts.ts">`handler: { relay: true }`</SourceLink> for `/api/relay`                                                |
+| `resolveTokens`                                                           | `resolveTokens`                                                                                                                                                                                            |
+
+`Relay.feePayer` takes the fee payer and its policy, so a <SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink> plugin with <SourceLink name="relay.plugins" path="src/plugins/relay.ts">`plugins`</SourceLink> takes no <SourceLink name="relay.account" path="src/plugins/relay.ts">`account`</SourceLink>, and throws with both. The plugins run in order, and the plugins after `Relay.feePayer` do not run for a transaction that it signs.
+
+```ts [server.ts]
+import { Handler } from 'accounts/server' // [!code --]
+import { Accounts } from 'accounts' // [!code ++]
+import { relay } from 'accounts/plugins' // [!code ++]
+import { Hono } from 'hono'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Relay } from 'viem/tempo' // [!code ++]
+
+const account = privateKeyToAccount(
+  process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
+)
+const allowed = '0x000000000000000000000000000000000000dEaD'
+
+const handler = Handler.relay({ // [!code --]
+  autoSwap: true, // [!code --]
+  feePayer: { // [!code --]
+    account, // [!code --]
+    validate: (request) => request.to === allowed, // [!code --]
+  }, // [!code --]
+  path: '/api/relay', // [!code --]
+}) // [!code --]
+const accounts = Accounts.create({ // [!code ++]
+  chain: 'testnet', // [!code ++]
+  clientId: 'https://app.example', // [!code ++]
+  plugins: [ // [!code ++]
+    relay({ // [!code ++]
+      plugins: [ // [!code ++]
+        Relay.feePayer({ // [!code ++]
+          account, // [!code ++]
+          validate: (request) => request.to === allowed, // [!code ++]
+        }), // [!code ++]
+        Relay.autoSwap(), // [!code ++]
+      ], // [!code ++]
+    }), // [!code ++]
+  ], // [!code ++]
+}) // [!code ++]
+
+const app = new Hono()
+
+app.post('/api/relay', (c) => handler.fetch(c.req.raw)) // [!code --]
+app.post('/api/relay', (c) => accounts.relay.fetch(c.req.raw)) // [!code ++]
+
+export default app
+```
+
+With <SourceLink name="relay.verify" path="src/plugins/relay.ts">`verify: false`</SourceLink>, the route checks no caller, as in version 0. Use it only behind the app's own guard, such as a backend session.
+
+### Stores
+
+<SourceLink name="Store" path="src/Store.ts">`Store`</SourceLink> replaces `Kv` of `accounts/server`. The <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin's <SourceLink name="backend.store" path="src/plugins/backend.ts">`store`</SourceLink> holds each backend session.
+
+| Version 0            | Version 1                                                                                                                                                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Kv.memory()`        | <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory()`</SourceLink>                                                                                                                                                      |
+| `Kv.from()`          | <SourceLink name="from" path="src/Store.ts">`Store.from()`</SourceLink>                                                                                                                                                                  |
+| `Kv.durableObject()` | <SourceLink name="durableObject" path="src/cloudflare/Sessions.ts">`Sessions.durableObject()`</SourceLink> of `accounts/cloudflare`, for the sessions of <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> |
+| `Kv.NonceStorage`    | <SourceLink name="sessions" path="src/cloudflare/DurableObject.ts">`DurableObject.sessions()`</SourceLink> of `accounts/cloudflare`                                                                                                      |
+| `Kv.cloudflare()`    | <SourceLink name="create" path="src/stores/WorkersKv.ts">`Store.workersKv()`</SourceLink> of `accounts/cloudflare`                                                                                                                       |
+
+<SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> and <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink> are new server stores. <SourceLink name="create" path="src/stores/DurableObject.ts">`Store.durableObject`</SourceLink> of `accounts/cloudflare` keeps values in the app's own Durable Object.
+
+## MPP
+
+The <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin of `accounts/mpp` replaces the `mpp` option. Version 0's option is on by default, and replaces the global `fetch`. Version 1 leaves the global `fetch`, and adds <SourceLink name="mpp" path="src/mpp/index.ts">`accounts.fetch`</SourceLink>, which pays each HTTP 402 challenge with the session's access key.
+
+:::code-group
+
+```ts [fortune.ts]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export async function fortune() {
+  const response = await fetch('https://api.example.com/fortune') // [!code --]
+  const response = await accounts.fetch('https://api.example.com/fortune') // [!code ++]
+  return response.text()
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts' // [!code ++]
+import { mpp } from 'accounts/mpp' // [!code ++]
+import { dialog, viem } from 'accounts/plugins' // [!code ++]
+
+const provider = Provider.create({ mpp: true }) // [!code --]
+export const accounts = Accounts.create({ // [!code ++]
+  accessKey: () => ({ // [!code ++]
+    expiry: '1d', // [!code ++]
+    limits: [{ limit: '100', token: 'ousd' }], // [!code ++]
+  }), // [!code ++]
+  chain: 'testnet', // [!code ++]
+  plugins: [dialog(), mpp(), viem()], // [!code ++]
+}) // [!code ++]
+```
+
+:::
+
+`provider.getMppxParameters()` returns the parameters of an `mppx` client that the app creates. <SourceLink name="mpp" path="src/mpp/index.ts">`accounts.mpp()`</SourceLink> returns a payer with its own `fetch`, and <SourceLink name="mpp" path="src/mpp/index.ts">`accounts.mpp.session()`</SourceLink> returns a payment session's manager.
+
+:::code-group
+
+```ts [fortune.ts]
+import { accounts } from './tempo.config.js' // [!code ++]
+
+export async function fortune() { // [!code ++]
+  const payer = accounts.mpp({ maxAmount: '1' }) // [!code ++]
+  const response = await payer.fetch('https://api.example.com/fortune') // [!code ++]
+  return response.text() // [!code ++]
+} // [!code ++]
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { dialog, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [dialog(), mpp(), viem()],
+})
+```
+
+:::
+
+## Errors
+
+`ExecutionError` moves to `viem/tempo`, and `ExecutionError.from` replaces `ExecutionError.parse`.
+
+```ts [parse.ts]
+import { ExecutionError } from 'accounts' // [!code --]
+import { ExecutionError } from 'viem/tempo' // [!code ++]
+
+export function parse(error: Error) {
+  const parsed = ExecutionError.parse(error) // [!code --]
+  const parsed = ExecutionError.from(error) // [!code ++]
+  return parsed
+}
+```
+
+Version 0's provider rejects with an RPC error and its code. An instance throws named errors:
+
+| Version 1                                                                                                       | Condition                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>                     | Tempo ID refuses a request. Its <SourceLink name="RequestError.reason" path="src/Accounts.ts">`reason`</SourceLink> names the cause |
+| <SourceLink name="AccessKeyRequiredError" path="src/Accounts.ts">`Accounts.AccessKeyRequiredError`</SourceLink> | The session holds no access key for the call                                                                                        |
+| <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink>                 | A Viem action runs while the instance holds no session                                                                              |
+
+## Removed APIs
+
+Version 1 has no replacement for these APIs.
+
+| Version 0                                                    | Reason                                                                                                                   |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `local`, `secp256k1`, `turnkey`, `webAuthn`, `privy`         | An instance holds no owner key                                                                                           |
+| `Adapter`                                                    | A plugin of <SourceLink name="from" path="src/Plugin.ts">`Plugin.from`</SourceLink> extends an instance                  |
+| `Remote`, `Dialog`, `Messenger`, `Mount`, `postMessage`      | Tempo ID is the only wallet side                                                                                         |
+| `Handoff`, `handoff`                                         | Version 1 has no phone handoff                                                                                           |
+| `IntersectionObserver`                                       | The <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin reads the support of the browser |
+| `Keystore`, `accessKey.keystores`                            | The instance creates and keeps the access key                                                                            |
+| `Schema`, `Rpc`, `ProviderRequest`, `wallet_getCapabilities` | The instance serves no RPC request                                                                                       |
+| `Handler.codeAuth`, `Handler.deviceCode`, `CliAuth`          | Tempo ID serves the device grant                                                                                         |
+| `Handler.webAuthn`, `WebAuthnCeremony`                       | Tempo ID runs each passkey ceremony                                                                                      |
+| `Handler.oidcProvider`, `Identity`, `identity`               | Tempo ID issues each token, with the verified <SourceLink name="Session.user" path="src/Session.ts">`user`</SourceLink>  |
+| `Handler.exchange`                                           | The page reads each quote through <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.dex`</SourceLink>         |
+| `hc`                                                         | `hono/client` exports it                                                                                                 |
+| `Mach.getFundingUrl`                                         | <SourceLink name="open" path="src/plugins/funding.ts">`accounts.funding.open()`</SourceLink> opens the deposit page      |
+| `icon`, `name`, `rdns`, `theme`                              | Tempo ID's approval page names the app, and takes no theme                                                               |
+| `cacheTtl`, `kv` of `Handler.relay`                          | The <SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink> plugin holds no cache                      |
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Sign a user in through Tempo ID's dialog."
+    icon="browser-window"
+    title="Dialog"
+    to="/docs/guides/dialog"
+  />
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Send transactions with the access key."
+    icon="viem"
+    title="Viem"
+    to="/docs/guides/viem"
+  />
+  <PageCard
+    description="Sign in through a wagmi connector."
+    icon="wagmi"
+    title="Wagmi"
+    to="/docs/guides/wagmi"
+  />
+  <PageCard
+    description="Keep each session on the app's server."
+    icon="server"
+    title="Redirect (Backend)"
+    to="/docs/guides/backend"
+  />
+  <PageCard
+    description="Pay the fees of the transactions of users."
+    icon="pay-by-hand"
+    title="Fee sponsorship"
+    to="/docs/guides/fee-sponsorship/host-fee-payers"
+  />
+</Cards>

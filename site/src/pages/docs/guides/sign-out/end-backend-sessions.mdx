@@ -1,0 +1,298 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+import { StepTag } from '../../../../components/StepTag.tsx'
+
+# End backend sessions [A backend ends the session that it holds for a user, and refuses that session's cookie.]
+
+## Overview
+
+With the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, the server's store holds each [session](/docs/guides/user-session), and the browser holds only its ID, in an HttpOnly session cookie. The logout route of <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> ends each part:
+
+| Part          | After the logout route                                  |
+| ------------- | ------------------------------------------------------- |
+| Refresh token | Revoked at Tempo ID                                     |
+| Session       | Deleted from the store, with its tokens and access key  |
+| Cookie        | Deleted. A request with the old cookie reads no session |
+
+The user's Tempo ID session in the browser stays, as after an [app sign-out](/docs/guides/sign-out/end-app-sessions).
+
+The demo signs a user in on this site's server, posts to the logout route, and then receives 401 from a route that needs the session.
+
+<Demo
+  name="EndBackendSessions"
+  source="examples/backend"
+  title="End a backend session"
+/>
+
+## Walkthrough
+
+The [`backend`](https://github.com/tempoxyz/accounts/tree/main/examples/backend) example runs these steps.
+
+::::steps
+
+### Serve the logout route<StepTag kind="server" />
+
+<SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> of an instance with the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin serves `POST /api/auth/logout` beside the sign-in routes.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw)) // [!code hl]
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the sessions in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+### Post to the logout route<StepTag kind="client" />
+
+The route answers 204. It answers 403 to a request from another origin, since a cross-site form post also sends the cookie. If the revocation or the store fails, it answers 503, and still deletes the cookie.
+
+```html
+<button
+  onclick="fetch('/api/auth/logout', { method: 'POST' }).then(() => location.reload())"
+  type="button"
+>
+  Sign out
+</button>
+```
+
+### Refuse a request without a session<StepTag kind="server" />
+
+<SourceLink name="session.get" path="src/Accounts.ts">`session.get`</SourceLink> returns `undefined` without a cookie, or for an ended session's cookie.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+app.get('/profile', async (c) => {
+  const session = await accounts.session.get(c.req.raw) // [!code hl]
+  if (session?.method !== 'tempo-id')
+    return c.json({ error: 'signed_out' }, 401) // [!code hl]
+
+  return c.json({ email: session.user.email })
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case ends a session with another route or member of the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, or sets one of its options.
+
+### End a session in a route of the app
+
+A backend with its own sign-in routes calls <SourceLink name="backend.end" path="src/plugins/backend.ts">`backend.end`</SourceLink> with its cookie's session ID, and deletes the cookie. With <SourceLink name="end.revoke" path="src/internal/BackendSessions.ts">`revoke: false`</SourceLink>, it deletes a session that Tempo ID ended already, with no request.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { deleteCookie, getCookie } from 'hono/cookie'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.post('/auth/sign-out', async (c) => {
+  const id = getCookie(c, 'session')
+  if (id) await accounts.backend.end({ id }) // [!code hl]
+
+  deleteCookie(c, 'session')
+  return c.body(null, 204)
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+### End a session after a logout token
+
+If a Tempo ID session ends, such as at a sign-out of every app, Tempo ID posts a logout token (OpenID Connect Back-Channel Logout) to each registered app. The back-channel logout route of <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> verifies it, and ends each session of the token's Tempo ID session.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { csrf } from 'hono/csrf'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+// Tempo ID posts the token with no Origin header, so the route comes before the CSRF middleware.
+app.post('/api/auth/backchannel-logout', (c) => accounts.handler.fetch(c.req.raw)) // [!code hl]
+app.use(csrf())
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+Register the route's URL, such as `https://app.example/api/auth/backchannel-logout`, as the app's back-channel logout URI, with the session required. Tempo ID revoked the refresh tokens already, so the route ends each session without a revocation. A second revocation reads as a reuse, which revokes the user's other sessions at the app.
+
+The route ends only the sessions that Tempo ID issued no later than the token. The <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin indexes each session by its Tempo ID session at the sign-in. The index keeps a session that fails to end, so the retry of the token ends it.
+
+A session from a release before the index has no entry, so it ends at its next refresh. A sign-in of the same Tempo ID session that finishes after the token ends at once. The exception is a sign-in whose tokens Tempo ID issued after the token, such as a sign-in again after the app's disconnection.
+
+The route answers a body above 64 KiB with 413, and stops reading it at the chunk that crosses 64 KiB.
+
+### Verify a logout token in a route of the app
+
+A backend with routes of its own calls <SourceLink name="backend.logout" path="src/plugins/backend.ts">`backend.logout`</SourceLink> with the token of the form body. It throws <SourceLink name="InvalidError" path="src/LogoutToken.ts">`LogoutToken.InvalidError`</SourceLink> for a token that does not verify.
+
+:::code-group
+
+```ts [server.ts]
+import { LogoutToken } from 'accounts'
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.post('/auth/logout-token', async (c) => {
+  const form = await c.req.formData()
+  // [!code hl:start]
+  const ended = await accounts.backend
+    .logout({ logoutToken: String(form.get('logout_token')) })
+    .catch((error: unknown) => {
+      if (error instanceof LogoutToken.InvalidError) return undefined
+      throw error
+    })
+  // [!code hl:end]
+  if (!ended) return c.body(null, 400)
+
+  return c.body(null, 200)
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+### Reach Tempo ID at an internal address
+
+<SourceLink name="backend.logoutToken" path="src/plugins/backend.ts">`logoutToken`</SourceLink> takes the options of the logout token's verifier. If the instance's <SourceLink name="from.url" path="src/Accounts.ts">`url`</SourceLink> reaches Tempo ID at another address, its <SourceLink name="create.issuer" path="src/LogoutToken.ts">`issuer`</SourceLink> names Tempo ID's public origin.
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({
+      logoutToken: { issuer: 'https://id.tempo.xyz' }, // [!code hl]
+      store: Store.memory(),
+    }),
+  ],
+  url: 'http://tempo-id.internal',
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Sign a user in on a server, with the session in its store."
+    icon="server"
+    title="Redirect (Backend)"
+    to="/docs/guides/backend"
+  />
+  <PageCard
+    description="Authenticate the requests of a page with the session cookie."
+    icon="shield-check"
+    title="Use session cookies"
+    to="/docs/guides/api-authentication/use-session-cookies"
+  />
+  <PageCard
+    description="Sign the user out of an app that holds its own session."
+    icon="log-out"
+    title="End app sessions"
+    to="/docs/guides/sign-out/end-app-sessions"
+  />
+  <PageCard
+    description="End the Tempo ID session of the user, for every app."
+    icon="log-out"
+    title="End all sessions"
+    to="/docs/guides/sign-out/end-all-sessions"
+  />
+</Cards>

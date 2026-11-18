@@ -1,0 +1,374 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# Restore sessions [An app restores the session of a signed-in user at each load, with no new sign-in.]
+
+## Overview
+
+A session holds a sign-in's user, tokens, and access key. The instance saves it to its store, so a later load of the app restores it with no new sign-in.
+
+The demo signs a user in through Tempo ID's dialog, and restores the session from the browser's store after a reload.
+
+<Demo name="RestoreSessions" source="examples/web" title="Restore a session" />
+
+## Walkthrough
+
+The [`web`](https://github.com/tempoxyz/accounts/tree/main/examples/web) example runs these steps.
+
+::::steps
+
+### Create the instance
+
+Create one instance for the app. The <SourceLink name="react" path="src/react/index.ts">`react`</SourceLink> plugin adds <SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession`</SourceLink>, and a browser's default store is IndexedDB.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+### Restore the session
+
+The first render of <SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession`</SourceLink> reads the saved session. Without one, or after its [access key](/docs/guides/access-keys) expires, <SourceLink name="Status" path="src/Session.ts">`session`</SourceLink> is `undefined`.
+
+On a page of a first-party app, the first render also renews a missing or expired session from the browser's Tempo ID session, with no prompt. [Manage sessions](/docs/guides/react/manage-sessions#renew-without-an-access-key) shows the options of that renewal.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession() // [!code hl]
+
+  if (!session) return <p>Signed out</p>
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Read the status
+
+The hook returns the status, with a flag for each value, and renders again at each change.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { isPending, session } = accounts.useSession() // [!code hl]
+
+  if (isPending) return <p>Restoring the session…</p> // [!code hl]
+  if (!session) return <p>Signed out</p>
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+| Status          | Flag                                                                                                   | Meaning                                                          | Session             |
+| --------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- | ------------------- |
+| `pending`       | <SourceLink name="useSession.isPending" path="src/react/index.ts">`isPending`</SourceLink>             | The instance reads the saved session, or an authorization runs   | `undefined`         |
+| `reauthorizing` | <SourceLink name="useSession.isReauthorizing" path="src/react/index.ts">`isReauthorizing`</SourceLink> | An authorization renews a saved session whose access key expired | The expired session |
+| `signedIn`      | <SourceLink name="useSession.isSignedIn" path="src/react/index.ts">`isSignedIn`</SourceLink>           | The instance holds a session                                     | The session         |
+| `signedOut`     | <SourceLink name="useSession.isSignedOut" path="src/react/index.ts">`isSignedOut`</SourceLink>         | The instance holds no session, and no authorization runs         | `undefined`         |
+
+### Sign the user in
+
+<SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> saves the session that it returns, and the hook renders the signed-in branch.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button onClick={() => accounts.dialog.signIn()} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Call the app's API
+
+<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch`</SourceLink> sends a request with the session's [access token](/docs/guides/api-authentication/authenticate-requests). If the access token expires within 30 seconds, the tokens refresh beside the request. Without a session, the call throws <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink>, and sends no request.
+
+:::code-group
+
+```tsx [Profile.tsx]
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+export function Profile() {
+  const [profile, setProfile] = useState<string>()
+
+  return (
+    <button
+      onClick={async () => {
+        const response = await accounts.session.fetch({ url: '/api/me' }) // [!code hl]
+        setProfile(await response.text())
+      }}
+      type="button"
+    >
+      {profile ?? 'Load the profile'}
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Sign the user out
+
+<SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink> empties the session, deletes the saved one, and revokes the refresh token.
+
+:::code-group
+
+```tsx [SignOut.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignOut() {
+  return (
+    <button onClick={() => accounts.signOut()} type="button">
+      Sign out
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+Render `SignIn` without a session, and `Profile` and `SignOut` with one.
+
+::::
+
+## Use cases
+
+Each use case reads the session through <SourceLink name="session" path="src/Accounts.ts">`accounts.session`</SourceLink>, which the hook also reads, or checks it with <SourceLink name="expired" path="src/Session.ts">`Session.expired`</SourceLink>.
+
+### Restore without React
+
+<SourceLink name="session.get" path="src/Accounts.ts">`session.get`</SourceLink> reads the saved session, such as on a page without React or in a script. It returns `undefined` without a session, and after its access key expires.
+
+:::code-group
+
+```ts [main.ts]
+import { accounts } from './tempo.config.js'
+
+const session = await accounts.session.get() // [!code hl]
+
+console.log(session ? `Signed in as ${session.user.email}` : 'Signed out')
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+:::
+
+### Renew an expired session
+
+<SourceLink name="getSession.reauthorize" path="src/internal/Core.ts">`reauthorize: true`</SourceLink> renews a missing or expired session from the browser's Tempo ID session, with no prompt. The call returns `undefined` if only an interactive sign-in can renew it, so the page shows its sign-in.
+
+:::code-group
+
+```ts [main.ts]
+import { accounts } from './tempo.config.js'
+
+const session = await accounts.session.get({ reauthorize: true }) // [!code hl]
+
+if (!session) console.log('Sign in again.')
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+:::
+
+### Follow the status
+
+<SourceLink name="session.status" path="src/Accounts.ts">`session.status`</SourceLink> returns the status of the table above, and calls a listener at each change. It suits code outside a component, such as a router guard.
+
+:::code-group
+
+```ts [main.ts]
+import { accounts } from './tempo.config.js'
+
+// [!code hl:start]
+const unsubscribe = accounts.session.status.subscribe((status, previous) => {
+  if (previous.status === 'signedIn' && status.status === 'signedOut')
+    console.log('Signed out')
+})
+// [!code hl:end]
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+:::
+
+### Load the instance for returning visitors
+
+The instance reads the saved session from IndexedDB, which has no synchronous read. With <SourceLink name="create.hint" path="src/Accounts.ts">`hint`</SourceLink>, the instance keeps a cookie while it holds a session. <SourceLink name="has" path="src/internal/Hint.ts">`Hint.has`</SourceLink> of `accounts/hint`, which imports no other module, reads it at startup, so the page loads the instance only for a returning visitor.
+
+A page that loads no instance renews no session from the browser's Tempo ID session at startup.
+
+:::code-group
+
+```ts [main.ts]
+import { Hint } from 'accounts/hint'
+
+// [!code hl:start]
+if (Hint.has(document.cookie)) {
+  const { accounts } = await import('./tempo.config.js')
+  await accounts.session.get()
+}
+// [!code hl:end]
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  hint: { cookie: true }, // [!code hl]
+})
+```
+
+:::
+
+### Check the expiry in an open page
+
+The hook empties an expired session only when it reads the store, so a page that stays open can hold a session whose access key expired. <SourceLink name="expired" path="src/Session.ts">`Session.expired`</SourceLink> reports it.
+
+:::code-group
+
+```tsx [App.tsx]
+import { Session } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  // [!code hl:start]
+  if (!session || Session.expired(session))
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+  // [!code hl:end]
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Choose the store of the session on each platform."
+    icon="id-card"
+    title="Store sessions"
+    to="/docs/guides/user-session/store-sessions"
+  />
+  <PageCard
+    description="Read the session in components, with a hook."
+    icon="react"
+    title="React"
+    to="/docs/guides/react/manage-sessions"
+  />
+  <PageCard
+    description="Verify the access token on the app's API."
+    icon="shield-check"
+    title="Authenticate requests"
+    to="/docs/guides/api-authentication/authenticate-requests"
+  />
+  <PageCard
+    description="Sign the user out of the app."
+    icon="log-out"
+    title="End app sessions"
+    to="/docs/guides/sign-out/end-app-sessions"
+  />
+</Cards>

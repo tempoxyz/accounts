@@ -1,0 +1,19 @@
+{
+  "name": "acme-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.18",
+    "hono": "^4.13.16",
+    "accounts": "1.0.0-alpha.20261112095625-8a78097",
+    "viem": "^2.57.19"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

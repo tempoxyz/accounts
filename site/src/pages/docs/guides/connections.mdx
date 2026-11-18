@@ -1,0 +1,33 @@
+import { Cards } from 'vocs'
+import { PageCard } from '../../../components/PageCard.tsx'
+
+# Connections [An API pays for a user with an access key that it holds for one connection.]
+
+## Overview
+
+A connection is an OAuth grant of one user, through one app, to one API, such as a paid MCP server. The API, not the app, holds the [access key](/docs/guides/access-keys), and pays from the user's Tempo Account within the limits that the user approved.
+
+An API uses connections if it charges the user for its own work, and the app only calls it. If the app itself pays, the app's own access key signs, as [Payments](/docs/guides/payments) shows.
+
+## Guides
+
+<Cards>
+  <PageCard
+    description="Pay for a user with an access key that the API holds for one connection."
+    icon="link"
+    title="Pay for users"
+    to="/docs/guides/connections/pay-for-users"
+  />
+  <PageCard
+    description="Serve the access key endpoint, so a passkey owner can approve the API."
+    icon="server"
+    title="Serve access keys"
+    to="/docs/guides/connections/serve-access-keys"
+  />
+  <PageCard
+    description="Revoke the access keys of a connection, and handle a refused connection."
+    icon="link"
+    title="Revoke connections"
+    to="/docs/guides/connections/revoke-connections"
+  />
+</Cards>

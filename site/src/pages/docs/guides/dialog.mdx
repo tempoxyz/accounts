@@ -1,0 +1,489 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# Dialog [Sign a user in through Tempo ID's dialog on the page of the app.]
+
+## Overview
+
+The dialog shows Tempo ID's sign-in in a frame over the app's page, which never sees the user's email code or passkey. It is the default sign-in flow for a web page, and needs no registration. For a full-page sign-in, use a [redirect](/docs/guides/redirect).
+
+The demo signs a user in from a button, shows the user, and signs the user out.
+
+<Demo
+  name="Dialog"
+  source="examples/web"
+  title="Sign in through the dialog"
+/>
+
+## Walkthrough
+
+The [`web`](https://github.com/tempoxyz/accounts/tree/main/examples/web) example runs these steps.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts@alpha react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts@alpha react react-dom viem
+```
+
+```sh [bun]
+bun add accounts@alpha react react-dom viem
+```
+
+:::
+
+### Create the instance
+
+An instance with no sign-in plugin uses the dialog, so the code names none.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+### Sign the user in
+
+Call <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> in a click handler, before any `await`, since its popup fallback opens only within a click. Without an [access key](/docs/guides/access-keys) request, the session holds no access key.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button onClick={() => accounts.dialog.signIn()} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+:::note
+Tempo ID frames its sign-in only on an HTTPS page. On an HTTP page, such as one on localhost, and in Safari and Firefox for an app that is neither [first-party](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps) nor [verified](https://github.com/tempoxyz/id/blob/main/docs/apps.md#verification), the call opens a popup instead.
+:::
+
+If the user closes the dialog, or denies the app on the approval page, the call rejects. [Errors](/docs/guides/errors#ignore-a-closed-dialog) shows which errors the app ignores.
+
+### Read the session
+
+<SourceLink name="useSession" path="src/react/index.ts">`accounts.useSession`</SourceLink> returns the [session](/docs/guides/user-session), and restores the saved one at the first render, so a later visit opens no dialog.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { isPending, session } = accounts.useSession() // [!code hl]
+
+  if (isPending) return <p>Checking the session…</p>
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Sign the user out
+
+<SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink> empties the session, and revokes its refresh token. The user stays signed in to Tempo ID.
+
+:::code-group
+
+```tsx [SignOut.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignOut() {
+  return (
+    <button onClick={() => accounts.signOut()} type="button">
+      Sign out
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case sets one option of <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink>, or of the <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin.
+
+### Request an access key
+
+<SourceLink name="signIn.method.accessKey" path="src/plugins/dialog.ts">`accessKey`</SourceLink> requests an [access key](/docs/guides/access-keys) with the sign-in. The session then signs transactions within these limits, with no prompt. Without it, the sign-in takes the instance's own access key, if the instance sets one.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() =>
+        accounts.dialog.signIn({
+          // [!code hl:start]
+          // The access key sends up to 100 OUSD for a day.
+          accessKey: {
+            expiry: '1d',
+            limits: [{ limit: '100', token: 'ousd' }],
+          },
+          // [!code hl:end]
+        })
+      }
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Bind a challenge
+
+<SourceLink name="signIn.challenge" path="src/plugins/dialog.ts">`challenge`</SourceLink> has the user sign a server's message at the sign-in. A function fetches the message after the dialog opens, so the click still opens it. The server checks the session's <SourceLink name="challengeSignature" path="src/Session.ts">`challengeSignature`</SourceLink>, as [Sign challenges](/docs/guides/account-proof/sign-challenges) shows.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  async function signIn() {
+    const session = await accounts.dialog.signIn({
+      // [!code hl:start]
+      challenge: async (signal) => {
+        const response = await fetch('/challenge', { method: 'POST', signal })
+        return response.text()
+      },
+      // [!code hl:end]
+    })
+    await fetch('/verify', {
+      body: JSON.stringify({
+        address: session.address,
+        signature: session.challengeSignature,
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+  }
+
+  return (
+    <button onClick={signIn} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Ask for funds
+
+<SourceLink name="signIn.funding" path="src/plugins/dialog.ts">`funding`</SourceLink> names the amount that the app needs in the user's Tempo Account. If the account holds less, Tempo ID's deposit page opens after the sign-in. The call resolves once that page returns or closes.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() =>
+        accounts.dialog.signIn({
+          funding: { amount: '10', currency: 'USD' }, // [!code hl]
+        })
+      }
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Sign in in a popup
+
+<SourceLink name="signIn.funding.mode" path="src/plugins/dialog.ts">`mode: 'popup'`</SourceLink> shows the sign-in in a popup window, with no frame. The plugin's <SourceLink name="dialog.mode" path="src/plugins/dialog.ts">`mode`</SourceLink> sets it for every sign-in, and loads no frame ahead.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() => accounts.dialog.signIn({ mode: 'popup' })} // [!code hl]
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Sign in for an API
+
+<SourceLink name="signIn.resource" path="src/plugins/dialog.ts">`resource`</SourceLink> names a [registered resource](https://github.com/tempoxyz/id/blob/main/docs/resources.md), such as an MCP server. Each access token then names it as its audience, so only that API accepts the token. A sign-in with a resource runs in a popup.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() =>
+        accounts.dialog.signIn({
+          resource: 'https://mcp.example.com/mcp', // [!code hl]
+        })
+      }
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Cancel a sign-in
+
+<SourceLink name="signIn.resource.signal" path="src/plugins/dialog.ts">`signal`</SourceLink> ends a sign-in from the page, such as after a time limit. Its abort closes the dialog, and rejects the call with the signal's reason.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() =>
+        accounts.dialog.signIn({
+          // The dialog closes after two minutes without a sign-in.
+          signal: AbortSignal.timeout(120_000), // [!code hl]
+        })
+      }
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Load the frame at the first sign-in
+
+A page without a session loads the dialog's frame, hidden, as the instance starts, so the first sign-in shows at once. <SourceLink name="dialog.preload" path="src/plugins/dialog.ts">`preload: false`</SourceLink> loads the frame at the first sign-in instead.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog({ preload: false }), react()], // [!code hl]
+})
+```
+
+### Isolate the page from popups
+
+A page that sends the `Cross-Origin-Opener-Policy: same-origin` header cuts the popup off from the page. <SourceLink name="dialog.crossOriginOpenerPolicy" path="src/plugins/dialog.ts">`crossOriginOpenerPolicy: 'same-origin'`</SourceLink> then has the page redeem each sign-in's code itself.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog({ crossOriginOpenerPolicy: 'same-origin' }), react()], // [!code hl]
+})
+```
+
+### Push each request
+
+<SourceLink name="dialog.par" path="src/plugins/dialog.ts">`par: true`</SourceLink> sends each request to Tempo ID first, as [Pushed authorization requests](https://github.com/tempoxyz/id/blob/main/docs/pushed-authorization-requests.md) describes. A pushed request signs in with a popup only.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog({ par: true }), react()], // [!code hl]
+})
+```
+
+### Keep the session on a server
+
+<SourceLink name="dialog.backend" path="src/plugins/dialog.ts">`backend`</SourceLink> runs the dialog's sign-in through the app's server, which keeps the session, so the page holds no token. [Redirect (Backend)](/docs/guides/backend#sign-in-with-the-dialog) shows the server and the page.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog({ backend: true })], // [!code hl]
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Read the session in components, with a hook."
+    icon="react"
+    title="React"
+    to="/docs/guides/react/manage-sessions"
+  />
+  <PageCard
+    description="Restore the session at load, and read its status."
+    icon="id-card"
+    title="Restore sessions"
+    to="/docs/guides/user-session/restore-sessions"
+  />
+  <PageCard
+    description="Sign a user in on Tempo ID's own pages, with no frame."
+    icon="log-in"
+    title="Redirect"
+    to="/docs/guides/redirect"
+  />
+</Cards>

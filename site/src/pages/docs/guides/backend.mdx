@@ -1,0 +1,579 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# Redirect (Backend) [The server of an app signs a user in with a redirect, and keeps the session.]
+
+## Overview
+
+The <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin runs the Tempo ID sign-in on the app's server, through a redirect to Tempo ID's pages. The server keeps each [session](/docs/guides/user-session) in a store.
+
+The browser holds only a session ID in an `HttpOnly` cookie, so the page needs no instance, and no page script reads a token. Choose this flow over the [dialog](/docs/guides/dialog) or [redirect](/docs/guides/redirect) flow if the server acts for the user, or if the page must hold no token. The app's origin is its client ID, with no registration or client secret.
+
+The demo signs a user in on the site's server, reads the user, and signs out.
+
+<Demo
+  name="RedirectBackend"
+  source="examples/backend"
+  title="Sign in on the server"
+/>
+
+## Walkthrough
+
+The [`backend`](https://github.com/tempoxyz/accounts/tree/main/examples/backend) example runs this flow in a Hono server.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts@alpha hono
+```
+
+```sh [pnpm]
+pnpm add accounts@alpha hono
+```
+
+```sh [bun]
+bun add accounts@alpha hono
+```
+
+:::
+
+### Create the instance
+
+`APP_URL` holds the app's origin. Create one instance for the process: Tempo ID refuses a reused refresh token, so the instance holds each refresh in progress, and concurrent requests of a session share it.
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps sessions in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+To send transactions with the access key of each session, add <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> and the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, as the Redirect (Backend) tab of [Getting started](/#walkthrough) shows. For a local Tempo ID or another chain, [Use another Tempo ID or chain](/docs/guides/viem#use-another-tempo-id-or-chain) sets the instance.
+
+| Store                                                                                           | Sessions live in                                                                   |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink>               | The process. A restart signs each user out                                         |
+| <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink>           | A table of a Postgres database                                                     |
+| <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>                 | Redis 6.2 or later                                                                 |
+| <SourceLink name="create" path="src/stores/DurableObject.ts">`Store.durableObject`</SourceLink> | The storage of the app's own Durable Object                                        |
+| <SourceLink name="create" path="src/stores/WorkersKv.ts">`Store.workersKv`</SourceLink>         | A Workers KV namespace. Another location can read a sign-out up to 60 seconds late |
+
+If replicas share a store, route each session to one replica.
+
+:::warning
+Keep the store on the server. Each session holds a refresh token and its [access key](/docs/guides/access-keys)'s private key.
+:::
+
+### Serve the sign-in routes
+
+<SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> serves the sign-in routes under `/api/auth`. Mount it on the page's origin, since each `POST` route refuses a request of another origin with 403.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw)) // [!code hl]
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+| Route                    | Result                                                                      |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `GET /api/auth/login`    | Starts a sign-in, and redirects the browser to Tempo ID                     |
+| `GET /api/auth/callback` | Completes the sign-in, sets the session cookie, and redirects to `returnTo` |
+| `GET /api/auth/session`  | Returns the session without its tokens, or `null`                           |
+| `POST /api/auth/logout`  | Ends the session, and deletes the session cookie                            |
+
+### Name the redirect URI
+
+Tempo ID returns a sign-in only to a redirect URI of the app. A localhost origin accepts any path. A deployed origin lists `/api/auth/callback` in `redirect_uris` of its [web app manifest](https://github.com/tempoxyz/id/blob/main/docs/apps.md#origin-client-id), which its root page links.
+
+```json [manifest.webmanifest]
+{
+  "name": "Example",
+  "redirect_uris": ["https://app.example/api/auth/callback"]
+}
+```
+
+Without `redirect_uris`, the only redirect URI is the origin's root.
+
+### Sign the user in
+
+A link to `/api/auth/login` leaves the page for Tempo ID's sign-in. The server keeps the PKCE verifier, so only the server can redeem the code.
+
+After the sign-in, the callback returns the browser to `returnTo` with the session cookie. <SourceLink name="session.get" path="src/Accounts.ts">`session.get(request)`</SourceLink> returns the session of the request's cookie, or `undefined`. It refreshes an [access token](/docs/guides/api-authentication/authenticate-requests) that expires within 30 seconds.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { html } from 'hono/html'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+app.get('/', async (c) => {
+  // [!code hl:start]
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'tempo-id')
+    return c.html(
+      html`<a href="/api/auth/login?returnTo=/">Sign in with Tempo</a>`,
+    )
+  // [!code hl:end]
+
+  return c.html(html`<p>Signed in as ${session.user.email}</p>`)
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+| Query parameter of the login route | Effect                                                                                 |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| `loginHint`                        | Fills the email field of Tempo ID's sign-in page                                       |
+| `prompt=login`                     | Requests a new sign-in, such as to switch to another account                           |
+| `returnTo`                         | Names the path that the callback returns to, with `error=access_denied` after a denial |
+
+The browser sends the session cookie with each request, so guard each route that changes state against cross-site requests, such as with Hono's CSRF middleware.
+
+### End the session
+
+The logout route revokes the refresh token, and deletes the session and its cookie. It returns 204, so the page reloads after it.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { html } from 'hono/html'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+app.get('/', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'tempo-id')
+    return c.html(
+      html`<a href="/api/auth/login?returnTo=/">Sign in with Tempo</a>`,
+    )
+
+  return c.html(html`
+    <p>Signed in as ${session.user.email}</p>
+    <button
+      onclick="fetch('/api/auth/logout', { method: 'POST' }).then(() => location.reload())"
+      type="button"
+    >
+      Sign out
+    </button>
+  `)
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case uses one option or action of the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, or the dialog's <SourceLink name="dialog.backend" path="src/plugins/dialog.ts">`backend`</SourceLink> option.
+
+### Sign in with the dialog
+
+A page can open Tempo ID's sign-in in a dialog over the page, in place of a redirect. Pass <SourceLink name="dialog.backend" path="src/plugins/dialog.ts">`backend`</SourceLink> to the <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin of the page's instance.
+
+<SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> runs the sign-in through `POST` requests to the login and callback routes, and the server still keeps the PKCE verifier and the session. After the sign-in, the page reloads, and the server renders it with the session.
+
+The [`authenticated-api`](https://github.com/tempoxyz/accounts/tree/main/examples/authenticated-api) example runs this flow in a React page.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={async () => {
+        await accounts.dialog.signIn() // [!code hl]
+        location.reload()
+      }}
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  // `true` names `/api`, the default path of the handler.
+  plugins: [dialog({ backend: true })], // [!code hl]
+})
+```
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+export default app
+```
+
+:::
+
+If the user closes the dialog, the call rejects with an `AbortError`. If the backend does not answer, such as offline, it rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>, with the code `server_error` and status 0, and with `signedIn` once the user signed in on Tempo ID.
+
+### Restore the session on load
+
+A page that renders without the server reads the session with <SourceLink name="session" path="src/plugins/dialog.ts">`dialog.session`</SourceLink>. With `backend`, it returns the session of `GET /api/auth/session`, or `null`. Its first call takes the read that the dialog's preload started as the instance was created, while it is pending or for 10 seconds after it settles, so the page reads the route once, signed in or out.
+
+```ts [main.ts]
+import { accounts } from './tempo.config.js'
+
+const session = await accounts.dialog.session() // [!code hl]
+if (session?.method === 'tempo-id') render(session.user.email)
+else if (session) render(session.account)
+else button.onclick = () => accounts.dialog.signIn()
+```
+
+### Write sign-in routes
+
+An app with its own paths or cookie names calls the plugin's actions in place of <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink>, and sets the cookie itself.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+import { Hono } from 'hono'
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { csrf } from 'hono/csrf'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+
+const app = new Hono()
+
+const cookie = {
+  httpOnly: true,
+  path: '/',
+  prefix: 'host',
+  sameSite: 'Lax',
+  secure: true,
+} as const
+
+app.use(csrf())
+
+// Start: stores the sign-in under a new session ID, and redirects to Tempo ID.
+app.get('/auth/start', async (c) => {
+  const { id, url } = await accounts.backend.start({
+    redirectUri: new URL('/auth/callback', c.req.url).href,
+  })
+  setCookie(c, 'session', id, cookie)
+  return c.redirect(url)
+})
+
+// Callback: redeems the code, and stores the session under the same session ID.
+app.get('/auth/callback', async (c) => {
+  const id = getCookie(c, 'session', 'host')
+  if (!id) return c.redirect('/auth/start')
+
+  await accounts.backend.complete({ id, url: c.req.url })
+  return c.redirect('/')
+})
+
+// Session: returns the user of the session ID.
+app.get('/auth/session', async (c) => {
+  const id = getCookie(c, 'session', 'host')
+  const session = id ? await accounts.backend.get({ id }) : undefined
+  if (session?.method !== 'tempo-id') return c.json({ user: null })
+
+  return c.json({ user: session.user })
+})
+
+// Sign-out: revokes the refresh token, and deletes the session.
+app.post('/auth/logout', async (c) => {
+  const id = getCookie(c, 'session', 'host')
+  if (id) await accounts.backend.end({ id })
+  deleteCookie(c, 'session', cookie)
+  return c.body(null, 204)
+})
+
+export default app
+```
+
+<SourceLink name="start" path="src/plugins/backend.ts">`backend.start`</SourceLink> keeps a sign-in for 10 minutes, or 20 with <SourceLink name="start.funding" path="src/plugins/backend.ts">`funding`</SourceLink>. <SourceLink name="complete" path="src/plugins/backend.ts">`backend.complete`</SourceLink> throws <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> for a denial, and <SourceLink name="PendingNotFoundError" path="src/Accounts.ts">`Accounts.PendingNotFoundError`</SourceLink> without a sign-in in progress.
+
+### Ask for funds
+
+<SourceLink name="start.funding" path="src/plugins/backend.ts">`funding`</SourceLink> of <SourceLink name="start" path="src/plugins/backend.ts">`backend.start`</SourceLink> names the amount that the app needs in the user's Tempo Account. If the account holds less, Tempo ID's deposit page opens after the approval, before the callback. The callback route stays the same as in [Write sign-in routes](#write-sign-in-routes).
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { setCookie } from 'hono/cookie'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.get('/auth/start', async (c) => {
+  const { id, url } = await accounts.backend.start({
+    funding: { amount: '10', currency: 'USD' }, // [!code hl]
+    redirectUri: new URL('/auth/callback', c.req.url).href,
+  })
+  setCookie(c, 'session', id, {
+    httpOnly: true,
+    path: '/',
+    prefix: 'host',
+    sameSite: 'Lax',
+    secure: true,
+  })
+  return c.redirect(url)
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+### Call an API for the user
+
+<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch(request, options)`</SourceLink> sends a request with the [access token](/docs/guides/api-authentication/authenticate-requests) of the request's session, after a refresh if necessary. It returns `undefined` without a Tempo ID session, and sends nothing.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+app.get('/me', async (c) => {
+  // [!code hl:start]
+  const response = await accounts.session.fetch(c.req.raw, {
+    url: 'https://api.example.com/me',
+  })
+  // [!code hl:end]
+  if (!response) return c.json({ error: 'invalid_token' }, 401)
+
+  return response
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+### Accept access tokens
+
+<SourceLink name="backend.accessToken" path="src/plugins/backend.ts">`accessToken: true`</SourceLink> has <SourceLink name="session.get" path="src/Accounts.ts">`session.get(request)`</SourceLink> also accept an access token of the app in the request's authorization header, such as from the app's CLI. Such a session holds the verified token's claims. A request with a session cookie reads the cookie's session first.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+app.get('/me', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method === 'tempo-id') return c.json({ userId: session.user.id })
+  // [!code hl:start]
+  if (session?.method === 'access-token')
+    return c.json({ userId: session.token.userId })
+  // [!code hl:end]
+
+  return c.json({ error: 'invalid_token' }, 401)
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ accessToken: true, store: Store.memory() })], // [!code hl]
+})
+```
+
+:::
+
+A DPoP-bound token carries a proof, which the route refuses once used, as [Bind DPoP keys](/docs/guides/api-authentication/bind-dpop-keys#refuse-a-repeated-proof) shows.
+
+### Authenticate with a private key
+
+A backend whose client ID is its origin sends no client authentication, so any holder of a session's refresh token can refresh the session. A backend that publishes a [metadata document](https://github.com/tempoxyz/id/blob/main/docs/apps.md#confidential-backends) with `private_key_jwt` signs a client assertion for each token request instead, with no registration. The document's URL is the client ID.
+
+Generate an ES256 key pair once, as [Pay for users](/docs/guides/connections/pay-for-users#store-the-connections) shows, and store the private key as the `APP_PRIVATE_KEY` secret. The document publishes the public key and the redirect URI, on the app's origin.
+
+:::code-group
+
+```json [client.json]
+{
+  "client_id": "https://app.example/client.json",
+  "client_name": "Example",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "jwks": {
+    "keys": [{ "alg": "ES256", "crv": "P-256", "kid": "…", "kty": "EC", "x": "…", "y": "…" }]
+  },
+  "redirect_uris": ["https://app.example/api/auth/callback"],
+  "token_endpoint_auth_method": "private_key_jwt"
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { ClientAssertion } from 'accounts/internal'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  // [!code hl:start]
+  clientAssertion: ClientAssertion.fromPrivateKey({
+    privateKey: JSON.parse(process.env.APP_PRIVATE_KEY!),
+  }),
+  clientId: 'https://app.example/client.json',
+  // [!code hl:end]
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
+The instance then pushes each authorization request, and signs each code redemption and refresh. Tempo ID still shows the approval page with the app's host. It reads the document again after 5 minutes, so publish a new public key beside the old one at least 5 minutes before the instance signs with it.
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Authenticate the routes of an API with the session cookie."
+    icon="shield-check"
+    title="Use session cookies"
+    to="/docs/guides/api-authentication/use-session-cookies"
+  />
+  <PageCard
+    description="End a session of a backend, also after a logout token."
+    icon="log-out"
+    title="End backend sessions"
+    to="/docs/guides/sign-out/end-backend-sessions"
+  />
+  <PageCard
+    description="Send a payment with the access key of a session."
+    icon="payment-flow"
+    title="Send payments"
+    to="/docs/guides/payments/self-managed"
+  />
+  <PageCard
+    description="Sign a user in with a signed message, under the same cookie."
+    icon="ethereum"
+    title="Sign-In With Ethereum"
+    to="/docs/guides/siwe"
+  />
+</Cards>

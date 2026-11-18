@@ -1,0 +1,18 @@
+{
+  "name": "acme-mobile",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start"
+  },
+  "dependencies": {
+    "expo": "^58.0.20",
+    "expo-status-bar": "^58.0.2",
+    "react": "~19.3.1",
+    "react-native": "^0.88.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

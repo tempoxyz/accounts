@@ -1,0 +1,379 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+import { StepTag } from '../../../../components/StepTag.tsx'
+
+# Bind challenges [Bind a server's challenge to an access key at sign-in, so the server knows the access key that signs.]
+
+## Overview
+
+A sign-in can carry a server's [challenge](https://github.com/tempoxyz/id/blob/main/docs/challenges.md), whose EIP-191 hash the key authorization holds as its [witness](https://github.com/tempoxyz/id/blob/main/docs/witnesses.md). The account owner's one signature thus proves to the server which [access key](/docs/guides/access-keys) the user authorized for the app.
+
+The demo requests a challenge from a route of the site, signs a user in with it, and sends the key authorization to a second route, which verifies it.
+
+<Demo name="BindChallenges" title="Bind a challenge" />
+
+## Walkthrough
+
+::::steps
+
+### Issue the challenge<StepTag kind="server" />
+
+The message names the server's origin and a nonce, and the store keeps it for five minutes. Tempo ID's approval page shows it to the user.
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps the challenges in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+```ts [server.ts]
+import { Store } from 'accounts'
+import { Hono } from 'hono'
+
+const challenges = Store.memory()
+
+const app = new Hono()
+
+app.post('/challenge', async (c) => {
+  const id = crypto.randomUUID()
+  const challenge = `app.example asks for proof of this sign-in.\n\nNonce: ${id}`
+
+  await challenges.setItem(id, challenge, { expiresAt: Date.now() + 300_000 })
+  return c.json({ challenge, id })
+})
+
+export default app
+```
+
+### Bind the challenge at sign-in<StepTag kind="client" />
+
+The click requests the challenge, and passes it to the sign-in as <SourceLink name="signIn.challenge" path="src/plugins/dialog.ts">`challenge`</SourceLink>.
+
+:::code-group
+
+```tsx [App.tsx]
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+type Issued = { challenge: string; id: string }
+type Proven = { accessKey: string; account: string }
+
+export function App() {
+  const [proven, setProven] = useState<Proven>()
+
+  async function signIn() {
+    // [!code hl:start]
+    const response = await fetch('/challenge', { method: 'POST' })
+    const issued: Issued = await response.json()
+    const session = await accounts.dialog.signIn({
+      challenge: issued.challenge,
+    })
+    // [!code hl:end]
+  }
+
+  if (proven) return <p>The server verified access key {proven.accessKey}.</p>
+
+  return (
+    <button onClick={signIn} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Send the proof<StepTag kind="client" />
+
+<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch`</SourceLink> posts the signed key authorization with the session's [access token](/docs/guides/api-authentication/authenticate-requests). The access key itself never leaves the page.
+
+:::code-group
+
+```tsx [App.tsx]
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+type Issued = { challenge: string; id: string }
+type Proven = { accessKey: string; account: string }
+
+export function App() {
+  const [proven, setProven] = useState<Proven>()
+
+  async function signIn() {
+    const challenge = await fetch('/challenge', { method: 'POST' })
+    const issued: Issued = await challenge.json()
+    const session = await accounts.dialog.signIn({
+      challenge: issued.challenge,
+    })
+
+    // [!code hl:start]
+    const response = await accounts.session.fetch({
+      init: {
+        body: JSON.stringify({
+          id: issued.id,
+          keyAuthorization: session.accessKey!.keyAuthorization,
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      },
+      url: '/verify',
+    })
+    setProven(await response.json())
+    // [!code hl:end]
+  }
+
+  if (proven) return <p>The server verified access key {proven.accessKey}.</p>
+
+  return (
+    <button onClick={signIn} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Verify the proof<StepTag kind="server" />
+
+The store's <SourceLink name="takeItem" path="src/Store.ts">`takeItem`</SourceLink> reads and deletes the challenge atomically, so each challenge verifies at most once.
+
+The <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin accepts only the access tokens of the app's own client ID. <SourceLink name="tokens.verifyChallenge" path="src/plugins/tokens.ts">`tokens.verifyChallenge`</SourceLink> then checks the witness, that the token names the access key, and the owner's signature, on the instance's chain.
+
+```ts [server.ts]
+import { Accounts, Challenge, Store } from 'accounts'
+import { tokens } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+// [!code hl:start]
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'https://app.example',
+  plugins: [tokens()],
+})
+// [!code hl:end]
+
+const challenges = Store.memory()
+
+const app = new Hono()
+
+app.post('/challenge', async (c) => {
+  const id = crypto.randomUUID()
+  const challenge = `app.example asks for proof of this sign-in.\n\nNonce: ${id}`
+
+  await challenges.setItem(id, challenge, { expiresAt: Date.now() + 300_000 })
+  return c.json({ challenge, id })
+})
+
+// [!code hl:start]
+app.post('/verify', async (c) => {
+  const { id, keyAuthorization } = await c.req.json()
+  const token = await accounts.tokens.verifyAccessToken(c.req.raw)
+  if (!token) return c.json({ error: 'invalid_token' }, 401)
+  // The chain spends no witness, so the server spends the challenge.
+  const challenge = await challenges.takeItem?.(id)
+  if (typeof challenge !== 'string')
+    return c.json({ error: 'invalid_request' }, 400)
+
+  try {
+    const { accessKey, account } = await accounts.tokens.verifyChallenge({
+      accessToken: token,
+      challenge,
+      keyAuthorization,
+    })
+
+    return c.json({ accessKey, account })
+  } catch (error) {
+    if (error instanceof Challenge.InvalidError)
+      return c.json({ error: 'invalid_proof' }, 400)
+    throw error
+  }
+})
+// [!code hl:end]
+
+export default app
+```
+
+:::warning
+Any app may set an access key's witness, so the witness and the signature alone also accept an access key that another app requested with the same challenge. Only the access token binds the proof to the app, so <SourceLink name="tokens.verifyChallenge" path="src/plugins/tokens.ts">`tokens.verifyChallenge`</SourceLink> takes the verified token, and rejects for a plugin whose <SourceLink name="create.clientIds" path="src/AccessToken.ts">`clientIds`</SourceLink> is `'any'`.
+:::
+
+::::
+
+## Use cases
+
+Each use case passes the <SourceLink name="signIn.challenge" path="src/plugins/dialog.ts">`challenge`</SourceLink> of a sign-in in another form, or to another call.
+
+### Fetch the challenge after the dialog opens
+
+A function as <SourceLink name="signIn.challenge" path="src/plugins/dialog.ts">`challenge`</SourceLink> fetches the message after the dialog or the popup opens. The click thus opens a popup also where the page cannot frame the dialog, since no request runs before it.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+type Issued = { challenge: string; id: string }
+
+export function App() {
+  async function signIn() {
+    const issued: Issued[] = []
+    const session = await accounts.dialog.signIn({
+      // [!code hl:start]
+      challenge: async (signal) => {
+        const response = await fetch('/challenge', { method: 'POST', signal })
+        issued.push(await response.json())
+        return issued[0]!.challenge
+      },
+      // [!code hl:end]
+    })
+
+    await accounts.session.fetch({
+      init: {
+        body: JSON.stringify({
+          id: issued[0]!.id,
+          keyAuthorization: session.accessKey!.keyAuthorization,
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      },
+      url: '/verify',
+    })
+  }
+
+  return (
+    <button onClick={signIn} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Bind a challenge with no page
+
+<SourceLink name="authorize" path="src/Accounts.ts">`accounts.authorize`</SourceLink> takes a <SourceLink name="authorize.challenge" path="src/internal/Core.ts">`challenge`</SourceLink> too, and shows no page. Only a [first-party app](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps) with the `tempo-id:sign` scope may send it, and the call returns `undefined` without a Tempo ID session.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+type Issued = { challenge: string; id: string }
+
+export function App() {
+  async function authorize() {
+    const response = await fetch('/challenge', { method: 'POST' })
+    const issued: Issued = await response.json()
+    const session = await accounts.authorize({ challenge: issued.challenge }) // [!code hl]
+    if (!session?.accessKey) return
+
+    await accounts.session.fetch({
+      init: {
+        body: JSON.stringify({
+          id: issued.id,
+          keyAuthorization: session.accessKey.keyAuthorization,
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      },
+      url: '/verify',
+    })
+  }
+
+  return (
+    <button onClick={authorize} type="button">
+      Prove the access key
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '10', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Prove a Tempo Account with a signed challenge, without an access key."
+    icon="signed-file"
+    title="Sign challenges"
+    to="/docs/guides/account-proof/sign-challenges"
+  />
+  <PageCard
+    description="Verify the access token of each request to an API."
+    icon="shield-check"
+    title="Authenticate requests"
+    to="/docs/guides/api-authentication/authenticate-requests"
+  />
+  <PageCard
+    description="Send a payment that the access key signs."
+    icon="payment-flow"
+    title="Send payments"
+    to="/docs/guides/payments/self-managed"
+  />
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+</Cards>

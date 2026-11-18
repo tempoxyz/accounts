@@ -1,0 +1,283 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+import { StepTag } from '../../../../components/StepTag.tsx'
+
+# Verify ID tokens [A server verifies the ID token of a sign-in before it reads the user from it.]
+
+## Overview
+
+The ID token is a JWT that names the user to the app. A server that receives one checks its signature, issuer, audience, and expiry, and only then reads its claims. The <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin runs these checks against Tempo ID's key set.
+
+The demo sends the session's ID token to the site's server, which returns its claims, then sends a copy with another email address, which the server refuses.
+
+<Demo name="VerifyIdTokens" title="Verify an ID token" />
+
+## Walkthrough
+
+::::steps
+
+### Install the packages
+
+Install `accounts` with Viem, in the app and on the server.
+
+:::code-group
+
+```sh [npm]
+npm install accounts@alpha react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts@alpha react react-dom viem
+```
+
+```sh [bun]
+bun add accounts@alpha react react-dom viem
+```
+
+:::
+
+### Create the instance<StepTag kind="client" />
+
+The page's origin is its client ID, the ID token's `aud`.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+### Send the ID token<StepTag kind="client" />
+
+The [session](/docs/guides/user-session) holds the ID token as <SourceLink name="idToken" path="src/internal/Tokens.ts">`idToken`</SourceLink>, which is optional, since a refresh can return none.
+
+:::code-group
+
+```tsx [Verify.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Verify() {
+  async function verify() {
+    const session = await accounts.dialog.signIn()
+
+    const response = await fetch('/api/verify', {
+      body: JSON.stringify({ idToken: session.idToken }), // [!code hl]
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+    console.log(await response.json())
+  }
+
+  return (
+    <button onClick={() => void verify()} type="button">
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({ chain: 'testnet' })
+```
+
+:::
+
+### Create the server instance<StepTag kind="server" />
+
+On the server, create an instance with the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin. Its <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink> is the client ID of the app, the origin of the page. The instance caches Tempo ID's key set for 10 minutes, so create it once.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens()],
+})
+```
+
+### Verify the ID token<StepTag kind="server" />
+
+<SourceLink name="verifyIdToken" path="src/plugins/tokens.ts">`tokens.verifyIdToken`</SourceLink> returns the claims of the ID token, or `undefined` if a check fails.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens()],
+})
+
+export async function handle(request: Request) {
+  const { idToken } = (await request.json()) as { idToken: string }
+
+  const token = await accounts.tokens.verifyIdToken({ idToken }) // [!code hl]
+  if (!token)
+    return Response.json({ error: 'invalid_token' }, { status: 401 })
+  return Response.json({ email: token.email, id: token.userId })
+}
+```
+
+| Check     | Refuses                                                                  |
+| --------- | ------------------------------------------------------------------------ |
+| Signature | A token that Tempo ID's key set did not sign with RS256                  |
+| Type      | A header `typ` other than `JWT`, such as a logout token or access token  |
+| Issuer    | A token of another issuer than Tempo ID                                  |
+| Audience  | A token of another app, also one that names the app beside another app   |
+| Expiry    | A token past its `exp`                                                   |
+| Claims    | A token without `email`, `email_verified`, `exp`, `iat`, `iss`, or `sub` |
+
+The audience comes from the instance's <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink>, never from a value of the request.
+
+### Read the claims<StepTag kind="server" />
+
+The verified token names the user. Its <SourceLink name="create.userId" path="src/internal/IdToken.ts">`userId`</SourceLink> is the <SourceLink name="id" path="src/internal/User.ts">`id`</SourceLink> of <SourceLink name="user" path="src/Session.ts">`session.user`</SourceLink>.
+
+| Property                                                                                            | Claim            | Value                                                                   |
+| --------------------------------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------- |
+| <SourceLink name="create.authTime" path="src/internal/IdToken.ts">`authTime`</SourceLink>           | `auth_time`      | When the user signed in to Tempo ID, in milliseconds                    |
+| <SourceLink name="create.clientId" path="src/internal/IdToken.ts">`clientId`</SourceLink>           | `aud`            | The client ID of the app                                                |
+| <SourceLink name="create.email" path="src/internal/IdToken.ts">`email`</SourceLink>                 | `email`          | The email address of the user                                           |
+| <SourceLink name="create.emailVerified" path="src/internal/IdToken.ts">`emailVerified`</SourceLink> | `email_verified` | `true`                                                                  |
+| <SourceLink name="create.expiresAt" path="src/internal/IdToken.ts">`expiresAt`</SourceLink>         | `exp`            | When the ID token expires, in milliseconds: 10 hours after issue        |
+| <SourceLink name="create.issuedAt" path="src/internal/IdToken.ts">`issuedAt`</SourceLink>           | `iat`            | When Tempo ID issued the ID token, in milliseconds                      |
+| <SourceLink name="create.sessionId" path="src/internal/IdToken.ts">`sessionId`</SourceLink>         | `sid`            | The Tempo ID session of the sign-in. Absent without a logout of the app |
+| <SourceLink name="create.userId" path="src/internal/IdToken.ts">`userId`</SourceLink>               | `sub`            | The ID of the user                                                      |
+
+### Answer the request<StepTag kind="server" />
+
+Respond with 401 if <SourceLink name="verifyIdToken" path="src/plugins/tokens.ts">`tokens.verifyIdToken`</SourceLink> returns `undefined`. If the server cannot fetch Tempo ID's key set, it throws <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with status 0. The ID token can still be valid, so respond with 503.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens()],
+})
+
+export async function handle(request: Request) {
+  const { idToken } = (await request.json()) as { idToken: string }
+
+  try {
+    const token = await accounts.tokens.verifyIdToken({ idToken })
+    if (!token)
+      return Response.json({ error: 'invalid_token' }, { status: 401 })
+    return Response.json({ email: token.email, id: token.userId })
+  } catch (error) {
+    // [!code hl:start]
+    if (error instanceof Accounts.RequestError && error.status === 0)
+      return Response.json(
+        { error: 'temporarily_unavailable' },
+        { status: 503 },
+      )
+    // [!code hl:end]
+    throw error
+  }
+}
+```
+
+::::
+
+:::warning
+An ID token is no credential for an API: its audience is the app, and it lasts 10 hours. An API verifies the request's [access token](/docs/guides/api-authentication/authenticate-requests).
+:::
+
+## Use cases
+
+Each use case sets one option of the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin, which <SourceLink name="verifyIdToken" path="src/plugins/tokens.ts">`tokens.verifyIdToken`</SourceLink> uses.
+
+### Accept several apps
+
+A server that receives the ID tokens of several apps names their client IDs in <SourceLink name="create.clientIds" path="src/AccessToken.ts">`clientIds`</SourceLink>. The <SourceLink name="create.clientId" path="src/internal/IdToken.ts">`clientId`</SourceLink> of the verified token names the app of each token.
+
+An ID token names the app itself, so <SourceLink name="create.clientIds" path="src/AccessToken.ts">`clientIds`</SourceLink> set to `'any'` verifies only the ID tokens of the instance's own <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink>.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [
+    tokens({ clientIds: ['https://app.example', 'https://admin.example'] }), // [!code hl]
+  ],
+})
+```
+
+### Reach Tempo ID at an internal address
+
+If the instance's <SourceLink name="from.url" path="src/Accounts.ts">`url`</SourceLink> reaches Tempo ID at another address, such as an internal host, <SourceLink name="create.issuer" path="src/AccessToken.ts">`issuer`</SourceLink> names Tempo ID's public origin. Each token names that origin as its issuer.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens({ issuer: 'https://id.tempo.xyz' })], // [!code hl]
+  url: 'http://tempo-id.internal',
+})
+```
+
+### Refresh the key set sooner
+
+<SourceLink name="create.maxAge" path="src/AccessToken.ts">`maxAge`</SourceLink> sets how long the instance keeps Tempo ID's key set, in milliseconds. A shorter time refuses the tokens of a removed signing key sooner. Defaults to 10 minutes.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens({ maxAge: 60_000 })], // [!code hl]
+})
+```
+
+### Limit the fetch of the key set
+
+<SourceLink name="create.timeout" path="src/AccessToken.ts">`timeout`</SourceLink> sets how long a fetch of the key set may take, in milliseconds. A slower fetch throws <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with status 0, which the server answers with 503. Defaults to 5 seconds.
+
+```ts [server.ts]
+import { Accounts } from 'accounts'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  plugins: [tokens({ timeout: 2_000 })], // [!code hl]
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Read the user from the session of a sign-in."
+    icon="user"
+    title="Read users"
+    to="/docs/guides/identity/read-users"
+  />
+  <PageCard
+    description="Verify the access token of a request on an API."
+    icon="shield-check"
+    title="Authenticate requests"
+    to="/docs/guides/api-authentication/authenticate-requests"
+  />
+  <PageCard
+    description="End the session of a backend when Tempo ID posts a logout token."
+    icon="log-out"
+    title="End backend sessions"
+    to="/docs/guides/sign-out/end-backend-sessions"
+  />
+  <PageCard
+    description="Prove the Tempo Account of a user with a signature."
+    icon="signed-file"
+    title="Sign challenges"
+    to="/docs/guides/account-proof/sign-challenges"
+  />
+</Cards>

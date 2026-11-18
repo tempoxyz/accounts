@@ -1,0 +1,169 @@
+# Publishes each push to main to npm, through npm trusted publishing, as
+# `<breaking>.<commit time>.0-<short SHA>` under `alpha`, such as `1.20261118194700.0-86519034c`, with
+# a GitHub release that lists the squash commit titles since the last one. `scripts/release.ts`
+# picks the version: a breaking title (`feat!:`) raises `<breaking>`, and `ci:` and `test:` commits
+# release nothing alone, unless Main runs by hand. `latest` stays at `0.21.1` until 1.0.
+name: Release
+
+on:
+  workflow_call:
+
+jobs:
+  # Packs the version. It runs the commit's code. The secure-runner action needs its OIDC token, but
+  # npm trusts only a token from `main.yml` in `npm-release`, so the job cannot publish.
+  pack:
+    name: Pack
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      # The release notes read the commits since the last release.
+      - name: Clone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # Runs before the dependencies install. Writes no version for a commit that is not the tip of
+      # main, or that changes only CI or tests outside a manual run.
+      - name: Resolve version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release.ts resolve
+
+      - name: Install dependencies
+        if: steps.version.outputs.version != ''
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository]
+
+      - name: Pack
+        if: steps.version.outputs.version != ''
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm version --no-git-tag-version --allow-same-version "$VERSION"
+          # `gitHead` records the commit, which the next release counts its commits from.
+          npm pkg set gitHead="$GITHUB_SHA"
+          pnpm publish:prepare
+          mkdir -p "$RUNNER_TEMP/packs"
+          pnpm pack --pack-destination "$RUNNER_TEMP/packs"
+          cp .tmp/release/notes.md "$RUNNER_TEMP/packs/notes.md"
+
+      - name: Upload pack
+        if: steps.version.outputs.version != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          name: pack
+          path: ${{ runner.temp }}/packs/
+          retention-days: 1
+
+  # Publishes the pack, and runs no code of the commit. It alone holds an OIDC token that npm
+  # trusts, since npm trusts `main.yml` only in `npm-release`, which admits only `main`.
+  publish:
+    name: Publish
+    environment: npm-release
+    if: needs.pack.outputs.version != ''
+    needs: pack
+    # `contents` creates the GitHub release and its tag, and reads the current commit of main.
+    permissions:
+      contents: write
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      # Pushes to main release one at a time, in push order, so a newer commit always publishes after
+      # an earlier one. Only a rerun can start after a newer commit, and it must not move the dist-tag
+      # back. A failed lookup fails the job.
+      - name: Check rerun
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current=true
+          if [ "$GITHUB_RUN_ATTEMPT" != 1 ]; then
+            current="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq ".sha == \"$GITHUB_SHA\"")"
+          fi
+          echo "publish=$current" >> "$GITHUB_OUTPUT"
+          if [ "$current" != true ]; then
+            echo "Skipped the rerun of \`$GITHUB_SHA\`, which is not the current commit of main." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Set up Node
+        if: steps.current.outputs.publish == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Download pack
+        if: steps.current.outputs.publish == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: pack
+          path: ${{ runner.temp }}/packs
+
+      - name: Publish
+        if: steps.current.outputs.publish == 'true'
+        env:
+          VERSION: ${{ needs.pack.outputs.version }}
+        run: |
+          pack="$RUNNER_TEMP/packs/accounts-$VERSION.tgz"
+          # The pack comes from the commit's code, so its manifest must name this package and version
+          # before it publishes.
+          manifest="$(tar -xOzf "$pack" package/package.json)"
+          # The backticks are a JavaScript template literal, which the shell must not expand.
+          # shellcheck disable=SC2016
+          if [ "$(echo "$manifest" | node -p 'const pkg = JSON.parse(require("fs").readFileSync(0)); `${pkg.name}@${pkg.version}`')" != "accounts@$VERSION" ]; then
+            echo "::error::$pack does not hold accounts@$VERSION."
+            exit 1
+          fi
+          # A rerun keeps the commit, whose version can already be published. `npm view` prints
+          # nothing for a version that does not exist.
+          if [ -n "$(npm view "accounts@$VERSION" version 2> /dev/null)" ]; then
+            exit 0
+          fi
+          # npm stages a version while it processes it, and refuses to publish a staged version
+          # again, so a rerun in that time succeeds.
+          status=0
+          npm publish "$pack" --access public --tag alpha > "$RUNNER_TEMP/publish.log" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/publish.log"
+          if [ "$status" != 0 ] && ! grep -q 'previously staged version' "$RUNNER_TEMP/publish.log"; then
+            exit 1
+          fi
+          echo "Published \`accounts@$VERSION\` under \`alpha\`." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create release
+        if: steps.current.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.pack.outputs.version }}
+        run: |
+          tag="accounts@$VERSION"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --notes-file "$RUNNER_TEMP/packs/notes.md" --prerelease
+          fi
+          # A rerun finds the release already made, which must be this commit's.
+          target=$(gh api "repos/$GITHUB_REPOSITORY/commits/$(printf %s "$tag" | jq -sRr @uri)" --jq .sha)
+          if [ "$target" != "$GITHUB_SHA" ]; then
+            echo "::error::$tag points to $target, not $GITHUB_SHA."
+            exit 1
+          fi
+
+permissions: {}

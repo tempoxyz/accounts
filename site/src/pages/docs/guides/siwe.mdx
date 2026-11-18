@@ -1,0 +1,742 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+import { StepTag } from '../../../components/StepTag.tsx'
+
+# Sign-In With Ethereum [Sign a user in on a backend with a message that the user's Tempo Account signs.]
+
+## Overview
+
+Sign-In With Ethereum ([EIP-4361](https://eips.ethereum.org/EIPS/eip-4361)) signs a user in to a backend with a signed message, in place of OAuth tokens. The backend issues the message, the user's Tempo Account signs it in Tempo ID's dialog, and the backend verifies the signature and keeps the session behind a cookie.
+
+Choose this flow over the [Backend flow](/docs/guides/backend) if the app needs only the account's address: a SIWE session holds no tokens, no [access key](/docs/guides/access-keys), and no email address. Another wallet, such as a browser extension, can sign in the same way.
+
+The demo signs a message, which the site's server verifies, and shows the session's account.
+
+<Demo
+  name="SignInWithEthereum"
+  source="examples/siwe"
+  title="Sign in with Ethereum"
+/>
+
+## Walkthrough
+
+The [`siwe`](https://github.com/tempoxyz/accounts/tree/main/examples/siwe) example runs these steps in a React app and a Hono server, with an API that keeps notes for each account.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts@alpha hono react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts@alpha hono react react-dom viem
+```
+
+```sh [bun]
+bun add accounts@alpha hono react react-dom viem
+```
+
+:::
+
+### Create the instances
+
+The page and the backend share one origin, `APP_URL`, which is the client ID, with no registration. The <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe`</SourceLink> plugin needs the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, which stores the sessions.
+
+Each message names <SourceLink name="origin" path="src/plugins/siwe.ts">`origin`</SourceLink> as its domain, and shows <SourceLink name="statement" path="src/plugins/siwe.ts">`statement`</SourceLink>. A signature thus signs in to this app only.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, siwe } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    siwe({
+      origin: process.env.APP_URL,
+      statement: 'Sign in to the notes example.',
+    }),
+  ],
+})
+```
+
+:::note
+
+<SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps sessions and challenges in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
+:::
+
+On the page, <SourceLink name="backend" path="src/plugins/dialog.ts">`backend`</SourceLink> set to `true` names the default path of the backend routes, `/api`.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog({ backend: true })],
+})
+```
+
+With <SourceLink name="backend" path="src/plugins/dialog.ts">`backend`</SourceLink>, the dialog's redirect URI is `/api/auth/callback`. A deployed origin lists it in `redirect_uris` of its [web app manifest](https://github.com/tempoxyz/id/blob/main/docs/apps.md#origin-client-id), or sets the instance's <SourceLink name="Config.redirectUri" path="src/Accounts.ts">`redirectUri`</SourceLink> to its root, such as `https://app.example/`.
+
+### Serve the SIWE routes<StepTag kind="server" />
+
+<SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> serves the sign-in routes under `/api/auth`.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, siwe } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    siwe({
+      origin: process.env.APP_URL,
+      statement: 'Sign in to the notes example.',
+    }),
+  ],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw)) // [!code hl]
+
+export default app
+```
+
+| Route                           | Result                                              |
+| ------------------------------- | --------------------------------------------------- |
+| `POST /api/auth/siwe/challenge` | Issues the message, and sets the challenge cookie   |
+| `POST /api/auth/siwe`           | Verifies the signature, and sets the session cookie |
+| `GET /api/auth/session`         | Returns the session of the page                     |
+| `POST /api/auth/logout`         | Ends the session                                    |
+
+`POST /api/auth/siwe/verify` verifies in the same way, for the <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin with <SourceLink name="backend" path="src/plugins/dialog.ts">`backend`</SourceLink>.
+
+A message lasts 10 minutes, and verifies once. The verify route answers a message other than the challenge with 400 `invalid_request`, and a signature of another account with 403 `access_denied`.
+
+:::note
+Each request to the challenge route stores a challenge. Limit the route's rate.
+:::
+
+### Sign the message<StepTag kind="client" />
+
+Call <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> with <SourceLink name="signIn.method" path="src/plugins/dialog.ts">`method`</SourceLink> set to `'siwe'` from a click handler. The dialog opens before it requests the message, so the popup opens within the click. The account's owner signs, since the plugin refuses an access key's signature.
+
+:::code-group
+
+```tsx [App.tsx]
+import * as React from 'react'
+import { accounts } from './tempo.config.js'
+
+type Session = { account: `0x${string}`; method: 'siwe' }
+
+export function App() {
+  const [session, setSession] = React.useState<Session | null>()
+
+  if (!session)
+    return (
+      <button
+        onClick={async () =>
+          setSession(await accounts.dialog.signIn({ method: 'siwe' })) // [!code hl]
+        }
+        type="button"
+      >
+        Sign in with Ethereum
+      </button>
+    )
+
+  return <p>Signed in as {session.account}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog({ backend: true })],
+})
+```
+
+:::
+
+The call returns the SIWE session with its account. If the user denies the request, it rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> and the code `access_denied`. If the user closes the dialog, it rejects with an `AbortError`. If the backend does not answer, such as offline, it rejects with `Accounts.RequestError`, with the code `server_error` and status 0.
+
+### Read the session<StepTag kind="server" />
+
+<SourceLink name="session.get" path="src/Accounts.ts">`session.get(request)`</SourceLink> returns the session of the request's cookie, or `undefined`. A SIWE session never refreshes, and lasts one day, or the <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe`</SourceLink> plugin's <SourceLink name="lifetime" path="src/plugins/siwe.ts">`lifetime`</SourceLink>.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, siwe } from 'accounts/plugins'
+import { Hono } from 'hono'
+import { csrf } from 'hono/csrf'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    siwe({
+      origin: process.env.APP_URL,
+      statement: 'Sign in to the notes example.',
+    }),
+  ],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+// Another site cannot post to the routes of the app.
+app.use('/v1/*', csrf())
+
+app.get('/v1/account', async (c) => {
+  const session = await accounts.session.get(c.req.raw) // [!code hl]
+  if (session?.method !== 'siwe') return c.json({ error: 'invalid_token' }, 401)
+
+  return c.json({ account: session.address })
+})
+
+export default app
+```
+
+### Restore the session<StepTag kind="client" />
+
+On a later visit, the click reads the session route before it opens the dialog.
+
+:::code-group
+
+```tsx [App.tsx]
+import * as React from 'react'
+import { accounts } from './tempo.config.js'
+
+type Session = { account: `0x${string}`; method: 'siwe' }
+
+export function App() {
+  const [session, setSession] = React.useState<Session>()
+
+  async function signIn() {
+    // [!code hl:start]
+    const response = await fetch('/api/auth/session')
+    const body = (await response.json()) as { session: Session | null }
+    // [!code hl:end]
+    setSession(body.session ?? (await accounts.dialog.signIn({ method: 'siwe' })))
+  }
+
+  if (!session)
+    return (
+      <button onClick={signIn} type="button">
+        Sign in with Ethereum
+      </button>
+    )
+
+  return <p>Signed in as {session.account}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog({ backend: true })],
+})
+```
+
+:::
+
+### Sign the user out<StepTag kind="client" />
+
+The logout route ends the session, and deletes its cookie.
+
+:::code-group
+
+```tsx [App.tsx]
+import * as React from 'react'
+import { accounts } from './tempo.config.js'
+
+type Session = { account: `0x${string}`; method: 'siwe' }
+
+export function App() {
+  const [session, setSession] = React.useState<Session | null>()
+
+  if (!session)
+    return (
+      <button
+        onClick={async () =>
+          setSession(await accounts.dialog.signIn({ method: 'siwe' }))
+        }
+        type="button"
+      >
+        Sign in with Ethereum
+      </button>
+    )
+
+  return (
+    <>
+      <p>Signed in as {session.account}</p>
+      <button
+        onClick={async () => {
+          await fetch('/api/auth/logout', { method: 'POST' }) // [!code hl]
+          setSession(null)
+        }}
+        type="button"
+      >
+        Sign out
+      </button>
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog({ backend: true })],
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case uses one option or action of the <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe`</SourceLink> plugin.
+
+### Write SIWE routes
+
+An app that sets its own cookies calls <SourceLink name="start" path="src/plugins/siwe.ts">`siwe.start`</SourceLink> and <SourceLink name="complete" path="src/plugins/siwe.ts">`siwe.complete`</SourceLink> in its own routes. Each throws an error named <SourceLink name="InvalidError" path="src/plugins/siwe.ts">`Plugins.siwe.InvalidError`</SourceLink> for a fault of the caller:
+
+| Call                                                                                | Throws for                                                                                                                                                                        |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| <SourceLink name="start" path="src/plugins/siwe.ts">`siwe.start`</SourceLink>       | A request from another origin, or a chain outside the plugin's <SourceLink name="chains" path="src/plugins/siwe.ts">`chains`</SourceLink>, which defaults to the instance's chain |
+| <SourceLink name="complete" path="src/plugins/siwe.ts">`siwe.complete`</SourceLink> | A sign-in that does not verify, such as a spent challenge                                                                                                                         |
+
+The package exports no class for the error, so the handler matches its name.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, siwe } from 'accounts/plugins'
+import { Hono } from 'hono'
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { csrf } from 'hono/csrf'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    siwe({
+      origin: process.env.APP_URL,
+      statement: 'Sign in to the notes example.',
+    }),
+  ],
+})
+
+const app = new Hono()
+
+const cookie = {
+  httpOnly: true,
+  path: '/',
+  sameSite: 'Lax',
+  secure: true,
+} as const
+
+app.use('/siwe/*', csrf())
+
+// A sign-in that does not verify is the fault of the caller.
+app.onError((error, c) => {
+  if (error.name === 'Plugins.siwe.InvalidError')
+    return c.json({ error: 'access_denied' }, 403)
+  throw error
+})
+
+app.post('/siwe/challenge', async (c) => {
+  // `siwe({ auth })` on the page sends the chain of the sign-in or the payment.
+  const { chainId } = await c.req.json<{ chainId?: number }>()
+  const { id, message } = await accounts.siwe.start({ chainId, request: c.req.raw }) // [!code hl]
+
+  setCookie(c, 'challenge', id, { ...cookie, maxAge: 600 })
+  return c.json({ message })
+})
+
+app.post('/siwe/verify', async (c) => {
+  const id = getCookie(c, 'challenge')
+  if (!id) return c.json({ error: 'invalid_request' }, 400)
+  // The challenge verifies once.
+  deleteCookie(c, 'challenge', cookie)
+
+  const body = await c.req.json<{
+    address: `0x${string}`
+    message: string
+    signature: `0x${string}`
+  }>()
+  const session = await accounts.siwe.complete({ ...body, id }) // [!code hl]
+
+  setCookie(c, 'session', session.id, { ...cookie, maxAge: 86_400 })
+  return c.json({ account: session.address })
+})
+
+export default app
+```
+
+<SourceLink name="get" path="src/plugins/backend.ts">`accounts.backend.get`</SourceLink> returns the session of a later request, and <SourceLink name="end" path="src/plugins/backend.ts">`accounts.backend.end`</SourceLink> ends it.
+
+The page signs with <SourceLink name="signMessage" path="src/plugins/dialog.ts">`dialog.signMessage`</SourceLink>. Its <SourceLink name="signMessage.message" path="src/plugins/dialog.ts">`message`</SourceLink> is a function, so the dialog opens on the click and requests the message after.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+async function post<data>(path: string, body: object = {}) {
+  const response = await fetch(path, {
+    body: JSON.stringify(body),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  })
+  return (await response.json()) as data
+}
+
+export function SignIn() {
+  return (
+    <button
+      onClick={async () => {
+        const signed = await accounts.dialog.signMessage({ // [!code hl]
+          message: async () =>
+            (await post<{ message: string }>('/siwe/challenge')).message,
+        })
+        await post('/siwe/verify', signed)
+      }}
+      type="button"
+    >
+      Sign in with Ethereum
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog({ backend: true })],
+})
+```
+
+:::
+
+### Sign in with the plugin on the page
+
+The <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe`</SourceLink> plugin on the page signs the user in to the app's routes at each <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink>. Its <SourceLink name="auth" path="src/plugins/siwe.ts">`auth`</SourceLink> names the challenge and verify routes, such as those of [Write SIWE routes](#write-siwe-routes). The dialog opens at the click, then requests the message, and the call returns the verify route's JSON object as <SourceLink name="signIn.auth" path="src/plugins/dialog.ts">`auth`</SourceLink>.
+
+```tsx [App.tsx]
+import { Accounts } from 'accounts'
+import { siwe } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [siwe({ auth: { challenge: '/siwe/challenge', verify: '/siwe/verify' } })],
+})
+
+const { auth } = await accounts.dialog.signIn()
+// { account }, the response of the verify route
+```
+
+A string in <SourceLink name="auth" path="src/plugins/siwe.ts">`auth`</SourceLink> names the verify route, and the challenge route at its `/challenge` path. `/api/auth/siwe` names the routes of <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink>.
+
+| Route     | Receives                                               | Answers                              |
+| --------- | ------------------------------------------------------ | ------------------------------------ |
+| Challenge | `{ chainId }`, the chain of the sign-in or the payment | `{ message }`, or `{ id, message }`  |
+| Verify    | `{ address, id, message, signature }`                  | The JSON object of the call's `auth` |
+
+<SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> without an account signs the user in in the same way, beside the payment.
+
+A sign-in with an access key needs one passkey prompt too. The account signs the key authorization, whose witness is the message's EIP-191 hash.
+
+The verify route then receives `{ address, id, keyAuthorization, message }`, with the sign-in's access token in its `Authorization` header, and <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> checks that the token names the access key for the app. Any app may set a witness, so the token binds the proof to this app. With the client IDs of several apps, <SourceLink name="accessTokens" path="src/plugins/siwe.ts">`accessTokens`</SourceLink> accepts the tokens of each.
+
+### Serve an API on another origin
+
+A session cookie reaches only the routes' own origin. With <SourceLink name="token" path="src/plugins/siwe.ts">`token`</SourceLink> set to `true`, the routes hand the session to the page as a token instead, so an API on one origin serves a page on another.
+
+<SourceLink name="origin" path="src/plugins/siwe.ts">`origin`</SourceLink> names the page, which each message names, and which the routes answer with CORS headers. A list of origins serves several pages. The API's own routes add CORS headers for the page themselves.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, siwe } from 'accounts/plugins'
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'https://app.example.com',
+  plugins: [
+    backend({ store: Store.memory() }),
+    siwe({ origin: 'https://app.example.com', token: true }), // [!code hl]
+  ],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+// The page sends its token from another origin, so the API's own routes answer it with CORS headers.
+app.use(
+  '/v1/*',
+  cors({ allowHeaders: ['authorization'], origin: 'https://app.example.com' }),
+)
+
+app.get('/v1/account', async (c) => {
+  // Reads the session of `Authorization: Bearer <token>`.
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'siwe') return c.json({ error: 'invalid_token' }, 401)
+
+  return c.json({ account: session.address })
+})
+
+export default app
+```
+
+```tsx [App.tsx]
+import { Accounts } from 'accounts'
+import { siwe } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [siwe({ auth: 'https://api.example.com/api/auth/siwe' })],
+})
+
+export async function signIn() {
+  const { auth } = await accounts.dialog.signIn()
+  // auth: { session: { account, method: 'siwe' }, token }
+  const response = await fetch('https://api.example.com/v1/account', {
+    headers: { authorization: `Bearer ${auth!.token}` },
+  })
+  return await response.json()
+}
+```
+
+The challenge route returns `{ id, message }`, and the verify route takes `id` in its body and returns `{ session, token }`. Neither sets a cookie.
+
+The session and logout routes read the token from the `Authorization` header. The page keeps the token, and ends the session with the logout route.
+
+### Approve a change
+
+A change that deletes data or moves funds needs more than a cookie. <SourceLink name="challenge" path="src/plugins/siwe.ts">`siwe.challenge`</SourceLink> issues a message that states the change, and <SourceLink name="approve" path="src/plugins/siwe.ts">`siwe.approve`</SourceLink> verifies that the session's account signs it. Both routes derive the statement from the session, so an approval of another change fails.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, siwe } from 'accounts/plugins'
+import { Hono } from 'hono'
+import { csrf } from 'hono/csrf'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    siwe({
+      origin: process.env.APP_URL,
+      statement: 'Sign in to the notes example.',
+    }),
+  ],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+// Another site cannot post to the routes of the app.
+app.use('/v1/*', csrf())
+
+// An approval that does not verify is the fault of the caller.
+app.onError((error, c) => {
+  if (error.name === 'Plugins.siwe.InvalidError')
+    return c.json({ error: 'access_denied' }, 403)
+  throw error
+})
+
+app.post('/v1/notes/clear/challenge', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'siwe') return c.json({ error: 'invalid_token' }, 401)
+
+  const { message } = await accounts.siwe.challenge({ // [!code hl]
+    request: c.req.raw,
+    session,
+    statement: `Delete every note of ${session.address}.`,
+  })
+  return c.json({ message })
+})
+
+app.post('/v1/notes/clear', async (c) => {
+  const session = await accounts.session.get(c.req.raw)
+  if (session?.method !== 'siwe') return c.json({ error: 'invalid_token' }, 401)
+
+  const body = await c.req.json<{ message: string; signature: `0x${string}` }>()
+  // Throws for an approval that does not verify, such as a spent one.
+  await accounts.siwe.approve({ // [!code hl]
+    ...body,
+    request: c.req.raw,
+    session,
+    statement: `Delete every note of ${session.address}.`,
+  })
+  return c.json({ notes: [] })
+})
+
+export default app
+```
+
+An approval lasts 5 minutes, and verifies once. The page signs it with <SourceLink name="signMessage" path="src/plugins/dialog.ts">`dialog.signMessage`</SourceLink>, and the error handler answers a failed one with 403, as in [Write SIWE routes](#write-siwe-routes).
+
+### Accept other chains
+
+<SourceLink name="chains" path="src/plugins/siwe.ts">`chains`</SourceLink> lists the IDs of the chains that a sign-in's message may name, such as the chains of the app's payments. It defaults to the instance's chain, and the challenge route refuses any other.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, siwe } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    siwe({
+      // Tempo testnet and Tempo mainnet.
+      chains: [42431, 4217], // [!code hl]
+      origin: process.env.APP_URL,
+      statement: 'Sign in to the notes example.',
+    }),
+  ],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+export default app
+```
+
+### Shorten the session
+
+<SourceLink name="lifetime" path="src/plugins/siwe.ts">`lifetime`</SourceLink> sets how long a SIWE session lasts after its sign-in, in milliseconds. It defaults to one day. The store deletes the session at its expiry, and the user signs the next message.
+
+```ts [server.ts]
+import { Accounts, Store } from 'accounts'
+import { backend, siwe } from 'accounts/plugins'
+import { Hono } from 'hono'
+
+const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [
+    backend({ store: Store.memory() }),
+    siwe({
+      // A session lasts one hour.
+      lifetime: 60 * 60 * 1000, // [!code hl]
+      origin: process.env.APP_URL,
+      statement: 'Sign in to the notes example.',
+    }),
+  ],
+})
+
+const app = new Hono()
+
+app.all('/api/*', (c) => accounts.handler.fetch(c.req.raw))
+
+export default app
+```
+
+### Sign in with another wallet
+
+A wallet that connects first, such as a browser extension, knows its account. Send it as `address` to the challenge route, so only that account signs in. `post` is the helper of [Write SIWE routes](#write-siwe-routes).
+
+```tsx [SignInWithWallet.tsx]
+import { createWalletClient, custom } from 'viem'
+import 'viem/window'
+
+async function post<data>(path: string, body: object = {}) {
+  const response = await fetch(path, {
+    body: JSON.stringify(body),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  })
+  return (await response.json()) as data
+}
+
+export function SignInWithWallet() {
+  return (
+    <button
+      onClick={async () => {
+        const wallet = createWalletClient({
+          transport: custom(window.ethereum!),
+        })
+        const [address] = await wallet.requestAddresses()
+        const { message } = await post<{ message: string }>(
+          '/api/auth/siwe/challenge',
+          { address }, // [!code hl]
+        )
+        const signature = await wallet.signMessage({
+          account: address!,
+          message,
+        })
+        await post('/api/auth/siwe/verify', { address, message, signature })
+      }}
+      type="button"
+    >
+      Sign in with a wallet
+    </button>
+  )
+}
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Sign a user in with Tempo ID on a backend, with tokens and an access key."
+    icon="server"
+    title="Redirect (Backend)"
+    to="/docs/guides/backend"
+  />
+  <PageCard
+    description="Authenticate the requests of an API with the session cookie."
+    icon="shield-check"
+    title="API authentication"
+    to="/docs/guides/api-authentication/use-session-cookies"
+  />
+  <PageCard
+    description="Prove the Tempo Account of a Tempo ID sign-in with a signed challenge."
+    icon="signed-file"
+    title="Account proof"
+    to="/docs/guides/account-proof/sign-challenges"
+  />
+  <PageCard
+    description="End the session of a backend, also after a logout token."
+    icon="log-out"
+    title="Sign-out"
+    to="/docs/guides/sign-out/end-backend-sessions"
+  />
+</Cards>

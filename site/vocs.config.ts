@@ -1,265 +1,402 @@
-import { type Config, defineConfig, McpSource } from 'vocs/config'
+/** Configures the documentation site: its metadata, its navigation, and its static build. @module */
+import * as fs from 'node:fs'
+import { defineConfig } from 'vocs/config'
 
-import remarkMarkdown from './scripts/remark-markdown.js'
+/** Repository that holds the package, its examples, and the pages of the site. */
+const repository = 'https://github.com/tempoxyz/accounts'
 
-const baseUrl = (() => {
-  if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production') return ''
-  if (process.env.VITE_BASE_URL && URL.canParse(process.env.VITE_BASE_URL))
-    return process.env.VITE_BASE_URL
-  if (process.env.VERCEL_ENV === 'production')
-    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-  return ''
-})()
-
-const config: Config = defineConfig({
-  baseUrl: baseUrl || undefined,
-  cacheDir: '.vocs/cache',
-  checkDeadlinks: 'warn',
-  description: 'Tempo Accounts SDK documentation',
+export default defineConfig({
+  // Production origin. The sitemap and the canonical URLs of every deployment name it.
+  baseUrl: 'https://accounts.tempo.xyz',
+  description:
+    'The SDK of Tempo ID. Sign users in, and keep their session, their access key, and a Viem client that signs with it.',
   editLink: {
-    link: 'https://github.com/tempoxyz/accounts/edit/main/site/src/pages/:path',
-    text: 'Suggest changes to this page',
+    link: `${repository}/edit/main/site/src/pages/:path`,
   },
-  markdown: { outputRemarkPlugins: [remarkMarkdown] },
-  mcp: {
-    enabled: true,
-    sources: [
-      McpSource.github({ repo: 'tempoxyz/accounts' }),
-      McpSource.github({ repo: 'tempoxyz/docs' }),
-      McpSource.github({ repo: 'wevm/viem' }),
-      McpSource.github({ repo: 'wevm/wagmi' }),
-      McpSource.github({ repo: 'wevm/ox' }),
-    ],
-  },
-  rootDir: '.',
-  sidebar: {
-    '/': [
+  head: (path, context) => ({
+    // Without a `<base>` element, each deployment resolves its links and assets on its own origin.
+    base: false,
+    link: [
+      // `sizes` limits the ICO to 32 pixels, so a browser that reads both icons picks an SVG.
+      { href: '/favicon.ico', rel: 'icon', sizes: '32x32' },
+      { href: '/apple-touch-icon.png', rel: 'apple-touch-icon' },
+      { href: '/site.webmanifest', rel: 'manifest' },
+      // The Markdown of the page, which `public/_redirects` serves.
       {
-        text: 'Tempo Accounts SDK',
-        items: [
-          { text: 'Getting Started', link: '/docs' },
-          { text: 'Deploying to Production', link: '/docs/production' },
-          { text: 'FAQ', link: '/docs/faq' },
-          { text: 'GitHub', link: 'https://github.com/tempoxyz/accounts' },
-        ],
-      },
-      {
-        text: 'Guides',
-        items: [
-          { text: 'Connect Accounts', link: '/docs/guides/connect-accounts' },
-          { text: 'Authentication', link: '/docs/guides/authentication' },
-          { text: 'Identity', link: '/docs/guides/identity' },
-          { text: 'Transfers', link: '/docs/guides/transfers' },
-          { text: 'Spend Permissions', link: '/docs/guides/spend-permissions' },
-          { text: 'React Native', link: '/docs/guides/react-native' },
-          { text: 'Subscriptions', link: '/docs/guides/subscriptions' },
-          { text: 'Fee Sponsorship', link: '/docs/guides/fee-sponsorship' },
-          { text: 'Deposits', link: '/docs/guides/deposits' },
-          { text: 'Swaps', link: '/docs/guides/swaps' },
-          { text: 'Theming', link: '/docs/guides/theming' },
-          { text: 'CLI', link: '/docs/guides/cli' },
-        ],
-      },
-      {
-        text: 'Adapters',
-        items: [
-          { text: 'Overview', link: '/docs/adapters' },
-          { text: 'Tempo Wallet', link: '/docs/adapters/tempo-wallet' },
-          { text: 'WebAuthn (Passkeys)', link: '/docs/adapters/webauthn' },
-          { text: 'Turnkey', link: '/docs/adapters/turnkey' },
-          { text: 'Privy', link: '/docs/adapters/privy' },
-          { text: 'Private Key', link: '/docs/adapters/private-key' },
-          { text: 'Custom', link: '/docs/adapters/custom' },
-        ],
-      },
-      {
-        text: 'Reference',
-        items: [
-          {
-            text: 'Adapters',
-            collapsed: true,
-            items: [
-              { text: 'Overview', link: '/docs/api/adapters' },
-              { text: 'dialog', link: '/docs/api/dialog' },
-              { text: 'local', link: '/docs/api/local' },
-              { text: 'mobileWebAuth', link: '/docs/api/mobileWebAuth' },
-              { text: 'postMessage', link: '/docs/api/postMessage' },
-              { text: 'privy', link: '/docs/api/privy' },
-              { text: 'secp256k1', link: '/docs/api/secp256k1' },
-              { text: 'turnkey', link: '/docs/api/turnkey' },
-              { text: 'webAuthn', link: '/docs/api/webAuthn' },
-            ],
-          },
-          {
-            text: 'Core',
-            collapsed: true,
-            items: [
-              {
-                text: 'Dialog',
-                collapsed: true,
-                items: [
-                  { text: 'Overview', link: '/docs/api/dialogs' },
-                  { text: '.iframe', link: '/docs/api/dialog.iframe' },
-                  { text: '.popup', link: '/docs/api/dialog.popup' },
-                ],
-              },
-              { text: 'Expiry', link: '/docs/api/expiry' },
-              { text: 'Provider', link: '/docs/api/provider' },
-              { text: 'Rpc', link: '/docs/api/rpc' },
-              { text: 'Schema', link: '/docs/api/schema' },
-              { text: 'TrustedHosts', link: '/docs/api/trustedHosts' },
-              {
-                text: 'WebAuthnCeremony',
-                collapsed: true,
-                items: [
-                  { text: 'Overview', link: '/docs/api/webauthnceremony' },
-                  { text: '.deferred', link: '/docs/api/webauthnceremony.deferred' },
-                  { text: '.from', link: '/docs/api/webauthnceremony.from' },
-                  { text: '.server', link: '/docs/api/webauthnceremony.server' },
-                ],
-              },
-            ],
-          },
-          {
-            text: 'CLI',
-            collapsed: true,
-            items: [{ text: 'Provider', link: '/docs/cli/provider' }],
-          },
-          {
-            text: 'JSON-RPC',
-            collapsed: true,
-            items: [
-              { text: 'eth_accounts', link: '/docs/rpc/eth_accounts' },
-              { text: 'eth_chainId', link: '/docs/rpc/eth_chainId' },
-              { text: 'eth_fillTransaction', link: '/docs/rpc/eth_fillTransaction' },
-              { text: 'eth_requestAccounts', link: '/docs/rpc/eth_requestAccounts' },
-              { text: 'eth_sendTransaction', link: '/docs/rpc/eth_sendTransaction' },
-              { text: 'eth_sendTransactionSync', link: '/docs/rpc/eth_sendTransactionSync' },
-              { text: 'eth_signTransaction', link: '/docs/rpc/eth_signTransaction' },
-              { text: 'eth_signTypedData_v4', link: '/docs/rpc/eth_signTypedData_v4' },
-              { text: 'personal_sign', link: '/docs/rpc/personal_sign' },
-              { text: 'wallet_authorizeAccessKey', link: '/docs/rpc/wallet_authorizeAccessKey' },
-              { text: 'wallet_connect', link: '/docs/rpc/wallet_connect' },
-              { text: 'wallet_deposit', link: '/docs/rpc/wallet_deposit' },
-              { text: 'wallet_depositZone', link: '/docs/rpc/wallet_depositZone' },
-              { text: 'wallet_disconnect', link: '/docs/rpc/wallet_disconnect' },
-              { text: 'wallet_getBalances', link: '/docs/rpc/wallet_getBalances' },
-              { text: 'wallet_getCallsStatus', link: '/docs/rpc/wallet_getCallsStatus' },
-              { text: 'wallet_getCapabilities', link: '/docs/rpc/wallet_getCapabilities' },
-              { text: 'wallet_revokeAccessKey', link: '/docs/rpc/wallet_revokeAccessKey' },
-              { text: 'wallet_send', link: '/docs/rpc/wallet_send' },
-              { text: 'wallet_sendCalls', link: '/docs/rpc/wallet_sendCalls' },
-              { text: 'wallet_swap', link: '/docs/rpc/wallet_swap' },
-              { text: 'wallet_switchEthereumChain', link: '/docs/rpc/wallet_switchEthereumChain' },
-              { text: 'wallet_withdrawZone', link: '/docs/rpc/wallet_withdrawZone' },
-            ],
-          },
-          {
-            text: 'Remote',
-            collapsed: true,
-            items: [
-              { text: 'Overview', link: '/docs/api/remote' },
-              { text: '.create', link: '/docs/api/remote.create' },
-              { text: '.useEnsureVisibility', link: '/docs/api/remote.useEnsureVisibility' },
-              { text: '.useState', link: '/docs/api/remote.useState' },
-              { text: '.useTheme', link: '/docs/api/remote.useTheme' },
-              { text: '.validateSearch', link: '/docs/api/remote.validateSearch' },
-            ],
-          },
-          {
-            text: 'Server',
-            collapsed: true,
-            items: [
-              { text: 'Overview', link: '/docs/server' },
-              {
-                text: 'Handlers',
-                collapsed: true,
-                items: [
-                  { text: '.auth', link: '/docs/server/handler.auth' },
-                  { text: '.compose', link: '/docs/server/handler.compose' },
-                  { text: '.deviceCode', link: '/docs/server/handler.deviceCode' },
-                  { text: '.exchange', link: '/docs/server/handler.exchange' },
-                  { text: '.relay', link: '/docs/server/handler.relay' },
-                  { text: '.webAuthn', link: '/docs/server/handler.webAuthn' },
-                ],
-              },
-              { text: 'hc', link: '/docs/server/hc' },
-              {
-                text: 'Identity',
-                collapsed: true,
-                items: [{ text: '.verify', link: '/docs/server/identity.verify' }],
-              },
-              {
-                text: 'Kv',
-                collapsed: true,
-                items: [
-                  { text: 'Overview', link: '/docs/server/kv' },
-                  { text: '.cloudflare', link: '/docs/server/kv.cloudflare' },
-                  { text: '.durableObject', link: '/docs/server/kv.durableObject' },
-                  { text: '.from', link: '/docs/server/kv.from' },
-                  { text: '.memory', link: '/docs/server/kv.memory' },
-                ],
-              },
-            ],
-          },
-          {
-            text: 'Keystore',
-            collapsed: true,
-            items: [
-              { text: 'Overview', link: '/docs/api/keystore' },
-              { text: '.p256', link: '/docs/api/keystore.p256' },
-              { text: '.secp256k1', link: '/docs/api/keystore.secp256k1' },
-              { text: '.webCryptoP256', link: '/docs/api/keystore.webCryptoP256' },
-            ],
-          },
-          {
-            text: 'Storage',
-            collapsed: true,
-            items: [
-              { text: 'Overview', link: '/docs/api/storage' },
-              { text: '.combine', link: '/docs/api/storage.combine' },
-              { text: '.cookie', link: '/docs/api/storage.cookie' },
-              { text: '.from', link: '/docs/api/storage.from' },
-              { text: '.idb', link: '/docs/api/storage.idb' },
-              { text: '.localStorage', link: '/docs/api/storage.localStorage' },
-              { text: '.memory', link: '/docs/api/storage.memory' },
-              {
-                text: 'React Native',
-                collapsed: true,
-                items: [
-                  { text: 'asyncStorage', link: '/docs/api/storage.asyncStorage' },
-                  { text: 'secureMmkv', link: '/docs/api/storage.secureMmkv' },
-                ],
-              },
-            ],
-          },
-        ],
+        href: `${path === '/' ? '/index' : path}.md`,
+        rel: 'alternate',
+        type: 'text/markdown',
       },
     ],
+    meta: {
+      ogImageAlt: context.frontmatter?.title,
+      ogImageHeight: 630,
+      ogImageType: 'image/png',
+      ogImageWidth: 1200,
+      ogLocale: 'en_US',
+      twitterImageAlt: context.frontmatter?.title,
+      twitterSite: '@tempo',
+    },
+  }),
+  // Tempo's icons, as Tempo ID's sites use. `head` names the raster icons of other clients.
+  iconUrl: {
+    dark: '/tempo-dark.svg',
+    light: '/tempo-light.svg',
   },
-  iconUrl: { light: '/tempo-light.svg', dark: '/tempo-dark.svg' },
-  logoUrl: { light: '/lockup-light.svg', dark: '/lockup-dark.svg' },
-  socials: [
+  // Tempo's wordmark, as Tempo's other docs sites show it.
+  logoUrl: {
+    dark: '/lockup-dark.svg',
+    light: '/lockup-light.svg',
+  },
+  // The build is static, so no server renders `/api/og`. `scripts/og.ts` writes each image after the
+  // build, at the path that this URL names.
+  ogImageUrl: (path, { baseUrl }) =>
+    `${baseUrl}/og${path === '/' ? '/index' : path}.png`,
+  redirects: [
+    { destination: '/', source: '/docs' },
+    { destination: '/', source: '/docs/introduction/getting-started' },
+  ],
+  // The build is static. Cloudflare serves the files of `dist/public`, and the Worker of
+  // `src/server/` serves only the routes of the demos.
+  renderStrategy: 'full-static',
+  // The order of the items is the order of the sidebar.
+  sidebar: [
     {
-      icon: 'github',
-      link: 'https://github.com/tempoxyz/accounts',
+      items: [
+        item({ icon: 'lightning', link: '/', text: 'Getting started' }),
+        item({
+          icon: 'swap-horizontal',
+          link: '/docs/guides/migration',
+          text: 'Migration from v0',
+        }),
+      ],
+      text: 'Introduction',
+    },
+    {
+      items: [
+        item({
+          icon: 'browser-window',
+          link: '/docs/guides/dialog',
+          text: 'Dialog',
+        }),
+        item({
+          icon: 'log-in',
+          link: '/docs/guides/redirect',
+          text: 'Redirect (Web)',
+        }),
+        item({
+          icon: 'smartphone',
+          link: '/docs/guides/mobile',
+          text: 'Redirect (Mobile)',
+        }),
+        item({
+          icon: 'server',
+          link: '/docs/guides/backend',
+          text: 'Redirect (Backend)',
+        }),
+        item({
+          icon: 'ethereum',
+          link: '/docs/guides/siwe',
+          text: 'Sign-In With Ethereum',
+        }),
+        item({ icon: 'laptop', link: '/docs/guides/cli', text: 'CLI' }),
+      ],
+      text: 'Sign-in flows',
+    },
+    {
+      items: [
+        // The topics of this section are in alphabetical order.
+        topic({
+          guides: [
+            {
+              link: '/docs/guides/access-keys/authorize-access-keys',
+              text: 'Authorize access keys',
+            },
+            {
+              link: '/docs/guides/access-keys/revoke-access-keys',
+              text: 'Revoke access keys',
+            },
+            {
+              link: '/docs/guides/access-keys/bind-challenges',
+              text: 'Bind challenges',
+            },
+          ],
+          icon: 'key',
+          link: '/docs/guides/access-keys',
+          text: 'Access keys',
+        }),
+        topic({
+          guides: [
+            {
+              link: '/docs/guides/connections/pay-for-users',
+              text: 'Pay for users',
+            },
+            {
+              link: '/docs/guides/connections/serve-access-keys',
+              text: 'Serve access keys',
+            },
+            {
+              link: '/docs/guides/connections/revoke-connections',
+              text: 'Revoke connections',
+            },
+          ],
+          icon: 'link',
+          link: '/docs/guides/connections',
+          text: 'Connections',
+        }),
+        topic({
+          guides: [
+            {
+              link: '/docs/guides/fee-sponsorship/use-tempo-api',
+              text: 'Use Tempo API',
+            },
+            {
+              link: '/docs/guides/fee-sponsorship/host-fee-payers',
+              text: 'Host fee payers',
+            },
+          ],
+          icon: 'pay-by-hand',
+          link: '/docs/guides/fee-sponsorship',
+          text: 'Fee sponsorship',
+        }),
+        item({
+          icon: 'mcp',
+          link: '/docs/guides/mcp/charge-tool-calls',
+          text: 'MCP',
+        }),
+        topic({
+          guides: [
+            {
+              link: '/docs/guides/sessions/self-managed',
+              text: 'Self-managed',
+            },
+            { link: '/docs/guides/sessions/mpp', text: 'MPP' },
+          ],
+          icon: 'pulse',
+          link: '/docs/guides/sessions',
+          text: 'Payment sessions',
+        }),
+        topic({
+          guides: [
+            {
+              link: '/docs/guides/payments/self-managed',
+              text: 'Self-managed',
+            },
+            { link: '/docs/guides/payments/mpp', text: 'MPP' },
+          ],
+          icon: 'arrow-up-right',
+          link: '/docs/guides/payments',
+          text: 'Payments',
+        }),
+        item({
+          icon: 'react',
+          link: '/docs/guides/react/manage-sessions',
+          text: 'React',
+        }),
+        topic({
+          guides: [
+            {
+              link: '/docs/guides/subscriptions/self-managed',
+              text: 'Self-managed',
+            },
+            { link: '/docs/guides/subscriptions/mpp', text: 'MPP' },
+          ],
+          icon: 'repeat',
+          link: '/docs/guides/subscriptions',
+          text: 'Subscriptions',
+        }),
+        topic({
+          guides: [
+            {
+              link: '/docs/guides/user-session/restore-sessions',
+              text: 'Restore sessions',
+            },
+            {
+              link: '/docs/guides/user-session/store-sessions',
+              text: 'Store sessions',
+            },
+          ],
+          icon: 'id-card',
+          link: '/docs/guides/user-session',
+          text: 'User session',
+        }),
+        item({ icon: 'viem', link: '/docs/guides/viem', text: 'Viem' }),
+        item({ icon: 'wagmi', link: '/docs/guides/wagmi', text: 'Wagmi' }),
+      ],
+      text: 'Tasks after sign-in',
+    },
+    {
+      items: [
+        topic({
+          guides: [
+            { link: '/docs/guides/identity/read-users', text: 'Read users' },
+            {
+              link: '/docs/guides/identity/verify-id-tokens',
+              text: 'Verify ID tokens',
+            },
+          ],
+          icon: 'user',
+          text: 'Identity',
+        }),
+        topic({
+          guides: [
+            {
+              link: '/docs/guides/api-authentication/authenticate-requests',
+              text: 'Authenticate requests',
+            },
+            {
+              link: '/docs/guides/api-authentication/use-session-cookies',
+              text: 'Use session cookies',
+            },
+            {
+              link: '/docs/guides/api-authentication/bind-dpop-keys',
+              text: 'Bind DPoP keys',
+            },
+          ],
+          icon: 'shield-check',
+          text: 'API authentication',
+        }),
+        topic({
+          guides: [
+            {
+              link: '/docs/guides/account-proof/sign-challenges',
+              text: 'Sign challenges',
+            },
+            {
+              link: '/docs/guides/account-proof/verify-signed-messages',
+              text: 'Verify signed messages',
+            },
+          ],
+          icon: 'signed-file',
+          text: 'Account proof',
+        }),
+        topic({
+          guides: [
+            { link: '/docs/guides/mpp/prove-accounts', text: 'Prove accounts' },
+            {
+              link: '/docs/guides/mpp/attribute-payments',
+              text: 'Attribute payments',
+            },
+          ],
+          icon: 'mpp',
+          text: 'MPP',
+        }),
+        topic({
+          guides: [
+            {
+              link: '/docs/guides/sign-out/end-app-sessions',
+              text: 'End app sessions',
+            },
+            {
+              link: '/docs/guides/sign-out/end-all-sessions',
+              text: 'End all sessions',
+            },
+            {
+              link: '/docs/guides/sign-out/end-backend-sessions',
+              text: 'End backend sessions',
+            },
+          ],
+          icon: 'log-out',
+          text: 'Sign-out',
+        }),
+      ],
+      text: 'Identity',
+    },
+    {
+      items: [
+        item({
+          icon: 'flask',
+          link: '/docs/guides/testing',
+          text: 'End-to-end tests',
+        }),
+      ],
+      text: 'Testing',
     },
   ],
-  title: 'Tempo Accounts SDK',
-  titleTemplate: '%s | Tempo Accounts SDK',
-  topNav: [
-    { text: 'Docs', link: '/docs' },
-    { text: 'Examples', link: 'https://github.com/tempoxyz/accounts/tree/main/examples' },
-    { text: 'Tempo', link: 'https://docs.tempo.xyz' },
-  ],
-  twoslash: {
-    throws: false,
-    twoslashOptions: {
-      compilerOptions: {
-        moduleResolution: 100,
-      },
-    },
-  },
+  socials: [{ icon: 'github', link: repository }],
+  title: 'Accounts',
+  titleTemplate: '%s – Accounts SDK for Tempo',
 })
 
-export default config
+/**
+ * Returns the sidebar item of a page, with its icon before the text. An item is disabled until
+ * `src/pages` holds the page of its `link`.
+ */
+function item(options: item.Options) {
+  const { icon, link, text } = options
+
+  return { badge: badge(icon), ...page(link), text }
+}
+
+declare namespace item {
+  type Options = {
+    /** Name of an SVG file of `icons/`, without its extension. */
+    icon: string
+    /** Path of the page, which is also the path of its MDX file under `src/pages`. */
+    link: string
+    /** Label of the item. */
+    text: string
+  }
+}
+
+/**
+ * Returns the sidebar group of a topic, with its icon before the text. The group starts collapsed.
+ * It holds the "Overview" item of the topic's `link`, if the topic has one, then one item for each
+ * of its guides. An item is disabled until `src/pages` holds the page of its `link`.
+ */
+function topic(options: topic.Options) {
+  const { guides, icon, link, text } = options
+
+  // Vocs expands a group only for the page of an item, not for the page of a group's own `link`,
+  // so the overview is an item of the group.
+  const items = link ? [{ link, text: 'Overview' }, ...guides] : guides
+
+  return {
+    badge: badge(icon),
+    collapsed: true,
+    items: items.map((item) => ({ ...page(item.link), text: item.text })),
+    text,
+  }
+}
+
+declare namespace topic {
+  type Options = {
+    /** Guides of the topic, in the order of the sidebar. */
+    guides: readonly {
+      /** Path of the page, which is also the path of its MDX file under `src/pages`. */
+      link: string
+      /** Label of the guide. */
+      text: string
+    }[]
+    /** Name of an SVG file of `icons/`, without its extension. */
+    icon: string
+    /** Path of the overview page of the topic, such as `/docs/guides/access-keys`. Without it, the group holds no "Overview" item. */
+    link?: string | undefined
+    /** Label of the topic. */
+    text: string
+  }
+}
+
+/** Returns the badge that holds the icon of `icons/<name>.svg`. */
+function badge(name: string) {
+  // Vocs renders an item's icon only in its badge. `src/pages/_root.css` moves it before the text.
+  return {
+    icon: fs.readFileSync(
+      new URL(`./icons/${name}.svg`, import.meta.url),
+      'utf8',
+    ),
+  }
+}
+
+/**
+ * Returns the link of the page at `link`, or `disabled` until `src/pages` holds the page. Vocs'
+ * pagination links each item with a `link`, also a disabled one, so an item without a page holds
+ * no link.
+ */
+function page(link: string) {
+  // The page of `/` is `src/pages/index.mdx`.
+  const file = link === '/' ? '/index' : link
+  if (fs.existsSync(new URL(`./src/pages${file}.mdx`, import.meta.url)))
+    return { link }
+  return { disabled: true }
+}

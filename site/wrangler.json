@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "accounts-site",
+  "assets": {
+    "directory": "./dist/public",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
+  },
+  "compatibility_date": "2026-09-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "kv_namespaces": [{ "binding": "STORE" }],
+  "main": "./src/server/Worker.ts",
+  "preview_urls": true,
+  "routes": [{ "custom_domain": true, "pattern": "accounts.tempo.xyz" }],
+  "workers_dev": true
+}

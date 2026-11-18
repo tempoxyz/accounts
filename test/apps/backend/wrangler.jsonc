@@ -1,0 +1,36 @@
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  // The Worker serves the pages' assets, so each page calls the Worker at its own origin.
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*",
+      "/apis/*",
+      "/app/*",
+      "/assertion/*",
+      "/fund/*",
+      "/headless/*",
+      "/page/*",
+      "/relay/*",
+      "/short/*",
+    ],
+  },
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // One object for each session ID holds the session, so its refreshes share one instance. One
+  // object for each connection of an API holds its access keys.
+  "durable_objects": {
+    "bindings": [
+      { "class_name": "CONNECTIONS", "name": "CONNECTIONS" },
+      { "class_name": "SESSIONS", "name": "SESSIONS" },
+    ],
+  },
+  // The routes of a logout token and of an access key request keep their records here.
+  "kv_namespaces": [{ "binding": "KEPT", "id": "kept" }],
+  "main": "./worker.ts",
+  "migrations": [
+    { "new_sqlite_classes": ["SESSIONS"], "tag": "v1" },
+    { "new_sqlite_classes": ["CONNECTIONS"], "tag": "v2" },
+  ],
+  "name": "accounts-test-app-backend",
+}

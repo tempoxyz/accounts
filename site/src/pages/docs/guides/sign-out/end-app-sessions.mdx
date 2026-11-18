@@ -1,0 +1,246 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
+import { PageCard } from '../../../../components/PageCard.tsx'
+import { SourceLink } from '../../../../components/SourceLink.tsx'
+
+# End app sessions [An app signs the user out. A second call revokes the session's access key.]
+
+## Overview
+
+<SourceLink name="signOut" path="src/Accounts.ts">`accounts.signOut()`</SourceLink> ends the app's [session](/docs/guides/user-session), and revokes its refresh token (RFC 7009). The user's Tempo ID session stays, so other apps stay signed in. The [access token](/docs/guides/api-authentication/authenticate-requests) and the [access key](/docs/guides/access-keys) outlive the sign-out, since APIs verify the token on their own, and the chain holds the access key:
+
+| Part of the session | After <SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink> |
+| ------------------- | ------------------------------------------------------------------------------ |
+| Session of the app  | Empty at once. The saved session is deleted                                    |
+| Refresh token       | Revoked at Tempo ID                                                            |
+| Access token        | Valid until it expires, at most 5 minutes later                                |
+| Access key          | Valid until its expiry, unless the app revokes it                              |
+| Tempo ID session    | Stays. The next sign-in asks for no email address                              |
+
+The demo signs a user in and out of the app, and shows the session's status after each step.
+
+<Demo name="EndAppSessions" source="examples/web" title="End an app session" />
+
+## Walkthrough
+
+The [`web`](https://github.com/tempoxyz/accounts/tree/main/examples/web) example runs these steps in a React app.
+
+::::steps
+
+### Create the instance
+
+The <SourceLink name="react" path="src/react/index.ts">`react`</SourceLink> plugin adds the <SourceLink name="useSession" path="src/react/index.ts">`useSession`</SourceLink> hook.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+### Render the status
+
+<SourceLink name="useSession" path="src/react/index.ts">`useSession`</SourceLink> returns the session and its status, such as `pending` before the restore ends, and renders again at each change.
+Outside React, <SourceLink name="session.status" path="src/Accounts.ts">`session.status`</SourceLink> holds the same status, and its listener receives the new status and the previous one.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session, status } = accounts.useSession() // [!code hl]
+
+  if (status === 'pending') return <p>Checking the session…</p> // [!code hl]
+  if (!session)
+    return (
+      <button onClick={() => void accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+  return <p>Signed in as {session.user.email}</p>
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Sign the user out
+
+<SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink> empties the session at once, also when the revocation fails.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session, status } = accounts.useSession()
+
+  if (status === 'pending') return <p>Checking the session…</p>
+  if (!session)
+    return (
+      <button onClick={() => void accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+  return <p>Signed in as {session.user.email}</p> // [!code --]
+  return ( // [!code ++]
+    <main> {/* [!code ++] */}
+      <p>Signed in as {session.user.email}</p> {/* [!code ++] */}
+      <button onClick={() => void accounts.signOut()} type="button"> {/* [!code ++] */}
+        Sign out {/* [!code ++] */}
+      </button> {/* [!code ++] */}
+    </main> // [!code ++]
+  ) // [!code ++]
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+The instance saves a signed-out mark, so a reload restores no session until the next sign-in.
+
+If Tempo ID does not answer the revocation, such as offline, <SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink> rejects with `server_error` and status 0, but the session is empty. The store keeps the refresh token for the next <SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink> to revoke.
+
+:::warning
+If the app deletes the saved session in place of <SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink>, the refresh token stays valid until the end of the app's [refresh token lifetime](https://github.com/tempoxyz/id/blob/main/docs/access-tokens.md#refresh-token-lifetime).
+:::
+
+### Revoke the access key
+
+A sign-out leaves the access key valid on the chain. To revoke it, call <SourceLink name="dialog.revokeAccessKey" path="src/plugins/dialog.ts">`dialog.revokeAccessKey`</SourceLink> before <SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink>, in a click handler, since a popup opens only within the gesture. The account owner signs the revocation on Tempo ID's approval page, because the chain refuses keychain changes from an access key.
+
+:::code-group
+
+```tsx [SignOut.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignOut() {
+  async function signOut() {
+    const { session } = accounts.session.status.get()
+
+    if (session?.accessKey) await accounts.dialog.revokeAccessKey() // [!code hl]
+    await accounts.signOut()
+  }
+
+  return (
+    <button onClick={signOut} type="button">
+      Sign out
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  // Each sign-in requests an access key that sends up to 100 OUSD for a day.
+  accessKey: () => ({
+    expiry: '1d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+It returns the revoking transaction's hash, or `null` for an access key revoked already. A Cancel throws <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with `access_denied`, and the session stays.
+
+With the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, <SourceLink name="accessKey" path="src/plugins/viem.ts">`accessKey.revokeSync`</SourceLink> revokes the session's own access key with no page, for any sign-in plugin. It sends the session's access token, and Tempo ID's cloud wallet signs as the owner.
+
+The session then keeps the access key without its private key. A transaction before the sign-out thus throws <SourceLink name="AccessKeyRequiredError" path="src/Accounts.ts">`Accounts.AccessKeyRequiredError`</SourceLink>, and on a page a transfer opens Tempo ID's payment page.
+
+An account that only a passkey owns throws <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with `webauthn_required`. Revoke its access key in the dialog.
+
+::::
+
+## Use cases
+
+The use case sets the only option of <SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink>.
+
+### Sign out of every app
+
+<SourceLink name="signOut.everywhere" path="src/Accounts.ts">`everywhere`</SourceLink> also ends the user's Tempo ID session, which signs the user out of every app. Only a first-party app may set it, as [End all sessions](/docs/guides/sign-out/end-all-sessions) shows.
+
+:::code-group
+
+```tsx [SignOut.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignOut() {
+  return (
+    <button
+      onClick={() => accounts.signOut({ everywhere: true })} // [!code hl]
+      type="button"
+    >
+      Sign out of every app
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'example-app',
+})
+```
+
+:::
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="End the Tempo ID session of the user, for every app."
+    icon="log-out"
+    title="End all sessions"
+    to="/docs/guides/sign-out/end-all-sessions"
+  />
+  <PageCard
+    description="End a session that a backend holds."
+    icon="server"
+    title="End backend sessions"
+    to="/docs/guides/sign-out/end-backend-sessions"
+  />
+  <PageCard
+    description="Change or revoke an access key in the dialog."
+    icon="key"
+    title="Revoke access keys"
+    to="/docs/guides/access-keys/revoke-access-keys"
+  />
+  <PageCard
+    description="Restore the session at load, and read its status."
+    icon="id-card"
+    title="Restore sessions"
+    to="/docs/guides/user-session/restore-sessions"
+  />
+</Cards>

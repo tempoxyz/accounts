@@ -1,0 +1,17 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // The Worker serves the page's assets, so the page calls the merchant at its own origin.
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/v1/*"],
+  },
+  "compatibility_date": "2026-10-01",
+  // `process.env` holds the vars and the secrets, such as `MPP_SECRET_KEY` from `.env`.
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./worker.ts",
+  "name": "tempo-id-example-mpp-charge",
+  // The address that receives each charge. A deployment names the merchant's own address.
+  "vars": {
+    "RECIPIENT": "0x000000000000000000000000000000000000dEaD",
+  },
+}

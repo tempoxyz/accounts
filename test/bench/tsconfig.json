@@ -1,0 +1,8 @@
+{
+  // Node runs each module as it is, so a module imports another by its `.ts` file. The starters and
+  // the oracles install their own packages in each trial.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "allowImportingTsExtensions": true },
+  "exclude": ["oracles", "starters"],
+  "include": ["."]
+}

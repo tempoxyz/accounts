@@ -1,0 +1,15 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2026-10-01",
+  // `process.env` holds the vars and the secrets, such as `MPP_SECRET_KEY` from `.dev.vars`.
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./server.ts",
+  "name": "tempo-id-example-mcp",
+  "vars": {
+    // The address that receives each charge. A deployment names its own address.
+    "RECIPIENT": "0x000000000000000000000000000000000000dEaD",
+    // The identifier of the resource that Tempo ID registers for the server: the `https` URL of
+    // `/mcp` on the deployment.
+    "RESOURCE": "https://mcp.example.com/mcp",
+  },
+}

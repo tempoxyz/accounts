@@ -1,0 +1,33 @@
+import { Cards } from 'vocs'
+import { PageCard } from '../../../components/PageCard.tsx'
+
+# Access keys [An access key signs for the user's Tempo Account within limits that the user approves.]
+
+## Overview
+
+An access key signs transactions for the user's Tempo Account with no wallet prompt. The account owner approves it once on Tempo ID's approval page, with a spending limit and an expiry. The chain refuses each transfer above the limit.
+
+An app needs an access key to send [payments](/docs/guides/payments), pay [subscriptions](/docs/guides/subscriptions), or send transactions with [Viem](/docs/guides/viem). An app that only signs users in needs none.
+
+## Guides
+
+<Cards>
+  <PageCard
+    description="Name what an access key may spend, and request it at sign-in or later."
+    icon="key"
+    title="Authorize access keys"
+    to="/docs/guides/access-keys/authorize-access-keys"
+  />
+  <PageCard
+    description="Change the limits of an access key, or revoke it."
+    icon="key"
+    title="Revoke access keys"
+    to="/docs/guides/access-keys/revoke-access-keys"
+  />
+  <PageCard
+    description="Bind a server's challenge to the access key of a sign-in."
+    icon="key"
+    title="Bind challenges"
+    to="/docs/guides/access-keys/bind-challenges"
+  />
+</Cards>

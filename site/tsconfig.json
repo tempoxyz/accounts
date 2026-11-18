@@ -1,11 +1,22 @@
 {
-  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "module": "esnext",
+    "target": "ESNext",
+    "types": ["@cloudflare/workers-types", "node", "vite/client"],
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "module": "ESNext",
+    "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
     "noEmit": true,
-    "types": ["node", "unplugin-icons/types/react"]
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
   },
-  "include": ["**/*.ts", "**/*.tsx", "**/*.mdx"]
+  "include": ["scripts", "src", "vite.config.ts", "vocs.config.ts"],
+  "exclude": ["src/pages.gen.ts"]
 }
