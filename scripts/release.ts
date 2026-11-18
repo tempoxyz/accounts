@@ -29,7 +29,7 @@ const title = /^(?:dogfood: )?(?<type>[a-z]+)(?:\([^)]*\))?(?<breaking>!)?: /
 /** A release version, such as `1.20261118194700.0-86519034c` or the earlier `0.21.1`. The `1.0.0-alpha.…` versions don't match. */
 const release = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9a-z]+)?$/
 
-/** A version this scheme publishes under `alpha`, such as `1.20261118194700.0-86519034c`. */
+/** A version this scheme publishes under `latest`, such as `1.20261118194700.0-86519034c`. */
 const channel = /^[1-9]\d*\.\d{14}\.0-[0-9a-z]+$/
 
 /**
@@ -155,7 +155,7 @@ function main() {
   const summary = (line: string) =>
     Fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY!, `${line}\n`)
 
-  // Only the tip of main releases, since the `alpha` dist-tag follows each release: an older commit, such as
+  // Only the tip of main releases, since the `latest` dist-tag follows each release: an older commit, such as
   // a rerun, would publish its code over a newer one. A newer release includes it.
   const tip = run('gh', [
     'api',
@@ -166,12 +166,14 @@ function main() {
   if (tip !== sha)
     return summary(`Skipped \`${sha}\`, since main moved to \`${tip}\`.`)
 
-  // Releases go under the `alpha` dist-tag, and `latest` stays at `0.21.1` until 1.0. The
-  // `1.0.0-alpha.…` versions from before this scheme count from `latest` instead.
-  const alpha = run('npm', ['view', 'accounts', 'dist-tags.alpha'])
-  const latest = release.test(alpha)
-    ? alpha
-    : run('npm', ['view', 'accounts', 'dist-tags.latest'])
+  // Releases go under the `latest` dist-tag. Until the first one, `latest` holds `0.21.1`, and the
+  // releases of this scheme are under `alpha`, so the first release counts from `alpha`.
+  const tagged = run('npm', ['view', 'accounts', 'dist-tags.latest'])
+  const latest = (() => {
+    if (channel.test(tagged)) return tagged
+    const alpha = run('npm', ['view', 'accounts', 'dist-tags.alpha'])
+    return channel.test(alpha) ? alpha : tagged
+  })()
 
   // A rerun after npm took this commit's version resumes that release: the GitHub release runs again,
   // and Publish skips the version that npm already has.

@@ -1,8 +1,8 @@
 # Publishes each push to main to npm, through npm trusted publishing, as
-# `<breaking>.<commit time>.0-<short SHA>` under `alpha`, such as `1.20261118194700.0-86519034c`, with
+# `<breaking>.<commit time>.0-<short SHA>` under `latest`, such as `1.20261118194700.0-86519034c`, with
 # a GitHub release that lists the squash commit titles since the last one. `scripts/release.ts`
 # picks the version: a breaking title (`feat!:`) raises `<breaking>`, and `ci:` and `test:` commits
-# release nothing alone, unless Main runs by hand. `latest` stays at `0.21.1` until 1.0.
+# release nothing alone, unless Main runs by hand.
 name: Release
 
 on:
@@ -146,12 +146,12 @@ jobs:
           # npm stages a version while it processes it, and refuses to publish a staged version
           # again, so a rerun in that time succeeds.
           status=0
-          npm publish "$pack" --access public --tag alpha > "$RUNNER_TEMP/publish.log" 2>&1 || status=$?
+          npm publish "$pack" --access public --tag latest > "$RUNNER_TEMP/publish.log" 2>&1 || status=$?
           cat "$RUNNER_TEMP/publish.log"
           if [ "$status" != 0 ] && ! grep -q 'previously staged version' "$RUNNER_TEMP/publish.log"; then
             exit 1
           fi
-          echo "Published \`accounts@$VERSION\` under \`alpha\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "Published \`accounts@$VERSION\` under \`latest\`." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create release
         if: steps.current.outputs.publish == 'true'

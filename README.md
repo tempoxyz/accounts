@@ -14,9 +14,6 @@
 
 ---
 
-> [!WARNING]
-> `accounts@1` is in alpha. Its API is not stable yet.
-
 ## Quick Prompt
 
 Prompt your agent:
@@ -128,7 +125,7 @@ pnpm test             # run tests
 
 ### Releases
 
-Each push to `main` publishes to npm through trusted publishing, from `.github/workflows/release.yml`, as `<breaking>.<commit time>.0-<short SHA>` under `alpha`, such as `1.20261118194700.0-86519034c`, so `accounts` installs the current commit of `main`. A breaking pull request title, such as `feat!:`, raises `<breaking>`. `scripts/release.ts` picks the version. `latest` stays at `0.21.1` until 1.0.
+Each push to `main` publishes to npm through trusted publishing, from `.github/workflows/release.yml`, as `<breaking>.<commit time>.0-<short SHA>` under `latest`, such as `1.20261118194700.0-86519034c`, so `accounts` installs the current commit of `main`. A breaking pull request title, such as `feat!:`, raises `<breaking>`. `scripts/release.ts` picks the version.
 
 ## License
 
