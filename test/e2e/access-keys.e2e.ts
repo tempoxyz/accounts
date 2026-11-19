@@ -961,8 +961,8 @@ test.describe('access keys', () => {
     for (const form of [
       {
         expiry: () => undefined,
-        name: 'the 30 days that Tempo ID fills for an absent expiry',
-        seconds: 30 * 24 * 60 * 60,
+        name: 'the day that the package fills for an absent expiry',
+        seconds: 24 * 60 * 60,
         tolerance: 120,
       },
       {

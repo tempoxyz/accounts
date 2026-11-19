@@ -25,8 +25,10 @@ const storageKey = 'test-app-backend:api'
 
 /** Creates the page's instance, and renders the page. */
 export function start() {
+  // The API holds the connection's access key, so the page requests none of its own.
   const accounts = Accounts.create({
     ...App.options,
+    accessKey: false,
     clientId: import.meta.env.VITE_CLIENT_ID_PAGE,
     plugins: [redirect(), react()],
     redirectUri: `${window.location.origin}/connected/`,
