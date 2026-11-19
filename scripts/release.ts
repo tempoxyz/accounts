@@ -108,14 +108,27 @@ function notes(commits: readonly Commit[]): string {
 
 /**
  * Returns the entry of `commit`: the `## Changelog` section of its pull request's description, which
- * the squash commit's body holds, or else its title without its type and pull request number.
+ * the squash commit's body holds, or else its title without its type and pull request number. The
+ * section ends at the next heading or at the commit's trailers, such as `Co-authored-by:`. The
+ * entry's first paragraph is one line, so the notes put its reference at the end of that paragraph.
  */
 function entry(commit: Commit): string {
-  const changelog = /^## Changelog[ \t]*\n(?<text>[\s\S]*?)(?=^## |(?![\s\S]))/m
-    .exec(commit.message)
-    ?.groups?.text?.trim()
-    .replace(/^[-*] /, '')
-  if (changelog) return changelog
+  const paragraphs = commit.message.trimEnd().split(/\n[ \t]*\n/)
+  // Git reads the last paragraph as trailers when each of its lines is `Token: value`.
+  const trailers = paragraphs
+    .at(-1)!
+    .split('\n')
+    .every((line) => /^(?:BREAKING CHANGE|[A-Za-z][\w-]*): /.test(line))
+  const body = (trailers ? paragraphs.slice(0, -1) : paragraphs).join('\n\n')
+  const changelog =
+    /^## Changelog[ \t]*\n(?<text>[\s\S]*?)(?=^#{1,6} |(?![\s\S]))/m
+      .exec(body)
+      ?.groups?.text?.trim()
+      .replace(/^[-*] /, '')
+  if (changelog) {
+    const [first, ...rest] = changelog.split(/\n[ \t]*\n/)
+    return [first!.replace(/\s*\n\s*/g, ' '), ...rest].join('\n\n')
+  }
   const text = subject(commit)
     .replace(title, '')
     .replace(/ \(#\d+\)$/, '')
