@@ -129,7 +129,7 @@ describe('resolve', () => {
     ).toMatchInlineSnapshot(`
       "### Features
 
-      - Add Tab (#2)
+      - Keeps  and  as they are.BREAKING CHANGE: no. (#2)
       "
     `)
   })
@@ -168,9 +168,7 @@ describe('resolve', () => {
 
     expect(Release.resolve({ cwd, latest: '0.21.1', sha })?.notes)
       .toMatchInlineSnapshot(`
-        "### Other changes
-
-        - Fix a link (#2)
+        "- docs: fix a link (#2) (29bdc40)
         "
       `)
   })
@@ -209,20 +207,18 @@ describe('resolve', () => {
       `[Error: npm's latest version 0.0.0-pr-1-20261118000000 is not a release version.]`,
     )
   })
-  test('lists each changelog entry under its section, without trailers, and a commit without one by its title', () => {
+  test('lists the description of each feat, fix, perf, and breaking commit under its section', () => {
     const { commit, cwd } = repository()
     const base = commit('feat: add Tab (#1)')
     commit(
-      'feat(web): add Tabs (#2)\n\nAdds Tabs.\n\n## Changelog\n\n- Added `Tabs`, which wrap\nover two lines.\n\n---------\n\nCo-authored-by: CI <ci@tempo.xyz>',
+      'feat(web): add Tabs (#2)\n\nAdded `Tabs`, which wrap\nover two lines.\n\n### How to test\n\n`pnpm test`\n\n---------\n\nCo-authored-by: CI <ci@tempo.xyz>',
     )
     commit(
-      'refactor: drop Tab (#3)\n\n## Changelog\n\nRemoved `Tab`.\n\n```ts\nTabs.from()\n```\n\nBREAKING CHANGE: use Tabs.\nCo-authored-by: CI <ci@tempo.xyz>',
+      'refactor: drop Tab (#3)\n\nRemoved `Tab`.\n\n```ts\nTabs.from()\n```\n\nBREAKING CHANGE: use Tabs.\nCo-authored-by: CI <ci@tempo.xyz>',
     )
     commit('fix: pad Tab (#4)')
     commit('ci: shard tests (#5)')
-    const sha = commit(
-      'docs: fix a link\n\n## Changelog\nFixed a link in the docs.\n\n### How to test\n\nOpen the page.',
-    )
+    const sha = commit('chore(deps): bump ox (#6)\n\nBumps ox.')
 
     expect(
       Release.resolve({ base, cwd, latest: '1.20261118190100.0-abcdef12', sha })
@@ -243,10 +239,6 @@ describe('resolve', () => {
       ### Fixes
 
       - Pad Tab (#4)
-
-      ### Other changes
-
-      - Fixed a link in the docs. (3c8713f)
       "
     `)
   })

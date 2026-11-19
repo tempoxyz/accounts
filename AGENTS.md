@@ -333,8 +333,8 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - Name what changed, with codebase identifiers. State the change, not the reason.
 - Each message stands alone.
 - Keep the PR title accurate, since it becomes the squash commit.
-- Keep PR bodies short: the problem, the behavior, one example, one validation line.
-- End each PR body with a `## Changelog` section: one entry for app developers, in the past tense, such as "Added `loginHint` to `dialog.signIn`." Name exports in backticks. For a breaking change, add the migration and at most one short `ts` block. The release notes list it, and fall back to the PR title without it. Skip it for `ci:` and `test:` PRs.
+- Keep PR bodies short. Open with the release note: what changed for an app, in the past tense, such as "Added `loginHint` to `dialog.signIn`." Name exports in backticks. For a breaking change, add the migration and at most one short `ts` block.
+- Put the problem, the example, and the validation under headings, such as `## How to test`. The release notes take the body only up to its first heading.
 - Never force push or amend a pushed commit.
 
 **State machine**
@@ -372,8 +372,8 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - Pin every dependency in the `pnpm-workspace.yaml` catalog, and reference it as `catalog:`.
 - Optional platform libraries (React, wagmi, Expo) are optional peers. `mppx` is a peer, since every instance holds the `mpp` plugin.
 - zile builds the package. `postinstall` runs `zile dev`.
-- Each push to `main` publishes `<breaking>.<commit time>.<n>` under `latest`, such as `1.20261118194700.0`, so `accounts` installs the current commit of `main`, without waiting on CI, with a GitHub release that lists the `## Changelog` entry of each pull request since the last one. `.github/workflows/release.yml` describes the release, and `scripts/release.ts` picks the version.
-- The pull request title picks the release notes' section, and the `## Changelog` section of its body is the entry. A breaking title (`feat!:`, or `BREAKING CHANGE:` in the commit body) raises `<breaking>`. Describe a breaking change in the pull request body with each change in a `diff` fence: the old usage as removed lines, and the new usage as added lines.
+- Each push to `main` publishes `<breaking>.<commit time>.<n>` under `latest`, such as `1.20261118194700.0`, so `accounts` installs the current commit of `main`, without waiting on CI, with a GitHub release that lists the description of each `feat`, `fix`, `perf`, and breaking pull request since the last one. `.github/workflows/release.yml` describes the release, and `scripts/release.ts` picks the version.
+- The pull request title's type decides whether the release notes list the pull request, and under which section. Its description is the entry. A breaking title (`feat!:`, or `BREAKING CHANGE:` in the commit body) raises `<breaking>`. Describe a breaking change in the pull request body with each change in a `diff` fence: the old usage as removed lines, and the new usage as added lines.
 - `ci:` and `test:` commits release nothing alone. Running Main by hand releases main's tip anyway.
 - Add no changeset. `.changeset/` keeps the notes written for `1.0.0` before this scheme, and no workflow reads it.
 - Prettier is banned. Vite+ runs oxfmt, oxlint, and Vitest from `vite.config.ts`.

@@ -12,9 +12,9 @@
  *   later release's notes leave them out. A manual run of Main releases them anyway.
  * - Each release counts its commits from the `gitHead` that npm records for the last version. A rerun
  *   of a commit that npm already has resumes its release rather than publishing again.
- * - The notes list one past-tense entry per commit under a section per commit type, as the
- *   changesets releases did. Each entry is the `## Changelog` section of the pull request's
- *   description, which the squash commit's body holds, or else the commit's title.
+ * - The notes list each `feat`, `fix`, `perf`, and breaking commit under its section, as the
+ *   changesets releases did. Each entry is the pull request's past-tense description, which the
+ *   squash commit's body holds, up to its first heading.
  * - It runs before the dependencies install, and reads only Node.js, git, gh, and npm.
  *
  * `node scripts/release.ts resolve` writes the version to `GITHUB_OUTPUT` and the notes to
@@ -80,56 +80,65 @@ function timestamp(time: Date): string {
 }
 
 /**
- * Returns the release notes for `commits`, as the changesets releases read: one entry per commit
- * under a heading per section, newest first. GitHub links each `(#123)` to its pull request.
+ * Returns the release notes for `commits`, as the changesets releases read: one entry per `feat`,
+ * `fix`, `perf`, or breaking commit under a heading per section, newest first. GitHub links each
+ * `(#123)` to its pull request.
  */
 function notes(commits: readonly Commit[]): string {
-  // A forced release of only `ci` and `test` commits lists them, so its notes are never empty.
-  const shipping = commits.filter((commit) => section(commit) !== undefined)
-  const listed = shipping.length > 0 ? shipping : commits
-
   const blocks = sections.flatMap((heading) => {
-    const items = listed
-      .filter((commit) => (section(commit) ?? 'Other changes') === heading)
+    const items = commits
+      .filter((commit) => section(commit) === heading)
       .map((commit) => {
-        const pr = /\(#(\d+)\)$/.exec(subject(commit))?.[1]
-        const reference = pr ? `#${pr}` : commit.sha.slice(0, 7)
         // An entry can span lines, such as a code block, which stays inside its bullet.
         const [first, ...rest] = entry(commit).split('\n')
         return [
-          `- ${first} (${reference})`,
+          `- ${first} (${reference(commit)})`,
           ...rest.map((line) => (line ? `  ${line}` : '')),
         ].join('\n')
       })
     return items.length === 0 ? [] : [`### ${heading}\n\n${items.join('\n')}`]
   })
+  // A release of only other commits, such as `chore` or a forced `ci`, lists their titles, so its
+  // notes are never empty.
+  if (blocks.length === 0)
+    return `${commits.map((commit) => `- ${subject(commit)} (${commit.sha.slice(0, 7)})`).join('\n')}\n`
   return `${blocks.join('\n\n')}\n`
 }
 
+/** Returns the pull request of `commit`, such as `#123`, or else its short SHA. */
+function reference(commit: Commit): string {
+  const pr = /\(#(\d+)\)$/.exec(subject(commit))?.[1]
+  return pr ? `#${pr}` : commit.sha.slice(0, 7)
+}
+
 /**
- * Returns the entry of `commit`: the `## Changelog` section of its pull request's description, which
- * the squash commit's body holds, or else its title without its type and pull request number. The
- * section ends at the next heading or at the commit's trailers, such as `Co-authored-by:`. The
- * entry's first paragraph is one line, so the notes put its reference at the end of that paragraph.
+ * Returns the entry of `commit`: its pull request's description, which the squash commit's body
+ * holds, up to its first heading and without its trailers, such as `Co-authored-by:`. Without a
+ * description, it is the title without its type and pull request number. The first paragraph is one
+ * line, so the notes put the reference at the end of that paragraph.
  */
 function entry(commit: Commit): string {
-  const paragraphs = commit.message.trimEnd().split(/\n[ \t]*\n/)
+  const paragraphs = commit.message
+    .trimEnd()
+    .split(/\n[ \t]*\n/)
+    .slice(1)
   // Git reads the last paragraph as trailers when each of its lines is `Token: value`.
-  const trailers = paragraphs
-    .at(-1)!
-    .split('\n')
-    .every((line) => /^(?:BREAKING CHANGE|[A-Za-z][\w-]*): /.test(line))
+  const trailers =
+    paragraphs.length > 0 &&
+    paragraphs
+      .at(-1)!
+      .split('\n')
+      .every((line) => /^(?:BREAKING CHANGE|[A-Za-z][\w-]*): /.test(line))
   const kept = trailers ? paragraphs.slice(0, -1) : paragraphs
   // A squash of several authors puts a `---------` line before their trailers.
   if (trailers && /^-{3,}$/.test(kept.at(-1)?.trim() ?? '')) kept.pop()
-  const body = kept.join('\n\n')
-  const changelog =
-    /^## Changelog[ \t]*\n(?<text>[\s\S]*?)(?=^#{1,6} |(?![\s\S]))/m
-      .exec(body)
-      ?.groups?.text?.trim()
-      .replace(/^[-*] /, '')
-  if (changelog) {
-    const [first, ...rest] = changelog.split(/\n[ \t]*\n/)
+  // Headed sections, such as `## How to test`, are for reviewers.
+  const description = kept
+    .join('\n\n')
+    .split(/^#{1,6} /m, 1)[0]!
+    .trim()
+  if (description) {
+    const [first, ...rest] = description.split(/\n[ \t]*\n/)
     return [first!.replace(/\s*\n\s*/g, ' '), ...rest].join('\n\n')
   }
   const text = subject(commit)
@@ -155,18 +164,16 @@ const sections = [
   'Features',
   'Fixes',
   'Performance',
-  'Other changes',
 ] as const
 
-/** Returns the section that lists `commit`, or `undefined` for a `ci` or `test` commit, which ships nothing. */
+/** Returns the section that lists `commit`, or `undefined` for a commit that the notes leave out, such as `chore` or `docs`. */
 function section(commit: Commit): (typeof sections)[number] | undefined {
   if (breaking(commit)) return 'Breaking changes'
   const type = title.exec(subject(commit))?.groups?.type
-  if (type === 'ci' || type === 'test') return undefined
   if (type === 'feat') return 'Features'
   if (type === 'fix') return 'Fixes'
   if (type === 'perf') return 'Performance'
-  return 'Other changes'
+  return undefined
 }
 
 function run(command: string, args: string[], cwd?: string): string {
