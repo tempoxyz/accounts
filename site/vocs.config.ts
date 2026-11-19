@@ -77,8 +77,9 @@ export default defineConfig({
         item({
           icon: 'browser-window',
           link: '/docs/guides/dialog',
-          text: 'Dialog',
+          text: 'Web',
         }),
+        item({ icon: 'laptop', link: '/docs/guides/cli', text: 'CLI' }),
         item({
           icon: 'smartphone',
           link: '/docs/guides/mobile',
@@ -94,7 +95,6 @@ export default defineConfig({
           link: '/docs/guides/siwe',
           text: 'Sign-In With Ethereum',
         }),
-        item({ icon: 'laptop', link: '/docs/guides/cli', text: 'CLI' }),
       ],
       text: 'Sign-in flows',
     },
