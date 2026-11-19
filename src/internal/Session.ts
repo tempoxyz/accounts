@@ -2612,7 +2612,9 @@ function fromSaved(
  * local session's access keys are no order, since a sign-in can add one that expires sooner.
  */
 function order(session: Session.Any) {
-  return Session.local(session) ? session.revision : session.expiresAt
+  if (!Session.local(session)) return session.expiresAt
+  // A local session saved before revisions orders before every revised one.
+  return session.revision ?? 0
 }
 
 /** Returns `promise` settled: `undefined` when it resolves, its error when it rejects. */

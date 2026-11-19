@@ -514,6 +514,41 @@ describe('local.remove during a sign-in', () => {
 })
 
 describe('local across instances', () => {
+  test('adopts a sign-in over a session that a release without revisions saved', async () => {
+    const folder = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-local-'))
+    const path = Path.join(folder, 'accounts.json')
+    const options = {
+      chain: 4217,
+      chains: [4217, 42431],
+      clientId: 'cli:mercator',
+      plugins: [local(), viem()],
+      store: Store.file(path),
+      url: 'http://127.0.0.1:9',
+    } as const
+    await Accounts.create(options).local.create()
+    // The saved session as such a release wrote it: without `revision`.
+    const file = JSON.parse(await Fs.readFile(path, 'utf8')) as Record<
+      string,
+      { value: { state?: { session?: { revision?: number } } } }
+    >
+    for (const entry of Object.values(file))
+      delete entry.value.state?.session?.revision
+    await Fs.writeFile(path, JSON.stringify(file))
+    const first = Accounts.create(options)
+    const second = Accounts.create(options)
+    await Promise.all([first.session.get(), second.session.get()])
+
+    await first.switchChain({ chainId: 42431 })
+    const added = await first.local.signIn({ accessKey: { expiry: '1h' } })
+    await second.switchChain({ chainId: 42431 })
+    const saved = await Accounts.create(options).session.get()
+
+    expect(saved!.accessKey!.keyAuthorization).toEqual(
+      added.accessKey!.keyAuthorization,
+    )
+    await Fs.rm(folder, { force: true, recursive: true })
+  })
+
   test('remove signs out the instance whose owner key it deletes, of two that share the plugin', async () => {
     const plugin = local()
     const create = () =>
