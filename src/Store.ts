@@ -25,7 +25,7 @@ export type Store = {
    * Whether only the process that created the store holds its values, as `Store.memory` does.
    * In a browser, a page load empties such a store, so `redirect.signIn` without `open` refuses
    * it before any request. An instance's `session.refresh` with such a store reads a refusal of its refresh token as final where a
-   * lock spans the process, since no other process can rotate the token. Defaults to `false`.
+   * lock spans the process, Web Locks or the store's `lock`, since no other process can rotate the token. Defaults to `false`.
    */
   local?: boolean | undefined
   /**
