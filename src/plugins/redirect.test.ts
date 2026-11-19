@@ -115,7 +115,7 @@ describe('redirect', () => {
     `)
   })
 
-  test('reads the stored chain selection, the saved session, and the sign-out flag in one store round before open', async () => {
+  test('reads the stored chain selection, the saved session, the login hint, and the sign-out flag in one store round before open', async () => {
     const memory = Store.memory()
     // Each read records the reads in flight when it starts, so sequential reads record 0.
     const reads: string[] = []
@@ -150,7 +150,8 @@ describe('redirect', () => {
       [
         "session:chain 0",
         "session 1",
-        "signed-out 2",
+        "login-hint 2",
+        "signed-out 3",
       ]
     `)
   })
@@ -222,6 +223,118 @@ describe('redirect', () => {
       ]
     `)
   })
+  test("sends no login_hint after a sign-out that ends the session before the plugin's sign-in hook runs", async () => {
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","example-mobile",42431]'
+    const store = Store.memory()
+    const hints: (string | null)[] = []
+    const held = Promise.withResolvers<void>()
+    const hook = Promise.withResolvers<void>()
+    const ran = Promise.withResolvers<void>()
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'example-mobile',
+      plugins: [
+        // The hook of an earlier plugin holds the hook of `redirect` until after the sign-out.
+        Plugin.from({
+          hooks: {
+            afterSignIn: () => {
+              held.resolve()
+              return hook.promise
+            },
+          },
+          id: 'pending',
+        }),
+        redirect({
+          open(url) {
+            hints.push(new URL(url).searchParams.get('login_hint'))
+            return Promise.resolve(undefined)
+          },
+        }),
+        Plugin.from({
+          actions: (context) => ({
+            reload: () => context.session.reload({ hooks: true }),
+          }),
+          hooks: { afterSignIn: () => ran.resolve() },
+          id: 'last',
+        }),
+      ],
+      redirectUri: 'com.example.app:/callback',
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+    // Another context signs the user in, and the instance adopts the session.
+    await store.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.last.reload()
+    await held.promise
+    await accounts.signOut().catch(() => undefined)
+    hook.resolve()
+    await ran.promise
+
+    await accounts.redirect.signIn({ accessKey: false })
+
+    expect(hints).toMatchInlineSnapshot(`
+      [
+        null,
+      ]
+    `)
+  })
+
+  test('sends the stored email of the last signed-in user as login_hint without a session, and none after signOut', async () => {
+    const store = Store.memory()
+    await store.setItem(
+      'tempo-id:login-hint:["http://127.0.0.1:9","example-mobile"]',
+      'user@example.com',
+    )
+    const requests: { hint: string | null; prompt: string | null }[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'example-mobile',
+      plugins: [
+        redirect({
+          open(url) {
+            const { searchParams } = new URL(url)
+            requests.push({
+              hint: searchParams.get('login_hint'),
+              prompt: searchParams.get('prompt'),
+            })
+            return Promise.resolve(undefined)
+          },
+        }),
+      ],
+      redirectUri: 'com.example.app:/callback',
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+
+    await accounts.redirect.signIn({ accessKey: false })
+    await accounts.signOut()
+    await accounts.redirect.signIn({ accessKey: false })
+
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        {
+          "hint": "user@example.com",
+          "prompt": null,
+        },
+        {
+          "hint": null,
+          "prompt": "login",
+        },
+      ]
+    `)
+  })
+
   test('opens the browser with prompt=login while a sign-out at the call still runs', async () => {
     const name =
       'tempo-id:session:["http://127.0.0.1:9","example-mobile",42431]'
