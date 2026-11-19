@@ -259,8 +259,13 @@ describe('expired', () => {
   test.each([
     {
       expected: true,
-      name: 'an exp that passed',
-      token: () => token({ exp: now() - 60 }),
+      name: 'an exp that passed over a minute ago',
+      token: () => token({ exp: now() - 61 }),
+    },
+    {
+      expected: false,
+      name: 'an exp that passed within a minute',
+      token: () => token({ exp: now() - 30 }),
     },
     {
       expected: false,
