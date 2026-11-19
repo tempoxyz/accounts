@@ -13,7 +13,7 @@ import type * as Store from '../Store.js'
  * that share the database take each value once. `lock` holds the key `<key>:lock` for at most 30
  * seconds, set to a token of the hold with `SET` and `NX`, and releases it with an `EVAL` that
  * deletes only that token. `update` reads with `GET` and writes with an `EVAL` that sets the key
- * only if it still holds the value read, and reads again otherwise. So the `backend` plugin's
+ * only if it still holds the value read and no `lock` holds the key, and reads again otherwise. So the `backend` plugin's
  * replicas write the logout index of each `sid` in a read and a write, without the lock, and a
  * logout token ends every session of the `sid`. The store needs Redis 6.2 or later.
  *
@@ -145,14 +145,16 @@ export function create(client: create.Client): Store.Store {
         const written = await send([
           'EVAL',
           swap,
-          '1',
+          '2',
           key,
+          `${key}:lock`,
           typeof previous === 'string' ? previous : '',
           typeof previous === 'string' ? '1' : '0',
           next === undefined || expired ? '' : next,
           expiresAt === undefined ? '' : String(Math.ceil(expiresAt)),
         ])
         if (written === 1) return result
+        await new Promise((resolve) => setTimeout(resolve, 10))
       }
     },
   }
@@ -165,11 +167,14 @@ export function create(client: create.Client): Store.Store {
 const lease = 30_000
 
 /**
- * Writes `ARGV[3]` to the key, with the expiry `ARGV[4]` if any, or deletes it for an empty
- * `ARGV[3]`, only if the key still holds `ARGV[1]`, or is absent for an `ARGV[2]` of `0`. Returns
+ * Writes `ARGV[3]` to the key `KEYS[1]`, with the expiry `ARGV[4]` if any, or deletes it for an empty
+ * `ARGV[3]`, only if the key still holds `ARGV[1]`, or is absent for an `ARGV[2]` of `0`. A
+ * `lock` of the key, at `KEYS[2]`, also refuses the write, so a replica that writes the key under
+ * `lock` with `setItem`, such as a replica of an earlier version, overwrites no update. Returns
  * `1` for a write, and `0` otherwise.
  */
 const swap = [
+  "if redis.call('EXISTS', KEYS[2]) == 1 then return 0 end",
   "local current = redis.call('GET', KEYS[1])",
   "if ARGV[2] == '0' then if current then return 0 end elseif current ~= ARGV[1] then return 0 end",
   "if ARGV[3] == '' then redis.call('DEL', KEYS[1])",

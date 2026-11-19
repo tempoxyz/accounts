@@ -185,6 +185,44 @@ describe('Store.redis', () => {
     `)
   }, 120_000)
 
+  test('behavior: writes no update while a replica without `update` holds the lock of the key', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    const store = Redis.create({
+      sendCommand(args) {
+        return client.call(...(args as [string, ...string[]]))
+      },
+    })
+
+    let write: Promise<undefined> | undefined
+    await store.lock!('index', async () => {
+      const index = (await store.getItem('index')) ?? []
+      write = store.update!('index', (value) => ({
+        result: undefined,
+        value: [...((value as string[] | undefined) ?? []), 'new'],
+      }))
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      await store.setItem('index', [...(index as string[]), 'old'])
+    })
+    await write
+    const index = await store.getItem('index')
+    client.disconnect()
+    await container.stop()
+
+    expect(index).toMatchInlineSnapshot(`
+      [
+        "old",
+        "new",
+      ]
+    `)
+  }, 120_000)
+
   test('behavior: a hold whose lease another replica took deletes no lock of that replica', async () => {
     const container = await new GenericContainer('redis:7.4-alpine')
       .withExposedPorts(6379)
