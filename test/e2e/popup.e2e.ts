@@ -179,6 +179,49 @@ test.describe('popup', () => {
     })
   })
 
+  test('rejects a sign-in whose popup the user closes before its page loads, such as offline', async ({
+    capture,
+    context,
+    page,
+  }) => {
+    await page.goto(urls.popup)
+    // Tempo ID's page never loads in the popup, so it reports nothing to the page.
+    await context.route(`${TempoId.url}/**`, (route) =>
+      route.request().frame().page() === page
+        ? route.fallback()
+        : route.abort('internetdisconnected'),
+    )
+
+    // The page's clock runs past the time that the popup takes to count as open, and past the
+    // close's grace for a late callback.
+    await page.clock.install()
+
+    const window =
+      await test.step('opens the popup, which shows an error page', async () => {
+        const window = await Playwright.popup(page, {
+          open: () => Playwright.start(page, { name: 'Sign in' }),
+        })
+        // The popup shows the browser's error page in place of Tempo ID's.
+        await expect.poll(() => window.url()).toMatch(/^chrome-error:/)
+        await page.clock.runFor(1_000)
+        await capture('offline popup', window)
+        return window
+      })
+
+    await test.step('rejects once the popup closes', async () => {
+      await window.close()
+      await page.clock.runFor(2_000)
+
+      expect(await Playwright.outcome(page, { name: 'Sign in' })).toEqual({
+        state: 'rejected',
+        value: expect.objectContaining(closed),
+      })
+      await expect(Playwright.prompt(page)).toHaveCount(0)
+      await expect(page.locator('#status')).toHaveText('signedOut')
+      await capture('popup closed')
+    })
+  })
+
   test('closes the popup of a sign-in whose signal aborts', async ({
     capture,
     page,
