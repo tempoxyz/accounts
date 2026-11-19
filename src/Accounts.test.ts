@@ -2608,6 +2608,60 @@ describe('session.refresh', () => {
 })
 
 describe('signOut', () => {
+  test('revokes the refresh token of a sign-out whose store is unreachable, such as a Redis that is down', async () => {
+    const memory = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 3_600_000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    const held = { down: false }
+    const requests: string[] = []
+    // A shared store whose server goes down after the session loads, such as Redis, rejects each call.
+    const reject = () =>
+      Promise.reject(new Error('GET failed with ECONNREFUSED.'))
+    const accounts = Accounts.create({
+      chain: 1337,
+      clientId: 'https://app.example.com',
+      fetch(input, init) {
+        const token = new URLSearchParams(String(init?.body)).get('token')
+        requests.push(`${new URL(String(input)).pathname} ${token}`)
+        return Promise.resolve(new Response(null, { status: 200 }))
+      },
+      store: Store.from({
+        getItem: (key) => (held.down ? reject() : memory.getItem(key)),
+        lock: (_key, fn) => (held.down ? reject() : fn()),
+        removeItem: (key) => (held.down ? reject() : memory.removeItem(key)),
+        setItem: (key, value) =>
+          held.down ? reject() : memory.setItem(key, value),
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+
+    held.down = true
+    const error = await accounts
+      .signOut()
+      .catch((error: Error) => error.message)
+
+    expect({ error, requests }).toMatchInlineSnapshot(`
+      {
+        "error": "GET failed with ECONNREFUSED.",
+        "requests": [
+          "/oauth2/revoke refresh-token",
+        ],
+      }
+    `)
+  })
+
   const name =
     'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
 
