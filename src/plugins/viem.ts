@@ -219,7 +219,9 @@ export class RetryClosedError extends Error {
  * returns what Viem's own returns. Only `amount`, `memo`, `to`, and `token` apply. A call with
  * `account` or `from`, a client of a fixed `session`, and `Actions.token.transfer(client, …)` are
  * Viem's own. `accounts.pay` sends its transfer with the session's access key in place of the
- * page, if the access key signs on the chain and its limits hold the amount. With `session`, such
+ * page, if the access key signs on the chain and its limits hold the amount. On a page, a low balance
+ * opens the deposit page, unless `retry` turns off `balance`, and the access key sends again once
+ * the deposit arrives. With `session`, such
  * as on a backend, the access key of that session sends it. Without `relay`, the
  * limit of the fee token must also hold 0.1 for the fee: `feeToken` or the chain's, else the payment's token if
  * it is a `USD` stablecoin other than MACH. A sponsoring `transport` counts as
@@ -2502,17 +2504,22 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       }
 
       // The clients that send a payment of `pay` with the session's access key, one for each chain.
-      // They show no screen of a retry, since the payment page takes a payment that the node refuses.
+      // On a page, a low balance shows the deposit page, and the access key sends again. The payment
+      // page takes each other refusal, so no other screen of a retry shows.
       const payers = new Map<number, viem.Client>()
+      const payerRetry = page ? { accessKey: false, limit: false } : false
 
       /**
        * Sends `transfer`, the transfer of `payment` that `Token.payable` returned, with the access
        * key of the payment's fixed session, else of the instance's session, and returns the
-       * transaction's hash. On a page, a refusal of the node
-       * that the payment page resolves returns `undefined`: a low balance, a spent limit, an access
-       * key that the chain does not hold, or a call outside the access key's scopes. Outside a page,
-       * such a refusal rejects with `Actions.account.PageRequiredError`, whose cause is the refusal,
-       * except a low balance, which rejects as it is.
+       * transaction's hash. On a page, a low balance of the instance's session opens the deposit
+       * page, unless the plugin's `retry` turns off `balance`, and the access key sends again once
+       * the deposit arrives. A close of the deposit page rejects with {@link RetryClosedError}. On
+       * a page, a refusal of the node that the payment page resolves returns `undefined`: a low
+       * balance after the retry, a spent limit, an access key that the chain does not hold, or a
+       * call outside the access key's scopes. Outside a page, such a refusal rejects with
+       * `Actions.account.PageRequiredError`, whose cause is the refusal, except a low balance, which
+       * rejects as it is.
        * Any other failure rejects, since the node may have taken the transaction.
        */
       async function send(
@@ -2521,12 +2528,18 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       ) {
         const { chainId, memo, session, signal, to } = payment
         signal?.throwIfAborted()
-        // A fixed session's client signs for one request, so no cache keeps it.
+        // A fixed session's client signs for one request, and a signal ends the deposit page of one
+        // payment, so no cache keeps either client.
         const client = (() => {
           if (session) return create({ chainId, session })
+          if (signal && payerRetry)
+            return create({ chainId, retry: { ...payerRetry, signal } })
           let cached = payers.get(chainId)
           if (!cached)
-            payers.set(chainId, (cached = create({ chainId, retry: false })))
+            payers.set(
+              chainId,
+              (cached = create({ chainId, retry: payerRetry })),
+            )
           return cached
         })()
 
@@ -2538,6 +2551,19 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           })
           return { transaction: receipt.transactionHash }
         } catch (error) {
+          // A close of the deposit page cancels the payment. Viem's error holds it among its causes,
+          // and its own cause is the node's refusal, which would otherwise show the payment page.
+          const closed = (() => {
+            const seen = new Set<unknown>()
+            let current = error
+            while (current instanceof Error && !seen.has(current)) {
+              if (current instanceof RetryClosedError) return current
+              seen.add(current)
+              current = current.cause
+            }
+            return undefined
+          })()
+          if (closed) throw closed
           const resolvable =
             retry.classify(error) !== undefined ||
             retry.errorName(error) === 'CallNotAllowed'

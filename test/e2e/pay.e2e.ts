@@ -1,14 +1,14 @@
 /**
  * Tests `accounts.pay` on the dialog page of the web test app: a payment that the session's access
- * key sends while the dialog covers the page, one that the chain refuses for the access key, which the
- * page then sends, one above the access key's limit, or of its whole limit, whose fee the limit cannot also pay, that Tempo ID's payment page sends from
+ * key sends with no dialog, one that the chain refuses for the access key, which the page then
+ * sends, one for a low balance, which the access key sends after a deposit, one above the access key's limit, or of its whole limit, whose fee the limit cannot also pay, that Tempo ID's payment page sends from
  * the account in the dialog's frame or in a popup, a session without an access key, whose Viem
  * `token.transferSync` the payment page also sends, and a payment
  * that the user rejects or closes, or whose amount the instance refuses, which sends nothing. Each case reads the transfer in the
  * transaction that the call returns.
  * @module
  */
-import type { Page } from '@playwright/test'
+import type { Page, Route } from '@playwright/test'
 import * as Apps from '../Apps.js'
 import * as Chain from '../Chain.js'
 import * as Playwright from '../Playwright.js'
@@ -26,35 +26,13 @@ function balance(address: `0x${string}`) {
   return Chain.balance({ address, token: Chain.ousd })
 }
 
-/**
- * Records the first state of the next dialog that shows on `page`: whether the skeleton covers it,
- * the skeleton's dividers, the frame's height, and whether the frame is inert. `shown` returns the
- * record, and `covered` whether the frame reported its own skeleton.
- */
+/** Records on `page` the report of the frame that it draws its skeleton, which `covered` reads. */
 async function watch(page: Page) {
   await page.evaluate(() => {
-    // The frame reports the skeleton that it draws while the dialog covers it.
+    // The frame reports the skeleton that it draws while the hidden dialog holds it.
     window.addEventListener('message', (event) => {
       if (event.data?.type === 'tempo-id:embed.covered')
         document.body.dataset.covered = ''
-    })
-    const observer = new MutationObserver(() => {
-      const dialog = document.querySelector(
-        'dialog[data-tempo-id-dialog][open]',
-      )
-      if (!dialog) return
-      observer.disconnect()
-      document.body.dataset.shown = JSON.stringify({
-        covered: dialog.querySelector('[data-skeleton]') !== null,
-        dividers: dialog.querySelectorAll('[data-skeleton] [data-line]').length,
-        height: dialog.querySelector('iframe')?.style.height,
-        inert: dialog.querySelector('iframe')?.inert,
-      })
-    })
-    observer.observe(document.body, {
-      attributes: true,
-      childList: true,
-      subtree: true,
     })
   })
 }
@@ -64,10 +42,45 @@ async function covered(page: Page) {
   return await page.evaluate(() => document.body.dataset.covered !== undefined)
 }
 
-/** Returns the record of `watch`, or `undefined` if no dialog showed. */
-async function shown(page: Page) {
-  const value = await page.evaluate(() => document.body.dataset.shown)
-  return value === undefined ? undefined : JSON.parse(value)
+/** Returns whether a dialog shows on `page`. */
+async function open(page: Page) {
+  return (await Playwright.prompt(page).count()) > 0
+}
+
+/**
+ * Holds each fill of a transaction on the node until `release`, so the access key's send waits
+ * meanwhile. Other requests to the node pass. `fills` holds each held fill, and `unhold` removes
+ * the route once every held fill continued.
+ */
+async function hold(page: Page) {
+  let release = () => {}
+  const held = new Promise<void>((resolve) => (release = resolve))
+  // Each held fill, which settles once its request continues after the release.
+  const fills: Promise<void>[] = []
+  const handler = async (route: Route) => {
+    if (!route.request().postData()?.includes('eth_fillTransaction'))
+      return route.fallback()
+    const fill = held.then(async () => {
+      try {
+        await route.continue()
+      } catch (error) {
+        // A request that ended meanwhile, such as with its page, needs no continue.
+        if (!String(error).includes('Route is already handled')) throw error
+      }
+    })
+    fills.push(fill)
+    await fill
+  }
+  await page.route(Chain.rpcUrl, handler)
+  return {
+    fills,
+    release,
+    async unhold() {
+      // The held fill continues before its handler goes, so no other handler takes its request.
+      await Promise.all(fills)
+      await page.unroute(Chain.rpcUrl, handler)
+    },
+  }
 }
 
 /** Returns what the control `name` of the dialog page returned or threw, once it settles. */
@@ -76,7 +89,7 @@ function paid(page: Page, name: string) {
 }
 
 test.describe('pay', () => {
-  test('sends a payment within the limit with the access key under the covered dialog, and one above it on the payment page', async ({
+  test('sends a payment within the limit with the access key and no dialog, and one above it on the payment page', async ({
     capture,
     code,
     email,
@@ -84,23 +97,31 @@ test.describe('pay', () => {
   }) => {
     const key = await Web.enter_dialog(page, { capture, code, email })
 
-    await test.step('sends 5 OUSD with the access key under the covered dialog, which closes', async () => {
-      await watch(page)
+    await test.step('sends 5 OUSD with the access key, and shows no dialog', async () => {
+      // Records each dialog that shows while the access key sends.
+      await page.evaluate(() => {
+        const observer = new MutationObserver(() => {
+          if (!document.querySelector('dialog[data-tempo-id-dialog][open]'))
+            return
+          // The record changes the body, so the observer stops before it.
+          observer.disconnect()
+          document.body.dataset.shown = ''
+        })
+        observer.observe(document.body, {
+          attributes: true,
+          childList: true,
+          subtree: true,
+        })
+      })
       const payment = await Playwright.run(page, {
         name: 'Pay 5 OUSD',
         timeout,
       })
 
       expect(payment.state).toBe('fulfilled')
-      await Playwright.uncovered(page)
-      // The dialog showed before the transfer landed, with the page under the cover.
-      // The payment skeleton's second card has two rows, the currency and the account, so one divider.
-      expect(await shown(page)).toEqual({
-        covered: true,
-        dividers: 1,
-        height: '542px',
-        inert: true,
-      })
+      expect(
+        await page.evaluate(() => document.body.dataset.shown !== undefined),
+      ).toBe(false)
       expect(
         await Chain.transfers({ hash: payment.value.transaction }),
       ).toContainEqual({ amount: 5_000_000n, from: key.account, to: recipient })
@@ -137,7 +158,7 @@ test.describe('pay', () => {
     })
   })
 
-  test('covers the payment page in the dialog until the chain refuses the access key, and pays on the page', async ({
+  test('loads the payment page in a hidden dialog until the chain refuses the access key, and pays on the page', async ({
     capture,
     code,
     email,
@@ -153,8 +174,9 @@ test.describe('pay', () => {
 
       expect(transfer.state).toBe('fulfilled')
     })
+    const fills = await hold(page)
 
-    await test.step('shows the covered dialog at once for 5 OUSD, and the payment page after the refusal', async () => {
+    await test.step('loads the payment page for 5 OUSD in a hidden dialog while the access key sends', async () => {
       // The access key's authorization holds 5 OUSD and its fee, so the access key sends first. The
       // chain refuses it, since the first transfer and its fee spent all but 4 of the limit.
       await watch(page)
@@ -164,27 +186,26 @@ test.describe('pay', () => {
       )
       await Playwright.start(page, { name: 'Pay 5 OUSD' })
       const html = await (await response).text()
-      const payment = await Playwright.payment(await Playwright.dialog(page))
 
-      await expect(payment.pay).toHaveText('Pay $5.00')
-      // The payment skeleton's second card has two rows, the currency and the account, so one divider.
-      expect(await shown(page)).toEqual({
-        covered: true,
-        dividers: 1,
-        height: '542px',
-        inert: true,
-      })
+      await expect.poll(() => fills.fills.length).toBe(1)
+      await expect.poll(() => covered(page)).toBe(true)
+      expect(await open(page)).toBe(false)
       expect(new URL((await response).url()).searchParams.get('covered')).toBe(
         'true',
       )
       expect(html).toContain('aria-label="Payment request"')
       expect(html).toContain('skullet-loading')
-      expect(await covered(page)).toBe(true)
-      await capture('payment page after the refusal')
+      await capture('no dialog while the access key sends')
     })
 
-    await test.step('pays 5 OUSD on the payment page', async () => {
+    await test.step('shows the payment page after the refusal, and pays 5 OUSD on it', async () => {
+      fills.release()
+      await fills.unhold()
       const payment = await Playwright.payment(await Playwright.dialog(page))
+
+      await expect(payment.pay).toHaveText('Pay $5.00')
+      await capture('payment page after the refusal')
+
       await payment.pay.click()
       const result = await paid(page, 'Pay 5 OUSD')
 
@@ -194,6 +215,50 @@ test.describe('pay', () => {
         await Chain.transfers({ hash: result.value.transaction }),
       ).toContainEqual({ amount: 5_000_000n, from: key.account, to: recipient })
       await capture('paid on the payment page')
+    })
+  })
+
+  test('shows the deposit page for a low balance, and sends the payment with the access key after the deposit', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    const key = await Web.enter_dialog(page, {
+      capture,
+      code,
+      email,
+      fund: false,
+    })
+    expect(await balance(key.account)).toBe(0n)
+
+    await test.step('rejects the payment once the user closes the deposit page, and sends nothing', async () => {
+      await Playwright.start(page, { name: 'Pay 5 OUSD' })
+      const deposit = await Playwright.deposit(await Playwright.dialog(page))
+      await capture('deposit page for the payment')
+      await deposit.close.click()
+
+      expect(await paid(page, 'Pay 5 OUSD')).toMatchObject({
+        state: 'rejected',
+        value: { name: 'Plugins.viem.RetryClosedError' },
+      })
+      await Playwright.uncovered(page)
+      expect(await balance(key.account)).toBe(0n)
+    })
+
+    await test.step('sends 5 OUSD with the access key once the faucet of the deposit page funds the account', async () => {
+      await Playwright.start(page, { name: 'Pay 5 OUSD' })
+      const deposit = await Playwright.deposit(await Playwright.dialog(page))
+      await deposit.faucet.click()
+      const result = await paid(page, 'Pay 5 OUSD')
+
+      // The access key sent the payment, since no payment page showed for the owner's approval.
+      expect(result.state).toBe('fulfilled')
+      await Playwright.uncovered(page)
+      expect(
+        await Chain.transfers({ hash: result.value.transaction }),
+      ).toContainEqual({ amount: 5_000_000n, from: key.account, to: recipient })
+      await capture('sent with the access key after the deposit')
     })
   })
 

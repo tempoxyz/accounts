@@ -75,7 +75,8 @@ export type Plugin<
         challenge?: ((context: Context) => Challenge | undefined) | undefined
         /**
          * Runs at `pay`, in the order of `plugins`, before the payment page shows. In a frame, the
-         * dialog shows at once, and covers the payment page while the plugin sends. Returns the
+         * payment page loads in a hidden dialog while the plugin sends, and the dialog shows only
+         * once no plugin sent the payment. Returns the
          * transaction of a payment that the plugin sent, such as with the session's access key.
          * Returns `undefined` for a payment that it did not send, which the next plugin takes,
          * and then the payment page. A rejection rejects `pay`.

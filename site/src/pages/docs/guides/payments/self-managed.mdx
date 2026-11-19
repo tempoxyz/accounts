@@ -168,7 +168,7 @@ export const accounts = Accounts.create({
 
 The access key sends the transfer if it signs on the payment's chain, acts for the account, and its limits hold the amount. Its transaction pays its own fee, so the limit of the fee token must also hold 0.1 for the fee. The fee token is the plugin's `feeToken`, else the payment's token if it is a USD stablecoin other than MACH.
 
-Otherwise the payment page opens in a frame in a dialog. The dialog shows at once with a loading state while the access key sends, so the page also shows at once after a transfer that the chain refuses, such as for a spent limit. The page returns to the instance's <SourceLink name="Config.redirectUri" path="src/Accounts.ts">`redirectUri`</SourceLink>, or to the root of the page's origin.
+Otherwise the payment page opens in a frame in a dialog. The page loads in a hidden dialog while the access key sends, so a transfer that lands shows no dialog, and the page shows at once after a transfer that the chain refuses, such as for a spent limit. A transfer that the chain refuses for a low balance opens the deposit page first, and the access key sends again once the deposit arrives. The page returns to the instance's <SourceLink name="Config.redirectUri" path="src/Accounts.ts">`redirectUri`</SourceLink>, or to the root of the page's origin.
 
 An <SourceLink name="pay.amount" path="src/actions/account.ts">`amount`</SourceLink> that is not a decimal above 0 with at most 6 decimal places rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> and the reason `invalid_field`, before any transfer. Without a session, the call rejects with <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink>.
 

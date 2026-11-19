@@ -1053,9 +1053,13 @@ export type Accounts<
      * the page, if it signs on the chain, acts for the account, and its limits hold the amount. The
      * access key's transaction pays its own fee, or the plugin's relay sponsors it. Its own fee
      * spends the limit of the fee token, so a payment in the fee token or in a `USD` stablecoin other than MACH leaves 0.1 of its limit for the fee, on a page. In a frame, the
-     * dialog shows at once, and covers the payment page while the access key's transfer runs. The
-     * dialog closes once the transfer lands. On a page, the payment page shows after a transfer that
-     * the chain refuses for the access key, such as for its scopes or a spent limit. Without `account`, the session's account on the chain pays. The
+     * payment page loads in a hidden dialog while the access key's transfer runs, so a transfer that
+     * lands shows no dialog. On a page, a transfer that the chain refuses for a low balance opens the
+     * deposit page, unless the plugin's `retry` turns off `balance`, and the access key sends again
+     * once the deposit arrives. A close of the deposit page rejects with
+     * `Plugins.viem.RetryClosedError`. On a page, the payment page shows after a transfer that the
+     * chain refuses for the access key, such as for its scopes or a spent limit, or for a balance
+     * that is still low after the deposit. Without `account`, the session's account on the chain pays. The
      * instance reads the stored session first, and Tempo ID only if the session holds no account.
      * A third-party client ID, such as an origin, sends no read, and the payment page picks the
      * account. Outside a page, a call without a session throws {@link SignedOutError} before any request.
@@ -2362,7 +2366,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         }
         return undefined
       }
-      // The dialog shows at once, and covers the payment page while a plugin sends.
+      // The payment page loads in a hidden dialog while a plugin sends, and shows only if none sent.
       return await AccountActions.pay(config, { ...payment, attempt: send(0) })
     },
     session: {

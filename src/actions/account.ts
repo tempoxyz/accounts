@@ -535,9 +535,9 @@ export declare namespace pay {
     amount: string
     /**
      * A send of the same payment in progress, such as `accounts.pay`'s send with the session's access
-     * key, which resolves with the payment, or `undefined` if it sent nothing. In a frame, the dialog
-     * shows at once and covers the page until it settles. A payment closes the dialog and returns, and
-     * `undefined` shows the page. A popup opens only after it settles. Absent, the page shows at once.
+     * key, which resolves with the payment, or `undefined` if it sent nothing. In a frame, the page
+     * loads in a hidden dialog until it settles. A payment returns with no dialog, and `undefined`
+     * shows the dialog. A popup opens only after it settles. Absent, the page shows at once.
      */
     attempt?:
       | Promise<Pick<ReturnType, 'address' | 'transaction'> | undefined>
@@ -1545,37 +1545,40 @@ async function approve<held = never>(
     return await new Promise<URL | held>((resolve, reject) => {
       abort = () => reject(signal?.reason)
       signal?.addEventListener('abort', abort, { once: true })
-      // The dialog shows at once, and its page loads covered or deferred. A send of `hold` ends the
-      // call.
-      covering?.then((held) => held && resolve(held), reject)
+      const show = () =>
+        sheet.show({
+          onCallback: (value) => {
+            try {
+              resolve(finish(value))
+            } catch (error) {
+              reject(error)
+            }
+          },
+          onCancel: () => reject(closed()),
+          onPopup: (entry) => {
+            // The payment page opens the deposit pages at once for a frame's Buy MACH.
+            const popup = open(entry.method)
+            if (popup === null) {
+              // The offer's Continue is the user's click, so only a blocker refuses it.
+              if (!entry.automatic) reject(new BlockedError())
+              return false
+            }
+            sheet.close()
+            watch(popup).then(resolve, reject)
+            return true
+          },
+        })
+      // The page loads in the hidden dialog while `hold` runs, so an access key's send shows no
+      // dialog. A send of `hold` ends the call, and the dialog shows only once it sends nothing.
+      if (covering)
+        covering.then((held) => (held ? resolve(held) : show()), reject)
+      else show()
       // The cover lifts once, after `hold` sends nothing and the message arrives, so the page takes
       // no input while `hold` can still send, and receives the message with the lift.
       if (covering || challenge)
         Promise.all([covering, challenge]).then(([held, value]) => {
           if (!held) sheet.uncover({ challenge: value })
         }, reject)
-      sheet.show({
-        onCallback: (value) => {
-          try {
-            resolve(finish(value))
-          } catch (error) {
-            reject(error)
-          }
-        },
-        onCancel: () => reject(closed()),
-        onPopup: (entry) => {
-          // The payment page opens the deposit pages at once for a frame's Buy MACH.
-          const popup = open(entry.method)
-          if (popup === null) {
-            // The offer's Continue is the user's click, so only a blocker refuses it.
-            if (!entry.automatic) reject(new BlockedError())
-            return false
-          }
-          sheet.close()
-          watch(popup).then(resolve, reject)
-          return true
-        },
-      })
     })
   } finally {
     if (abort) signal?.removeEventListener('abort', abort)
@@ -1594,8 +1597,9 @@ declare namespace approve {
     challenge?: Promise<string> | undefined
     /**
      * Another send of the same payment, which resolves with its result, or `undefined` if it sent
-     * nothing. The frame covers the page until it settles, and a result closes the dialog and
-     * returns. A popup opens only after it sends nothing. Absent, the page shows at once.
+     * nothing. The frame loads in a hidden dialog until it settles, and a result returns with no
+     * dialog. The dialog, or a popup, shows only after it sends nothing. Absent, the page shows at
+     * once.
      */
     hold?: Promise<held | undefined> | undefined
     /** The dialog's accessible name. */
