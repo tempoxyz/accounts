@@ -815,12 +815,28 @@ export function user(tokens: Tokens): User {
 
 /**
  * Reads a token response into `Tokens`. Its `expires_in` counts from `options.sentAt`, the start of
- * the request that issued the tokens, or from the read without it.
+ * the request that issued the tokens, or from the read without it. A response without a string
+ * `access_token` or a finite `expires_in` throws `server_error` with status 200.
  */
 export function tokens(
   response: TokenResponse,
   options: tokens.Options = {},
 ): Tokens {
+  // A success response without an access token or a lifetime, such as from a proxy, would save a
+  // session that sends no credential and never expires. The refusal quotes none of the response,
+  // which can hold a token, and has no `cause`.
+  if (
+    typeof response.access_token !== 'string' ||
+    response.access_token === '' ||
+    typeof response.expires_in !== 'number' ||
+    !Number.isFinite(response.expires_in)
+  )
+    throw new RequestError({
+      code: 'server_error',
+      message:
+        "Invalid response: the token response holds no access token or no lifetime. Check the instance's `url`, then retry the request.",
+      status: 200,
+    })
   const receivedAt = Date.now()
   // A wall clock that steps back during the request never lengthens the lifetime.
   const start = Math.min(options.sentAt ?? receivedAt, receivedAt)

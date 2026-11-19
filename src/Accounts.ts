@@ -1346,6 +1346,8 @@ export type Accounts<
        *   - `unexpected`: An unexpected failure. Retry the request.
        * @throws {RequestError} With `server_error` and status 0, when no attempt receives a
        *   response, such as offline. The session stays. Refresh again.
+       * @throws {RequestError} With `server_error` and status 200, when the response holds no access
+       *   token or no lifetime, such as a page of a proxy at `url`. The session stays.
        *
        * @example
        * ```ts
