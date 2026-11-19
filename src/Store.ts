@@ -34,7 +34,7 @@ export type Store = {
    * so concurrent sign-ins of one `sid` keep each session. Every instance on the store refreshes
    * its session through it, so two instances send one refresh: without Web Locks, such as in React
    * Native, and for a store that is not `local`, such as `Store.redis` that processes share, whose
-   * Web Locks span one process only. `Store.file`, `Store.memory`, `Store.redis`, and the store of `accounts/expo` set it. Absent, each instance
+   * Web Locks span one process only. `Store.file`, `Store.memory`, `Store.postgres`, `Store.redis`, and the store of `accounts/expo` set it. Absent, each instance
    * orders only its own writes and refreshes.
    */
   lock?:
