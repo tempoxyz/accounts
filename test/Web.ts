@@ -219,6 +219,8 @@ export declare namespace url {
     funding?: Funding.Funding
     /** The registered resource that the page's instance names for each request. */
     instanceResource?: string
+    /** The address that the dialog page's sign-in fills in Tempo ID's email field. */
+    loginHint?: string
     /** The message that each "Sign a message" control of the page signs. */
     message?: string
     /** The origin of the build that serves the page. Defaults to the web test app's. */

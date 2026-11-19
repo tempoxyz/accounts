@@ -292,6 +292,43 @@ export const accounts = Accounts.create({
 
 :::
 
+### Fill in the email
+
+<SourceLink name="signIn.loginHint" path="src/plugins/dialog.ts">`loginHint`</SourceLink> fills in the email field of Tempo ID's sign-in, and the user can still change it. An app passes it for a session that ended, such as after a refused refresh. A browser with a Tempo ID session ignores it.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() =>
+        accounts.dialog.signIn({
+          loginHint: 'alice@example.com', // [!code hl]
+        })
+      }
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
 ### Sign in in a popup
 
 <SourceLink name="signIn.funding.mode" path="src/plugins/dialog.ts">`mode: 'popup'`</SourceLink> shows the sign-in in a popup window, with no frame. The plugin's <SourceLink name="dialog.mode" path="src/plugins/dialog.ts">`mode`</SourceLink> sets it for every sign-in, and loads no frame ahead.

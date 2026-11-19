@@ -299,6 +299,7 @@ export function dialog<const options extends dialog.Options = {}>(
             // The plugin's challenge comes from the app's server, so the dialog shows at the click.
             deferred: source !== undefined,
             funding: page.funding,
+            loginHint: page.loginHint,
             mode: page.mode ?? (popup ? 'popup' : 'iframe'),
             resource: page.resource,
             // A sign-out cancels only the wait for the approval. Tokens that Tempo ID issued before
@@ -1016,6 +1017,12 @@ export declare namespace dialog {
        * a top-level page, that sign-in runs in a popup.
        */
       funding?: Funding.Funding | undefined
+      /**
+       * The address that Tempo ID's sign-in fills in its email field, as OpenID Connect's
+       * `login_hint`, such as the email of a session whose refresh Tempo ID refused. The field stays
+       * editable. A browser with a Tempo ID session ignores it.
+       */
+      loginHint?: string | undefined
       /**
        * Whether the sign-in shows in a frame or in a popup window. Defaults to the plugin's `mode`.
        * A popup opens only within a click. Outside a secure context, on a page on `http:` such as

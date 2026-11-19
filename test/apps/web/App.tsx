@@ -23,6 +23,7 @@
  * | `funding`          | The amount that the page's "Sign in" control needs in the account, as JSON      |
  * | `hint=1`           | The instance keeps the session hint in the `tempo_session` cookie               |
  * | `instanceResource` | The registered resource that the instance names for each request                |
+ * | `loginHint`        | The address that the dialog page's sign-in fills in Tempo ID's email field      |
  * | `message`          | The message that each "Sign a message" control signs                            |
  * | `reauthorize=0`    | `useSession` authorizes no Tempo ID session of the browser at a mount           |
  * | `resource`         | The registered resource that the tokens of the "Sign in" control are for        |
@@ -164,6 +165,15 @@ export async function fingerprint(value: string) {
 export function funding() {
   const funding = query.get('funding')
   return funding ? { funding: Internal.Funding.from(JSON.parse(funding)) } : {}
+}
+
+/**
+ * Returns the `loginHint` of a dialog sign-in that the page's query sets: the address that Tempo ID's
+ * sign-in fills in its email field. Defaults to none.
+ */
+export function loginHint() {
+  const loginHint = query.get('loginHint')
+  return loginHint ? { loginHint } : {}
 }
 
 /**
