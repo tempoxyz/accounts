@@ -330,9 +330,12 @@ export function refresh(
     // also hold IndexedDB. Node's span the threads of one process only.
     const spansContexts = typeof indexedDB !== 'undefined' && locks
     // A local store, such as `Store.memory`, has no context outside the process, so a lock there
-    // serializes every refresh of its token, and a refusal is final too.
+    // serializes every refresh of its token, and a refusal is final too. Without Web Locks, such as
+    // in React Native, the store's own lock serializes them.
     const final =
-      spansContexts || (locks && context.config.store?.local === true)
+      spansContexts ||
+      (context.config.store?.local === true &&
+        (locks || !!context.config.store.lock))
     // Where the lock spans every context, it serializes the refreshes of this store, so a refusal
     // is final. Elsewhere, such as two runs of a CLI on one file, another process can rotate the
     // same token at once, and Tempo ID refuses it until that rotation returns. After the first

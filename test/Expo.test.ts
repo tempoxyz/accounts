@@ -99,4 +99,49 @@ describe('expo', () => {
       }
     `)
   }, 20_000)
+  test('throws the first invalid_grant of a refresh on Store.memory without Web Locks, as React Native, with one request', async () => {
+    // Without Web Locks, the store's lock serializes every refresh in the process. Only this process
+    // holds a `Store.memory`, so no other process can rotate its token, and Tempo ID's refusal is final.
+    const output = await run(
+      [
+        "import * as Accounts from './Accounts.ts'",
+        "import * as Session from './Session.ts'",
+        "import * as Store from './Store.ts'",
+        "import { expo } from './plugins/expo.ts'",
+        'const requests = []',
+        'const store = Store.memory()',
+        'const accounts = Accounts.create({',
+        '  chain: 1337,',
+        "  clientId: 'client_1',",
+        '  async fetch(input, init) {',
+        "    const token = new URLSearchParams(String(init?.body)).get('refresh_token')",
+        '    requests.push(new URL(String(input)).pathname + " " + token)',
+        "    return Response.json({ error: 'invalid_grant', error_description: 'The refresh token is revoked.' }, { status: 400 })",
+        '  },',
+        "  plugins: [expo({ redirectUri: 'com.example.app:/callback' })],",
+        '  store,',
+        "  url: 'http://127.0.0.1:9',",
+        '})',
+        'await store.setItem(\'tempo-id:session:["http://127.0.0.1:9","client_1",1337]\', {',
+        "  state: { session: Session.from({ accessToken: 'access-token', expiresAt: Date.now() + 3600000, refreshToken: 'refresh-token', user: { email: 'user@example.com', id: 'user_1' } }) },",
+        '  version: 0,',
+        '})',
+        'await accounts.session.get()',
+        'const started = Date.now()',
+        'const error = await accounts.session.refresh().then(() => undefined, (error) => error)',
+        'console.log(JSON.stringify({ code: error?.code, fast: Date.now() - started < 500, requests, session: await accounts.session.get() ?? null }))',
+      ].join('\n'),
+    )
+
+    expect(output).toMatchInlineSnapshot(`
+      {
+        "code": "invalid_grant",
+        "fast": true,
+        "requests": [
+          "/oauth2/token refresh-token",
+        ],
+        "session": null,
+      }
+    `)
+  }, 20_000)
 })
