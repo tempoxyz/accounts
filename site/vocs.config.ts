@@ -81,11 +81,6 @@ export default defineConfig({
         }),
         item({ icon: 'laptop', link: '/docs/guides/cli', text: 'CLI' }),
         item({
-          icon: 'key',
-          link: '/docs/guides/local',
-          text: 'Local owner keys',
-        }),
-        item({
           icon: 'smartphone',
           link: '/docs/guides/mobile',
           text: 'Mobile',
@@ -100,6 +95,8 @@ export default defineConfig({
           link: '/docs/guides/siwe',
           text: 'Sign-In With Ethereum',
         }),
+        item({ icon: 'key', link: '/docs/guides/local', text: 'Local' }),
+        item({ icon: 'flask', link: '/docs/guides/testing', text: 'Test' }),
       ],
       text: 'Sign-in flows',
     },
@@ -311,16 +308,6 @@ export default defineConfig({
         }),
       ],
       text: 'Extending',
-    },
-    {
-      items: [
-        item({
-          icon: 'flask',
-          link: '/docs/guides/testing',
-          text: 'End-to-end tests',
-        }),
-      ],
-      text: 'Testing',
     },
   ],
   socials: [{ icon: 'github', link: repository }],
