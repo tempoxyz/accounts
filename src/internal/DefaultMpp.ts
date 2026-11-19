@@ -3,7 +3,7 @@
  * chunk at the first payment, so an instance that pays nothing loads none of mppx.
  * @module
  */
-import type * as Accounts from '../Accounts.js'
+import * as Accounts from '../Accounts.js'
 import type { mpp } from '../mpp/index.js'
 import * as Plugin from '../Plugin.js'
 import * as SessionManager from './mpp/SessionManager.js'
@@ -23,6 +23,12 @@ export function plugin(): Mpp {
   return Plugin.from({
     extend(instance: Accounts.Accounts, context: Plugin.Context): Members {
       let loading: Promise<Members> | undefined
+      // The changes that ended the instance's session, or replaced it with another user's, as the
+      // loaded plugin counts them, so a manager created before the load binds to its session.
+      let ends = 0
+      instance.session.subscribe((next, before) => {
+        if (!before || next?.user.id !== before.user.id) ends++
+      })
 
       /** Loads the plugin once. A failed load, such as offline, lets the next call try again. */
       function load() {
@@ -57,10 +63,17 @@ export function plugin(): Mpp {
             callTool: async (...args) =>
               (await get()).mcp(client).callTool(...args),
           }),
-          session: (parameters) =>
-            SessionManager.deferred(async () =>
-              (await get()).session(parameters),
-            ),
+          session: (parameters) => {
+            // A manager created with a session pays for that session alone, as the loaded plugin's
+            // does. A sign-out before its first request ends it, also after a later sign-in.
+            const held = !overrides?.session && !!context.session.get()
+            const started = ends
+            return SessionManager.deferred(async () => {
+              const payer = await get()
+              if (held && ends !== started) throw new Accounts.SignedOutError()
+              return payer.session(parameters)
+            })
+          },
         }
       }
 

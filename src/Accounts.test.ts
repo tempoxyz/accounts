@@ -22,7 +22,7 @@ import {
   test,
 } from 'vite-plus/test'
 import { Account } from 'viem/tempo'
-import { Bytes, Hash, Json } from 'ox'
+import { Bytes, Hash, Json, Secp256k1 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import * as Accounts from './Accounts.js'
 import * as StoreValue from './internal/StoreValue.js'
@@ -380,6 +380,58 @@ describe('create', () => {
         "status": "idle",
       }
     `)
+  })
+
+  test("ends a session manager of the default `mpp` plugin at a change of user before its first request, so it never pays for the next user's session", async () => {
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'example',
+      plugins: [
+        Plugin.from({
+          actions: (context) => ({
+            commit: (session: Session.Session) =>
+              context.session.change().commit(session),
+          }),
+          id: 'test',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    /** Returns a session of `id` whose access key spends any token on Tempo testnet. */
+    const signedIn = async (id: string) => {
+      const owner = Account.fromSecp256k1(Secp256k1.randomPrivateKey())
+      const privateKey = Secp256k1.randomPrivateKey()
+      const accessKey = Account.fromSecp256k1(privateKey, { access: owner })
+      return Session.from({
+        accessKey: {
+          account: owner.address,
+          chainId: 42431,
+          keyAuthorization: KeyAuthorization.toRpc(
+            await owner.signKeyAuthorization(accessKey, {
+              chainId: 42431n,
+              expiry: Math.floor(Date.now() / 1000) + 86_400,
+            }),
+          ),
+          privateKey,
+        },
+        accessToken: 'access-token',
+        expiresAt: Date.now() + 3_600_000,
+        user: { email: `${id}@example.com`, id },
+      })
+    }
+    await accounts.test.commit(await signedIn('user_1'))
+    const manager = accounts.mpp.session()
+
+    await accounts.test.commit(await signedIn('user_2'))
+    const error = await manager
+      .fetch('http://127.0.0.1:9/stream')
+      .catch((error: Error) => error)
+
+    // The manager sends no request with the access key of `user_2`.
+    expect(error instanceof Error ? error.name : error).toMatchInlineSnapshot(
+      `"Accounts.SignedOutError"`,
+    )
   })
 
   test('keeps the client secret out of a log or JSON of the instance and its `config`', () => {

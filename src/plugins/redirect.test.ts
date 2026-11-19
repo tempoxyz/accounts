@@ -530,7 +530,7 @@ describe('redirect', () => {
         opened: opened.length,
       }).toMatchInlineSnapshot(`
         {
-          "error": "Error: EISDIR: illegal operation on a directory, read '<directory>'",
+          "error": "Error: EISDIR: illegal operation on a directory, read",
           "opened": 0,
         }
       `)
