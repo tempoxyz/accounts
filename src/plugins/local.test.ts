@@ -540,9 +540,7 @@ describe('local.remove during a sign-in', () => {
                 await gate
                 return 'Sign in to Mercator'
               },
-              async settle() {
-                return { token: 'app-token' }
-              },
+              settle: () => Promise.resolve({ token: 'app-token' }),
             }),
           },
           id: 'app',
