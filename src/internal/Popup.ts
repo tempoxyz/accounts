@@ -5,6 +5,13 @@
  * @module
  */
 /* istanbul ignore file -- The popup window exists only in a browser. */
+import {
+  type ActorRefFrom,
+  createActor,
+  fromCallback,
+  type SnapshotFrom,
+  setup,
+} from 'xstate'
 import * as Callback from './Callback.js'
 import * as Chains from './Chains.js'
 
@@ -16,6 +23,13 @@ const closeGrace = 1_000
 
 /** Milliseconds between two checks of whether the user closed a popup. */
 const closeInterval = 100
+
+/**
+ * Milliseconds that a popup's handle reads open on another origin's page before the popup counts as
+ * open. A handle that this page's `Cross-Origin-Opener-Policy` severs reads open there for a few
+ * tens of milliseconds.
+ */
+const settle = 500
 
 /**
  * Opens `url` in a popup centered on the window, or returns `null` when the browser blocks it. Each
@@ -37,43 +51,64 @@ export function openPopup(url: string) {
 
 /**
  * Takes the callback that Tempo ID's page in `popup` posts in place of the redirect URI's page, and
- * calls `onClose` once the user closes the popup. Only a popup whose page reported that it loaded
- * counts as closed, since this page's own `Cross-Origin-Opener-Policy` severs the handle, which then
- * reads as closed while the popup is open. `onClosed` runs as soon as the popup reads closed, and
- * `onClose` waits `closeGrace` more for a callback that the popup posted as it closed. Returns the
- * function that stops both.
+ * calls `onClose` once the user closes the popup. `machines.watch` decides when a closed handle
+ * counts as the user's close. Returns the function that stops the watch.
  */
 export function watchPopup(popup: Window, options: watchPopup.Options) {
-  let open = false
-  let closedAt: number | undefined
-  const listener = (event: MessageEvent) => {
-    if (event.origin !== options.origin || event.source !== popup) return
-    const data = event.data as { type?: unknown } | null
-    if (data?.type === 'tempo-id:popup.open') {
-      open = true
-      return
-    }
-    const callback = Callback.received(data, { prefix: 'tempo-id:popup' })
-    if (!callback) return
-    stop()
-    options.onCallback(callback)
+  const actor = createActor(
+    machines.watch.provide({
+      actions: {
+        callback: (_args, params) => options.onCallback(params.callback),
+        close: () => options.onClose(),
+        closed: () => options.onClosed?.(),
+      },
+      actors: {
+        popup: fromCallback<machines.watch.Event>((args) => {
+          const listener = (event: MessageEvent) => {
+            if (event.origin !== options.origin || event.source !== popup)
+              return
+            const data = event.data as { type?: unknown } | null
+            if (data?.type === 'tempo-id:popup.open') {
+              args.sendBack({ type: 'popup.open' })
+              return
+            }
+            const callback = Callback.received(data, {
+              prefix: 'tempo-id:popup',
+            })
+            if (callback) args.sendBack({ callback, type: 'popup.callback' })
+          }
+          const interval = setInterval(
+            () => args.sendBack({ type: handle(popup) }),
+            closeInterval,
+          )
+
+          window.addEventListener('message', listener)
+
+          return () => {
+            clearInterval(interval)
+            window.removeEventListener('message', listener)
+          }
+        }),
+      },
+    }),
+  ).start()
+
+  return () => {
+    if (actor.getSnapshot().status === 'active')
+      actor.send({ type: 'watch.stop' })
   }
-  const interval = setInterval(() => {
-    if (!open || !popup.closed) return
-    if (closedAt === undefined) {
-      closedAt = Date.now()
-      options.onClosed?.()
-    }
-    if (Date.now() - closedAt < closeGrace) return
-    stop()
-    options.onClose()
-  }, closeInterval)
-  const stop = () => {
-    clearInterval(interval)
-    window.removeEventListener('message', listener)
+}
+
+/** Returns the event of what the handle of `popup` reads: closed, or open on a page of which origin. */
+function handle(popup: Window) {
+  if (popup.closed) return 'handle.closed'
+  try {
+    void popup.location.href
+    return 'handle.local'
+  } catch {
+    // This page cannot read the location of another origin's page.
+    return 'handle.foreign'
   }
-  window.addEventListener('message', listener)
-  return stop
 }
 
 export declare namespace watchPopup {
@@ -156,5 +191,116 @@ export declare namespace http {
     page: string
     /** Tempo ID's URL. */
     url: string
+  }
+}
+
+export namespace machines {
+  /**
+   * The watch of a popup. This page's own `Cross-Origin-Opener-Policy` severs the handle as the
+   * popup navigates away, and a severed handle reads closed while the popup is open. So a closed
+   * handle counts as the user's close only in `open`: after Tempo ID's page reported that it
+   * loaded, or after the handle read open on another origin's page for `settle`, such as at the
+   * error page of a popup that failed to load offline. `closing` waits `closeGrace` for a
+   * callback that the popup posted as it closed.
+   *
+   * | State         | A closed handle                         |
+   * | ------------- | --------------------------------------- |
+   * | `unconfirmed` | Counts as severed.                      |
+   * | `settling`    | Counts as severed, and ends the settle. |
+   * | `open`        | Starts the close.                       |
+   */
+  export const watch = setup({
+    actions: {
+      /** Runs `onCallback` with the callback. `Popup.ts` provides it. */
+      callback: (_args, _params: { callback: Callback.Received }) => {},
+      /** Runs `onClose`, after `closeGrace` without a callback. `Popup.ts` provides it. */
+      close: () => {},
+      /** Runs `onClosed`, once the handle of an open popup reads closed. `Popup.ts` provides it. */
+      closed: () => {},
+    },
+    actors: {
+      /**
+       * Polls the handle every `closeInterval`, and sends the messages of the popup's page, until the
+       * watch ends. `Popup.ts` provides it.
+       */
+      popup: fromCallback<watch.Event>(() => {}),
+    },
+    delays: {
+      /** The wait of a closed popup for a callback that its page posted as it closed. */
+      closeGrace,
+      /** The time that the handle reads open on another origin's page before the popup counts as open. */
+      settle,
+    },
+    types: {
+      events: {} as watch.Event,
+    },
+  }).createMachine({
+    id: 'watch',
+    initial: 'unconfirmed',
+    invoke: { src: 'popup' },
+    on: {
+      'popup.callback': {
+        actions: {
+          params: (args) => ({ callback: args.event.callback }),
+          type: 'callback',
+        },
+        target: '.received',
+      },
+      'watch.stop': '.stopped',
+    },
+    states: {
+      closed: { entry: 'close', type: 'final' },
+      closing: {
+        after: { closeGrace: 'closed' },
+        entry: 'closed',
+      },
+      open: {
+        on: { 'handle.closed': 'closing' },
+      },
+      received: { type: 'final' },
+      settling: {
+        after: { settle: 'open' },
+        on: {
+          'handle.closed': 'unconfirmed',
+          'handle.local': 'unconfirmed',
+          'popup.open': 'open',
+        },
+      },
+      stopped: { type: 'final' },
+      unconfirmed: {
+        on: {
+          'handle.foreign': 'settling',
+          'popup.open': 'open',
+        },
+      },
+    },
+  })
+
+  /** The types of {@link watch}. */
+  export namespace watch {
+    /** An event of the watch. */
+    export type Event =
+      /** The handle reads closed. */
+      | { type: 'handle.closed' }
+      /** The handle reads open on another origin's page, whose location this page cannot read. */
+      | { type: 'handle.foreign' }
+      /** The handle reads open on a page of this origin, such as the blank page before the navigation. */
+      | { type: 'handle.local' }
+      /** The popup's page posted the callback. */
+      | {
+          /** The redirect URI with `code` and `state`, or with `error`, or an authorization. */
+          callback: Callback.Received
+          type: 'popup.callback'
+        }
+      /** Tempo ID's page in the popup reported that it loaded. */
+      | { type: 'popup.open' }
+      /** The caller stopped the watch. */
+      | { type: 'watch.stop' }
+
+    /** A running watch. */
+    export type Actor = ActorRefFrom<typeof watch>
+
+    /** A snapshot of the watch. */
+    export type Snapshot = SnapshotFrom<typeof watch>
   }
 }
