@@ -103,7 +103,7 @@ type Stored = {
  *
  * const accounts = Accounts.create({
  *   plugins: [
- *     local({ name: 'Mercator', v0: { key: 'mercator-local', path: '~/.mercator/wallet.json' } }),
+ *     local({ name: 'Mercator', v0: '~/.mercator/wallet.json' }),
  *     viem(),
  *   ],
  *   store: Store.file('~/.mercator/accounts.json'),
@@ -404,17 +404,11 @@ export declare namespace local {
     /** A label for the owner key, which `local.get` returns. */
     name?: string | undefined
     /**
-     * The accounts v0 `Storage.filesystem` file whose active secp256k1 account becomes the owner key
-     * at the first read without one, outside a browser.
+     * The accounts v0 `Storage.filesystem` file, such as `~/.mercator/wallet.json`, whose active
+     * secp256k1 account becomes the owner key at the first read without one, outside a browser. Of
+     * the file's `<key>.store` entries, the first that holds one gives it.
      */
-    v0?: V0 | undefined
-  }
-
-  type V0 = {
-    /** The v0 storage `key`. Defaults to `tempo-cli`, v0's default. */
-    key?: string | undefined
-    /** The v0 JSON file, such as `~/.mercator/wallet.json`. */
-    path: string
+    v0?: string | undefined
   }
 
   namespace get {
@@ -451,39 +445,47 @@ export declare namespace local {
  * Returns the private key of the active secp256k1 account in an accounts v0 `Storage.filesystem`
  * file, or `undefined` without the file, its entry, or such an account, and outside Node.
  */
-async function readV0(options: local.V0): Promise<Hex.Hex | undefined> {
+async function readV0(file: string): Promise<Hex.Hex | undefined> {
   const modules = Node.modules()
   if (!modules) return undefined
   const { Fs, Os, Path } = modules
-  const path = options.path.startsWith('~/')
-    ? Path.join(Os.homedir(), options.path.slice(2))
-    : options.path
+  const path = file.startsWith('~/')
+    ? Path.join(Os.homedir(), file.slice(2))
+    : file
   const text = await Fs.readFile(path, 'utf8').catch(() => undefined)
   if (!text) return undefined
-  const file = (() => {
-    try {
-      return JSON.parse(text) as Record<string, unknown>
-    } catch {
-      return undefined
-    }
-  })()
-  // v0's zustand `persist` keeps the state under `<key>.store`, as a JSON string or as an object.
-  const raw = file?.[`${options.key ?? 'tempo-cli'}.store`]
-  const entry = (typeof raw === 'string' ? JSON.parse(raw) : raw) as
-    | {
-        state?: {
-          accounts?: readonly { keyType?: string; privateKey?: string }[]
-          activeAccount?: number
+  const entries = parse<Record<string, unknown>>(text)
+  if (!entries || typeof entries !== 'object') return undefined
+  // v0's zustand `persist` keeps each instance's state under `<key>.store`, as a JSON string or as an
+  // object. A file holds one wallet in practice, so the first entry with an account gives it.
+  for (const [key, raw] of Object.entries(entries)) {
+    if (!key.endsWith('.store')) continue
+    const entry = (typeof raw === 'string' ? parse(raw) : raw) as
+      | {
+          state?: {
+            accounts?: readonly { keyType?: string; privateKey?: string }[]
+            activeAccount?: number
+          }
         }
-      }
-    | undefined
-  const accounts = entry?.state?.accounts ?? []
-  const active = accounts[entry?.state?.activeAccount ?? 0]
-  const account = [active, ...accounts].find(
-    (account) =>
-      account?.keyType === 'secp256k1' &&
-      typeof account.privateKey === 'string' &&
-      Hex.validate(account.privateKey, { strict: true }),
-  )
-  return account?.privateKey as Hex.Hex | undefined
+      | undefined
+    const accounts = entry?.state?.accounts ?? []
+    const active = accounts[entry?.state?.activeAccount ?? 0]
+    const account = [active, ...accounts].find(
+      (account) =>
+        account?.keyType === 'secp256k1' &&
+        typeof account.privateKey === 'string' &&
+        Hex.validate(account.privateKey, { strict: true }),
+    )
+    if (account) return account.privateKey as Hex.Hex
+  }
+  return undefined
+}
+
+/** Returns `text` parsed as JSON, or `undefined` for text that is no JSON. */
+function parse<value = unknown>(text: string): value | undefined {
+  try {
+    return JSON.parse(text) as value
+  } catch {
+    return undefined
+  }
 }

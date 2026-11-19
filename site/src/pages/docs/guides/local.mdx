@@ -78,7 +78,7 @@ export const accounts = Accounts.create({
   plugins: [
     local({
       name: 'Acme',
-      v0: { key: 'acme-local', path: '~/.acme/wallet.json' }, // [!code ++]
+      v0: '~/.acme/wallet.json', // [!code ++]
     }),
     viem(),
   ],
@@ -86,4 +86,4 @@ export const accounts = Accounts.create({
 })
 ```
 
-`key` is the v0 storage's `key`, `tempo-cli` by default. The v0 file stays as it is, and its access keys stay unused: the owner signs a new one at the first sign-in.
+The plugin takes the first secp256k1 account among the file's `<key>.store` entries, whatever v0's storage `key` was. The v0 file stays as it is, and its access keys stay unused: the owner signs a new one at the first sign-in.

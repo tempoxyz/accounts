@@ -270,6 +270,8 @@ describe('local', () => {
     const privateKey = generatePrivateKey()
     const other = generatePrivateKey()
     const v0 = {
+      // An entry without a secp256k1 account comes first, and the scan passes over it.
+      'other.store': { state: { accounts: [{ keyType: 'webAuthn' }] } },
       'mercator-local.store': {
         state: {
           accessKeys: [],
@@ -294,7 +296,7 @@ describe('local', () => {
     await Fs.writeFile(path, JSON.stringify(v0))
     const { accounts } = instance({
       store: Store.file(Path.join(folder, 'accounts.json')),
-      v0: { key: 'mercator-local', path },
+      v0: path,
     })
 
     const session = await accounts.local.signIn()
@@ -314,7 +316,7 @@ describe('local', () => {
         'tempo-cli.store': { state: { accounts: [{ keyType: 'webAuthn' }] } },
       }),
     )
-    const { accounts } = instance({ v0: { path } })
+    const { accounts } = instance({ v0: path })
 
     expect(await accounts.local.get()).toBeUndefined()
     await Fs.rm(folder, { force: true, recursive: true })
