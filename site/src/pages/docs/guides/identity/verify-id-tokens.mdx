@@ -87,7 +87,7 @@ export const accounts = Accounts.create({ chain: 'testnet' })
 
 ### Create the server instance<StepTag kind="server" />
 
-On the server, create an instance with the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin. Its <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink> is the client ID of the app, the origin of the page. The instance caches Tempo ID's key set for 10 minutes, so create it once.
+On the server, create an instance with the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin. Its <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink> is the client ID of the app, the origin of the page. The instance keeps Tempo ID's key set for 10 minutes, so create it once.
 
 ```ts [server.ts]
 import { Accounts } from 'accounts'
@@ -227,7 +227,14 @@ const accounts = Accounts.create({
 
 ### Refresh the key set sooner
 
-<SourceLink name="create.maxAge" path="src/AccessToken.ts">`maxAge`</SourceLink> sets how long the instance keeps Tempo ID's key set, in milliseconds. A shorter time refuses the tokens of a removed signing key sooner. Defaults to 10 minutes.
+<SourceLink name="create.maxAge" path="src/AccessToken.ts">`maxAge`</SourceLink> sets how long Tempo ID's key set verifies, in milliseconds. A shorter time refuses the tokens of a removed signing key sooner. Defaults to 10 minutes. Few verifications wait for a fetch of the set:
+
+| Age of the key set             | Verification                                                   |
+| ------------------------------ | -------------------------------------------------------------- |
+| Before half of `maxAge`        | Verifies with the set                                          |
+| From half of `maxAge`          | Verifies with the set, and fetches a new set in the background |
+| From `maxAge`, or no set       | Waits for a fetch                                              |
+| A token names an unknown `kid` | Waits for a fetch, at most once each 30 seconds                |
 
 ```ts [server.ts]
 import { Accounts } from 'accounts'
@@ -238,6 +245,23 @@ const accounts = Accounts.create({
   plugins: [tokens({ maxAge: 60_000 })], // [!code hl]
 })
 ```
+
+### Keep the key set across Worker isolates
+
+On Cloudflare Workers, each new isolate starts without the key set. <SourceLink name="cacheApi" path="src/cloudflare/KeySet.ts">`KeySet.cacheApi`</SourceLink> of `accounts/cloudflare` keeps the set in the Cache API of the Worker's location, so a new isolate verifies without a fetch. Its background fetches run in `waitUntil`.
+
+```ts [worker.ts]
+import { Accounts, KeySet } from 'accounts/cloudflare'
+import { tokens } from 'accounts/plugins'
+
+const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  keySet: KeySet.cacheApi(), // [!code hl]
+  plugins: [tokens()],
+})
+```
+
+Another runtime passes a <SourceLink name="Store" path="src/Store.ts">`Store`</SourceLink> as `keySet.cache`, such as `Store.redis`, and its own `keySet.defer` for background work.
 
 ### Limit the fetch of the key set
 

@@ -35,6 +35,7 @@ import * as DefaultStore from './internal/DefaultStore.js'
 import * as Hint from './internal/Hint.js'
 import * as InstanceChain from './internal/InstanceChain.js'
 import * as InternalSession from './internal/Session.js'
+import type * as KeySet from './internal/KeySet.js'
 import * as Payment from './internal/Payment.js'
 import type { Permissions } from './Permissions.js'
 import * as Plugin from './Plugin.js'
@@ -515,6 +516,15 @@ export type Config = {
    * also for a session that the instance restores. The `passkey` plugin sets its own `getFn`.
    */
   getFn?: TempoAccount.deserialize.Options['getFn']
+  /**
+   * The platform capabilities of the key set that the verifiers of Tempo ID's tokens fetch, such as
+   * `AccessToken.create`: a cache that instances share, and a function that keeps background work
+   * running. A verifier with `cache` starts from its copy, such as in a new Worker isolate, and
+   * fetches the set only without one. `KeySet.cacheApi` of `accounts/cloudflare` returns the
+   * capabilities of a Worker. Absent, each verifier keeps the set in memory, and leaves its
+   * background fetches to run.
+   */
+  keySet?: KeySet.Runtime | undefined
   /**
    * Whether a redirect or dialog pushes each authorization request to `POST /oauth2/par`
    * ([RFC 9126](https://www.rfc-editor.org/rfc/rfc9126)), so the browser's URL holds only
