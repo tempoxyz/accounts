@@ -115,21 +115,16 @@ describe('Store.memory', () => {
     const store = Store.memory()
     const expiresAt = Date.now() + 3_600_000
 
-    // Before, each write read every entry for its expiry, so 20,000 writes read 200 million.
+    // A write reads no other entry, so 20,000 writes stay far below the budget on a slow runner.
     const start = performance.now()
     for (let index = 0; index < 20_000; index++)
       await store.setItem(`session:${index}`, { index }, { expiresAt })
     const elapsed = performance.now() - start
 
-    expect({
-      read: await store.getItem('session:19999'),
-      withinBudget: elapsed < 1_000,
-    }).toMatchInlineSnapshot(`
+    expect(elapsed < 1_000).toMatchInlineSnapshot(`true`)
+    expect(await store.getItem('session:19999')).toMatchInlineSnapshot(`
       {
-        "read": {
-          "index": 19999,
-        },
-        "withinBudget": true,
+        "index": 19999,
       }
     `)
   }, 60_000)
