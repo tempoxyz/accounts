@@ -467,6 +467,9 @@ describe('create', () => {
     expect(
       Accounts.from({ chain: 'testnet', clientId: 'client_acme' }).chainId,
     ).toMatchInlineSnapshot(`42431`)
+    expect(
+      Accounts.from({ chain: null as never, clientId: 'client_acme' }).chainId,
+    ).toMatchInlineSnapshot(`4217`)
   })
 
   test('keeps an own `__proto__` member as a member of a log or JSON of `config`', () => {

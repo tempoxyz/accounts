@@ -1564,7 +1564,7 @@ export function from(options: from.Options = {}): Config {
   const chainId = (() => {
     if (typeof chain === 'number' && Number.isSafeInteger(chain) && chain > 0)
       return chain
-    if (chain === undefined) return Chains.ids.mainnet
+    if (chain === undefined || chain === null) return Chains.ids.mainnet
     if (Object.hasOwn(Chains.ids, chain as string))
       return Chains.ids[chain as keyof typeof Chains.ids]
     throw new ChainNameInvalidError({ chain })
