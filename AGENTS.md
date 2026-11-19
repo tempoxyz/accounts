@@ -334,7 +334,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - Each message stands alone.
 - Keep the PR title accurate, since it becomes the squash commit.
 - Keep PR bodies short. Open with the release note: what changed for an app, in the past tense, such as "Added `loginHint` to `dialog.signIn`." Name exports in backticks. For a breaking change, add the migration and at most one short `ts` block.
-- Put the problem, the example, and the validation under headings, such as `## How to test`. The release notes take the body only up to its first heading.
+- Put the problem, the example, and the validation under `##` headings, such as `## API changes` and `## How to test`, also for the sections below. The release notes take the body only up to its first heading.
 - Never force push or amend a pushed commit.
 
 **State machine**

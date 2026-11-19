@@ -14,7 +14,7 @@
  *   of a commit that npm already has resumes its release rather than publishing again.
  * - The notes list each `feat`, `fix`, `perf`, and breaking commit under its section, as the
  *   changesets releases did. Each entry is the pull request's past-tense description, which the
- *   squash commit's body holds, up to its first heading.
+ *   squash commit's body holds, up to its first heading or bold line.
  * - It runs before the dependencies install, and reads only Node.js, git, gh, and npm.
  *
  * `node scripts/release.ts resolve` writes the version to `GITHUB_OUTPUT` and the notes to
@@ -113,7 +113,7 @@ function reference(commit: Commit): string {
 
 /**
  * Returns the entry of `commit`: its pull request's description, which the squash commit's body
- * holds, up to its first heading and without its trailers, such as `Co-authored-by:`. Without a
+ * holds, up to its first heading or bold line and without its trailers, such as `Co-authored-by:`. Without a
  * description, it is the title without its type and pull request number. The first paragraph is one
  * line, so the notes put the reference at the end of that paragraph.
  */
@@ -132,10 +132,10 @@ function entry(commit: Commit): string {
   const kept = trailers ? paragraphs.slice(0, -1) : paragraphs
   // A squash of several authors puts a `---------` line before their trailers.
   if (trailers && /^-{3,}$/.test(kept.at(-1)?.trim() ?? '')) kept.pop()
-  // Headed sections, such as `## How to test`, are for reviewers.
+  // Headed sections, such as `## How to test` or a bold `**How to test**` line, are for reviewers.
   const description = kept
     .join('\n\n')
-    .split(/^#{1,6} /m, 1)[0]!
+    .split(/^(?:#{1,6} |\*\*[^*\n]+\*\*[ \t]*$)/m, 1)[0]!
     .trim()
   if (description) {
     const [first, ...rest] = description.split(/\n[ \t]*\n/)

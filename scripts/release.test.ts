@@ -217,6 +217,9 @@ describe('resolve', () => {
       'refactor: drop Tab (#3)\n\nRemoved `Tab`.\n\n```ts\nTabs.from()\n```\n\nBREAKING CHANGE: use Tabs.\nCo-authored-by: CI <ci@tempo.xyz>',
     )
     commit('fix: pad Tab (#4)')
+    commit(
+      'perf: cache Tab (#7)\n\nCached `Tab`.\n\n**How to test**\n\n`pnpm test`',
+    )
     commit('ci: shard tests (#5)')
     const sha = commit('chore(deps): bump ox (#6)\n\nBumps ox.')
 
@@ -239,6 +242,10 @@ describe('resolve', () => {
       ### Fixes
 
       - Pad Tab (#4)
+
+      ### Performance
+
+      - Cached \`Tab\`. (#7)
       "
     `)
   })
