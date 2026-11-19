@@ -1248,7 +1248,7 @@ describe('mpp', () => {
         }),
         'signature',
       ].join('.')
-    const expired = idToken(now - 60)
+    const expired = idToken(now - 3600)
     await store.setItem(name, {
       state: { session: { ...session({ expiry: 3600 }), idToken: expired } },
       version: 0,
