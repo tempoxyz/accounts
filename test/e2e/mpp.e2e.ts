@@ -73,16 +73,20 @@ const pathUsd = '0x20c0000000000000000000000000000000000000'
 
 /**
  * Returns a backend's session for the Tempo Account of `owner`, whose access key the owner
- * authorizes with `limit` of pathUSD for an hour, as a sign-in at Tempo ID returns it.
+ * authorizes with `limit` of pathUSD for an hour, as a sign-in at Tempo ID returns it. Without
+ * `limit`, the access key has no limits.
  */
-function backendSession(options: { limit: bigint; owner: `0x${string}` }) {
+function backendSession(options: {
+  limit?: bigint | undefined
+  owner: `0x${string}`
+}) {
   const { limit, owner } = options
   const privateKey = Secp256k1.randomPrivateKey()
   const authorization = KeyAuthorization.from({
     address: Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey })),
     chainId: BigInt(Chain.chain.id),
     expiry: Math.floor(Date.now() / 1000) + 3600,
-    limits: [{ limit, token: pathUsd }],
+    ...(limit === undefined ? {} : { limits: [{ limit, token: pathUsd }] }),
     type: 'secp256k1',
   })
   const signature = Secp256k1.sign({
@@ -538,6 +542,56 @@ test.describe('mpp', () => {
         '200',
         `mpp.LimitError: The charge of 0.6 exceeds the access key's limit of <left> left for token ${pathUsd}. Sign in with an access key whose limit covers the charge.`,
       ])
+    })
+    test("returns the endpoint's response for a reverted charge of an access key without limits", async () => {
+      // Once a first charge registers the access key, the owner holds 1 pathUSD, so of two charges of
+      // 0.6 at once, one lands and the other reverts for the balance. The access key has no limits,
+      // so no limit refuses the charge.
+      const owner = generatePrivateKey()
+      await Chain.fund({ address: privateKeyToAddress(owner) })
+      const accounts = Accounts.create({
+        chain: Chain.chain.id,
+        clientId: 'https://app.example.com',
+        plugins: [
+          viem({ transport: http(Chain.rpcUrl) }),
+          mpp({
+            fetch: merchant({
+              recipient: privateKeyToAddress(generatePrivateKey()),
+            }),
+          }),
+        ],
+        store: Store.memory(),
+      })
+      const payer = accounts.mpp({ session: backendSession({ owner }) })
+
+      expect((await payer.fetch('https://merchant.test/0.1')).status).toBe(200)
+      const held = await Chain.balance({
+        address: privateKeyToAddress(owner),
+        token: pathUsd,
+      })
+      await Chain.send({
+        amount: held - parseUnits('1', 6),
+        privateKey: owner,
+        to: privateKeyToAddress(generatePrivateKey()),
+        token: pathUsd,
+      })
+
+      const outcomes = await Promise.allSettled(
+        [0, 1].map(() =>
+          payer
+            .fetch('https://merchant.test/0.6')
+            .then((response) => response.status),
+        ),
+      )
+      expect(
+        outcomes
+          .map((outcome) =>
+            outcome.status === 'fulfilled'
+              ? String(outcome.value)
+              : `${(outcome.reason as Error).name}: ${(outcome.reason as Error).message}`,
+          )
+          .sort(),
+      ).toEqual(['200', '500'])
     })
   })
 

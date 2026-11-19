@@ -2306,7 +2306,8 @@ function create(options: {
     serialized: string,
     charge: { amount: bigint; token: Address.Address } | undefined,
   ) {
-    if (!account || !charge) return undefined
+    // Without signed limits, the access key spends any amount, so a revert is not of a limit.
+    if (!account || !charge || !limits) return undefined
     const signed = transaction(serialized)
     if (!signed) return undefined
     const client = getClient({ chainId })
