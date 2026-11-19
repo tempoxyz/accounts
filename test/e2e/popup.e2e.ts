@@ -123,14 +123,14 @@ test.describe('popup', () => {
     })
 
     await test.step('signs in with the filled address', async () => {
-      await window.getByRole('button', { name: 'Continue with email' }).click()
-      await window
-        .getByRole('textbox', { exact: true, name: 'Code' })
-        .fill(await code(email))
+      // The helper fills the same address, so the step above shows what the page filled.
+      await Playwright.signIn(window, { code, email })
 
       expect(
         await Playwright.outcome(page, { name: 'Sign in in a popup' }),
       ).toMatchObject({ state: 'fulfilled', value: { email } })
+      await expect(page.locator('#status')).toHaveText('signedIn')
+      await capture('signed in')
     })
   })
 
