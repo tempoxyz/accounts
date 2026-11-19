@@ -281,7 +281,9 @@ export function passkey(options: passkey.Options = {}) {
           const resolved = (() => {
             try {
               return {
-                accessKey: SignIn.accessKey(context, parameters.accessKey),
+                accessKey: SignIn.accessKey(context, parameters.accessKey, {
+                  challenge: parameters.challenge !== undefined,
+                }),
               }
             } catch (error) {
               return { error }
@@ -397,7 +399,9 @@ export function passkey(options: passkey.Options = {}) {
           // supersedes the sign-in. The options request awaits the read beside the access key.
           const change = context.session.change()
           const result = await PasskeyActions.signIn(config, {
-            accessKey: SignIn.accessKey(context, parameters.accessKey),
+            accessKey: SignIn.accessKey(context, parameters.accessKey, {
+              challenge: parameters.challenge !== undefined,
+            }),
             chainId: config.chainId,
             challenge: parameters.challenge,
             credentialId: parameters.credentialId,

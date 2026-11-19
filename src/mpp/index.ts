@@ -22,7 +22,7 @@ import * as TempoId from 'mppx/extensions/identity/tempo'
 import { McpClient } from 'mppx/mcp/client'
 import { Address, Hash, Hex } from 'ox'
 import { KeyAuthorization, TempoAddress, TxEnvelopeTempo } from 'ox/tempo'
-import type { Chain, Client, Transport } from 'viem'
+import type { Chain, Client, TransactionReceipt, Transport } from 'viem'
 import {
   BaseError,
   createClient,
@@ -40,6 +40,7 @@ import * as AccessKey from '../internal/AccessKey.js'
 import * as Api from '../internal/Api.js'
 import * as FeeAllowance from '../internal/FeeAllowance.js'
 import * as Charge from '../internal/mpp/Charge.js'
+import * as SessionManager from '../internal/mpp/SessionManager.js'
 import * as Retry from '../internal/viem/Retry.js'
 import * as Token from '../internal/viem/Token.js'
 import * as Accounts from '../Accounts.js'
@@ -300,8 +301,10 @@ type Turn = {
  *
  * The plugin reads the chain and transport of each chain ID from the `viem` plugin. Without a
  * `viem` plugin in `plugins`, it uses a `viem` plugin of its own, with Tempo's chains and their own
- * RPC. `mppx` is an optional peer dependency of `accounts`, so an app that pays MPP endpoints
- * installs it beside the package.
+ * RPC. `mppx` is a peer dependency of `accounts`, so an app installs it beside the package.
+ *
+ * Every instance holds the plugin. An instance without it in `plugins` receives it with its default
+ * options, and loads its module at the first payment. An app passes `mpp()` only to set its options.
  *
  * The plugin shares the `viem` plugin's record of the access keys that the chain registered, which
  * the instance's `store` keeps across runs. A charge that registers an access key adds it to the
@@ -1011,7 +1014,7 @@ export function mpp(options: mpp.Options = {}) {
             if (context.session.get()) return guarded({ overrides, parameters })
             // The instance reads its stored session only at `load`, such as after a restart, so the
             // manager loads it at its first request, as `fetch` does.
-            return deferred(async () => {
+            return SessionManager.deferred(async () => {
               // A session in memory before the load, such as after a read of the session since the
               // manager's creation, returns without a store read, so the first request reads it.
               const loaded = !context.session.get()
@@ -1674,72 +1677,6 @@ export declare namespace mpp {
 }
 
 /**
- * Returns a session manager that creates its manager with `start` at its first request, stream, or
- * top-up, and forwards each call to it. Before then, it reads as a manager without a channel, and
- * `close` settles nothing. A failed `start`, such as without a session, rejects that call, and the
- * next call starts again.
- */
-function deferred(
-  start: () => Promise<mpp.SessionManager>,
-): mpp.SessionManager {
-  // One value of three cases: no start yet, the start in progress, or the manager that it created.
-  // A failed start returns to none, so the next call starts again.
-  let current:
-    | { manager: mpp.SessionManager; status: 'ready' }
-    | { promise: Promise<mpp.SessionManager>; status: 'starting' }
-    | undefined
-  const manager = () =>
-    current?.status === 'ready' ? current.manager : undefined
-  const resolve = () => {
-    if (current?.status === 'ready') return Promise.resolve(current.manager)
-    if (current?.status === 'starting') return current.promise
-    const promise = start().then(
-      (value) => {
-        current = { manager: value, status: 'ready' }
-        return value
-      },
-      (error: unknown) => {
-        current = undefined
-        throw error
-      },
-    )
-    current = { promise, status: 'starting' }
-    return promise
-  }
-  return {
-    get channelId() {
-      return manager()?.channelId
-    },
-    async close() {
-      if (!current) return undefined
-      const started = await resolve().catch(() => undefined)
-      return started?.close()
-    },
-    get cumulative() {
-      return manager()?.cumulative ?? 0n
-    },
-    async fetch(...args) {
-      return (await resolve()).fetch(...args)
-    },
-    get opened() {
-      return manager()?.opened ?? false
-    },
-    async sse(...args) {
-      return (await resolve()).sse(...args)
-    },
-    get state() {
-      return manager()?.state ?? { status: 'idle' }
-    },
-    async topUp(...args) {
-      return (await resolve()).topUp(...args)
-    },
-    async ws(...args) {
-      return (await resolve()).ws(...args)
-    },
-  }
-}
-
-/**
  * Returns whether `current` is a session of the user of `options.session` that holds an access key,
  * active or parked on another chain, of `options.account`, whose access key thus still pays for it.
  */
@@ -2257,36 +2194,38 @@ function create(options: {
   }
 
   /**
+   * Returns the receipt read of the transaction of a charge's credential, which reads the chain at
+   * most once, so `superseded` and `reverted` share one read. Returns `undefined` for a
+   * credential that names no transaction.
+   */
+  function receiptOf(serialized: string): Inclusion | undefined {
+    const signed = transaction(serialized)
+    if (!signed) return undefined
+    const client = getClient({ chainId })
+    let pending: Promise<Inclusion.Settled> | undefined
+    const receipt: Inclusion = {
+      read() {
+        pending ??= getTransactionReceipt(client, { hash: signed.hash }).then(
+          (value) => (receipt.settled = { receipt: value }),
+          (error: unknown) => (receipt.settled = { error }),
+        )
+        return pending
+      },
+      settled: undefined,
+    }
+    return receipt
+  }
+
+  /**
    * Returns whether the chain refuses the signed transaction of `serialized` for good, since it
    * attaches the key authorization of an access key that another sender registered, such as a
    * charge of another instance on the same `store`. Records the registration then, so the next
    * charge attaches no key authorization. Returns `false` after a failed read.
    */
-  async function superseded(serialized: string) {
+  async function superseded(serialized: string, receipt: Inclusion) {
     if (!account) return false
-    // Only a canonical, sender-signed 0x76 envelope that awaits no fee payer names the hash of the
-    // transaction that lands, as mppx derives it. A fee payer's signature, such as of a 0x78
-    // envelope, gives the transaction that lands another hash. A malformed credential sends nothing.
-    const signed = (() => {
-      try {
-        const { payload } = Credential.deserialize<{
-          signature?: string | undefined
-          type: string
-        }>(serialized)
-        if (payload.type !== 'transaction' || !payload.signature)
-          return undefined
-        const signed = payload.signature as TxEnvelopeTempo.Serialized
-        if (!signed.startsWith(TxEnvelopeTempo.serializedType)) return undefined
-        const envelope = TxEnvelopeTempo.deserialize(signed)
-        if (!envelope.keyAuthorization || !envelope.signature) return undefined
-        if (envelope.feePayerSignature === null) return undefined
-        if (TxEnvelopeTempo.serialize(envelope) !== signed) return undefined
-        return signed
-      } catch {
-        return undefined
-      }
-    })()
-    if (!signed) return false
+    const signed = transaction(serialized)
+    if (!signed?.keyAuthorization) return false
 
     const client = getClient({ chainId })
     const { accessKeyAddress } = account
@@ -2305,15 +2244,48 @@ function create(options: {
     // The receipt read follows the registration read, so a transaction of this request that
     // registered the access key shows its receipt. Once the chain holds the access key, a
     // transaction that attaches its key authorization never lands.
-    const included = await getTransactionReceipt(client, {
-      hash: Hash.keccak256(signed),
-    }).then(
-      () => true,
-      (error: unknown) => !(error instanceof TransactionReceiptNotFoundError),
-    )
+    const read = await receipt.read()
+    const included =
+      'receipt' in read ||
+      !(read.error instanceof TransactionReceiptNotFoundError)
     if (included) return false
-    landed(signed, () => Promise.resolve(true))
+    landed(signed.serialized, () => Promise.resolve(true))
     return true
+  }
+
+  /**
+   * Returns {@link LimitError} for a charge whose transaction landed and reverted since the limit
+   * that remains no longer covers it, such as after a concurrent charge of the same access key
+   * spent the limit between the fill and the broadcast. Only a failed response reads the receipt and
+   * the limit, in parallel. A receipt that `superseded` read is not read again, and a successful one
+   * reads no limit. Returns `undefined` for a transaction that succeeded or that the chain
+   * holds no receipt of, for another credential, and after a failed read.
+   */
+  async function reverted(
+    receipt: Inclusion,
+    charge: { amount: bigint; token: Address.Address } | undefined,
+  ) {
+    // Without signed limits, the access key spends any amount, so a revert is not of a limit.
+    if (!account || !charge || !limits) return undefined
+    if (receipt.settled && !failed(receipt.settled)) return undefined
+    const client = getClient({ chainId })
+    const [settled, read] = await Promise.all([
+      receipt.read(),
+      Actions.accessKey
+        .getRemainingLimit(client, {
+          accessKey: account.accessKeyAddress,
+          account: account.address,
+          token: charge.token,
+        })
+        .catch(() => undefined),
+    ])
+    if (!failed(settled)) return undefined
+    if (!read || read.remaining >= charge.amount) return undefined
+    return new LimitError({
+      amount: formatUnits(charge.amount, 6),
+      limit: formatUnits(read.remaining, 6),
+      token: charge.token,
+    })
   }
 
   /**
@@ -2430,6 +2402,7 @@ function create(options: {
         call.end?.()
         return response
       }
+      const receipt = call.credential ? receiptOf(call.credential) : undefined
       // Another instance on the store can register the access key while this charge carries its
       // key authorization, so the endpoint's broadcast fails. The first transaction never lands
       // then, so the charge sends once more, without the key authorization.
@@ -2440,11 +2413,21 @@ function create(options: {
         // sends again.
         call.credentials === 1 &&
         resendable(input, init) &&
-        (await superseded(call.credential))
+        receipt &&
+        (await superseded(call.credential, receipt))
       ) {
         // The failed response is not the app's, so its body buffers nothing.
         void response.body?.cancel().catch(() => undefined)
         return created.fetch(input, { ...init, [resent]: true } as RequestInit)
+      }
+      // A concurrent charge of the access key can spend the limit after this charge's fill, so its
+      // transaction lands and reverts, and the endpoint fails. The charge then rejects as one above
+      // the limit that remains does before its signature.
+      const limited = receipt && (await reverted(receipt, call.charge))
+      if (limited) {
+        // The failed response is not the app's, so its body buffers nothing.
+        void response.body?.cancel().catch(() => undefined)
+        throw limited
       }
       return response
     },
@@ -2617,6 +2600,54 @@ function create(options: {
     },
   }
   return created
+}
+
+/** The receipt read of a charge's transaction, which settles once. */
+type Inclusion = {
+  /** Reads the receipt, once. A later call returns the same read. */
+  read: () => Promise<Inclusion.Settled>
+  /** The settled read. Absent before the read settles. */
+  settled: Inclusion.Settled | undefined
+}
+
+declare namespace Inclusion {
+  /** The receipt, or the read's error, such as `TransactionReceiptNotFoundError`. */
+  type Settled = { error: unknown } | { receipt: TransactionReceipt }
+}
+
+/** Returns whether a settled receipt read shows a transaction that landed and reverted. */
+function failed(settled: Inclusion.Settled) {
+  return 'receipt' in settled && settled.receipt.status === 'reverted'
+}
+
+/**
+ * Returns the signed transaction of a charge's credential, with the hash of the transaction that
+ * lands and its key authorization. Only a canonical, sender-signed 0x76 envelope that awaits no fee
+ * payer names the hash of the transaction that lands, as mppx derives it. A fee payer's signature,
+ * such as of a 0x78 envelope, gives the transaction that lands another hash. Returns `undefined`
+ * for any other credential, and for a malformed one.
+ */
+function transaction(serialized: string) {
+  try {
+    const { payload } = Credential.deserialize<{
+      signature?: string | undefined
+      type: string
+    }>(serialized)
+    if (payload.type !== 'transaction' || !payload.signature) return undefined
+    const signed = payload.signature as TxEnvelopeTempo.Serialized
+    if (!signed.startsWith(TxEnvelopeTempo.serializedType)) return undefined
+    const envelope = TxEnvelopeTempo.deserialize(signed)
+    if (!envelope.signature) return undefined
+    if (envelope.feePayerSignature === null) return undefined
+    if (TxEnvelopeTempo.serialize(envelope) !== signed) return undefined
+    return {
+      hash: Hash.keccak256(signed),
+      keyAuthorization: envelope.keyAuthorization,
+      serialized: signed,
+    }
+  } catch {
+    return undefined
+  }
 }
 
 /**

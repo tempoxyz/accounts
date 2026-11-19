@@ -233,8 +233,10 @@ export function backend(options: backend.Options) {
          * without a revocation. A SIWE session returns until its `expiresAt`, without a refresh,
          * and then `undefined`.
          *
-         * With `store`, if Tempo ID refuses the refresh with `invalid_grant`, `get` sends it once
-         * more after one second. Another process that shares the store can refresh the same token
+         * With a `store` that has `lock`, such as `Store.file` or `Store.redis`, the instances on
+         * the store refresh a session one at a time, so they send one refresh. With `store`, if
+         * Tempo ID refuses the refresh with `invalid_grant`, `get` sends it once more after one
+         * second. Another process that shares the store can refresh the same token
          * at once, and the second refresh receives its tokens. If the other refresh takes longer
          * than one second, the session still ends, so replicas keep session affinity. With
          * `sessions`, such as `Sessions.durableObject`, one object holds each session, so a refusal

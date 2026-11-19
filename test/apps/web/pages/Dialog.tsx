@@ -79,10 +79,16 @@ export async function start() {
         accounts.dialog.signMessage({ message: App.message(), mode: 'popup' }),
       'Sign in': async () =>
         App.describe(
-          await accounts.dialog.signIn({ ...App.request(), ...App.funding() }),
+          await accounts.dialog.signIn({
+            ...App.request(),
+            ...App.funding(),
+            ...App.loginHint(),
+          }),
         ),
       'Sign in in a popup': async () =>
-        App.describe(await accounts.dialog.signIn({ mode: 'popup' })),
+        App.describe(
+          await accounts.dialog.signIn({ ...App.loginHint(), mode: 'popup' }),
+        ),
       'Sign in with a limit of 5': async () =>
         App.describe(
           await accounts.dialog.signIn({

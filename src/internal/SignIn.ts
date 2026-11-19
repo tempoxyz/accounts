@@ -8,6 +8,7 @@ import { RequestError } from '../Accounts.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
+import * as AccessKey from './AccessKey.js'
 import type * as TempoAccount from './TempoAccount.js'
 import type { Tokens } from './Tokens.js'
 import type { User } from './User.js'
@@ -42,19 +43,33 @@ export type External = Permissions & {
 }
 
 /**
- * Returns the access key of a sign-in, or `undefined` for a sign-in without an access key. Throws a
- * `TypeError` on a page whose instance's `store` has `json`, for an access key that the sign-in
- * generates, before any request.
+ * Returns the access key of a sign-in, or `undefined` for a sign-in without an access key. An
+ * access key without `expiry` expires `AccessKey.defaultExpiry` after the sign-in. The default
+ * access key of an instance without `accessKey` applies only to a sign-in without a challenge, on a
+ * store that can keep it. Throws a `TypeError` on a page whose instance's `store` has `json`, for
+ * an access key that the sign-in generates, before any request.
  */
 export function accessKey(
   context: Plugin.Context,
   value: AccessKeyOption_external,
+  options: accessKey.Options = {},
 ): Permissions | External | undefined {
   const resolved = (() => {
-    if (value === false) return undefined
-    if (typeof value === 'function') return value()
-    if (value) return value
-    return context.accessKey()
+    const given = (() => {
+      if (value === false) return undefined
+      if (typeof value === 'function') return value()
+      if (value) return value
+      const configured = context.accessKey()
+      if (configured) return configured
+      // With the default access key, the challenge's signature would sign the key authorization,
+      // which no EIP-191 verifier accepts. A page's store with `json` cannot keep its key.
+      if (options.challenge) return undefined
+      if (context.config.store?.json && typeof indexedDB !== 'undefined')
+        return undefined
+      return context.defaultAccessKey()
+    })()
+    if (!given || given.expiry !== undefined) return given
+    return { ...given, expiry: AccessKey.defaultExpiry }
   })()
   // A page generates a non-extractable access key, which the save of the session would refuse after
   // Tempo ID spent the sign-in's code. An access key of `account` or `publicKey` holds no such key.
@@ -71,6 +86,13 @@ export function accessKey(
       'Unserializable value: a non-extractable access key has no JSON form. In a browser, keep the session in the default store.',
     )
   return resolved
+}
+
+export declare namespace accessKey {
+  type Options = {
+    /** Whether the sign-in carries a challenge. Defaults to `false`. */
+    challenge?: boolean | undefined
+  }
 }
 
 /** Returns the session of a sign-in's result: its tokens, its user, its access key, and its account. */

@@ -12,7 +12,8 @@ import type * as Store from '../Store.js'
  * write, or to a value that a read returned, thus changes no stored value until the next write. A
  * `CryptoKey` stays the same key. A value that a structured clone refuses, such as a function,
  * rejects the write. A runtime without `structuredClone`, such as React Native on Hermes, keeps
- * each value as it is. A read skips an expired entry, and each write deletes the expired entries. A
+ * each value as it is. A read skips an expired entry. A write deletes the expired entries once the
+ * store doubles its size since the last such sweep, so each write costs constant time on average. A
  * restart loses every value, so it serves one process, such as in development or tests. A page
  * load also loses every value, so `redirect.signIn` without `open` refuses the store with
  * `invalid_request` before any request. The store sets `local`, so where a lock spans the process, such as in Node or a
@@ -35,6 +36,9 @@ import type * as Store from '../Store.js'
  */
 export function create(): Store.Store {
   const entries = new Map<string, Expiry.Entry<unknown>>()
+  // The size at which a write deletes the expired entries. A sweep reads every entry, so the size
+  // doubles after each sweep, and the writes between two sweeps pay for it.
+  let sweepAt = 64
   // Hermes has no `structuredClone`, so a store there keeps each value as it is, and every write
   // still succeeds.
   const clone: <value>(value: value) => value =
@@ -65,8 +69,11 @@ export function create(): Store.Store {
         }
       })()
       if ('error' in copy) return Promise.reject(copy.error)
-      for (const [name, entry] of entries)
-        if (Expiry.expired(entry)) entries.delete(name)
+      if (entries.size >= sweepAt) {
+        for (const [name, entry] of entries)
+          if (Expiry.expired(entry)) entries.delete(name)
+        sweepAt = Math.max(64, entries.size * 2)
+      }
       entries.set(key, { expiresAt: options.expiresAt, value: copy.value })
       return Promise.resolve()
     },

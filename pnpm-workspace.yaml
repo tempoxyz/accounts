@@ -69,7 +69,7 @@ catalog:
   vite-plus: 1.6.0
   vocs: 2.12.0
   wagmi: 3.7.9
-  waku: 1.0.0-rc.2
+  waku: 1.0.0-rc.5
   wrangler: 4.161.0
   xstate: 5.33.4
   zile: 0.0.29

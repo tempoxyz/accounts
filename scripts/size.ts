@@ -39,6 +39,11 @@ const cases = {
     import { Hint } from 'accounts/hint'
     export const hinted = Hint.has(document.cookie)
   `,
+  'accounts/lite (dialog)': `
+    import { Accounts } from 'accounts/lite'
+    import { dialog } from 'accounts/plugins'
+    export const accounts = Accounts.create({ plugins: [dialog()] })
+  `,
   'accounts/plugins (dialog)': `
     import { Accounts } from 'accounts'
     import { dialog } from 'accounts/plugins'

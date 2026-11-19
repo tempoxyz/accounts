@@ -57,7 +57,7 @@ export const accounts = Accounts.create({
 
 ### Sign the user in
 
-Call <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> in a click handler, before any `await`, since its popup fallback opens only within a click. Without an [access key](/docs/guides/access-keys) request, the session holds no access key.
+Call <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> in a click handler, before any `await`, since its popup fallback opens only within a click. Without an [access key](/docs/guides/access-keys) request, the sign-in requests an access key that may transfer up to 5 OUSD for a day.
 
 :::code-group
 
@@ -270,6 +270,43 @@ export function SignIn() {
       onClick={() =>
         accounts.dialog.signIn({
           funding: { amount: '10', currency: 'USD' }, // [!code hl]
+        })
+      }
+      type="button"
+    >
+      Sign in with Tempo
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react()],
+})
+```
+
+:::
+
+### Fill in the email
+
+<SourceLink name="signIn.loginHint" path="src/plugins/dialog.ts">`loginHint`</SourceLink> fills in the email field of Tempo ID's sign-in, and the user can still change it. An app passes it for a session that ended, such as after a refused refresh. A browser with a Tempo ID session ignores it.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={() =>
+        accounts.dialog.signIn({
+          loginHint: 'alice@example.com', // [!code hl]
         })
       }
       type="button"

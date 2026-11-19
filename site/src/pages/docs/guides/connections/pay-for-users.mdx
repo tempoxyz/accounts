@@ -99,6 +99,7 @@ import { Accounts } from 'accounts'
 import { react } from 'accounts/react'
 
 export const accounts = Accounts.create({
+  accessKey: false,
   chain: 'testnet',
   plugins: [react()],
 })
@@ -106,7 +107,7 @@ export const accounts = Accounts.create({
 
 :::
 
-Tempo ID approves a connection only on its own page, so the sign-in sets <SourceLink name="signIn.challenge.mode" path="src/plugins/dialog.ts">`mode`</SourceLink> to `'popup'`, which opens it in a window. Each access token of the [session](/docs/guides/user-session) names the API as its audience. Without <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink>, the app requests no access key of its own.
+Tempo ID approves a connection only on its own page, so the sign-in sets <SourceLink name="signIn.challenge.mode" path="src/plugins/dialog.ts">`mode`</SourceLink> to `'popup'`, which opens it in a window. Each access token of the [session](/docs/guides/user-session) names the API as its audience. With <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> set to `false`, the app requests no access key of its own.
 
 ### Call the API<StepTag kind="client" />
 
@@ -142,6 +143,7 @@ import { Accounts } from 'accounts'
 import { react } from 'accounts/react'
 
 export const accounts = Accounts.create({
+  accessKey: false,
   chain: 'testnet',
   plugins: [react()],
 })

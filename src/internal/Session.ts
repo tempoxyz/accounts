@@ -1313,12 +1313,13 @@ export function create(options: create.Options): create.ReturnType {
   }
 
   /** Reads the stored session, or `undefined` when the read fails. */
-  async function read() {
+  async function read(options: { onError?: () => void } = {}) {
     if (!writes) return undefined
     const { storage } = writes
-    const stored = await (async () => storage.getItem(name))().catch(
-      () => undefined,
-    )
+    const stored = await (async () => storage.getItem(name))().catch(() => {
+      options.onError?.()
+      return undefined
+    })
     return stored?.session
   }
 
@@ -1961,16 +1962,25 @@ export function create(options: create.Options): create.ReturnType {
     // A change here during the read, such as a sign-in, saves its session after the read started,
     // and a reload can set a session that the store held before it. The read then tells nothing of
     // the instance's session, so the sign-out waits for the writes and reads the store again.
+    // A store that rejects the read, such as a Redis that is down, still holds what it held, so the
+    // instance's session counts as the stored one, and the sign-out revokes its tokens.
+    let unread = false
+    const onError = () => {
+      unread = true
+    }
     let version = started
-    let before = hydrated && started === 0 ? hydrated.stored : await read()
+    let before =
+      hydrated && started === 0 ? hydrated.stored : await read({ onError })
     while (actor && context().version !== version) {
       version = await flushed()
-      before = await read()
+      unread = false
+      before = await read({ onError })
     }
     // The instance's session is read after the store, with no wait before the sign-out empties it.
     // A refresh here that commits during the read rotated the token of the earlier session, so the
     // sign-out ends the session that it empties.
     const local = actor ? context().session : undefined
+    if (unread) before = local
     // After a failed write, the store can hold an earlier copy of the session, or none, such as after
     // a sign-in whose save the store refused. The instance then holds the latest tokens.
     // Only the session that the failed write held counts, not one that the instance adopted since.
