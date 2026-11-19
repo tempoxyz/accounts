@@ -16,7 +16,8 @@ import type * as Store from '../Store.js'
  * `delete … returning`, so replicas that share the table take each value once. `update` writes only
  * if the row still holds the value it read, so replicas that share the table write the logout
  * index of a `sid` without losing each other's sessions, in a read and a write. `lock` holds a
- * row with a 30-second lease, so replicas that share the table refresh a session's token once.
+ * row with a 30-second lease on the database's clock, so replicas that share the table refresh a
+ * session's token once.
  *
  * `client` is any client with `query(text, values)`, such as a `pg` pool.
  *
@@ -103,19 +104,22 @@ export function create(
     },
     json: true,
     // Each replica holds its own client, so a lock in memory orders no other replica's runs, such
-    // as two refreshes of one session's token. The lock is a row with a lease in the same table,
-    // which a hold takes only while no other lease holds it, as a write of an expired row does.
+    // as two refreshes of one session's token. The lock is a row whose value holds a token and a
+    // lease, which a hold takes only once no other lease holds it.
     async lock(key, fn) {
       await ready()
       const name = `${key}:lock`
+      // The lease uses the database's clock at execution, so clock skew between replicas and a wait
+      // for a pooled connection extend no lease. Its row has no `expires_at`, so the sweep of
+      // expired rows, which uses the replica's clock, never deletes a held lock.
+      const now = `(extract(epoch from clock_timestamp()) * 1000)::bigint`
       // Each hold writes a token of its own, so a holder whose lease expired deletes no lock that
       // another replica took since.
-      const token = StoreValue.stringify(crypto.randomUUID())
+      const token = crypto.randomUUID()
       while (true) {
-        const now = Date.now()
         const { rows } = await client.query(
-          `insert into ${table} (key, value, expires_at) values ($1, $2, $3) on conflict (key) do update set value = excluded.value, expires_at = excluded.expires_at where ${table}.expires_at <= $4 returning key`,
-          [name, token, now + lease, now],
+          `insert into ${table} (key, value, expires_at) values ($1, json_build_object('token', $2::text, 'until', ${now} + $3::bigint)::text, null) on conflict (key) do update set value = excluded.value, expires_at = null where coalesce((${table}.value::json->>'until')::bigint, 0) <= ${now} returning key`,
+          [name, token, lease],
         )
         if (rows.length > 0) break
         await new Promise((resolve) => setTimeout(resolve, 10))
@@ -125,10 +129,10 @@ export function create(
       } finally {
         // A failed release leaves the lease, which expires within `lease`.
         await client
-          .query(`delete from ${table} where key = $1 and value = $2`, [
-            name,
-            token,
-          ])
+          .query(
+            `delete from ${table} where key = $1 and value::json->>'token' = $2`,
+            [name, token],
+          )
           .catch(() => undefined)
       }
     },

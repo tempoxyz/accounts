@@ -177,24 +177,43 @@ describe('Store.postgres', () => {
   test('behavior: lock runs the holds of two replicas on one table in turn', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())
-    const client = {
-      query: (text: string, values: readonly unknown[]) =>
-        database.query(text, [...values]),
-    }
-    // Each replica holds a store of its own on the table, as two processes do.
-    const replicas = [Postgres.create(client), Postgres.create(client)]
-    const events: string[] = []
-
-    await Promise.all(
-      replicas.map((store, index) =>
-        store.lock!('session', async () => {
-          events.push(`start ${index}`)
-          await new Promise((resolve) => setTimeout(resolve, 50))
-          events.push(`end ${index}`)
-        }),
-      ),
+    // Each replica holds a store of its own on the table, as two processes do. Each records the
+    // attempts of its lock that another lease refuses.
+    const refusals = [0, 0]
+    const replicas = [0, 1].map((index) =>
+      Postgres.create({
+        async query(text, values) {
+          const result = await database.query(text, [...values])
+          if (values[0] !== 'session:lock') return result
+          if (text.startsWith('insert') && result.rows.length === 0)
+            refusals[index]! += 1
+          return result
+        },
+      }),
     )
+    const events: string[] = []
+    const release = Promise.withResolvers<void>()
 
+    const first = replicas[0]!.lock!('session', async () => {
+      events.push('start 0')
+      await release.promise
+      events.push('end 0')
+    })
+    await expect.poll(() => events).toEqual(['start 0'])
+    const second = replicas[1]!.lock!('session', () => {
+      events.push('start 1', 'end 1')
+      return Promise.resolve()
+    })
+    await expect.poll(() => refusals[1]).toBeGreaterThan(0)
+    const held = [...events]
+    release.resolve()
+    await Promise.all([first, second])
+
+    expect(held).toMatchInlineSnapshot(`
+      [
+        "start 0",
+      ]
+    `)
     expect(events).toMatchInlineSnapshot(`
       [
         "start 0",
@@ -218,7 +237,7 @@ describe('Store.postgres', () => {
     // The lease of the first hold expires, and another replica sets its own token.
     await store.lock!('key', () =>
       database.query(
-        "update tempo_id_store set value = '\"other\"' where key = 'key:lock'",
+        `update tempo_id_store set value = '{"token":"other","until":0}' where key = 'key:lock'`,
       ),
     )
 
@@ -231,7 +250,49 @@ describe('Store.postgres', () => {
     ).toMatchInlineSnapshot(`
       [
         {
-          "value": ""other"",
+          "value": "{"token":"other","until":0}",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: lock takes a lease that expired by the clock of the database', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const store = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+    await store.getItem('ready')
+    // A replica whose hold ended without a release leaves a lease that expired.
+    await database.query(
+      `insert into tempo_id_store (key, value) values ('key:lock', '{"token":"other","until":0}')`,
+    )
+
+    const result = await store.lock!('key', () => Promise.resolve('held'))
+
+    expect(result).toMatchInlineSnapshot(`"held"`)
+  })
+
+  test('behavior: a sweep of expired rows keeps a held lock', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const store = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+
+    const rows = await store.lock!('key', async () => {
+      await store.setItem('other', 'value', { expiresAt: Date.now() + 60_000 })
+      return (
+        await database.query(
+          "select key from tempo_id_store where key = 'key:lock'",
+        )
+      ).rows
+    })
+
+    expect(rows).toMatchInlineSnapshot(`
+      [
+        {
+          "key": "key:lock",
         },
       ]
     `)
