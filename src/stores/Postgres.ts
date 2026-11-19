@@ -116,12 +116,22 @@ export function create(
       // Each hold writes a token of its own, so a holder whose lease expired deletes no lock that
       // another replica took since.
       const token = crypto.randomUUID()
+      const value = `json_build_object('token', $2::text, 'until', ${now} + $3::bigint)::text`
       while (true) {
-        const { rows } = await client.query(
-          `insert into ${table} (key, value, expires_at) values ($1, json_build_object('token', $2::text, 'until', ${now} + $3::bigint)::text, null) on conflict (key) do update set value = excluded.value, expires_at = null where coalesce((${table}.value::json->>'until')::bigint, 0) <= ${now} returning key`,
+        // A refused `on conflict do update` still locks the row of the holder. If the client of this
+        // replica runs inside a transaction, that lock blocks the release of the holder until the
+        // transaction ends. So the insert does nothing on a conflict, and an `update` takes only an
+        // expired lease, since it locks only the rows that match.
+        const inserted = await client.query(
+          `insert into ${table} (key, value, expires_at) values ($1, ${value}, null) on conflict (key) do nothing returning key`,
           [name, token, lease],
         )
-        if (rows.length > 0) break
+        if (inserted.rows.length > 0) break
+        const updated = await client.query(
+          `update ${table} set value = ${value}, expires_at = null where key = $1 and coalesce((value::json->>'until')::bigint, 0) <= ${now} returning key`,
+          [name, token, lease],
+        )
+        if (updated.rows.length > 0) break
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
       try {
