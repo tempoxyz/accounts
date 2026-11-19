@@ -86,10 +86,10 @@ export type Challenge = {
  * Creates the sessions of one backend. Concurrent `get` calls of one session share one refresh. The
  * instance holds the refreshes in progress, so one instance serves every request of a session: one
  * for a single process, or one per Durable Object on Cloudflare Workers. Several processes or
- * replicas that share `store` need session affinity, so each session reaches one process, unless
- * `store` has `lock`, as `Store.file`, `Store.memory`, and `Store.redis` do: then the instances on
- * `store` refresh a session one at a time, so they send one refresh, and writes to the index of a
- * `sid` wait for each other. If it has `update`, as `Store.postgres` does, each write
+ * replicas that share `store` need session affinity, so each session reaches one process, since
+ * `end` orders itself only against the refreshes of its own instance. If `store` has `lock`, as
+ * `Store.file`, `Store.memory`, and `Store.redis` do, the instances on `store` refresh a session one
+ * at a time, so they send one refresh, and writes to the index of a `sid` wait for each other. If it has `update`, as `Store.postgres` does, each write
  * lands only over the index it read, so no session drops out either. Without either, instances that
  * share `store` can lose a `link` that runs at the same time as another write to the same index.
  *
