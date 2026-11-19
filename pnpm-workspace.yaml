@@ -35,7 +35,7 @@ catalog:
   '@electric-sql/pglite': 0.5.16
   '@modelcontextprotocol/sdk': 1.32.2
   '@playwright/test': 1.65.0
-  '@takumi-rs/core': 0.62.8
+  '@takumi-rs/core': 2.20.0
   '@takumi-rs/helpers': 2.20.0
   '@tanstack/react-query': 5.104.1
   '@types/node': 26.6.6
