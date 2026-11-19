@@ -182,24 +182,35 @@ export function create(options: create.Options): create.ReturnType {
   // request, unless this instance runs a refresh. The refresh then saves its new tokens first, and
   // the sign-out revokes them. Any other change waits for the lock, so it follows a sign-out that
   // asked for the lock first, which empties the tokens that another tab's refresh saved after it.
-  if (channel)
-    channel.onmessage = (event: MessageEvent<Message>) => {
-      const options = {
-        at: event.data?.at,
-        everywhere: event.data?.everywhere === true,
-        signOut: event.data?.signOut === true,
-      }
-      // Another tab's logout revokes the tokens of this tab's restore, as this tab's own does.
-      if (event.data?.everywhere) actor?.send({ type: 'logout.remote' })
-      // The plugins' hooks run after the lock releases, since a hook that takes the lock, such as
-      // through `exclusive`, would otherwise wait for itself.
-      void (async () => {
-        const hooks = await (options.signOut && exclusives === 0
-          ? adopt(options)
-          : exclusive(() => adopt(options)))
-        await hooks?.()
-      })().catch(() => undefined)
+  const receive = (data: unknown, connected?: boolean) => {
+    const message = data as Message | undefined
+    const options = {
+      at: message?.at,
+      connected,
+      everywhere: message?.everywhere === true,
+      signOut: message?.signOut === true,
     }
+    // Another tab's logout revokes the tokens of this tab's restore, as this tab's own does.
+    if (message?.everywhere) actor?.send({ type: 'logout.remote' })
+    // The plugins' hooks run after the lock releases, since a hook that takes the lock, such as
+    // through `exclusive`, would otherwise wait for itself.
+    void (async () => {
+      const hooks = await (options.signOut && exclusives === 0
+        ? adopt(options)
+        : exclusive(() => adopt(options)))
+      await hooks?.()
+    })().catch(() => undefined)
+  }
+  if (channel)
+    channel.onmessage = (event: MessageEvent<Message>) => receive(event.data)
+  // Without a page's channel, other instances in the process on the same store hear each saved
+  // change directly, so one instance's sign-out empties the others' sessions at once, as across tabs.
+  // The store holds `receive` weakly, and the `post` that it returns holds `receive` while the
+  // instance lives.
+  const post =
+    enabled && !channel
+      ? store?.connect?.(name, (data) => receive(data, true))
+      : undefined
   const actor = enabled
     ? createActor(
         machines.session.provide({
@@ -214,13 +225,15 @@ export function create(options: create.Options): create.ReturnType {
               const everywhere = signOut && args.context.signingOut?.everywhere
               writes
                 ?.save(name, args.context.session)
-                .then(() =>
-                  channel?.postMessage({
+                .then(() => {
+                  const message = {
                     at: Date.now(),
                     everywhere,
                     signOut,
-                  } satisfies Message),
-                )
+                  } satisfies Message
+                  channel?.postMessage(message)
+                  post?.(message)
+                })
                 .catch(() => undefined)
             },
           },
@@ -607,6 +620,11 @@ export function create(options: create.Options): create.ReturnType {
     /** When the other tab posted its message, in milliseconds since the epoch. */
     at?: number | undefined
     /**
+     * Whether the message came through the store's `connect`, from an instance on the same store. The
+     * store then holds that instance's values too, so it counts as shared, not local.
+     */
+    connected?: boolean | undefined
+    /**
      * Whether another tab's sign-out ends the Tempo ID session too. Without it, the sign-out marks
      * the store signed out, so this instance holds the mark too.
      */
@@ -653,6 +671,7 @@ export function create(options: create.Options): create.ReturnType {
       machines.signsOut({
         at: options.at,
         everywhere: options.everywhere,
+        connected: options.connected,
         local: store?.local,
         signedIn,
         signOut: options.signOut,
@@ -4411,8 +4430,9 @@ export namespace machines {
 
   /**
    * Returns whether another tab's sign-out message signs the instance out: the store holds no
-   * session, or the sign-out ended the Tempo ID session with `everywhere`, the store is local, and
-   * the instance signed in before the message. A local store, such as `Store.memory`,
+   * session, or the sign-out ended the Tempo ID session with `everywhere`, the store is local, the
+   * message came from another tab and not through the store's `connect`, and the instance signed
+   * in before the message. A local store, such as `Store.memory`,
    * holds each tab's own session, which the other tab's sign-out cannot empty. Its logout revoked
    * the tokens of the browser's Tempo ID session, also those of that store. A sign-in after the
    * message, such as while the message waited for the lock, follows the logout, so it stays.
@@ -4420,10 +4440,14 @@ export namespace machines {
   export function signsOut(
     options: machines.signsOut.Options,
   ): machines.signsOut.ReturnType {
-    const { at, everywhere, local, signedIn, signOut, stored } = options
+    const { at, connected, everywhere, local, signedIn, signOut, stored } =
+      options
     if (!signOut) return false
     if (!stored) return true
-    if (everywhere !== true || local !== true) return false
+    // A message through the store's `connect` comes from an instance on the same store, so the
+    // stored session is the sender's too, as on a shared store.
+    if (everywhere !== true || local !== true || connected === true)
+      return false
     // A message without a time orders nothing, so the logout can follow any session.
     return at === undefined || signedIn <= at
   }
@@ -4435,6 +4459,8 @@ export namespace machines {
        * message that states no time.
        */
       at: number | undefined
+      /** Whether the message came through the store's `connect`, from an instance on the same store. */
+      connected: boolean | undefined
       /** Whether the other tab's sign-out ended the Tempo ID session too. */
       everywhere: boolean | undefined
       /** Whether the store holds only this tab's values, as `Store.memory` does. */

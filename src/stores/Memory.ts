@@ -36,6 +36,9 @@ import type * as Store from '../Store.js'
  */
 export function create(): Store.Store {
   const entries = new Map<string, Expiry.Entry<unknown>>()
+  // The listeners of each key. A `WeakRef` holds no instance that the app dropped, such as one
+  // that a server creates for each request.
+  const listeners = new Map<string, Set<WeakRef<(message: unknown) => void>>>()
   // The size at which a write deletes the expired entries. A sweep reads every entry, so the size
   // doubles after each sweep, and the writes between two sweeps pay for it.
   let sweepAt = 64
@@ -46,6 +49,24 @@ export function create(): Store.Store {
       ? (value) => structuredClone(value)
       : (value) => value
   return {
+    connect(key, listener) {
+      const set =
+        listeners.get(key) ?? new Set<WeakRef<(message: unknown) => void>>()
+      listeners.set(key, set)
+      // Each connection and each post drops the references of collected listeners, so the set
+      // holds about as many references as live instances, also where no instance posts.
+      for (const ref of set) if (!ref.deref()) set.delete(ref)
+      set.add(new WeakRef(listener))
+      // The function holds `listener`, so the instance that holds the function keeps its listener.
+      return (message) => {
+        for (const ref of set) {
+          const peer = ref.deref()
+          if (!peer) set.delete(ref)
+          // A page's channel delivers to every tab but the sender, in a later task.
+          else if (peer !== listener) queueMicrotask(() => peer(message))
+        }
+      }
+    },
     getItem(key) {
       const entry = entries.get(key)
       if (!entry || Expiry.expired(entry)) return Promise.resolve(undefined)

@@ -634,7 +634,14 @@ describe('mpp', () => {
     const store = Store.memory()
     const endpoint = server()
     const first = instance({ fetch: endpoint.fetch, store })
-    const second = instance({ store })
+    // Another process on the same entries, whose messages never reach the first instance.
+    const second = instance({
+      store: Store.from({
+        getItem: (key) => store.getItem(key),
+        removeItem: (key) => store.removeItem(key),
+        setItem: (key, value, options) => store.setItem(key, value, options),
+      }),
+    })
     await store.setItem(name, {
       state: { session: session({ expiry: 3600 }) },
       version: 0,

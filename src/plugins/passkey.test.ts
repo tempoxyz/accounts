@@ -403,7 +403,7 @@ describe('passkey', () => {
   test("register throws session_required, and sends no request, while another instance's sign-out of its later sign-in runs", async () => {
     const paths: string[] = []
     const store = Store.memory()
-    const create = () =>
+    const create = (store: Store.Store) =>
       Accounts.create({
         chain: 42431,
         clientId: 'https://app.example.com',
@@ -434,8 +434,15 @@ describe('passkey', () => {
         store,
         url: 'http://127.0.0.1:9',
       })
-    const accounts = create()
-    const other = create()
+    const accounts = create(store)
+    // Another process on the same entries, whose messages never reach this one.
+    const other = create(
+      Store.from({
+        getItem: (key) => store.getItem(key),
+        removeItem: (key) => store.removeItem(key),
+        setItem: (key, value, options) => store.setItem(key, value, options),
+      }),
+    )
     await accounts.signOut()
     await other.test.commit()
 
@@ -465,7 +472,7 @@ describe('passkey', () => {
   test("register throws session_required, and sends no request, while another instance's sign-out with everywhere of its later sign-in runs", async () => {
     const paths: string[] = []
     const store = Store.memory()
-    const create = () =>
+    const create = (store: Store.Store) =>
       Accounts.create({
         chain: 42431,
         clientId: 'client_test',
@@ -496,8 +503,15 @@ describe('passkey', () => {
         store,
         url: 'http://127.0.0.1:9',
       })
-    const accounts = create()
-    const other = create()
+    const accounts = create(store)
+    // Another process on the same entries, whose messages never reach this one.
+    const other = create(
+      Store.from({
+        getItem: (key) => store.getItem(key),
+        removeItem: (key) => store.removeItem(key),
+        setItem: (key, value, options) => store.setItem(key, value, options),
+      }),
+    )
     await accounts.signOut()
     await other.test.commit()
 
