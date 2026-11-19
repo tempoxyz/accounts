@@ -12,7 +12,7 @@
   "outputDirectory": "dist/vercel",
   "rewrites": [
     {
-      "destination": "https://accounts-site.porto.workers.dev/$1",
+      "destination": "https://accounts-site.tempo-dev.workers.dev/$1",
       "source": "/(.*)"
     }
   ]
