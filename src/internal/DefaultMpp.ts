@@ -23,12 +23,6 @@ export function plugin(): Mpp {
   return Plugin.from({
     extend(instance: Accounts.Accounts, context: Plugin.Context): Members {
       let loading: Promise<Members> | undefined
-      // The changes that ended the instance's session, or replaced it with another user's, as the
-      // loaded plugin counts them, so a manager created before the load binds to its session.
-      let ends = 0
-      instance.session.subscribe((next, before) => {
-        if (!before || next?.user.id !== before.user.id) ends++
-      })
 
       /** Loads the plugin once. A failed load, such as offline, lets the next call try again. */
       function load() {
@@ -68,17 +62,20 @@ export function plugin(): Mpp {
             // loaded plugin's does. A sign-out before its first request ends it, also after a later
             // sign-in, and so does another access key, such as after `switchChain`.
             const held = overrides?.session ? undefined : context.session.get()
-            const keyId = held?.accessKey?.keyAuthorization.keyId
-            const started = ends
+            // Whether a change of the session replaced or dropped its access key. One subscription
+            // per manager holds it, and ends at the first such change.
+            let ended = false
+            if (held) {
+              const keyId = held.accessKey?.keyAuthorization.keyId
+              const unsubscribe = instance.session.subscribe((next) => {
+                if (next?.accessKey?.keyAuthorization.keyId === keyId) return
+                ended = true
+                unsubscribe()
+              })
+            }
             return SessionManager.deferred(async () => {
               const payer = await get()
-              if (
-                held &&
-                (ends !== started ||
-                  context.session.get()?.accessKey?.keyAuthorization.keyId !==
-                    keyId)
-              )
-                throw new Accounts.SignedOutError()
+              if (ended) throw new Accounts.SignedOutError()
               return payer.session(parameters)
             })
           },
