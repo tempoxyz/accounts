@@ -1,6 +1,6 @@
 # Publishes each push to main to npm, through npm trusted publishing, as
 # `<breaking>.<commit time>.<n>` under `latest`, such as `1.20261118194700.0`, with
-# a GitHub release that lists the squash commit titles since the last one. `scripts/release.ts`
+# a GitHub release that lists the `## Changelog` entry of each pull request since the last one. `scripts/release.ts`
 # picks the version: a breaking title (`feat!:`) raises `<breaking>`, and `ci:` and `test:` commits
 # release nothing alone, unless Main runs by hand.
 name: Release
