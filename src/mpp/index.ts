@@ -686,6 +686,9 @@ export function mpp(options: mpp.Options = {}) {
         return {
           ...from(''),
           async prove(request, attempt) {
+            // A local session holds no Tempo ID tokens, so its requests go out without an identity.
+            const held = context.session.get()
+            if (held && Session.local(held) && !ended()) return request
             const accessToken = await read().catch((error: unknown) => {
               // A request with a credential, such as the paid retry of a pushed transfer or a
               // session manager's close, still goes out, without the tokens it can no longer read.

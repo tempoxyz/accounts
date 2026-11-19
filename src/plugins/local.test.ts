@@ -21,6 +21,7 @@ import {
   MissingError,
   SharedStoreError,
 } from './local.js'
+import { mpp } from '../mpp/index.js'
 import { viem } from './viem.js'
 
 /** Returns the address that signed the session's access key. */
@@ -426,5 +427,38 @@ describe('review fixes', () => {
     await expect(
       accounts.local.create({ accessKey: { expiry: '1h' } }),
     ).resolves.toMatchObject({ kind: 'local' })
+  })
+})
+
+describe('local with mpp', () => {
+  test('sends a request to an origin of `identity.scope` without an identity', async () => {
+    const requests: Request[] = []
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:mercator',
+      plugins: [
+        local(),
+        viem(),
+        mpp({
+          fetch: (input, init) => {
+            requests.push(new Request(input, init))
+            return Promise.resolve(new Response('free'))
+          },
+          identity: { scope: ['https://api.example.com'] },
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.local.create()
+
+    const response = await accounts
+      .mpp()
+      .fetch('https://api.example.com/fortune')
+
+    expect(await response.text()).toBe('free')
+    expect(
+      requests.map((request) => request.headers.get('authorization')),
+    ).toEqual([null])
   })
 })
