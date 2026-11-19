@@ -10,6 +10,7 @@ import { Address, Hex, PersonalMessage, Secp256k1, Signature } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import * as AccessKey from '../internal/AccessKey.js'
 import * as DefaultStore from '../internal/DefaultStore.js'
+import * as Lock from '../internal/Lock.js'
 import * as Node from '../internal/Node.js'
 import * as Permissions from '../Permissions.js'
 import * as Plugin from '../Plugin.js'
@@ -69,6 +70,26 @@ export class StoreRequiredError extends Error {
   }
 }
 
+/**
+ * Thrown by a sign-in of an instance with `accessKey: false`. The owner key signs only access keys,
+ * so a local session without one could not send.
+ */
+export class AccessKeyDisabledError extends Error {
+  override readonly name = 'Plugins.local.AccessKeyDisabledError'
+
+  constructor() {
+    super(
+      'The instance requests no access key (`accessKey: false`), and a local session sends only with one. Pass `accessKey` to the sign-in, or drop `accessKey: false`.',
+    )
+  }
+}
+
+/**
+ * The value of a store whose owner key `local.remove` deleted. It keeps the `v0` file from giving
+ * the account again.
+ */
+type Removed = { removed: true; version: typeof version }
+
 /** The owner key, as the store keeps it. */
 type Stored = {
   /** The account of the owner key. */
@@ -120,6 +141,13 @@ export function local(options: local.Options = {}) {
   return Plugin.from({
     actions: (context) => {
       const key = `tempo-id:local:${JSON.stringify(context.config.clientId ?? null)}`
+      // Orders the reads and writes of the owner key, also of other instances on a store with a
+      // `lock`, so two calls of `create` never both find no key and each write one.
+      const fallback = Lock.create()
+      function exclusive<result>(fn: () => Promise<result>): Promise<result> {
+        const { lock } = store()
+        return lock ? lock(key, fn) : fallback(key, fn)
+      }
 
       function store(): Store {
         const store = DefaultStore.get(context.config.store)
@@ -129,8 +157,14 @@ export function local(options: local.Options = {}) {
         return store
       }
 
+      /** Returns the owner key, from the store or else the `v0` file. Runs inside `exclusive`. */
       async function read(): Promise<Stored | undefined> {
-        const value = (await store().getItem(key)) as Stored | null | undefined
+        const value = (await store().getItem(key)) as
+          | Removed
+          | Stored
+          | null
+          | undefined
+        if (value && 'removed' in value) return undefined
         if (value?.version === version && value.type === 'secp256k1')
           return value
         if (!v0) return undefined
@@ -203,15 +237,28 @@ export function local(options: local.Options = {}) {
         }
       }
 
+      /** Returns the sign-in's access key permissions, or throws for an instance that requests none. */
+      function requested(parameters: local.signIn.Parameters) {
+        const permissions =
+          parameters.accessKey ??
+          context.accessKey() ??
+          context.defaultAccessKey()
+        if (!permissions) throw new AccessKeyDisabledError()
+        return permissions
+      }
+
       /** Signs in with `owner`, answers the app's challenge, and commits the session. */
       async function signIn(
         owner: Stored,
         parameters: local.signIn.Parameters,
       ): Promise<local.signIn.ReturnType> {
+        // A new instance reads the chain that `switchChain` saved, and the session, first.
+        await context.chain.load().catch(() => undefined)
+        const current = context.session.get() ?? (await context.session.load())
+        const permissions = requested(parameters)
         const change = context.session.change()
         try {
           const chainId = context.chain.get()
-          const current = context.session.get()
           const own =
             current &&
             Session.local(current) &&
@@ -230,15 +277,7 @@ export function local(options: local.Options = {}) {
                 )
               : undefined
           const accessKey =
-            kept ??
-            (await authorize(
-              owner,
-              parameters.accessKey ??
-                context.accessKey() ??
-                context.defaultAccessKey() ??
-                {},
-              chainId,
-            ))
+            kept ?? (await authorize(owner, permissions, chainId))
           const source = context.challenge()
           const challenged = source
             ? await (async () => {
@@ -298,9 +337,13 @@ export function local(options: local.Options = {}) {
         async create(
           parameters: local.signIn.Parameters = {},
         ): Promise<local.signIn.ReturnType> {
-          const existing = await read()
-          if (existing) throw new ExistsError({ address: existing.address })
-          const owner = await write(Secp256k1.randomPrivateKey())
+          // Stores no key for a sign-in that could not authorize an access key.
+          requested(parameters)
+          const owner = await exclusive(async () => {
+            const existing = await read()
+            if (existing) throw new ExistsError({ address: existing.address })
+            return await write(Secp256k1.randomPrivateKey())
+          })
           return await signIn(owner, parameters)
         },
         /**
@@ -315,7 +358,7 @@ export function local(options: local.Options = {}) {
          * ```
          */
         async export(): Promise<Hex.Hex> {
-          const owner = await read()
+          const owner = await exclusive(read)
           if (!owner) throw new MissingError()
           return owner.privateKey
         },
@@ -330,7 +373,7 @@ export function local(options: local.Options = {}) {
          * ```
          */
         async get(): Promise<local.get.ReturnType> {
-          const owner = await read()
+          const owner = await exclusive(read)
           if (!owner) return undefined
           return {
             address: owner.address,
@@ -355,9 +398,13 @@ export function local(options: local.Options = {}) {
           const { privateKey, ...rest } = parameters
           // Rejects a value that is no secp256k1 private key before the store changes.
           Secp256k1.getPublicKey({ privateKey })
-          const existing = await read()
-          if (existing) throw new ExistsError({ address: existing.address })
-          return await signIn(await write(privateKey), rest)
+          requested(rest)
+          const owner = await exclusive(async () => {
+            const existing = await read()
+            if (existing) throw new ExistsError({ address: existing.address })
+            return await write(privateKey)
+          })
+          return await signIn(owner, rest)
         },
         /**
          * Signs out a local session, and deletes the owner key from the store. The account and its
@@ -370,10 +417,13 @@ export function local(options: local.Options = {}) {
          * ```
          */
         async remove(): Promise<void> {
-          const current = context.session.get()
+          // A new instance reads the saved session first, so its access key stops signing too.
+          const current =
+            context.session.get() ?? (await context.session.load())
           if (current && Session.local(current))
             await context.session.change().commit(undefined)
-          await store().removeItem(key)
+          const removed: Removed = { removed: true, version }
+          await exclusive(() => store().setItem(key, removed))
         },
         /**
          * Signs in with the stored owner key. A live access key of the session on the instance's
@@ -389,7 +439,7 @@ export function local(options: local.Options = {}) {
         async signIn(
           parameters: local.signIn.Parameters = {},
         ): Promise<local.signIn.ReturnType> {
-          const owner = await read()
+          const owner = await exclusive(read)
           if (!owner) throw new MissingError()
           return await signIn(owner, parameters)
         },

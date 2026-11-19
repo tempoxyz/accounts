@@ -14,7 +14,13 @@ import { describe, expect, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
-import { ExistsError, local, MissingError, SharedStoreError } from './local.js'
+import {
+  AccessKeyDisabledError,
+  ExistsError,
+  local,
+  MissingError,
+  SharedStoreError,
+} from './local.js'
 import { viem } from './viem.js'
 
 /** Returns the address that signed the session's access key. */
@@ -320,5 +326,105 @@ describe('local', () => {
 
     expect(await accounts.local.get()).toBeUndefined()
     await Fs.rm(folder, { force: true, recursive: true })
+  })
+})
+
+describe('review fixes', () => {
+  test('creates one owner key for concurrent calls on one store', async () => {
+    const store = Store.memory()
+    const first = instance({ store }).accounts
+    const second = instance({ store }).accounts
+
+    const results = await Promise.allSettled([
+      first.local.create(),
+      second.local.create(),
+      first.local.import({ privateKey: generatePrivateKey() }),
+    ])
+    const created = results.filter((result) => result.status === 'fulfilled')
+
+    expect(created).toHaveLength(1)
+    expect(
+      results.filter(
+        (result) =>
+          result.status === 'rejected' && result.reason instanceof ExistsError,
+      ),
+    ).toHaveLength(2)
+    expect((await first.local.get())!.address).toBe(
+      (created[0] as PromiseFulfilledResult<Session.LocalSession>).value
+        .address,
+    )
+  })
+
+  test("authorizes on the chain that an earlier instance's switchChain saved", async () => {
+    const store = Store.memory()
+    const options = {
+      chain: 4217,
+      chains: [4217, 42431],
+      clientId: 'cli:mercator',
+      plugins: [local(), viem()],
+      store,
+      url: 'http://127.0.0.1:9',
+    } as const
+    const earlier = Accounts.create(options)
+    await earlier.local.create()
+    await earlier.switchChain({ chainId: 42431 })
+
+    const session = await Accounts.create(options).local.signIn()
+
+    expect(session.accessKey!.chainId).toBe(42431)
+  })
+
+  test('remove on a new instance signs out the saved session', async () => {
+    const { accounts, store } = instance()
+    await accounts.local.create()
+
+    await instance({ store }).accounts.local.remove()
+
+    expect(await instance({ store }).accounts.session.get()).toBeUndefined()
+  })
+
+  test('remove keeps the v0 file from giving the account again', async () => {
+    const folder = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-local-'))
+    const path = Path.join(folder, 'wallet.json')
+    const privateKey = generatePrivateKey()
+    await Fs.writeFile(
+      path,
+      JSON.stringify({
+        'tempo-cli.store': {
+          state: { accounts: [{ keyType: 'secp256k1', privateKey }] },
+        },
+      }),
+    )
+    const { accounts } = instance({ v0: path })
+    expect((await accounts.local.get())!.address).toBe(
+      privateKeyToAccount(privateKey).address,
+    )
+
+    await accounts.local.remove()
+    expect(await accounts.local.get()).toBeUndefined()
+    const other = generatePrivateKey()
+    const session = await accounts.local.import({ privateKey: other })
+
+    expect(session.address).toBe(privateKeyToAccount(other).address)
+    await Fs.rm(folder, { force: true, recursive: true })
+  })
+
+  test('throws AccessKeyDisabledError for an instance with accessKey: false, and stores no key', async () => {
+    const accounts = Accounts.create({
+      accessKey: false,
+      chain: 4217,
+      clientId: 'cli:mercator',
+      plugins: [local(), viem()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    await expect(accounts.local.create()).rejects.toBeInstanceOf(
+      AccessKeyDisabledError,
+    )
+    expect(await accounts.local.get()).toBeUndefined()
+    await expect(
+      accounts.local.create({ accessKey: { expiry: '1h' } }),
+    ).resolves.toMatchObject({ kind: 'local' })
   })
 })
