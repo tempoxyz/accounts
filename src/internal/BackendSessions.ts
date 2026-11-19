@@ -86,9 +86,10 @@ export type Challenge = {
  * Creates the sessions of one backend. Concurrent `get` calls of one session share one refresh. The
  * instance holds the refreshes in progress, so one instance serves every request of a session: one
  * for a single process, or one per Durable Object on Cloudflare Workers. Several processes or
- * replicas that share `store` need session affinity, so each session reaches one process. If
- * `store` has `lock`, as `Store.memory` and `Store.redis` do, writes to the index of a `sid` wait for each
- * other across the instances on `store`. If it has `update`, as `Store.postgres` does, each write
+ * replicas that share `store` need session affinity, so each session reaches one process, since
+ * `end` orders itself only against the refreshes of its own instance. If `store` has `lock`, as
+ * `Store.file`, `Store.memory`, and `Store.redis` do, the instances on `store` refresh a session one
+ * at a time, so they send one refresh, and writes to the index of a `sid` wait for each other. If it has `update`, as `Store.postgres` does, each write
  * lands only over the index it read, so no session drops out either. Without either, instances that
  * share `store` can lose a `link` that runs at the same time as another write to the same index.
  *
@@ -256,6 +257,26 @@ export function create(
   }
 
   /**
+   * Refreshes the session under the store's `lock`, so instances on the store, such as processes on
+   * one `Store.file`, send one refresh: the later reads the tokens of the first, and sends none. If
+   * the lock rejects before the refresh, such as a folder that refuses the lock file, the refresh
+   * runs without it.
+   */
+  async function exclusive(id: string) {
+    if (!store.lock) return refresh(id)
+    let started = false
+    return await store
+      .lock(refreshKey(id), () => {
+        started = true
+        return refresh(id)
+      })
+      .catch((error: unknown) => {
+        if (started) throw error
+        return refresh(id)
+      })
+  }
+
+  /**
    * Refreshes the session's access token unless it is still valid. It reads the session again, since
    * a read before this refresh started can hold a refresh token that an earlier refresh rotated.
    */
@@ -377,7 +398,7 @@ export function create(
 
     // The map entry is set before the refresh's first await, so every later read shares it.
     const refreshing =
-      refreshes.get(id) ?? refresh(id).finally(() => refreshes.delete(id))
+      refreshes.get(id) ?? exclusive(id).finally(() => refreshes.delete(id))
     refreshes.set(id, refreshing)
     const next = await refreshing
     return next && view(next, id)
@@ -843,7 +864,8 @@ export declare namespace create {
     fetch: (options: fetch.Options) => Promise<Response | undefined>
     /**
      * Returns the session, after a refresh if its access token expires within 30 seconds. A SIWE
-     * session returns until its expiry, without a refresh. With
+     * session returns until its expiry, without a refresh. Instances on a store with `lock` refresh
+     * one at a time through it, so they send one refresh. With
      * `shared`, a refresh that Tempo ID refuses with `invalid_grant` goes once more after one second,
      * since another process can refresh the same token at once. A session whose access key
      * expired ends without a refresh, and returns `undefined`. A refresh
@@ -1340,6 +1362,11 @@ function sessionKey(id: string) {
 /** The key of the index of the Tempo ID session `sid` in the store, which lists its session IDs. */
 function indexKey(sid: string) {
   return `tempo-id:sid:${sid}`
+}
+
+/** The key of the store's `lock` that orders the refreshes of the session `id`. */
+function refreshKey(id: string) {
+  return `tempo-id:refresh:${id}`
 }
 
 /**
