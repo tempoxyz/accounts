@@ -137,6 +137,8 @@ type Stored = {
  */
 export function local(options: local.Options = {}) {
   const { name, v0 } = options
+  // The instance, which `extend` receives, for its sign-out in `local.remove`.
+  let instance: { signOut: () => Promise<void> } | undefined
 
   return Plugin.from({
     actions: (context) => {
@@ -426,13 +428,15 @@ export function local(options: local.Options = {}) {
          * ```
          */
         async remove(): Promise<void> {
-          // A new instance reads the saved session first, so its access key stops signing too.
-          const current =
-            context.session.get() ?? (await context.session.load())
-          if (current && Session.local(current))
-            await context.session.change().commit(undefined)
+          // The key goes first, so no sign-in that starts during the sign-out finds it.
           const removed: Removed = { removed: true, version }
           await exclusive(() => store().setItem(key, removed))
+          // A new instance reads the saved session first, so its access key stops signing too. The
+          // instance's sign-out overtakes a sign-in that started before, such as one that waits for
+          // the app's challenge, so none restores the removed account, and it runs the hooks.
+          const current =
+            context.session.get() ?? (await context.session.load())
+          if (current && Session.local(current)) await instance?.signOut()
         },
         /**
          * Signs in with the stored owner key. A live access key of the session on the instance's
@@ -453,6 +457,10 @@ export function local(options: local.Options = {}) {
           return await signIn(owner, parameters)
         },
       }
+    },
+    extend: (extended) => {
+      instance = extended
+      return {}
     },
     id: 'local',
   })

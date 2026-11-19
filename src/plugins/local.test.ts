@@ -12,6 +12,7 @@ import { custom } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { describe, expect, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
+import * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
 import {
@@ -518,5 +519,54 @@ describe('local with Tempo ID calls', () => {
     expect(error).toBeInstanceOf(Error)
     expect((error as Error).name).not.toBe('Accounts.RetryAccountError')
     expect(await accounts.session.get()).toMatchObject({ kind: 'local' })
+  })
+})
+
+describe('local.remove during a sign-in', () => {
+  test('overtakes a sign-in that waits for the challenge, so it restores no session', async () => {
+    // The challenge of the first sign-in answers at once, and the next one waits for `release`.
+    let gate: Promise<void> = Promise.resolve()
+    let release = () => {}
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:mercator',
+      plugins: [
+        local(),
+        viem(),
+        Plugin.from({
+          hooks: {
+            challenge: () => ({
+              async message() {
+                await gate
+                return 'Sign in to Mercator'
+              },
+              async settle() {
+                return { token: 'app-token' }
+              },
+            }),
+          },
+          id: 'app',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.local.create()
+    gate = new Promise((resolve) => {
+      release = resolve
+    })
+
+    const signIn = accounts.local.signIn({ accessKey: { expiry: '1h' } })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    await accounts.local.remove()
+    release()
+    const result = await signIn.then(
+      () => 'committed',
+      (error: Error) => error.name,
+    )
+
+    expect(result).not.toBe('committed')
+    expect(await accounts.session.get()).toBeUndefined()
+    expect(await accounts.local.get()).toBeUndefined()
   })
 })
