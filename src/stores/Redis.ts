@@ -138,8 +138,20 @@ export function create(client: create.Client): Store.Store {
         return result
       })
 
+    // The text that the previous attempt read, and the attempts in a row whose write found another
+    // value while that text stayed the same.
+    let read: unknown
+    let unchanged = 0
     while (true) {
       const previous = await send(['GET', key])
+      // A peer rarely writes the key and then restores it three times in a row, so the third such
+      // refusal rejects, such as for a client that alters an argument of each command.
+      unchanged = read !== undefined && previous === read ? unchanged + 1 : 0
+      read = previous ?? null
+      if (unchanged >= 3)
+        throw new Error(
+          'Refused write: the conditional write of the store found another value three times. Send each argument of a command as it is.',
+        )
       const { expiresAt, result, value } = fn(
         typeof previous === 'string' ? StoreValue.parse(previous) : undefined,
       )
@@ -175,12 +187,21 @@ export function create(client: create.Client): Store.Store {
           return 'split'
         throw error
       })
-      if (written === 1) return result
+      if (written === 'OK') return result
       if (written === 'split') {
         slots = 'split'
         return update(key, fn)
       }
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      if (written === 'LOCKED') {
+        // The holder of the lock can write the same text again, which is no refusal.
+        read = undefined
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        continue
+      }
+      if (written !== 'CHANGED')
+        throw new Error(
+          'Unexpected reply: the conditional write of the store returned no status. Return each status reply as a string.',
+        )
     }
   }
 
@@ -209,16 +230,17 @@ const lease = 30_000
  * `ARGV[3]`, only if the key still holds `ARGV[1]`, or is absent for an `ARGV[2]` of `0`. A
  * `lock` of the key, at `KEYS[2]`, also refuses the write, so a replica that writes the key under
  * `lock` with `setItem`, such as a replica of an earlier version, overwrites no update. Returns
- * `1` for a write, and `0` otherwise.
+ * the status `OK` for a write, `LOCKED` for a held lock, and `CHANGED` for another value. A status
+ * reply stays a string in each client, which can map an integer reply to a string or a `bigint`.
  */
 const swap = [
-  "if redis.call('EXISTS', KEYS[2]) == 1 then return 0 end",
+  "if redis.call('EXISTS', KEYS[2]) == 1 then return redis.status_reply('LOCKED') end",
   "local current = redis.call('GET', KEYS[1])",
-  "if ARGV[2] == '0' then if current then return 0 end elseif current ~= ARGV[1] then return 0 end",
+  "if (ARGV[2] == '0' and current) or (ARGV[2] == '1' and current ~= ARGV[1]) then return redis.status_reply('CHANGED') end",
   "if ARGV[3] == '' then redis.call('DEL', KEYS[1])",
   "elseif ARGV[4] == '' then redis.call('SET', KEYS[1], ARGV[3])",
   "else redis.call('SET', KEYS[1], ARGV[3], 'PXAT', ARGV[4]) end",
-  'return 1',
+  "return redis.status_reply('OK')",
 ].join(' ')
 
 /** Deletes the lock only if it still holds the token of the hold that releases it. */
