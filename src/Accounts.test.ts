@@ -22,9 +22,10 @@ import {
   test,
 } from 'vite-plus/test'
 import { Account } from 'viem/tempo'
-import { Bytes, Hash, Json } from 'ox'
+import { Bytes, Hash, Json, Secp256k1 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import * as Accounts from './Accounts.js'
+import * as DefaultAccounts from './internal/DefaultAccounts.js'
 import * as StoreValue from './internal/StoreValue.js'
 import * as Plugin from './Plugin.js'
 import * as Session from './Session.js'
@@ -346,6 +347,136 @@ describe('create', () => {
     `)
   })
 
+  test('adds no plugin, and the root entry adds the `dialog`, `funding`, and `mpp` plugins that `plugins` lacks', () => {
+    const options = {
+      chain: 42431,
+      clientId: 'example',
+      plugins: [Plugin.from({ actions: () => ({}), id: 'test' })],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    } satisfies Accounts.create.Options
+    const names = ['dialog', 'fetch', 'funding', 'mpp', 'test']
+
+    const lite = Accounts.create(options)
+    const root = DefaultAccounts.create(options)
+
+    expect({
+      lite: names.filter((name) => name in lite),
+      root: names.filter((name) => name in root),
+    }).toMatchInlineSnapshot(`
+      {
+        "lite": [
+          "test",
+        ],
+        "root": [
+          "dialog",
+          "fetch",
+          "funding",
+          "mpp",
+          "test",
+        ],
+      }
+    `)
+  })
+
+  test('holds `fetch` and `mpp` of the `mpp` plugin without one in `plugins`, which load the plugin at the first request', async () => {
+    const accounts = DefaultAccounts.create({
+      chain: 42431,
+      clientId: 'example',
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const errors = await Promise.all([
+      accounts.fetch('http://127.0.0.1:9/fortune').then(
+        () => 'sent',
+        (error: Error) => error.name,
+      ),
+      accounts
+        .mpp({ maxAmount: '1' })
+        .fetch('http://127.0.0.1:9/fortune')
+        .then(
+          () => 'sent',
+          (error: Error) => error.name,
+        ),
+    ])
+
+    // The loaded plugin reads the stored session before it sends a request.
+    expect(errors).toMatchInlineSnapshot(`
+      [
+        "Accounts.SignedOutError",
+        "Accounts.SignedOutError",
+      ]
+    `)
+    expect(accounts.mpp.session().state).toMatchInlineSnapshot(`
+      {
+        "status": "idle",
+      }
+    `)
+  })
+
+  test('ends a session manager of the default `mpp` plugin at a change of user or of access key before its first request, so it never pays with another access key', async () => {
+    const accounts = DefaultAccounts.create({
+      chain: 42431,
+      clientId: 'example',
+      plugins: [
+        Plugin.from({
+          actions: (context) => ({
+            commit: (session: Session.Session) =>
+              context.session.change().commit(session),
+          }),
+          id: 'test',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    /** Returns a session of `id` whose access key spends any token on Tempo testnet. */
+    const signedIn = async (id: string) => {
+      const owner = Account.fromSecp256k1(Secp256k1.randomPrivateKey())
+      const privateKey = Secp256k1.randomPrivateKey()
+      const accessKey = Account.fromSecp256k1(privateKey, { access: owner })
+      return Session.from({
+        accessKey: {
+          account: owner.address,
+          chainId: 42431,
+          keyAuthorization: KeyAuthorization.toRpc(
+            await owner.signKeyAuthorization(accessKey, {
+              chainId: 42431n,
+              expiry: Math.floor(Date.now() / 1000) + 86_400,
+            }),
+          ),
+          privateKey,
+        },
+        accessToken: 'access-token',
+        expiresAt: Date.now() + 3_600_000,
+        user: { email: `${id}@example.com`, id },
+      })
+    }
+    /** Returns the outcome of the first request of a manager created before a sign-in of `id`. */
+    const refused = async (id: string) => {
+      await accounts.test.commit(await signedIn('user_1'))
+      const manager = accounts.mpp.session()
+
+      await accounts.test.commit(await signedIn(id))
+      return manager.fetch('http://127.0.0.1:9/stream').then(
+        () => 'sent',
+        (error: Error) => error.name,
+      )
+    }
+
+    // Neither manager sends a request with the later access key.
+    expect({
+      otherKey: await refused('user_1'),
+      otherUser: await refused('user_2'),
+    }).toMatchInlineSnapshot(`
+      {
+        "otherKey": "Accounts.SignedOutError",
+        "otherUser": "Accounts.SignedOutError",
+      }
+    `)
+  })
+
   test('keeps the client secret out of a log or JSON of the instance and its `config`', () => {
     const accounts = Accounts.create({
       chain: 42431,
@@ -445,6 +576,31 @@ describe('create', () => {
     expect(JSON.stringify(accounts.config)).toMatchInlineSnapshot(
       `"{"clientId":"client_acme"}"`,
     )
+  })
+
+  test('throws ChainNameInvalidError for a `chain` that names no chain, such as an environment variable', () => {
+    const errors = ['localnet', '1337', 'Testnet'].map((chain) => {
+      try {
+        return Accounts.from({ chain: chain as never, clientId: 'client_acme' })
+          .chainId
+      } catch (error) {
+        return String(error)
+      }
+    })
+
+    expect(errors).toMatchInlineSnapshot(`
+      [
+        "Accounts.ChainNameInvalidError: Invalid chain: "localnet" names no chain. Pass \`mainnet\`, \`testnet\`, or the chain's ID as a number.",
+        "Accounts.ChainNameInvalidError: Invalid chain: "1337" names no chain. Pass \`mainnet\`, \`testnet\`, or the chain's ID as a number.",
+        "Accounts.ChainNameInvalidError: Invalid chain: "Testnet" names no chain. Pass \`mainnet\`, \`testnet\`, or the chain's ID as a number.",
+      ]
+    `)
+    expect(
+      Accounts.from({ chain: 'testnet', clientId: 'client_acme' }).chainId,
+    ).toMatchInlineSnapshot(`42431`)
+    expect(
+      Accounts.from({ chain: null as never, clientId: 'client_acme' }).chainId,
+    ).toMatchInlineSnapshot(`4217`)
   })
 
   test('keeps an own `__proto__` member as a member of a log or JSON of `config`', () => {
@@ -2608,6 +2764,60 @@ describe('session.refresh', () => {
 })
 
 describe('signOut', () => {
+  test('revokes the refresh token of a sign-out whose store is unreachable, such as a Redis that is down', async () => {
+    const memory = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 3_600_000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    const held = { down: false }
+    const requests: string[] = []
+    // A shared store whose server goes down after the session loads, such as Redis, rejects each call.
+    const reject = () =>
+      Promise.reject(new Error('GET failed with ECONNREFUSED.'))
+    const accounts = Accounts.create({
+      chain: 1337,
+      clientId: 'https://app.example.com',
+      fetch(input, init) {
+        const token = new URLSearchParams(String(init?.body)).get('token')
+        requests.push(`${new URL(String(input)).pathname} ${token}`)
+        return Promise.resolve(new Response(null, { status: 200 }))
+      },
+      store: Store.from({
+        getItem: (key) => (held.down ? reject() : memory.getItem(key)),
+        lock: (_key, fn) => (held.down ? reject() : fn()),
+        removeItem: (key) => (held.down ? reject() : memory.removeItem(key)),
+        setItem: (key, value) =>
+          held.down ? reject() : memory.setItem(key, value),
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+
+    held.down = true
+    const error = await accounts
+      .signOut()
+      .catch((error: Error) => error.message)
+
+    expect({ error, requests }).toMatchInlineSnapshot(`
+      {
+        "error": "GET failed with ECONNREFUSED.",
+        "requests": [
+          "/oauth2/revoke refresh-token",
+        ],
+      }
+    `)
+  })
+
   const name =
     'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
 

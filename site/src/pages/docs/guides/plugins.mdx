@@ -415,6 +415,21 @@ export const accounts = Accounts.create({
 })
 ```
 
+### Leave out the default plugins
+
+The instance of `accounts` adds the `dialog`, `funding`, and `mpp` plugins that `plugins` lacks. `accounts/lite` exports the same modules, and its <SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink> adds none of them, so the bundle holds only the plugins that the app names.
+
+```ts [tempo.config.ts]
+// [!code hl:next]
+import { Accounts } from 'accounts/lite'
+import { dialog } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [dialog()],
+})
+```
+
 ## Next steps
 
 <Cards>

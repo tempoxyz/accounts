@@ -73,6 +73,7 @@
 - One module is one namespace of types, constants, functions, and errors, read as `Module.operation(...)`.
 - Name every module file in PascalCase, after its namespace, in `src/internal/` too: `Session.ts`, `Popup.ts`. Folders stay lowercase, such as `actions/` and `internal/viem/`.
 - The root entry exports only `AccessToken`, `Accounts`, `Challenge`, `LogoutToken`, `Permissions`, `Plugin`, `Session`, and `Store`, which sit at the top of `src/`. Every other module goes in `src/internal/`, and `accounts/internal` exports those that apps can use.
+- The root entry's `Accounts` is `src/internal/DefaultAccounts.ts`: `src/Accounts.ts` with a `create` that adds the `dialog`, `funding`, and `mpp` plugins. `accounts/lite` exports `src/Accounts.ts` itself. `src/Accounts.ts` never imports a default plugin, so the bundle of `accounts/lite` holds none.
 - Prefer stateless functions. Create an instance only for dependencies or lifecycle state, through `Module.create(options)` returning a plain object.
 - `Accounts.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons, except a lock on a resource of the whole device that no instance owns, such as the `expo` preset's lock on the device's secure store.
 - Inject platform capabilities (fetch, storage, clock, `open`) through options. Keep them out of pure modules.
@@ -356,7 +357,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 
 ## Repository Layout
 
-- `src/` is the published package `accounts`. Its entries are in `package.json` `exports`: `.`, `./cloudflare`, `./expo`, `./internal`, `./mpp`, `./plugins`, `./react`, `./test`, and `./wagmi`.
+- `src/` is the published package `accounts`. Its entries are in `package.json` `exports`: `.`, `./cloudflare`, `./expo`, `./internal`, `./lite`, `./mpp`, `./plugins`, `./react`, `./test`, and `./wagmi`.
 - `src/actions/` holds the actions that `Actions` exports. `src/plugins/` holds the plugins.
 - `src/stores/` holds each store that `Store` exports, such as `Store.memory`. `Store.ts` holds only the `Store` type and `Store.from`.
 - `src/internal/handlers/` holds each route handler, such as `Relay.ts`, the relay route. `src/internal/Handler.ts` holds the `Handler` type that each returns.
@@ -368,7 +369,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 ## Tooling
 
 - Pin every dependency in the `pnpm-workspace.yaml` catalog, and reference it as `catalog:`.
-- Optional platform libraries (React, wagmi, Expo, mppx) are optional peers.
+- Optional platform libraries (React, wagmi, Expo) are optional peers. `mppx` is a peer, since every instance holds the `mpp` plugin.
 - zile builds the package. `postinstall` runs `zile dev`.
 - Each push to `main` publishes `<breaking>.<commit time>.<n>` under `latest`, such as `1.20261118194700.0`, so `accounts` installs the current commit of `main`, without waiting on CI, with a GitHub release that lists the squash commit titles since the last one. `.github/workflows/release.yml` describes the release, and `scripts/release.ts` picks the version.
 - The pull request title is the changelog entry. A breaking title (`feat!:`, or `BREAKING CHANGE:` in the commit body) raises `<breaking>`. Describe a breaking change in the pull request body with each change in a `diff` fence: the old usage as removed lines, and the new usage as added lines.

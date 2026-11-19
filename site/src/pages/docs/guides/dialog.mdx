@@ -57,7 +57,7 @@ export const accounts = Accounts.create({
 
 ### Sign the user in
 
-Call <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> in a click handler, before any `await`, since its popup fallback opens only within a click. Without an [access key](/docs/guides/access-keys) request, the session holds no access key.
+Call <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> in a click handler, before any `await`, since its popup fallback opens only within a click. Without an [access key](/docs/guides/access-keys) request, the sign-in requests an access key that may transfer up to 5 OUSD for a day.
 
 :::code-group
 

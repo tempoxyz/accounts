@@ -6,7 +6,7 @@
  * @module
  */
 import { describe, expect, test } from 'vite-plus/test'
-import * as Accounts from '../Accounts.js'
+import * as Accounts from '../internal/DefaultAccounts.js'
 import * as Store from '../Store.js'
 
 describe('Actions.funding.open', () => {

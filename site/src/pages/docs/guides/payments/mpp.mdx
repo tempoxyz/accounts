@@ -21,7 +21,7 @@ The [`mpp-charge`](https://github.com/tempoxyz/accounts/tree/main/examples/mpp-c
 
 ### Install the packages
 
-The <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin pays through mppx, an optional peer dependency.
+The <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin pays through mppx, a peer dependency. Every instance holds the plugin, so an app passes `mpp()` only to set its options.
 
 :::code-group
 

@@ -6,7 +6,7 @@
  * @module
  */
 export * as AccessToken from './AccessToken.js'
-export * as Accounts from './Accounts.js'
+export * as Accounts from './internal/DefaultAccounts.js'
 export * as Challenge from './Challenge.js'
 export * as LogoutToken from './LogoutToken.js'
 export * as Permissions from './Permissions.js'

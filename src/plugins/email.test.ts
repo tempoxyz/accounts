@@ -13,7 +13,7 @@ describe('email', () => {
   function create() {
     return Accounts.create({
       chain: 42431,
-      clientId: 'https://app.example.com',
+      clientId: 'tempo-example-web',
       plugins: [email()],
       store: Store.memory(),
       url: 'http://127.0.0.1:9',
@@ -110,7 +110,7 @@ describe('email', () => {
     }) satisfies typeof fetch
     const page = Accounts.create({
       chain: 42431,
-      clientId: 'https://app.example.com',
+      clientId: 'tempo-example-web',
       fetch: record,
       plugins: [email()],
       store: Store.memory(),
@@ -147,7 +147,7 @@ describe('email', () => {
     }) satisfies typeof fetch
     const page = Accounts.create({
       chain: 42431,
-      clientId: 'https://app.example.com',
+      clientId: 'tempo-example-web',
       fetch: record,
       plugins: [email()],
       store: Store.memory(),
@@ -224,10 +224,64 @@ describe('email', () => {
     `)
   })
 
-  test('signIn throws RequestError, not TypeError, for a code that is no string, such as from an untyped request body', async () => {
+  test('sendCode and signIn refuse a third-party client ID with rejected and status 400, before any request', async () => {
+    const paths: string[] = []
+    // Records the path of each request, which then fails with a network error.
+    const record = (async (input, init) => {
+      paths.push(new URL(input instanceof Request ? input.url : input).pathname)
+      return fetch(input, init)
+    }) satisfies typeof fetch
     const accounts = Accounts.create({
       chain: 42431,
       clientId: 'https://app.example.com',
+      fetch: record,
+      plugins: [email()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const errors = await Promise.all(
+      [
+        accounts.email.sendCode({ email: 'user@example.com' }),
+        accounts.email.signIn({ code: '123456', email: 'user@example.com' }),
+      ].map((promise) =>
+        promise.then(
+          () => undefined,
+          (error: Accounts.RequestError) => ({
+            message: error.message,
+            reason: error.reason,
+            signedIn: error.signedIn,
+            status: error.status,
+          }),
+        ),
+      ),
+    )
+
+    expect({ errors, paths }).toMatchInlineSnapshot(`
+      {
+        "errors": [
+          {
+            "message": "Email sign-in refused: the client ID names a third-party app, which signs in only on an approval page. Sign in with \`dialog.signIn\` or \`redirect.signIn\`.",
+            "reason": "rejected",
+            "signedIn": false,
+            "status": 400,
+          },
+          {
+            "message": "Email sign-in refused: the client ID names a third-party app, which signs in only on an approval page. Sign in with \`dialog.signIn\` or \`redirect.signIn\`.",
+            "reason": "rejected",
+            "signedIn": false,
+            "status": 400,
+          },
+        ],
+        "paths": [],
+      }
+    `)
+  })
+
+  test('signIn throws RequestError, not TypeError, for a code that is no string, such as from an untyped request body', async () => {
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
       plugins: [email()],
       store: Store.memory(),
       url: 'http://127.0.0.1:9',

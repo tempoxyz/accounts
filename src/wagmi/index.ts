@@ -45,6 +45,7 @@ import {
   waitFor,
 } from 'xstate'
 import * as Accounts from '../Accounts.js'
+import * as DefaultAccounts from '../internal/DefaultAccounts.js'
 import * as Api from '../internal/Api.js'
 import * as Callback from '../internal/Callback.js'
 import * as ClientId from '../internal/ClientId.js'
@@ -233,7 +234,7 @@ export function tempoId<const plugins extends readonly Plugin.Option[] = []>(
     chainId,
     create(config, current, hooks) {
       let context: Plugin.Context | undefined
-      const instance = Accounts.create({
+      const instance = DefaultAccounts.create({
         ...rest,
         chain: current.id,
         // The instance switches only among the config's chains, which wagmi serves.

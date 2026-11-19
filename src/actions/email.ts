@@ -6,6 +6,7 @@ import { Authentication, type Types } from 'ox/webauthn'
 import { type Config, RequestError } from '../Accounts.js'
 import type { Authorization } from '../internal/Authorization.js'
 import * as Api from '../internal/Api.js'
+import * as ClientId from '../internal/ClientId.js'
 import * as Code from '../internal/Code.js'
 import * as Headless from '../internal/Headless.js'
 import * as RegistrationOptions from '../internal/Registration.js'
@@ -15,7 +16,27 @@ import type { TempoAccount } from '../internal/TempoAccount.js'
 import type * as Passkey from './passkey.js'
 
 /**
+ * Throws `rejected` with status 400 for a third-party client ID, such as an origin. Tempo ID signs in
+ * only a first-party app with an emailed code, so a code request would email a code that no sign-in
+ * redeems, and a page receives no CORS grant for the refusal, which reads as a request without a
+ * response.
+ */
+function firstParty(auth: Config) {
+  if (!ClientId.thirdParty(auth.clientId)) return
+  throw new RequestError({
+    code: 'invalid_request',
+    // A CLI has no browser window or redirect URI, so it signs in through the device grant.
+    message: `Email sign-in refused: the client ID names a third-party app, which signs in only on an approval page. Sign in with ${ClientId.cli(auth.clientId) ? '`device.signIn`' : '`dialog.signIn` or `redirect.signIn`'}.`,
+    reason: 'rejected',
+    status: 400,
+  })
+}
+
+/**
  * Emails the user a sign-in code. The response is the same for every address.
+ *
+ * @throws {Accounts.RequestError} With `rejected` and status 400, when `clientId` names a third-party
+ *   app, such as an origin. The call sends no request.
  *
  * @example
  * ```ts
@@ -26,6 +47,7 @@ export async function sendCode(
   auth: Config,
   options: sendCode.Options,
 ): Promise<void> {
+  firstParty(auth)
   const offline = Api.answered(auth, {
     message:
       'The code request received no response. Check the connection, and request the code again.',
@@ -52,7 +74,8 @@ export declare namespace sendCode {
  * relying party does not cover the page, throws it too. Then authorize through
  * `Actions.redirect.start`.
  *
- * A `code` that holds other than 6 digits throws `invalid_field` with status 0, before any request.
+ * A third-party `clientId` throws `rejected` with status 400, before the check of `code`. A `code`
+ * that holds other than 6 digits throws `invalid_field` with status 0. Neither sends a request.
  *
  * A new user of an app whose first account is a passkey receives the passkey account's registration in
  * place of the authorization, and the call registers the passkey, whose proof signs the access key,
@@ -63,6 +86,9 @@ export declare namespace sendCode {
  * A wallet.tempo passkey's account that waits for its upgrade signs the access key as the passkey's own
  * account, and `upgradeAvailable` is `true`. `Actions.account.upgrade` with the access key then upgrades
  * the account with one more prompt, after Tempo ID registers the access key.
+ *
+ * @throws {Accounts.RequestError} With `rejected` and status 400, when `clientId` names a third-party
+ *   app, such as an origin. The call sends no request.
  *
  * @example
  * ```ts
@@ -76,6 +102,7 @@ export async function signIn<
   options: signIn.Options<accessKey>,
 ): Promise<signIn.ReturnType<ChainId<accessKey>, HasAccessKey<accessKey>>> {
   const { createFn, email, getFn, link } = options
+  firstParty(auth)
   // A code without 6 digits throws before any request, or the prompt of `link`'s passkey.
   const code = Code.from(options.code)
   // The authorization request rides with the sign-in, so one request signs in, creates the first
