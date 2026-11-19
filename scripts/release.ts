@@ -9,9 +9,12 @@
  *   `<breaking>`. It starts at `1`, after the `0.x` releases of `tempoxyz/accounts`. A `dogfood: ` prefix is
  *   read past, so `dogfood: feat!: …` is breaking too.
  * - `ci` and `test` commits change nothing that the package ships, so they release nothing alone. A
- *   later release lists them. A manual run of Main releases them anyway.
+ *   later release's notes leave them out. A manual run of Main releases them anyway.
  * - Each release counts its commits from the `gitHead` that npm records for the last version. A rerun
  *   of a commit that npm already has resumes its release rather than publishing again.
+ * - The notes list each `feat`, `fix`, `perf`, and breaking commit under its section, as the
+ *   changesets releases did. Each entry is the pull request's past-tense description, which the
+ *   squash commit's body holds, up to its first heading or bold line.
  * - It runs before the dependencies install, and reads only Node.js, git, gh, and npm.
  *
  * `node scripts/release.ts resolve` writes the version to `GITHUB_OUTPUT` and the notes to
@@ -60,15 +63,9 @@ function next(
 
   // Without the commit of `latest`, such as the `1.x` releases from `tempoxyz/accounts2`'s private
   // history, the commits since it are unknown, so `<breaking>` stays.
-  const breaking =
-    !!base &&
-    commits.some(
-      (commit) =>
-        title.exec(subject(commit))?.groups?.breaking === '!' ||
-        /^BREAKING[ -]CHANGE: /m.test(commit.message),
-    )
+  const raised = !!base && commits.some(breaking)
   // The `0.x` releases came before this scheme, so its first release is 1 either way.
-  const breakingVersion = Math.max(1, breaking ? major + 1 : major)
+  const breakingVersion = Math.max(1, raised ? major + 1 : major)
   const at = timestamp(time)
   // npm refuses a version twice, so a release in the same second as `latest` raises the last number.
   const patch = latest.startsWith(`${breakingVersion}.${at}.`)
@@ -82,13 +79,101 @@ function timestamp(time: Date): string {
   return time.toISOString().replace(/\D/g, '').slice(0, 14)
 }
 
-/** Returns the release notes for `commits`, newest first. GitHub links each `(#123)` to its pull request. */
+/**
+ * Returns the release notes for `commits`, as the changesets releases read: one entry per `feat`,
+ * `fix`, `perf`, or breaking commit under a heading per section, newest first. GitHub links each
+ * `(#123)` to its pull request.
+ */
 function notes(commits: readonly Commit[]): string {
-  return `${commits.map((commit) => `- ${subject(commit)} (${commit.sha.slice(0, 7)})`).join('\n')}\n`
+  const blocks = sections.flatMap((heading) => {
+    const items = commits
+      .filter((commit) => section(commit) === heading)
+      .map((commit) => {
+        // An entry can span lines, such as a code block, which stays inside its bullet.
+        const [first, ...rest] = entry(commit).split('\n')
+        return [
+          `- ${first} (${reference(commit)})`,
+          ...rest.map((line) => (line ? `  ${line}` : '')),
+        ].join('\n')
+      })
+    return items.length === 0 ? [] : [`### ${heading}\n\n${items.join('\n')}`]
+  })
+  // A release of only other commits, such as `chore` or a forced `ci`, lists their titles, so its
+  // notes are never empty.
+  if (blocks.length === 0)
+    return `${commits.map((commit) => `- ${subject(commit)} (${commit.sha.slice(0, 7)})`).join('\n')}\n`
+  return `${blocks.join('\n\n')}\n`
+}
+
+/** Returns the pull request of `commit`, such as `#123`, or else its short SHA. */
+function reference(commit: Commit): string {
+  const pr = /\(#(\d+)\)$/.exec(subject(commit))?.[1]
+  return pr ? `#${pr}` : commit.sha.slice(0, 7)
+}
+
+/**
+ * Returns the entry of `commit`: its pull request's description, which the squash commit's body
+ * holds, up to its first heading or bold line and without its trailers, such as `Co-authored-by:`. Without a
+ * description, it is the title without its type and pull request number. The first paragraph is one
+ * line, so the notes put the reference at the end of that paragraph.
+ */
+function entry(commit: Commit): string {
+  const paragraphs = commit.message
+    .trimEnd()
+    .split(/\n[ \t]*\n/)
+    .slice(1)
+  // Git reads the last paragraph as trailers when each of its lines is `Token: value`.
+  const trailers =
+    paragraphs.length > 0 &&
+    paragraphs
+      .at(-1)!
+      .split('\n')
+      .every((line) => /^(?:BREAKING CHANGE|[A-Za-z][\w-]*): /.test(line))
+  const kept = trailers ? paragraphs.slice(0, -1) : paragraphs
+  // A squash of several authors puts a `---------` line before their trailers.
+  if (trailers && /^-{3,}$/.test(kept.at(-1)?.trim() ?? '')) kept.pop()
+  // Headed sections, such as `## How to test` or a bold `**How to test**` line, are for reviewers.
+  const description = kept
+    .join('\n\n')
+    .split(/^(?:#{1,6} |\*\*[^*\n]+\*\*[ \t]*$)/m, 1)[0]!
+    .trim()
+  if (description) {
+    const [first, ...rest] = description.split(/\n[ \t]*\n/)
+    return [first!.replace(/\s*\n\s*/g, ' '), ...rest].join('\n\n')
+  }
+  const text = subject(commit)
+    .replace(title, '')
+    .replace(/ \(#\d+\)$/, '')
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 function subject(commit: Commit): string {
   return commit.message.split('\n', 1)[0]!.trim()
+}
+
+function breaking(commit: Commit): boolean {
+  return (
+    title.exec(subject(commit))?.groups?.breaking === '!' ||
+    /^BREAKING[ -]CHANGE: /m.test(commit.message)
+  )
+}
+
+/** The sections of the release notes, in the order that they appear. */
+const sections = [
+  'Breaking changes',
+  'Features',
+  'Fixes',
+  'Performance',
+] as const
+
+/** Returns the section that lists `commit`, or `undefined` for a commit that the notes leave out, such as `chore` or `docs`. */
+function section(commit: Commit): (typeof sections)[number] | undefined {
+  if (breaking(commit)) return 'Breaking changes'
+  const type = title.exec(subject(commit))?.groups?.type
+  if (type === 'feat') return 'Features'
+  if (type === 'fix') return 'Fixes'
+  if (type === 'perf') return 'Performance'
+  return undefined
 }
 
 function run(command: string, args: string[], cwd?: string): string {

@@ -62,8 +62,9 @@ describe('resolve', () => {
 
     expect(resolved?.version).toMatchInlineSnapshot(`"1.20261118190300.0"`)
     expect(resolved?.notes).toMatchInlineSnapshot(`
-      "- feat(marketing): add Nav (#355) (d0e3b64)
-      - ci: publish each main commit (#354) (f5ac1ef)
+      "### Features
+
+      - Add Nav (#355)
       "
     `)
   })
@@ -126,7 +127,9 @@ describe('resolve', () => {
       Release.resolve({ base, cwd, latest: '1.20261118190100.0-abcdef12', sha })
         ?.notes,
     ).toMatchInlineSnapshot(`
-      "- feat: add Tab (#2) (8856317)
+      "### Features
+
+      - Keeps  and  as they are.BREAKING CHANGE: no. (#2)
       "
     `)
   })
@@ -165,9 +168,9 @@ describe('resolve', () => {
 
     expect(Release.resolve({ cwd, latest: '0.21.1', sha })?.notes)
       .toMatchInlineSnapshot(`
-      "- docs: fix a link (#2) (29bdc40)
-      "
-    `)
+        "- docs: fix a link (#2) (29bdc40)
+        "
+      `)
   })
 
   test('keeps the breaking number for a breaking title without a base', () => {
@@ -203,6 +206,48 @@ describe('resolve', () => {
     ).toThrowErrorMatchingInlineSnapshot(
       `[Error: npm's latest version 0.0.0-pr-1-20261118000000 is not a release version.]`,
     )
+  })
+  test('lists the description of each feat, fix, perf, and breaking commit under its section', () => {
+    const { commit, cwd } = repository()
+    const base = commit('feat: add Tab (#1)')
+    commit(
+      'feat(web): add Tabs (#2)\n\nAdded `Tabs`, which wrap\nover two lines.\n\n### How to test\n\n`pnpm test`\n\n---------\n\nCo-authored-by: CI <ci@tempo.xyz>',
+    )
+    commit(
+      'refactor: drop Tab (#3)\n\nRemoved `Tab`.\n\n```ts\nTabs.from()\n```\n\nBREAKING CHANGE: use Tabs.\nCo-authored-by: CI <ci@tempo.xyz>',
+    )
+    commit('fix: pad Tab (#4)')
+    commit(
+      'perf: cache Tab (#7)\n\nCached `Tab`.\n\n**How to test**\n\n`pnpm test`',
+    )
+    commit('ci: shard tests (#5)')
+    const sha = commit('chore(deps): bump ox (#6)\n\nBumps ox.')
+
+    expect(
+      Release.resolve({ base, cwd, latest: '1.20261118190100.0-abcdef12', sha })
+        ?.notes,
+    ).toMatchInlineSnapshot(`
+      "### Breaking changes
+
+      - Removed \`Tab\`. (#3)
+
+        \`\`\`ts
+        Tabs.from()
+        \`\`\`
+
+      ### Features
+
+      - Added \`Tabs\`, which wrap over two lines. (#2)
+
+      ### Fixes
+
+      - Pad Tab (#4)
+
+      ### Performance
+
+      - Cached \`Tab\`. (#7)
+      "
+    `)
   })
 })
 
