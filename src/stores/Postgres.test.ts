@@ -174,6 +174,69 @@ describe('Store.postgres', () => {
     `)
   })
 
+  test('behavior: lock runs the holds of two replicas on one table in turn', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const client = {
+      query: (text: string, values: readonly unknown[]) =>
+        database.query(text, [...values]),
+    }
+    // Each replica holds a store of its own on the table, as two processes do.
+    const replicas = [Postgres.create(client), Postgres.create(client)]
+    const events: string[] = []
+
+    await Promise.all(
+      replicas.map((store, index) =>
+        store.lock!('session', async () => {
+          events.push(`start ${index}`)
+          await new Promise((resolve) => setTimeout(resolve, 50))
+          events.push(`end ${index}`)
+        }),
+      ),
+    )
+
+    expect(events).toMatchInlineSnapshot(`
+      [
+        "start 0",
+        "end 0",
+        "start 1",
+        "end 1",
+      ]
+    `)
+    expect(
+      (await database.query('select key from tempo_id_store')).rows,
+    ).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: a hold whose lease another replica took deletes no lock of that replica', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const store = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+
+    // The lease of the first hold expires, and another replica sets its own token.
+    await store.lock!('key', () =>
+      database.query(
+        "update tempo_id_store set value = '\"other\"' where key = 'key:lock'",
+      ),
+    )
+
+    expect(
+      (
+        await database.query(
+          "select value from tempo_id_store where key = 'key:lock'",
+        )
+      ).rows,
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "value": ""other"",
+        },
+      ]
+    `)
+  })
+
   test('behavior: a write with an expiry replaces its own expired row', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())
