@@ -370,7 +370,10 @@ export function create(options: create.Options): create.ReturnType {
         },
         offer: ({ context, event }) => {
           assertEvent(event, 'fallback')
-          frame.remove()
+          // The popup of Google's sign-in asks the frame whether the user clicked Google in it, which
+          // then starts Google at once. The frame stays loaded for that, out of view.
+          if (event.method === 'google') frame.style.display = 'none'
+          else frame.remove()
           // A deferred request's popup has no URL until its challenge arrives, so Continue waits too.
           primary.disabled = context.current?.popupUrl === undefined
           text.textContent =
