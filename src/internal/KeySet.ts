@@ -10,6 +10,7 @@ import {
   type JSONWebKeySet,
   type JWTVerifyGetKey,
 } from 'jose'
+import { assign, createActor, type SnapshotFrom, setup } from 'xstate'
 import type { Config } from '../Accounts.js'
 import type * as Store from '../Store.js'
 
@@ -66,14 +67,6 @@ export type Runtime = {
  */
 export type Status = 'expired' | 'fresh' | 'stale'
 
-/** A key set in memory, and its key function. */
-type Loaded = {
-  /** When the fetch of the set ended, in milliseconds since the epoch. */
-  fetchedAt: number
-  /** The key function of the set. */
-  keys: JWTVerifyGetKey
-}
-
 /**
  * Returns the key function of jose's `jwtVerify` over the key set at `/oauth2/jwks` of `auth.url`.
  * Each verifier of `AccessToken`, `LogoutToken`, and `IdToken` holds one for its lifetime.
@@ -82,16 +75,19 @@ type Loaded = {
  * waits for a fetch. A set younger than half of `maxAge` verifies as it is. An older one verifies
  * while a fetch in `auth.keySet.defer` replaces it, at most once each 30 seconds after the last
  * fetch started. From `maxAge`, a verification waits for a new set, so a signing key that the issuer
- * removed stops verifying within `maxAge`. A token that names a `kid` that the set lacks, such as after a
- * rotation, first checks a set that another fetch stored meanwhile, and then waits for a fetch, at
- * most once each 30 seconds after the last fetch ended. Each verification that waits for a fetch
+ * removed stops verifying within `maxAge`. A token that names a `kid` that the set lacks, such as
+ * after a rotation, first checks a set that another fetch stored meanwhile, and then waits for a
+ * fetch, at most once each 30 seconds after the last fetch ended. Within those 30 seconds, it throws
+ * the key set as unavailable if the last fetch failed. Each verification that waits for a fetch
  * starts its own, since a Worker cancels the subrequests of a request when it ends, and a shared
- * fetch could then never settle.
+ * fetch could then never settle. `machines.keySet` holds the lifecycle, and {@link decide} and
+ * {@link rotate} choose each step.
  *
  * @throws {errors.JWKSNoMatchingKey} If no signing key of the set matches the token, also after a
  * fetch.
  * @throws {Error} If the fetch fails, answers with a status other than 2xx, returns no key set, or
- * ends after `timeout`, such as with a `TimeoutError`.
+ * ends after `timeout`, such as with a `TimeoutError`, or if the last fetch failed within the
+ * cooldown of a token that names an unknown `kid`.
  *
  * @example
  * ```ts
@@ -114,43 +110,35 @@ export function create(
   } = options
   const { cache, defer = detach } = auth.keySet ?? {}
   const url = new URL('/oauth2/jwks', auth.url).href
+  const actor = createActor(machines.keySet).start()
+  // The key function of each set, which jose builds once for it.
+  const functions = new WeakMap<Entry, JWTVerifyGetKey>()
 
-  let current: Loaded | undefined
-  // When the last fetch started. A stale set starts a background fetch at most once per cooldown,
-  // so a fetch that never settles does not stop later ones.
-  let started = -Infinity
-  // When the last fetch ended, with or without a set. A token of an unknown `kid` waits a cooldown.
-  let ended = -Infinity
-
-  function use(entry: Entry): Loaded {
-    if (!current || entry.fetchedAt >= current.fetchedAt)
-      current = {
-        fetchedAt: entry.fetchedAt,
-        keys: createLocalJWKSet(entry.jwks),
-      }
-    return current
+  function keysOf(entry: Entry) {
+    const existing = functions.get(entry)
+    if (existing) return existing
+    const keys = createLocalJWKSet(entry.jwks)
+    functions.set(entry, keys)
+    return keys
   }
 
   async function read() {
-    if (!cache) return undefined
+    if (!cache) return
     try {
       const entry = parse(await cache.getItem(url))
       // A copy from a clock ahead of this one is no fresher than a fetch.
-      if (!entry || entry.fetchedAt > now()) return undefined
+      if (!entry || entry.fetchedAt > now()) return
       const age = status({
         fetchedAt: entry.fetchedAt,
         maxAge: maxAge_,
         now: now(),
       })
-      if (age === 'expired') return undefined
-      return use(entry)
-    } catch {
-      return undefined
-    }
+      if (age !== 'expired') actor.send({ entry, type: 'cache.read' })
+    } catch {}
   }
 
   async function fetchSet() {
-    started = now()
+    actor.send({ now: now(), type: 'fetch.start' })
     try {
       const response = await (auth.fetch ?? fetch)(url, {
         headers: { accept: 'application/json' },
@@ -165,7 +153,7 @@ export function create(
         throw new Error(
           'Invalid key set: the issuer returned no `keys` array. Retry later.',
         )
-      const loaded = use(entry)
+      actor.send({ entry, now: now(), type: 'fetch.end' })
       if (cache)
         defer(
           cache
@@ -173,44 +161,47 @@ export function create(
             .setItem(url, entry, { expiresAt: Date.now() + maxAge_ })
             .catch(() => {}),
         )
-      return loaded
-    } finally {
-      ended = now()
+      return entry
+    } catch (error) {
+      actor.send({ now: now(), type: 'fetch.fail' })
+      throw error
     }
   }
 
   async function load() {
-    const loaded = current
-    const age = status({
-      fetchedAt: loaded?.fetchedAt,
-      maxAge: maxAge_,
-      now: now(),
-    })
-    if (!loaded || age === 'expired')
-      return (await read()) ?? (await fetchSet())
-    if (age === 'stale' && now() - started >= cooldown)
-      defer(fetchSet().catch(() => {}))
-    return loaded
+    const step = () =>
+      decide(actor.getSnapshot(), { maxAge: maxAge_, now: now() })
+    if (step() === 'fetch') await read()
+    // A copy of the cache can be stale too, so the step follows the set that the read stored.
+    const next = step()
+    if (next === 'fetch') return await fetchSet()
+    if (next === 'refresh') defer(fetchSet().catch(() => {}))
+    return actor.getSnapshot().context.entry!
   }
 
   return async (header, token) => {
-    const loaded = await load()
+    const entry = await load()
     try {
-      return await loaded.keys(header, token)
+      return await keysOf(entry)(header, token)
     } catch (error) {
       if (!(error instanceof errors.JWKSNoMatchingKey)) throw error
       // Another fetch stored a newer set while this one checked, so the token checks it first.
-      if (current && current !== loaded) {
+      const current = actor.getSnapshot().context.entry
+      if (current && current !== entry) {
         try {
-          return await current.keys(header, token)
+          return await keysOf(current)(header, token)
         } catch (error) {
           if (!(error instanceof errors.JWKSNoMatchingKey)) throw error
         }
       }
-      // The issuer may have rotated its keys, so a fetch follows, at most once per cooldown.
-      if (now() - ended < cooldown) throw error
-      const fetched = await fetchSet()
-      return await fetched.keys(header, token)
+      const next = rotate(actor.getSnapshot(), { now: now() })
+      if (next === 'refuse') throw error
+      if (next === 'unavailable')
+        throw new Error(
+          'Key set unavailable: the last fetch of the key set failed. Retry later.',
+          { cause: error },
+        )
+      return await keysOf(await fetchSet())(header, token)
     }
   }
 }
@@ -229,6 +220,77 @@ export declare namespace create {
     now?: (() => number) | undefined
     /** How long a fetch of the key set may take, in milliseconds. Defaults to 5 seconds. */
     timeout?: number | undefined
+  }
+}
+
+/**
+ * Returns the step of a verification from the key set of `snapshot` at `now`: `use` the set,
+ * `refresh` it in the background and use it, or wait to `fetch` a set. A stale set refreshes at
+ * most once each cooldown after the last fetch started, so a fetch that never settles holds no later
+ * refresh. Without a set, each verification fetches one, so none waits on another's fetch.
+ *
+ * @example
+ * ```ts
+ * import { KeySet } from 'accounts/internal'
+ * import { createActor } from 'xstate'
+ *
+ * const actor = createActor(KeySet.machines.keySet).start()
+ * KeySet.decide(actor.getSnapshot(), { maxAge: 600_000, now: Date.now() })
+ * // 'fetch'
+ * ```
+ */
+export function decide(
+  snapshot: machines.keySet.Snapshot,
+  options: decide.Options,
+): 'fetch' | 'refresh' | 'use' {
+  const { maxAge, now } = options
+  const { entry, started } = snapshot.context
+  const age = status({ fetchedAt: entry?.fetchedAt, maxAge, now })
+  if (age === 'expired') return 'fetch'
+  if (age === 'stale' && !cooling({ at: started, now })) return 'refresh'
+  return 'use'
+}
+
+export declare namespace decide {
+  type Options = {
+    /** How long a key set verifies, in milliseconds. */
+    maxAge: number
+    /** The current time, in milliseconds since the epoch. */
+    now: number
+  }
+}
+
+/**
+ * Returns the step for a token that names a `kid` that the set of `snapshot` lacks, at `now`: wait
+ * to `fetch` a set, `refuse` the token, or throw the key set as `unavailable`. A fetch follows at
+ * most once each cooldown after the last fetch ended. Within it, the token is refused, unless the
+ * last fetch failed, since the issuer's current set is then unknown.
+ *
+ * @example
+ * ```ts
+ * import { KeySet } from 'accounts/internal'
+ * import { createActor } from 'xstate'
+ *
+ * const actor = createActor(KeySet.machines.keySet).start()
+ * actor.send({ now: 0, type: 'fetch.start' })
+ * actor.send({ now: 1, type: 'fetch.fail' })
+ * KeySet.rotate(actor.getSnapshot(), { now: 2 })
+ * // 'unavailable'
+ * ```
+ */
+export function rotate(
+  snapshot: machines.keySet.Snapshot,
+  options: rotate.Options,
+): 'fetch' | 'refuse' | 'unavailable' {
+  if (!cooling({ at: snapshot.context.ended, now: options.now })) return 'fetch'
+  if (snapshot.hasTag('failed')) return 'unavailable'
+  return 'refuse'
+}
+
+export declare namespace rotate {
+  type Options = {
+    /** The current time, in milliseconds since the epoch. */
+    now: number
   }
 }
 
@@ -277,6 +339,102 @@ export declare namespace status {
     /** The current time, in milliseconds since the epoch. */
     now: number
   }
+}
+
+/** The state machines that this module runs. */
+export namespace machines {
+  /**
+   * The key set of one verifier: `empty` before any set, `loaded` with a set, and `failing` and
+   * `unavailable`, tagged `failed`, while the last fetch failed, with and without a set. A set from
+   * a fetch or the cache replaces only an older one. The context keeps when the last fetch started
+   * and ended, which {@link decide} and {@link rotate} compare with the cooldown.
+   */
+  export const keySet = setup({
+    actions: {
+      adopt: assign(({ context, event }) => {
+        if (event.type !== 'cache.read' && event.type !== 'fetch.end') return {}
+        if (context.entry && context.entry.fetchedAt > event.entry.fetchedAt)
+          return {}
+        return { entry: event.entry }
+      }),
+      end: assign(({ event }) =>
+        event.type === 'fetch.end' || event.type === 'fetch.fail'
+          ? { ended: event.now }
+          : {},
+      ),
+      start: assign(({ event }) =>
+        event.type === 'fetch.start' ? { started: event.now } : {},
+      ),
+    },
+    types: {
+      context: {} as keySet.Context,
+      events: {} as keySet.Event,
+    },
+  }).createMachine({
+    context: { ended: undefined, entry: undefined, started: undefined },
+    id: 'keySet',
+    initial: 'empty',
+    on: {
+      'fetch.start': { actions: 'start' },
+    },
+    states: {
+      empty: {
+        on: {
+          'cache.read': { actions: 'adopt', target: 'loaded' },
+          'fetch.end': { actions: ['adopt', 'end'], target: 'loaded' },
+          'fetch.fail': { actions: 'end', target: 'unavailable' },
+        },
+      },
+      failing: {
+        on: {
+          'cache.read': { actions: 'adopt' },
+          'fetch.end': { actions: ['adopt', 'end'], target: 'loaded' },
+          'fetch.fail': { actions: 'end' },
+        },
+        tags: ['failed'],
+      },
+      loaded: {
+        on: {
+          'cache.read': { actions: 'adopt' },
+          'fetch.end': { actions: ['adopt', 'end'] },
+          'fetch.fail': { actions: 'end', target: 'failing' },
+        },
+      },
+      unavailable: {
+        on: {
+          'cache.read': { actions: 'adopt', target: 'failing' },
+          'fetch.end': { actions: ['adopt', 'end'], target: 'loaded' },
+          'fetch.fail': { actions: 'end' },
+        },
+        tags: ['failed'],
+      },
+    },
+  })
+
+  export declare namespace keySet {
+    type Context = {
+      /** When the last fetch ended, with or without a set, in milliseconds since the epoch. */
+      ended: number | undefined
+      /** The newest set from a fetch or the cache. */
+      entry: Entry | undefined
+      /** When the last fetch started, in milliseconds since the epoch. */
+      started: number | undefined
+    }
+
+    type Event =
+      | { entry: Entry; type: 'cache.read' }
+      | { entry: Entry; now: number; type: 'fetch.end' }
+      | { now: number; type: 'fetch.fail' }
+      | { now: number; type: 'fetch.start' }
+
+    type Snapshot = SnapshotFrom<typeof keySet>
+  }
+}
+
+/** Returns whether `at` lies within the cooldown before `now`. Absent, no fetch ran. */
+function cooling(options: { at: number | undefined; now: number }) {
+  const { at, now } = options
+  return at !== undefined && now - at < cooldown
 }
 
 /** Leaves a promise of background work to run. Each promise that the key set defers never rejects. */
