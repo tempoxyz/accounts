@@ -142,6 +142,49 @@ describe('Store.redis', () => {
     `)
   }, 120_000)
 
+  test('behavior: links a session of a `sid` in a read and a conditional write', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    const commands: string[] = []
+    const accounts = Accounts.create({
+      clientId: 'https://app.example.com',
+      url: 'http://127.0.0.1:9',
+    })
+    const store = Redis.create({
+      sendCommand(args) {
+        commands.push(args[0]!)
+        return client.call(...(args as [string, ...string[]]))
+      },
+    })
+    const sessions = BackendSessions.create(accounts.config, {
+      shared: true,
+      store,
+    })
+
+    await sessions.link({
+      expiresAt: Date.now() + 3_600_000,
+      id: 'a-sid',
+      sid: 'sid',
+    })
+    client.disconnect()
+    await container.stop()
+
+    expect(commands).toMatchInlineSnapshot(`
+      [
+        "GET",
+        "EVAL",
+        "GET",
+        "GET",
+      ]
+    `)
+  }, 120_000)
+
   test('behavior: a hold whose lease another replica took deletes no lock of that replica', async () => {
     const container = await new GenericContainer('redis:7.4-alpine')
       .withExposedPorts(6379)
