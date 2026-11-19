@@ -1360,13 +1360,13 @@ function sessionKey(id: string) {
 }
 
 /** The key of the index of the Tempo ID session `sid` in the store, which lists its session IDs. */
+function indexKey(sid: string) {
+  return `tempo-id:sid:${sid}`
+}
+
 /** The key of the store's `lock` that orders the refreshes of the session `id`. */
 function refreshKey(id: string) {
   return `tempo-id:refresh:${id}`
-}
-
-function indexKey(sid: string) {
-  return `tempo-id:sid:${sid}`
 }
 
 /**
