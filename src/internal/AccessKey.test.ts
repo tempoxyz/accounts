@@ -44,12 +44,12 @@ describe('own', () => {
       platform: 'browser',
       plugins: [
         {
-          name: 'entry',
-          resolveId: (id) => (id === 'entry' ? id : undefined),
           load: (id) =>
             id === 'entry'
               ? `export { own } from ${JSON.stringify(Path.join(import.meta.dirname, 'AccessKey.ts'))}`
               : undefined,
+          name: 'entry',
+          resolveId: (id) => (id === 'entry' ? id : undefined),
         },
       ],
     })
