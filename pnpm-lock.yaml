@@ -28,8 +28,8 @@ catalogs:
       specifier: 0.62.8
       version: 0.62.8
     '@takumi-rs/helpers':
-      specifier: 0.62.8
-      version: 0.62.8
+      specifier: 2.20.0
+      version: 2.20.0
     '@tanstack/react-query':
       specifier: 5.104.1
       version: 5.104.1
@@ -1013,7 +1013,7 @@ importers:
         version: 0.62.8
       '@takumi-rs/helpers':
         specifier: 'catalog:'
-        version: 0.62.8
+        version: 2.20.0(react@19.3.0)
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -3871,6 +3871,18 @@ packages:
 
   '@takumi-rs/helpers@0.62.8':
     resolution: {integrity: sha512-9qRFeuk0yTvAeVAaQoU2uW1XeigbTBta/fTReHxEsa0hYqyJe4gM4YicA0D29tfObhSRJUN/j2b2WmHuADAmcQ==}
+
+  '@takumi-rs/helpers@2.20.0':
+    resolution: {integrity: sha512-efdeG4Ujsw0IEYXhq3lUN1UiKhK6f3tak7VSMrCEWSvumFs0q5moBHSLdsR6aJhPNsYei21Ea6Rjtv94/qdyjg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      preact: ^10.0.0 || ^11.0.0
+      react: ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      preact:
+        optional: true
+      react:
+        optional: true
 
   '@takumi-rs/image-response@0.62.8':
     resolution: {integrity: sha512-he79pvjif5psP8jyDiugUph3qbvKl7SaMetIuYUCI1asES5NMW3yw/nY2zQd73gqwqverhfnOEO/k4we6UxiIA==}
@@ -12010,6 +12022,10 @@ snapshots:
       '@takumi-rs/core-win32-x64-msvc': 0.62.8
 
   '@takumi-rs/helpers@0.62.8': {}
+
+  '@takumi-rs/helpers@2.20.0(react@19.3.0)':
+    optionalDependencies:
+      react: 19.3.0
 
   '@takumi-rs/image-response@0.62.8':
     dependencies:
