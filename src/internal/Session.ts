@@ -89,6 +89,18 @@ type Message = {
   signOut: boolean
 }
 
+/**
+ * The instances of each store, by the name of their session, which tell each other of each saved
+ * change where no page posts it, such as in React Native or Node. The store belongs to the app, and no
+ * instance owns it, so the registry lives in module scope, as the lock of `accounts/expo` does. A
+ * `WeakMap` holds no store that the app dropped, and a `WeakRef` no instance, which has no end of its
+ * own, such as one that a server creates for each request.
+ */
+const peers = new WeakMap<
+  Store,
+  Map<string, Set<WeakRef<(message: Message) => void>>>
+>()
+
 /** How a change failed. */
 export type FailOptions = {
   /**
@@ -182,24 +194,48 @@ export function create(options: create.Options): create.ReturnType {
   // request, unless this instance runs a refresh. The refresh then saves its new tokens first, and
   // the sign-out revokes them. Any other change waits for the lock, so it follows a sign-out that
   // asked for the lock first, which empties the tokens that another tab's refresh saved after it.
-  if (channel)
-    channel.onmessage = (event: MessageEvent<Message>) => {
-      const options = {
-        at: event.data?.at,
-        everywhere: event.data?.everywhere === true,
-        signOut: event.data?.signOut === true,
-      }
-      // Another tab's logout revokes the tokens of this tab's restore, as this tab's own does.
-      if (event.data?.everywhere) actor?.send({ type: 'logout.remote' })
-      // The plugins' hooks run after the lock releases, since a hook that takes the lock, such as
-      // through `exclusive`, would otherwise wait for itself.
-      void (async () => {
-        const hooks = await (options.signOut && exclusives === 0
-          ? adopt(options)
-          : exclusive(() => adopt(options)))
-        await hooks?.()
-      })().catch(() => undefined)
+  const receive = (message: Message | undefined) => {
+    const options = {
+      at: message?.at,
+      everywhere: message?.everywhere === true,
+      signOut: message?.signOut === true,
     }
+    // Another tab's logout revokes the tokens of this tab's restore, as this tab's own does.
+    if (message?.everywhere) actor?.send({ type: 'logout.remote' })
+    // The plugins' hooks run after the lock releases, since a hook that takes the lock, such as
+    // through `exclusive`, would otherwise wait for itself.
+    void (async () => {
+      const hooks = await (options.signOut && exclusives === 0
+        ? adopt(options)
+        : exclusive(() => adopt(options)))
+      await hooks?.()
+    })().catch(() => undefined)
+  }
+  if (channel)
+    channel.onmessage = (event: MessageEvent<Message>) => receive(event.data)
+  // Without a page's channel, other instances in the process on the same store hear each saved
+  // change directly, so one instance's sign-out empties the others' sessions at once, as across tabs.
+  const local = (() => {
+    if (!enabled || !store || channel) return undefined
+    const byName =
+      peers.get(store) ??
+      new Map<string, Set<WeakRef<(message: Message) => void>>>()
+    peers.set(store, byName)
+    const set =
+      byName.get(name) ?? new Set<WeakRef<(message: Message) => void>>()
+    byName.set(name, set)
+    set.add(new WeakRef(receive))
+    return set
+  })()
+  /** Tells the other instances in the process on the store of a saved change, and drops collected ones. */
+  function tell(message: Message) {
+    for (const ref of local ?? []) {
+      const peer = ref.deref()
+      if (!peer) local?.delete(ref)
+      // A page's channel delivers to every other tab but the sender, in a later task.
+      else if (peer !== receive) queueMicrotask(() => peer(message))
+    }
+  }
   const actor = enabled
     ? createActor(
         machines.session.provide({
@@ -214,13 +250,15 @@ export function create(options: create.Options): create.ReturnType {
               const everywhere = signOut && args.context.signingOut?.everywhere
               writes
                 ?.save(name, args.context.session)
-                .then(() =>
-                  channel?.postMessage({
+                .then(() => {
+                  const message = {
                     at: Date.now(),
                     everywhere,
                     signOut,
-                  } satisfies Message),
-                )
+                  } satisfies Message
+                  channel?.postMessage(message)
+                  tell(message)
+                })
                 .catch(() => undefined)
             },
           },

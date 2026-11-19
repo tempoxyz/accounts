@@ -83,7 +83,7 @@ If an `id` names a member of every instance, such as `session`, or the `id` of a
 
 ### Track sign-ins and sign-outs
 
-<SourceLink name="afterSignIn" path="src/Plugin.ts">`afterSignIn`</SourceLink> runs after each change that sets a session, with the session. <SourceLink name="afterSignOut" path="src/Plugin.ts">`afterSignOut`</SourceLink> runs after each sign-out. In a browser, both also run after a sign-in or a sign-out in another tab.
+<SourceLink name="afterSignIn" path="src/Plugin.ts">`afterSignIn`</SourceLink> runs after each change that sets a session, with the session. <SourceLink name="afterSignOut" path="src/Plugin.ts">`afterSignOut`</SourceLink> runs after each sign-out. Both also run after a sign-in or a sign-out in another tab, or in another instance on the same store object, such as in React Native or Node.
 
 The sign-in waits for each `afterSignIn` hook, so the hook sends the event without an `await`.
 

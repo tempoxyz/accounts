@@ -2716,6 +2716,19 @@ describe('signOut', () => {
     )
   })
 
+  test('empties the session of another instance on the store at once, without a page to post to it, as in React Native', async () => {
+    const store = Store.memory()
+    const accounts = create(store)
+    const other = create(store)
+    await accounts.test.commit(session())
+    await other.session.get()
+
+    await accounts.signOut()
+
+    await expect.poll(() => other.session.status.get().status).toBe('signedOut')
+    expect(await other.session.get()).toMatchInlineSnapshot(`undefined`)
+  })
+
   test('keeps the signed-out mark of a sign-out that starts during a sign-in and ends the session after its commit', async () => {
     const memory = Store.memory()
     // The sign-out's read of the session waits until the sign-in commits. Later reads run at once.
