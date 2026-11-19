@@ -35,6 +35,9 @@ import type * as Store from '../Store.js'
  */
 export function create(): Store.Store {
   const entries = new Map<string, Expiry.Entry<unknown>>()
+  // The listeners of each key. A `WeakRef` holds no instance that the app dropped, such as one
+  // that a server creates for each request.
+  const listeners = new Map<string, Set<WeakRef<(message: unknown) => void>>>()
   // Hermes has no `structuredClone`, so a store there keeps each value as it is, and every write
   // still succeeds.
   const clone: <value>(value: value) => value =
@@ -42,6 +45,21 @@ export function create(): Store.Store {
       ? (value) => structuredClone(value)
       : (value) => value
   return {
+    connect(key, listener) {
+      const set =
+        listeners.get(key) ?? new Set<WeakRef<(message: unknown) => void>>()
+      listeners.set(key, set)
+      set.add(new WeakRef(listener))
+      // The function holds `listener`, so the instance that holds the function keeps its listener.
+      return (message) => {
+        for (const ref of set) {
+          const peer = ref.deref()
+          if (!peer) set.delete(ref)
+          // A page's channel delivers to every tab but the sender, in a later task.
+          else if (peer !== listener) queueMicrotask(() => peer(message))
+        }
+      }
+    },
     getItem(key) {
       const entry = entries.get(key)
       if (!entry || Expiry.expired(entry)) return Promise.resolve(undefined)

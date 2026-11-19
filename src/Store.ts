@@ -12,6 +12,21 @@
  * device's secure store.
  */
 export type Store = {
+  /**
+   * Adds `listener` for the messages that other instances on the store post at `key`, and returns
+   * the function that posts a message to them. Each listener receives each message in a later
+   * microtask. The store holds no listener of an instance that the app dropped. An instance's
+   * session posts each saved change through it where no page's `BroadcastChannel` exists, such as in
+   * React Native or Node, so another instance's sign-out empties its session at once.
+   * `Store.memory` sets it. Absent, an instance outside a page reads another's sign-out only from
+   * the store.
+   */
+  connect?:
+    | ((
+        key: string,
+        listener: (message: unknown) => void,
+      ) => (message: unknown) => void)
+    | undefined
   /** Reads the value at `key`, or `undefined`. */
   getItem: (key: string) => Promise<unknown>
   /**
