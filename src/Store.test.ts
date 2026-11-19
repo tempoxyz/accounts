@@ -111,6 +111,29 @@ describe('Store.file', () => {
 })
 
 describe('Store.memory', () => {
+  test('writes in constant time on average, so a write to a store of many sessions reads no other entry', async () => {
+    const store = Store.memory()
+    const expiresAt = Date.now() + 3_600_000
+
+    // Before, each write read every entry for its expiry, so 20,000 writes read 200 million.
+    const start = performance.now()
+    for (let index = 0; index < 20_000; index++)
+      await store.setItem(`session:${index}`, { index }, { expiresAt })
+    const elapsed = performance.now() - start
+
+    expect({
+      read: await store.getItem('session:19999'),
+      withinBudget: elapsed < 1_000,
+    }).toMatchInlineSnapshot(`
+      {
+        "read": {
+          "index": 19999,
+        },
+        "withinBudget": true,
+      }
+    `)
+  }, 60_000)
+
   test('keeps a copy of each value, as structured-clone storage does, so a change to a written or read value changes no stored value', async () => {
     const store = Store.memory()
     const session = {
