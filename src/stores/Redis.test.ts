@@ -194,9 +194,12 @@ describe('Store.redis', () => {
       host: container.getHost(),
       port: container.getMappedPort(6379),
     })
+    let refused = 0
     const store = Redis.create({
-      sendCommand(args) {
-        return client.call(...(args as [string, ...string[]]))
+      async sendCommand(args) {
+        const reply = await client.call(...(args as [string, ...string[]]))
+        if (args[0] === 'EVAL' && args[2] === '2' && reply === 0) refused++
+        return reply
       },
     })
 
@@ -207,7 +210,7 @@ describe('Store.redis', () => {
         result: undefined,
         value: [...((value as string[] | undefined) ?? []), 'new'],
       }))
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      await expect.poll(() => refused).toBeGreaterThan(0)
       await store.setItem('index', [...(index as string[]), 'old'])
     })
     await write
@@ -219,6 +222,46 @@ describe('Store.redis', () => {
       [
         "old",
         "new",
+      ]
+    `)
+  }, 120_000)
+
+  test('behavior: updates an entry on Redis Cluster, where the entry and its lock occupy two hash slots', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withCommand(['redis-server', '--cluster-enabled', 'yes'])
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    await client.call('CLUSTER', 'ADDSLOTSRANGE', '0', '16383')
+    await expect
+      .poll(async () => String(await client.call('CLUSTER', 'INFO')), {
+        timeout: 30_000,
+      })
+      .toContain('cluster_state:ok')
+    const store = Redis.create({
+      sendCommand(args) {
+        return client.call(...(args as [string, ...string[]]))
+      },
+    })
+    const append = (entry: string) =>
+      store.update!('tempo-id:sid:sid', (value) => ({
+        result: undefined,
+        value: [...((value as string[] | undefined) ?? []), entry],
+      }))
+
+    await Promise.all([append('a'), append('b')])
+    const index = (await store.getItem('tempo-id:sid:sid')) as string[]
+    client.disconnect()
+    await container.stop()
+
+    expect([...index].sort()).toMatchInlineSnapshot(`
+      [
+        "a",
+        "b",
       ]
     `)
   }, 120_000)
