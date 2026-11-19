@@ -50,10 +50,7 @@ export type Plugin<
          * of the `tempoId` connector outside a page.
          */
         afterSignIn?:
-          | ((
-              context: Context,
-              session: Session.Session,
-            ) => Promise<void> | void)
+          | ((context: Context, session: Session.Any) => Promise<void> | void)
           | undefined
         /**
          * Runs after `signOut`, in the order of `plugins`. In a browser, it also runs after another
@@ -229,7 +226,7 @@ export type Context = {
      * discards, beside the caller. It ends no Tempo ID session. A revocation without an answer
      * enters the store's unanswered entry, so the next sign-out sends it again.
      */
-    discard: (session: Session.Session) => void
+    discard: (session: Session.Any) => void
     /**
      * Resolves once every sign-out that runs now settles, with its revocation and logout, with
      * whether one ran. Resolves at once with `false` without one. Never rejects. A plugin that
@@ -238,7 +235,7 @@ export type Context = {
      */
     ended: () => Promise<boolean>
     /** Returns the session, without reading the store. */
-    get: () => Session.Session | undefined
+    get: () => Session.Any | undefined
     /**
      * Runs `fn` while no other run of the same session's `exclusive` does, also in another tab of
      * a browser.
@@ -250,7 +247,7 @@ export type Context = {
      */
     load: (options?: {
       locked?: boolean | undefined
-    }) => Promise<Session.Session | undefined>
+    }) => Promise<Session.Any | undefined>
     /**
      * Reads the stored session again, and returns the session. Sets the stored session when it is
      * the same user's with other tokens, such as after another tab's refresh. With `hooks`, an
@@ -260,13 +257,13 @@ export type Context = {
     reload: (options?: {
       /** Whether an adoption runs the plugins' `afterSignIn` hooks. Defaults to `false`. */
       hooks?: boolean | undefined
-    }) => Promise<Session.Session | undefined>
+    }) => Promise<Session.Any | undefined>
     /**
      * Returns the saved session whose access key expired, which the next authorization in this
      * instance renews. `undefined` after a change sets a session, and after a sign-out. The store
      * does not hold it, so a later instance on the same store holds none.
      */
-    renewing: () => Session.Session | undefined
+    renewing: () => Session.Any | undefined
     /**
      * Reads the store's refresh token rotations, which a change with `sent` takes as its
      * `rotations`, so the read runs beside the read of the token. Resolves `undefined` when the
@@ -305,16 +302,19 @@ export type Context = {
  *
  * @example
  * ```ts
- * import { Accounts, Plugin } from 'accounts'
+ * import { Accounts, Plugin, Session } from 'accounts'
  *
  * function profile() {
  *   return Plugin.from({
  *     actions: (context) => ({
- *       email: () => context.session.get()?.user.email,
+ *       // A `local` plugin's session names no user.
+ *       email: () => context.session.get()?.user?.email,
  *     }),
  *     extend: (instance) => ({ clientIdOf: () => instance.config.clientId }),
  *     hooks: {
- *       afterSignIn: (context, session) => analytics.identify(session.user.id),
+ *       afterSignIn: (context, session) => {
+ *         if (!Session.local(session)) analytics.identify(session.user.id)
+ *       },
  *     },
  *     id: 'profile',
  *     setup: (context) => void fetch(new URL('/health', context.config.url)),

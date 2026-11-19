@@ -26,7 +26,7 @@ import { authorizeUrl } from './Request.js'
  * token stays in the store.
  */
 export type BackendSession = Omit<
-  Session.Session,
+  Session.TempoIdSession,
   'idToken' | 'refreshToken'
 > & {
   /**
@@ -1063,7 +1063,7 @@ export declare namespace save {
      */
     id?: string | undefined
     /** The session that a sign-in returned, or a SIWE session without its ID. */
-    session: Session.Session | Omit<SiweSession, 'id'>
+    session: Session.TempoIdSession | Omit<SiweSession, 'id'>
   }
 
   type ReturnType = {
@@ -1178,7 +1178,7 @@ function siwe(
  * leaves its `id` and `method`, which the read derives.
  */
 function toStored(
-  session: Session.Session & {
+  session: Session.TempoIdSession & {
     id?: unknown
     method?: unknown
     signer?: unknown

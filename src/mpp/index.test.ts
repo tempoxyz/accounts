@@ -1504,8 +1504,7 @@ function server(
 function renew() {
   return Plugin.from({
     actions: (context) => ({
-      commit: (value: Session.Session) =>
-        context.session.change().commit(value),
+      commit: (value: Session.Any) => context.session.change().commit(value),
     }),
     id: 'renew',
   })

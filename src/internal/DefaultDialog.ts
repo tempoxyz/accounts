@@ -13,6 +13,7 @@ export const signInIds = new Set([
   'device',
   'dialog',
   'email',
+  'local',
   'passkey',
   'redirect',
 ])
@@ -23,6 +24,7 @@ export type SignInId =
   | 'device'
   | 'dialog'
   | 'email'
+  | 'local'
   | 'passkey'
   | 'redirect'
 
@@ -73,7 +75,10 @@ export function plugin(): Dialog {
           parameters?: dialog.revokeAccessKey.Parameters,
         ) => (await get()).revokeAccessKey(parameters),
         // Without `backend`, the session is the stored one, so the read loads no dialog code.
-        session: async () => (await context.session.load()) ?? null,
+        // An instance with the `dialog` plugin signs in with Tempo ID, so its session has tokens.
+        session: async () =>
+          ((await context.session.load()) as Session.Session | undefined) ??
+          null,
         signIn: (async (parameters?: dialog.signIn.Parameters) =>
           (await get()).signIn(parameters)) as dialog.signIn.Fn,
         signMessage: async (parameters: dialog.signMessage.Parameters) =>
@@ -95,7 +100,7 @@ export function plugin(): Dialog {
        * Loads the plugin, and runs its `extend`. With `read`, the session that this plugin's own
        * read returned, the loaded plugin's `reload` returns it, so the page reads the store once.
        */
-      const extend = (read?: { session: Session.Session | undefined }) => {
+      const extend = (read?: { session: Session.Any | undefined }) => {
         // The frame's preload is an optimization, so a failed load leaves the first sign-in to load
         // it, and the instance waits for no load.
         extending ??= load().then(

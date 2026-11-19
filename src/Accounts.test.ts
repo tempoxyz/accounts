@@ -180,7 +180,7 @@ describe('create', () => {
       plugins: [
         Plugin.from({
           actions: (context) => ({
-            commit: (session: Session.Session) =>
+            commit: (session: Session.Any) =>
               context.session.change().commit(session),
           }),
           id: 'test',
@@ -258,9 +258,9 @@ describe('create', () => {
     ])
 
     expect({
-      deploy: deploy?.user.email,
+      deploy: deploy?.user?.email,
       files: files(),
-      status: status?.user.email,
+      status: status?.user?.email,
     }).toMatchInlineSnapshot(`
       {
         "deploy": "user@example.com",
@@ -284,7 +284,7 @@ describe('create', () => {
 
     expect({
       after: await create({ clientId: 'cli:acme-deploy' }).session.get(),
-      before: before?.user.email,
+      before: before?.user?.email,
     }).toMatchInlineSnapshot(`
       {
         "after": undefined,
@@ -422,7 +422,7 @@ describe('create', () => {
       plugins: [
         Plugin.from({
           actions: (context) => ({
-            commit: (session: Session.Session) =>
+            commit: (session: Session.Any) =>
               context.session.change().commit(session),
           }),
           id: 'test',
@@ -1802,7 +1802,7 @@ describe('session.get', () => {
 
     const [session] = await Promise.all([accounts.session.get(), ...reloads])
 
-    expect(session?.user.id).toMatchInlineSnapshot(`"user_1"`)
+    expect(session?.user?.id).toMatchInlineSnapshot(`"user_1"`)
     expect(accounts.session.status.get().status).toMatchInlineSnapshot(
       `"signedIn"`,
     )
@@ -1854,7 +1854,7 @@ describe('session.get', () => {
 
     const session = await accounts.session.get()
 
-    expect(session?.user.id).toMatchInlineSnapshot(`"user_1"`)
+    expect(session?.user?.id).toMatchInlineSnapshot(`"user_1"`)
     expect(reads).toMatchInlineSnapshot(`
       [
         ":chain 0",
@@ -1915,7 +1915,7 @@ describe('session.get', () => {
     const second = await accounts.session.get()
 
     expect(first).toMatchInlineSnapshot(`"The callback failed."`)
-    expect(second?.user.id).toMatchInlineSnapshot(`"user_1"`)
+    expect(second?.user?.id).toMatchInlineSnapshot(`"user_1"`)
   })
 
   test("rejects with the store's error, and keeps the status `pending`, when the read of the saved session fails", async () => {
@@ -1946,7 +1946,7 @@ describe('session.get', () => {
     })
 
     const first = await accounts.session.get().then(
-      (session) => ({ session: session?.user.id }),
+      (session) => ({ session: session?.user?.id }),
       (error: Error) => ({ error: error.name }),
     )
     const status = accounts.session.status.get().status
@@ -1961,7 +1961,7 @@ describe('session.get', () => {
         "status": "pending",
       }
     `)
-    expect(second?.user.id).toMatchInlineSnapshot(`"user_1"`)
+    expect(second?.user?.id).toMatchInlineSnapshot(`"user_1"`)
     expect(accounts.session.status.get().status).toMatchInlineSnapshot(
       `"signedIn"`,
     )
@@ -2129,7 +2129,7 @@ describe('session.get', () => {
     )
     const changes: (string | undefined)[][] = []
     accounts.session.subscribe((session, previous) =>
-      changes.push([previous?.user.id, session?.user.id]),
+      changes.push([previous?.user?.id, session?.user?.id]),
     )
 
     const session = await accounts.session.get()
@@ -2338,10 +2338,10 @@ describe('session.get', () => {
       plugins: [
         Plugin.from({
           actions: (context) => ({
-            commit: (session: Session.Session) =>
+            commit: (session: Session.Any) =>
               context.session.change().commit(session),
             reload: () => context.session.reload(),
-            update: (session: Session.Session) =>
+            update: (session: Session.Any) =>
               context.session.change({ update: true }).commit(session),
           }),
           id: 'test',
@@ -2633,7 +2633,7 @@ describe('session.refresh', () => {
       'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
     const store = Store.memory()
     /** The value that the store holds under the session's key. */
-    type Saved = { state: { session?: Session.Session | undefined } }
+    type Saved = { state: { session?: Session.Any | undefined } }
     /** Returns the session that the store holds. */
     const stored = async () =>
       ((await store.getItem(name)) as Saved | undefined)?.state.session
@@ -2698,7 +2698,7 @@ describe('session.refresh', () => {
       'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
     const store = Store.memory()
     /** The value that the store holds under the session's key. */
-    type Saved = { state: { session?: Session.Session | undefined } }
+    type Saved = { state: { session?: Session.Any | undefined } }
     /** Returns the session that the store holds. */
     const stored = async () =>
       ((await store.getItem(name)) as Saved | undefined)?.state.session
@@ -2830,7 +2830,7 @@ describe('signOut', () => {
         Plugin.from({
           actions: (context) => ({
             async commit(
-              session: Session.Session,
+              session: Session.Any,
               before: Promise<void> = Promise.resolve(),
             ) {
               const change = context.session.change()
@@ -3316,7 +3316,7 @@ describe('signOut', () => {
         plugins: [
           Plugin.from({
             actions: (context) => ({
-              async restore(session: Session.Session) {
+              async restore(session: Session.Any) {
                 const change = context.session.change({ restore: true })
                 await committing.promise
                 await change.commit(session)
@@ -3385,7 +3385,7 @@ describe('signOut', () => {
       plugins: [
         Plugin.from({
           actions: (context) => ({
-            async restore(session: Session.Session) {
+            async restore(session: Session.Any) {
               const change = context.session.change({ restore: true })
               await committing.promise
               await change.commit(session)
@@ -3458,7 +3458,7 @@ describe('signOut', () => {
         Plugin.from({
           actions: (context) => ({
             reload: () => context.session.reload(),
-            update: (session: Session.Session) =>
+            update: (session: Session.Any) =>
               context.session.change({ update: true }).commit(session),
           }),
           id: 'test',
@@ -3533,7 +3533,7 @@ describe('signOut', () => {
     const writes: (() => void)[] = []
     let holds = false
     // The session that another context saves right after the next write of the session.
-    let saves: Session.Session | undefined
+    let saves: Session.Any | undefined
     const requests: string[] = []
     const accounts = Accounts.create({
       chain: 42431,
@@ -3633,7 +3633,7 @@ describe('signOut', () => {
       plugins: [
         Plugin.from({
           actions: (context) => ({
-            commit: (session: Session.Session) =>
+            commit: (session: Session.Any) =>
               context.session.change().commit(session),
           }),
           id: 'test',
@@ -3809,7 +3809,7 @@ describe('signOut', () => {
       plugins: [
         Plugin.from({
           actions: (context) => ({
-            commit: (session: Session.Session) =>
+            commit: (session: Session.Any) =>
               context.session.change().commit(session),
           }),
           id: 'test',
@@ -4063,7 +4063,7 @@ describe('switchChain', () => {
   /** Saves a session with `fields` to `store`. */
   async function save(
     store: Store.Store,
-    fields: Pick<Session.Session, 'accessKey' | 'accessKeys' | 'account'>,
+    fields: Pick<Session.Any, 'accessKey' | 'accessKeys' | 'account'>,
   ) {
     await store.setItem(name, {
       state: {
@@ -4080,7 +4080,7 @@ describe('switchChain', () => {
   }
 
   /** Returns the chains of the access keys of `session`. */
-  function chains(session: Session.Session | undefined) {
+  function chains(session: Session.Any | undefined) {
     return {
       accessKey: session?.accessKey?.chainId,
       accessKeys: session?.accessKeys?.map((entry) => entry.chainId),
@@ -4146,7 +4146,9 @@ describe('switchChain', () => {
       ],
       store,
     })
-    const signedIn = async (fields: Pick<Session.Session, 'expiresAt'>) =>
+    const signedIn = async (
+      fields: Pick<Session.TempoIdSession, 'expiresAt'>,
+    ) =>
       Session.from({
         accessKey: await createAccessKey(1337),
         accessKeys: [await createAccessKey(42431)],
@@ -4263,7 +4265,10 @@ describe('switchChain', () => {
       store,
     })
     const signedIn = (
-      fields: Pick<Session.Session, 'accessKey' | 'accessKeys' | 'expiresAt'>,
+      fields: Pick<
+        Session.TempoIdSession,
+        'accessKey' | 'accessKeys' | 'expiresAt'
+      >,
     ) =>
       Session.from({
         accessToken: 'access-token',
@@ -4386,7 +4391,10 @@ describe('switchChain', () => {
       store,
     })
     const signedIn = (
-      fields: Pick<Session.Session, 'accessKey' | 'accessKeys' | 'expiresAt'>,
+      fields: Pick<
+        Session.TempoIdSession,
+        'accessKey' | 'accessKeys' | 'expiresAt'
+      >,
     ) =>
       Session.from({
         accessToken: 'access-token',
@@ -4423,7 +4431,7 @@ describe('switchChain', () => {
 
     expect({
       chainId: accounts.chain.get(),
-      expiresAt: session!.expiresAt - expiresAt,
+      expiresAt: session!.expiresAt! - expiresAt,
       lifetime: session!.accessKeys?.[0]?.lifetime,
       ...chains(session),
     }).toMatchInlineSnapshot(`
@@ -4784,7 +4792,7 @@ describe('switchChain', () => {
       )
       .catch(() => undefined)
     await expect
-      .poll(async () => (await accounts.session.get())?.user.id)
+      .poll(async () => (await accounts.session.get())?.user?.id)
       .toBe('user_2')
     gate.resolve()
     const [error] = await Promise.all([switching, signingIn])
@@ -4793,7 +4801,7 @@ describe('switchChain', () => {
     expect(error).toBeUndefined()
     expect(accounts.chain.get()).toMatchInlineSnapshot(`42431`)
     expect(await memory.getItem(`${name}:chain`)).toMatchInlineSnapshot(`42431`)
-    expect(held?.user.id).toMatchInlineSnapshot(`"user_2"`)
+    expect(held?.user?.id).toMatchInlineSnapshot(`"user_2"`)
   })
 
   test('throws ChainInvalidError for a chain outside `chains`, and restores no stored selection outside them', async () => {
@@ -4848,7 +4856,7 @@ describe('Plugin.Context.session.reload', () => {
         Plugin.from({
           hooks: {
             afterSignIn: (_context, session) => {
-              signIns.push(session.user.id)
+              signIns.push(session.user!.id)
             },
           },
           id: 'record',
@@ -4894,7 +4902,7 @@ describe('Plugin.Context.session.reload', () => {
       .toMatchObject({ state: { session: undefined } })
 
     expect({
-      reloaded: reloaded?.user.id,
+      reloaded: reloaded?.user?.id,
       signIns,
     }).toMatchInlineSnapshot(`
       {

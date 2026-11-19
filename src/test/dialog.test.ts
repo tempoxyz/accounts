@@ -28,7 +28,7 @@ describe('dialog', () => {
         Plugin.from({
           hooks: {
             afterSignIn: (_context, session) => {
-              signedIn.push(session.user.id)
+              signedIn.push(session.user!.id)
             },
           },
           id: 'record',

@@ -26,7 +26,8 @@ function analytics(options: analytics.Options) {
         send({
           chainId: context.chain.get(),
           name,
-          userId: context.session.get()?.user.id,
+          // A `local` plugin's session names no user.
+          userId: context.session.get()?.user?.id,
         }),
     }),
     hooks: {
@@ -34,7 +35,7 @@ function analytics(options: analytics.Options) {
         send({
           chainId: context.chain.get(),
           name: 'signIn',
-          userId: session.user.id,
+          userId: session.user?.id,
         }),
       afterSignOut: (context) =>
         send({ chainId: context.chain.get(), name: 'signOut' }),

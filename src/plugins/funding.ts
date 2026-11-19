@@ -5,10 +5,11 @@
  */
 import * as AccountActions from '../actions/account.js'
 import * as FundingActions from '../actions/funding.js'
+import { LocalSessionError } from '../Accounts.js'
 import * as Core from '../internal/Core.js'
 import * as Popup from '../internal/Popup.js'
 import * as Plugin from '../Plugin.js'
-import type * as Session from '../Session.js'
+import * as Session from '../Session.js'
 
 /**
  * The session holds no user, so the deposit page has no account to fund. `funding.open` throws it
@@ -60,7 +61,7 @@ export function funding(options: funding.Options = {}) {
         | {
             address: `0x${string}`
             chainId: number
-            session: Session.Session
+            session: Session.Any
           }
         | undefined
       /**
@@ -69,7 +70,7 @@ export function funding(options: funding.Options = {}) {
        * own account.
        */
       const resolve = (chainId: number) => {
-        const own = (session: Session.Session | undefined) => {
+        const own = (session: Session.Any | undefined) => {
           const held =
             chainId === context.config.chainId
               ? (session?.account?.address ?? session?.accessKey?.account)
@@ -266,6 +267,7 @@ async function accessToken(
   options: accessToken.Options,
 ) {
   const { session } = options
+  if (Session.local(session)) throw new LocalSessionError()
   if (session.expiresAt - refreshMargin > Date.now()) return session.accessToken
   if (!session.refreshToken) {
     if (session.expiresAt > Date.now()) return session.accessToken
@@ -273,14 +275,14 @@ async function accessToken(
   }
 
   const refreshed = await Core.refresh(context, { margin: refreshMargin })
-  if (refreshed?.user.id !== session.user.id) throw new SignedOutError()
+  if (!Session.same(refreshed, session)) throw new SignedOutError()
   return refreshed.accessToken
 }
 
 declare namespace accessToken {
   type Options = {
     /** The session whose access token the read sends. */
-    session: Session.Session
+    session: Session.Any
   }
 }
 

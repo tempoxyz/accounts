@@ -8,12 +8,53 @@ import type { Tokens } from './internal/Tokens.js'
 import type { User } from './internal/User.js'
 
 /**
- * The session of a signed-in user, which an instance holds and saves to its store, and each sign-in
- * of a plugin returns. It holds the {@link Tokens}, the user, the app's access key as data, the
- * user's Tempo Account, and any signature of the sign-in's challenge. {@link expired} reports an
- * access key past its expiry.
+ * The session of a user whom Tempo ID signed in, which an instance holds and saves to its store, and
+ * each sign-in of a Tempo ID plugin returns. It holds the {@link Tokens}, the user, the app's access
+ * key as data, the user's Tempo Account, and any signature of the sign-in's challenge.
+ * {@link expired} reports an access key past its expiry. An instance with the `local` plugin holds
+ * {@link Any} instead.
  */
-export type Session = Tokens & {
+export type Session = TempoIdSession
+
+/** Either session that an instance holds: a Tempo ID sign-in's, or the `local` plugin's. */
+export type Any = LocalSession | TempoIdSession
+
+/**
+ * The session that an instance of `plugins` holds: {@link Session} for plugins whose ids exclude the
+ * `local` plugin's, else {@link Any}, such as for a list of any plugins.
+ */
+export type Of<plugins extends readonly { id: string }[]> =
+  string extends plugins[number]['id']
+    ? Any
+    : 'local' extends plugins[number]['id']
+      ? Any
+      : Session
+
+/**
+ * The session of an account whose owner key the instance holds, which the `local` plugin signs in.
+ * Tempo ID issues it no tokens and names no user: `address` is the owner's account, and the owner
+ * signs each access key that it holds. It expires only with its access keys.
+ */
+export type LocalSession = Omit<
+  TempoIdSession,
+  keyof Tokens | 'kind' | 'user'
+> & {
+  accessToken?: undefined
+  /** The account of the owner key. */
+  address: `0x${string}`
+  expiresAt?: undefined
+  idToken?: undefined
+  /** Marks a session of the `local` plugin. */
+  kind: 'local'
+  receivedAt?: undefined
+  refreshToken?: undefined
+  user?: undefined
+}
+
+/** The session of a user whom Tempo ID signed in, with its tokens. */
+export type TempoIdSession = Tokens & {
+  /** Absent for a session of Tempo ID, such as one that an earlier release saved. */
+  kind?: 'tempoId' | undefined
   /**
    * The app's access key, with its material: the latest sign-in's, or, after `switchChain`, the one
    * on the instance's chain. The `viem` plugin signs with it. Absent after a sign-in without an
@@ -63,7 +104,7 @@ export type Session = Tokens & {
  * of the browser's Tempo ID session, such as `accounts.authorize`, holds it at `pending`, or at
  * `reauthorizing` while it renews a saved session whose access key expired.
  */
-export type Status =
+export type Status<session extends Any = Session> =
   | {
       /** No session to show. */
       session: undefined
@@ -78,13 +119,13 @@ export type Status =
        * The saved session whose access key expired, which the authorization renews. Its access key
        * signs nothing, so it shows only the user and the account.
        */
-      session: Session
+      session: session
       /** An authorization renews the saved session, which expired. */
       status: 'reauthorizing'
     }
   | {
       /** The session. */
-      session: Session
+      session: session
       /** The instance holds a session. */
       status: 'signedIn'
     }
@@ -103,8 +144,57 @@ export type Status =
  * const session = Session.from({ ...tokens, accessKey, user })
  * ```
  */
-export function from(value: Session): Session {
+export function from<const value extends Any>(value: value): value {
   return value
+}
+
+/**
+ * Returns whether the session is a {@link LocalSession}, which Tempo ID issued no tokens for.
+ *
+ * @example
+ * ```ts
+ * import { Session } from 'accounts'
+ *
+ * const session = await accounts.session.get()
+ * if (session && !Session.local(session)) console.log(session.user.email)
+ * ```
+ */
+export function local(session: Any): session is LocalSession {
+  return session.kind === 'local'
+}
+
+/**
+ * Returns who the session belongs to: the user's ID, or `local:` and the lowercase address of a
+ * {@link LocalSession}. Two sessions of the same subject belong to the same user.
+ *
+ * @example
+ * ```ts
+ * import { Session } from 'accounts'
+ *
+ * const same = Session.subject(before) === Session.subject(after)
+ * ```
+ */
+export function subject(session: Any): string {
+  if (local(session)) return `local:${session.address.toLowerCase()}`
+  return session.user.id
+}
+
+/**
+ * Returns whether `session` belongs to the {@link subject} of `other`. A missing `session` belongs
+ * to no one.
+ *
+ * @example
+ * ```ts
+ * import { Session } from 'accounts'
+ *
+ * if (!Session.same(await accounts.session.get(), before)) throw new Error('Signed out.')
+ * ```
+ */
+export function same<session extends Any>(
+  session: session | undefined,
+  other: Any,
+): session is session {
+  return !!session && subject(session) === subject(other)
 }
 
 /**
@@ -122,7 +212,7 @@ export function from(value: Session): Session {
  * if (session && Session.expired(session)) await accounts.signOut()
  * ```
  */
-export function expired(session: Session): boolean {
+export function expired(session: Any): boolean {
   if (session.accessKey)
     return (
       AccessKey.expired(session.accessKey) &&
@@ -130,5 +220,6 @@ export function expired(session: Session): boolean {
     )
   if (session.accessKeys?.some((entry) => !AccessKey.expired(entry)))
     return false
+  if (local(session)) return true
   return !session.refreshToken && session.expiresAt <= Date.now()
 }

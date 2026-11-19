@@ -36,7 +36,7 @@ import type * as TempoAccount from './TempoAccount.js'
  */
 export function fromSession(
   config: Config,
-  session: Pick<Session.Session, 'accessKey' | 'accessKeys' | 'account'>,
+  session: Pick<Session.Any, 'accessKey' | 'accessKeys' | 'account'>,
   options: fromSession.Options,
 ): LocalAccount | undefined {
   const { accessToken, chainId, signer } = options

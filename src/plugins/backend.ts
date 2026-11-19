@@ -7,6 +7,7 @@
  */
 import { Base64, Bytes } from 'ox'
 import type * as Accounts from '../Accounts.js'
+import { LocalSessionError } from '../Accounts.js'
 import * as AccessToken from '../AccessToken.js'
 import type * as AccessToken_ from '../AccessToken.js'
 import type * as Funding from '../internal/Funding.js'
@@ -17,7 +18,7 @@ import * as BackendSessions from '../internal/BackendSessions.js'
 import * as LogoutToken from '../LogoutToken.js'
 import * as SignIn from '../internal/SignIn.js'
 import * as Plugin from '../Plugin.js'
-import type * as Session_ from '../Session.js'
+import * as Session_ from '../Session.js'
 import type { Store } from '../Store.js'
 
 /**
@@ -343,6 +344,9 @@ export function backend(options: backend.Options) {
         async save(
           parameters: backend.save.Parameters,
         ): Promise<backend.save.ReturnType> {
+          // A local session holds no tokens for the backend to keep. Its account signs in through
+          // `siwe` instead.
+          if (Session_.local(parameters.session)) throw new LocalSessionError()
           const saved = await sessions.save({
             id: parameters.id ?? newId(),
             session: parameters.session,
@@ -785,7 +789,7 @@ export declare namespace backend {
        */
       id?: string | undefined
       /** The session that a sign-in returned. */
-      session: Session_.Session
+      session: Session_.Any
     }
 
     /** The session ID and the session's `sid`. */

@@ -83,7 +83,9 @@ async function connector() {
   const properties = config.connectors[0] as unknown as tempoId.Properties
   return {
     config,
-    instance: (): Promise<Instance> => properties.getInstance(),
+    // The page signs in through the dialog alone, so its session is Tempo ID's.
+    instance: (): Promise<Instance> =>
+      properties.getInstance() as Promise<unknown> as Promise<Instance>,
   }
 }
 

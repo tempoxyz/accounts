@@ -389,7 +389,7 @@ describe('passkey', () => {
       after,
       during,
       paths,
-      session: (await accounts.session.get())?.user.id,
+      session: (await accounts.session.get())?.user?.id,
     }).toMatchInlineSnapshot(`
       {
         "after": "session_required",
@@ -457,7 +457,7 @@ describe('passkey', () => {
     expect({
       error,
       paths,
-      session: (await accounts.session.get())?.user.id,
+      session: (await accounts.session.get())?.user?.id,
     }).toMatchInlineSnapshot(`
       {
         "error": "session_required",
@@ -528,7 +528,7 @@ describe('passkey', () => {
     expect({
       error,
       paths,
-      session: (await accounts.session.get())?.user.id,
+      session: (await accounts.session.get())?.user?.id,
     }).toMatchInlineSnapshot(`
       {
         "error": "session_required",

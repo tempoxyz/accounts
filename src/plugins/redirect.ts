@@ -13,7 +13,7 @@ import * as DefaultStore from '../internal/DefaultStore.js'
 import * as SignIn from '../internal/SignIn.js'
 import * as StoreValue from '../internal/StoreValue.js'
 import * as Plugin from '../Plugin.js'
-import type * as Session from '../Session.js'
+import * as Session from '../Session.js'
 
 /**
  * Returns the plugin of sign-in through a redirect to Tempo ID's pages, which adds
@@ -272,7 +272,7 @@ export function redirect(options: redirect.Options = {}) {
           const hint = async () => {
             if (parameters.loginHint) return parameters.loginHint
             const current = context.session.get() ?? context.session.renewing()
-            if (current) return current.user.email
+            if (current?.user) return current.user.email
             const [session, email] = await Promise.all([
               context.session.load().catch(() => undefined),
               // A pending write of the email settles first. Without one, the read joins the round.
@@ -284,7 +284,7 @@ export function redirect(options: redirect.Options = {}) {
                 )
               })().catch(() => undefined),
             ])
-            if (session) return session.user.email
+            if (session?.user) return session.user.email
             if (unhinted.has(context.config)) return undefined
             return typeof email === 'string' ? email : undefined
           }
@@ -407,11 +407,13 @@ export function redirect(options: redirect.Options = {}) {
         // running sign-out settles, and runs only if no sign-out started since the hook and the
         // session still holds the user. It runs beside the sign-in, since a sign-out can wait for
         // the sign-in's change. A failed write only drops the hint of a later sign-in.
+        // A local session names no user, so it leaves the hint of the last sign-in.
+        if (!session.user) return
         const { email } = session.user
         const started = hintOuts.get(context.config) ?? 0
         const kept = () =>
           (hintOuts.get(context.config) ?? 0) === started &&
-          context.session.get()?.user.email === email
+          context.session.get()?.user?.email === email
         const store = DefaultStore.get(context.config.store)
         const write = (async () => {
           // The memo is read after the earlier writes settle, since one of them can replace or

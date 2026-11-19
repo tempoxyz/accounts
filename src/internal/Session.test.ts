@@ -1823,8 +1823,8 @@ describe('machines.session', () => {
     ] as const
 
     /** Returns the fields of `session` that the cases compare. */
-    function fields(session: Session.Session | undefined) {
-      const id = (entry: NonNullable<Session.Session['accessKey']>) =>
+    function fields(session: Session.Any | undefined) {
+      const id = (entry: NonNullable<Session.Any['accessKey']>) =>
         `${entry.chainId}:${entry.keyAuthorization.keyId}:${entry.lifetime ?? ''}`
       return {
         accessKey: session?.accessKey ? id(session.accessKey) : undefined,

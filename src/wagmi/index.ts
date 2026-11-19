@@ -652,11 +652,11 @@ export declare namespace wagmi {
 type Settled =
   | {
       /** Another sign-in's session, which the read starts again for. */
-      other: Session.Session
+      other: Session.Any
     }
   | {
       /** The session with its account. */
-      session: Session.Session
+      session: Session.Any
     }
 
 /**
@@ -735,7 +735,7 @@ function settle<value>(fn: () => value): Promise<value> {
 }
 
 /** Returns the address of `session`'s account, or `undefined` without an access key and an account. */
-function addressOf(session: Session.Session | undefined) {
+function addressOf(session: Session.Any | undefined) {
   return (
     session?.accessKey?.account ??
     session?.account?.address ??
@@ -792,7 +792,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
     let context: Plugin.Context | undefined
     let instance: Base | undefined
     // The account read in progress of each session without an address, which every caller awaits.
-    const reads = new WeakMap<Session.Session, Promise<Session.Session>>()
+    const reads = new WeakMap<Session.Any, Promise<Session.Any>>()
     // The clients that {@link ownAccount} returns, for each client of the instance.
     const owned = new WeakMap<object, object>()
     // The sign-outs of `disconnect` in progress. The session empties at once, but wagmi's connection
@@ -1317,9 +1317,11 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
      * tokens, and no other context holds that DPoP key, so wagmi connects to no such session. A
      * page or a worker keeps it, since another context of the browser can hold that DPoP key.
      */
-    function foreign(session: Session.Session) {
+    function foreign(session: Session.Any) {
       return (
-        Api.page() === undefined && Api.unbound(getInstance().config, session)
+        !Session.local(session) &&
+        Api.page() === undefined &&
+        Api.unbound(getInstance().config, session)
       )
     }
 
@@ -1349,7 +1351,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
      * restore with `reauthorize`, so wagmi stays reconnecting while the status is `pending` or
      * `reauthorizing`.
      */
-    async function restored(): Promise<Session.Session | undefined> {
+    async function restored(): Promise<Session.Any | undefined> {
       const instance = getInstance()
       const session = await instance.session.get()
       const { actor } = instance.session
@@ -1372,7 +1374,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
      */
     async function saved(
       options: SavedOptions = {},
-    ): Promise<Session.Session | undefined> {
+    ): Promise<Session.Any | undefined> {
       // A call that creates the instance, such as the `isAuthorized` of the first `reconnect`,
       // starts its first load, whose read comes after the call starts, so it reads no more. A load
       // that started before the call can miss another context's later change.
@@ -1397,7 +1399,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
      * session's subscriber and `connect` both read the account of a new session, so concurrent
      * reads of one session share one request.
      */
-    function withAccount(held: Session.Session): Promise<Session.Session> {
+    function withAccount(held: Session.Any): Promise<Session.Any> {
       if (addressOf(held)) return Promise.resolve(held)
       const pending = reads.get(held)
       if (pending) return pending
@@ -1407,12 +1409,11 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
     }
 
     /** Reads the account of `held`, a session without an address, as {@link withAccount} returns it. */
-    async function readAccount(
-      held: Session.Session,
-    ): Promise<Session.Session> {
+    async function readAccount(held: Session.Any): Promise<Session.Any> {
       // Tempo ID returns the Tempo Account only for a first-party app's access token, and the page of
       // a third-party app has no CORS grant for the read, so the read sends no request.
       if (ClientId.thirdParty(getInstance().config.clientId)) return held
+      if (Session.local(held)) return held
       // The session's access token authenticates the read, so it returns the account of the
       // session's user, also on a page of another site, which sends no Tempo ID cookie. A token
       // that another DPoP key binds throws without a request, as every other request with the
@@ -1460,7 +1461,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
         // A switch during the read reads the account on its own chain.
         if (getInstance().chain.get() !== chainId) return { session: latest }
         if (
-          latest.user.id !== held.user.id ||
+          Session.subject(latest) !== Session.subject(held) ||
           latest.accessKey?.keyAuthorization.keyId !==
             held.accessKey?.keyAuthorization.keyId
         )

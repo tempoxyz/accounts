@@ -397,7 +397,7 @@ describe('getSession', () => {
 
     await restore.commit(undefined)
     const stored = (await memory.getItem(name)) as {
-      state: { session?: Session.Session | undefined }
+      state: { session?: Session.Any | undefined }
     }
 
     expect(stored.state.session?.accessToken).toMatchInlineSnapshot(`"other"`)
@@ -439,7 +439,7 @@ describe('getSession', () => {
       )
       .catch(() => undefined)
     const stored = (await memory.getItem(name)) as {
-      state: { session?: Session.Session | undefined }
+      state: { session?: Session.Any | undefined }
     }
 
     expect(stored.state.session?.accessToken).toMatchInlineSnapshot(`"other"`)
@@ -492,7 +492,7 @@ describe('getSession', () => {
         Plugin.from({
           hooks: {
             afterSignIn: (_, session) => {
-              signedIn.push(session.accessToken)
+              signedIn.push(session.accessToken!)
             },
           },
           id: 'hooks',

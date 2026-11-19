@@ -58,7 +58,7 @@ export function analytics(options: analytics.Options) {
         send({
           chainId: context.chain.get(),
           name,
-          userId: context.session.get()?.user.id,
+          userId: context.session.get()?.user?.id,
         }),
     }),
     id: 'analytics',
@@ -99,7 +99,7 @@ export function analytics(options: analytics.Options) {
         send({
           chainId: context.chain.get(),
           name,
-          userId: context.session.get()?.user.id,
+          userId: context.session.get()?.user?.id,
         }),
     }),
     // [!code hl:start]
@@ -108,7 +108,7 @@ export function analytics(options: analytics.Options) {
         send({
           chainId: context.chain.get(),
           name: 'signIn',
-          userId: session.user.id,
+          userId: session.user?.id,
         }),
       afterSignOut: (context) =>
         send({ chainId: context.chain.get(), name: 'signOut' }),
@@ -169,7 +169,7 @@ export function analytics(options: analytics.Options) {
         send({
           chainId: context.chain.get(),
           name,
-          userId: context.session.get()?.user.id,
+          userId: context.session.get()?.user?.id,
         }),
     }),
     hooks: {
@@ -177,7 +177,7 @@ export function analytics(options: analytics.Options) {
         send({
           chainId: context.chain.get(),
           name: 'signIn',
-          userId: session.user.id,
+          userId: session.user?.id,
         }),
       afterSignOut: (context) =>
         send({ chainId: context.chain.get(), name: 'signOut' }),
