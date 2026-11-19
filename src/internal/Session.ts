@@ -16,6 +16,7 @@ import {
 import { RequestError, SupersededError } from '../Accounts.js'
 import * as Session from '../Session.js'
 import type { Store } from '../Store.js'
+import * as AccessKey from './AccessKey.js'
 import * as Api from './Api.js'
 import * as Lock from './Lock.js'
 import * as StoreValue from './StoreValue.js'
@@ -119,10 +120,7 @@ export type Change = {
    * Sets the session, or empties it for `undefined`, and saves it. Throws {@link SupersededError}
    * for a session that a newer change overtook.
    */
-  commit: (
-    session: Session.Session | undefined,
-    failure?: Failure,
-  ) => Promise<void>
+  commit: (session: Session.Any | undefined, failure?: Failure) => Promise<void>
   /**
    * Rethrows a sign-in's error. A refusal marked `signedIn` empties the session, and revokes its
    * refresh token beside the rejection. An arrow function, which `catch` takes unbound.
@@ -333,8 +331,8 @@ export function create(options: create.Options): create.ReturnType {
 
   /** Sets the session, and counts the change. */
   function set(
-    session: Session.Session | undefined,
-    options: { renewing?: Session.Session | undefined; signIn?: boolean } = {},
+    session: Session.Any | undefined,
+    options: { renewing?: Session.Any | undefined; signIn?: boolean } = {},
   ) {
     actor?.send({
       renewing: options.renewing,
@@ -346,10 +344,10 @@ export function create(options: create.Options): create.ReturnType {
 
   // The read of the stored session, which every `load` shares, until one succeeds. `'read'` once one
   // succeeded.
-  let hydrating: Promise<Session.Session | undefined> | 'read' | undefined
+  let hydrating: Promise<Session.Any | undefined> | 'read' | undefined
   // The failed read of a `preload` that no `hydrate` took, such as after a restore hook threw. The
   // next `preload` reads again in its place.
-  let unclaimed: Promise<Session.Session | undefined> | undefined
+  let unclaimed: Promise<Session.Any | undefined> | undefined
   // The number of runs of `exclusive` in this instance that hold the lock or wait for it.
   let exclusives = 0
   // The run of the latest sign-out, which a call that joins it returns, and the next one follows.
@@ -384,7 +382,7 @@ export function create(options: create.Options): create.ReturnType {
   function startHydrate(
     actor: machines.session.Actor,
     writes: ReturnType<typeof queue>,
-  ): Promise<Session.Session | undefined> {
+  ): Promise<Session.Any | undefined> {
     if (hydrating === 'read') return Promise.resolve(undefined)
     hydrating ??= (async () => {
       // The stored chain selection loads beside the session, so the session selects the access
@@ -435,7 +433,7 @@ export function create(options: create.Options): create.ReturnType {
    * `undefined` otherwise.
    */
   async function hydrate(): Promise<
-    { stored: Session.Session | undefined } | undefined
+    { stored: Session.Any | undefined } | undefined
   > {
     if (!actor) return undefined
     if (!writes) return undefined
@@ -754,7 +752,7 @@ export function create(options: create.Options): create.ReturnType {
     /** Returns whether `digests` hold the refresh token of `session`. */
     has(
       digests: readonly string[],
-      session: Pick<Session.Session, 'refreshToken'> | undefined,
+      session: Pick<Session.Any, 'refreshToken'> | undefined,
     ) {
       if (!session?.refreshToken) return false
       return digests.includes(digest(session.refreshToken))
@@ -856,7 +854,7 @@ export function create(options: create.Options): create.ReturnType {
    * so the next sign-out sends it again.
    */
   async function revokeExpired(
-    session: Session.Session,
+    session: Session.Any,
     options: { unsaved?: boolean | undefined } = {},
   ) {
     const { refreshToken } = session
@@ -930,12 +928,12 @@ export function create(options: create.Options): create.ReturnType {
    * rejects nothing. A failed revocation leaves the token live.
    */
   async function endRefused(
-    ended: Session.Session,
+    ended: Session.Any,
     refused: machines.session.Context,
   ) {
     // Only the end tracks the user, so a refusal without an end, such as a failed save's, keeps no
     // user out of a later reload.
-    actor?.send({ type: 'refusal.start', userId: ended.user.id })
+    actor?.send({ type: 'refusal.start', userId: Session.subject(ended) })
     await exclusive(async () => {
       const [stored, digests] = await Promise.all([read(), revoked.read()])
       const { empty, session: ending } = machines.refusal({
@@ -959,7 +957,7 @@ export function create(options: create.Options): create.ReturnType {
     })
       .catch(() => undefined)
       .finally(() => {
-        actor?.send({ type: 'refusal.end', userId: ended.user.id })
+        actor?.send({ type: 'refusal.end', userId: Session.subject(ended) })
       })
   }
 
@@ -970,7 +968,7 @@ export function create(options: create.Options): create.ReturnType {
    * revocation skips a token that another context rotated into the stored session, or still keeps.
    * `since` is when the instance obtained `current`.
    */
-  function revokeDropped(current: Session.Session | undefined, since: number) {
+  function revokeDropped(current: Session.Any | undefined, since: number) {
     if (!current?.refreshToken) return
     if (current.refreshToken === context().session?.refreshToken) return
     void revokeReplaced(current, since)
@@ -981,7 +979,7 @@ export function create(options: create.Options): create.ReturnType {
    * refresh rotated it or a context revoked it. It ends no Tempo ID session. A failed revocation
    * leaves the token live.
    */
-  async function revokeReplaced(session: Session.Session, since: number) {
+  async function revokeReplaced(session: Session.Any, since: number) {
     const { refreshToken } = session
     if (!refreshToken) return
     await exclusive(
@@ -1066,12 +1064,12 @@ export function create(options: create.Options): create.ReturnType {
    * save revokes nothing. Rejects nothing.
    */
   async function yieldTo(
-    overwritten: Session.Session,
+    overwritten: Session.Any,
     options: {
       /** The session that the sign-in saved. */
-      kept: Session.Session
+      kept: Session.Any
       /** The session that the instance held before the sign-in. */
-      replaced: Session.Session | undefined
+      replaced: Session.Any | undefined
       /** When the sign-in read the store, in milliseconds since the epoch. */
       since: number
     },
@@ -1164,7 +1162,7 @@ export function create(options: create.Options): create.ReturnType {
    * next sign-out sends it again.
    */
   async function revokeUnsaved(
-    session: Session.Session,
+    session: Session.Any,
     started: machines.session.Context,
   ) {
     const { refreshToken } = session
@@ -1215,7 +1213,7 @@ export function create(options: create.Options): create.ReturnType {
    * so the next sign-out sends it again.
    */
   async function revokeRestored(
-    session: Session.Session,
+    session: Session.Any,
     started: machines.session.Context,
   ) {
     const { refreshToken } = session
@@ -1337,7 +1335,7 @@ export function create(options: create.Options): create.ReturnType {
 
   // The last status that `status` returned, which an unchanged status returns again, so a render
   // that reads it does not repeat.
-  let shown: Session.Status = signedOut_status
+  let shown: Session.Status<Session.Any> = signedOut_status
 
   /** Returns the status, or the last one that it returned while the status is unchanged. */
   function getStatus() {
@@ -1350,7 +1348,10 @@ export function create(options: create.Options): create.ReturnType {
 
   /** Calls `listener` with each new status and the one before it. Returns the unsubscribe. */
   function subscribeStatus(
-    listener: (status: Session.Status, previous: Session.Status) => void,
+    listener: (
+      status: Session.Status<Session.Any>,
+      previous: Session.Status<Session.Any>,
+    ) => void,
   ) {
     if (!actor) return () => {}
     let previous = getStatus()
@@ -1441,7 +1442,7 @@ export function create(options: create.Options): create.ReturnType {
       // A sign-in that finishes after sign-out can set a new server session, so it ends that
       // session again, unless a newer change already followed the sign-out.
       const superseded = async (
-        session?: Session.Session,
+        session?: Session.Any,
         error?: unknown,
         failure: FailOptions = {},
       ) => {
@@ -2016,7 +2017,8 @@ export function create(options: create.Options): create.ReturnType {
       // reuse, so the instance's own token ends only while the rotations show it unrotated.
       // Another tab's logout since the instance obtained its session revokes that session's tokens.
       // A store that holds an earlier copy of the instance's user never held the instance's tokens.
-      const held = !before || !local || before.user.id !== local.user.id
+      const held =
+        !before || !local || Session.subject(before) !== Session.subject(local)
       const revocable = (token: string | undefined) =>
         machines.revocable({
           entries,
@@ -2240,14 +2242,14 @@ export declare namespace create {
      * Runs after a change sets a session without an access key that a switch overtook, whose
      * account the change dropped, so the instance reads the account on its chain.
      */
-    onMoved?: ((session: Session.Session) => void) | undefined
+    onMoved?: ((session: Session.Any) => void) | undefined
     /** Runs after a change sets a session. */
-    onSignIn?: ((session: Session.Session) => Promise<void> | void) | undefined
+    onSignIn?: ((session: Session.Any) => Promise<void> | void) | undefined
     /** Runs after another tab's sign-out empties the session. */
     onSignOut?: (() => Promise<void> | void) | undefined
     /** Ends the server session, and revokes the tokens of the session that ended, when one did. */
     signOut: (
-      session: Session.Session | undefined,
+      session: Session.Any | undefined,
       options?: {
         /** Whether the Tempo ID session ends too. Defaults to `true`. */
         logout?: boolean | undefined
@@ -2312,14 +2314,14 @@ export declare namespace create {
      * discards, beside the caller. It ends no Tempo ID session. A revocation without an answer enters
      * the unanswered entry, so the next sign-out sends it again.
      */
-    discard: (session: Session.Session) => void
+    discard: (session: Session.Any) => void
     /**
      * Resolves once every sign-out that runs now settles, with its revocation and logout, with
      * whether one ran. Resolves at once with `false` without one. Never rejects.
      */
     ended: () => Promise<boolean>
     /** Returns the session, without reading the store. */
-    get: () => Session.Session | undefined
+    get: () => Session.Any | undefined
     /**
      * Resolves once every authorization that runs now settles, except one per callback that
      * `delegate` runs, with whether it waited. Never rejects.
@@ -2331,7 +2333,7 @@ export declare namespace create {
      */
     load: (options?: {
       locked?: boolean | undefined
-    }) => Promise<Session.Session | undefined>
+    }) => Promise<Session.Any | undefined>
     /**
      * Runs `fn` while no other run of the same session's `exclusive` does, also in another tab of a
      * browser, through its Web Locks.
@@ -2352,7 +2354,7 @@ export declare namespace create {
     reload: (options?: {
       /** Whether an adoption runs the plugins' `afterSignIn` hooks. Defaults to `false`. */
       hooks?: boolean | undefined
-    }) => Promise<Session.Session | undefined>
+    }) => Promise<Session.Any | undefined>
     /**
      * Moves the access keys of the kept session whose access key expired to `chainId`, as a switch of
      * chain moves the session's, so a renewal requests none on the chain that the switch left.
@@ -2362,7 +2364,7 @@ export declare namespace create {
      * Returns the saved session whose access key expired, which the next authorization in this
      * instance renews. `undefined` after a change sets a session, and after a sign-out.
      */
-    renewing: () => Session.Session | undefined
+    renewing: () => Session.Any | undefined
     /**
      * Reads the store's refresh token rotations, for the `rotations` of a change with `sent`.
      * Resolves `undefined` when the read fails. Never rejects.
@@ -2394,26 +2396,29 @@ export declare namespace create {
     /** Calls `listener` with each new session and the one before it. Returns the unsubscribe. */
     subscribe: (
       listener: (
-        session: Session.Session | undefined,
-        previous: Session.Session | undefined,
+        session: Session.Any | undefined,
+        previous: Session.Any | undefined,
       ) => void,
     ) => () => void
   }
 }
 
 /** The status of a session, which `get` reads and `subscribe` follows. */
-export type Status = {
+export type Status<session extends Session.Any = Session.Any> = {
   /**
    * Returns the status, with the session to show. An unchanged status returns the same object, so
    * `useSyncExternalStore` takes `get` as it is. `signedOut` for a session that holds nothing.
    */
-  get: () => Session.Status
+  get: () => Session.Status<session>
   /**
    * Calls `listener` with each new status and the one before it. Returns the unsubscribe. A session
    * that holds nothing never calls it.
    */
   subscribe: (
-    listener: (status: Session.Status, previous: Session.Status) => void,
+    listener: (
+      status: Session.Status<session>,
+      previous: Session.Status<session>,
+    ) => void,
   ) => () => void
 }
 
@@ -2421,7 +2426,7 @@ export type Status = {
 const rotationLimit = 8
 
 /** The status of a session that holds nothing, such as a backend's. */
-const signedOut_status: Session.Status = {
+const signedOut_status: Session.Status<Session.Any> = {
   session: undefined,
   status: 'signedOut',
 }
@@ -2433,7 +2438,7 @@ const signedOut_status: Session.Status = {
 type Saved = {
   state: {
     session:
-      | (Omit<Session.Session, 'account'> & {
+      | (Omit<Session.Any, 'account'> & {
           account?: TempoAccount.Serialized | undefined
         })
       | undefined
@@ -2453,9 +2458,9 @@ type Saved = {
  * ```
  */
 export function toChain(
-  session: Session.Session,
+  session: Session.Any,
   options: toChain.Options,
-): Session.Session {
+): Session.Any {
   const { chainId } = options
   if (!session.accessKey && !session.accessKeys?.length) return session
   if (session.accessKey && Number(session.accessKey.chainId) === chainId)
@@ -2493,7 +2498,7 @@ export declare namespace toChain {
  * belongs to the earlier chain. A sign-in that names another chain on purpose keeps its access key.
  */
 function moved(
-  session: Session.Session | undefined,
+  session: Session.Any | undefined,
   options: {
     /** The instance's chain at the commit. */
     chainId: number
@@ -2502,7 +2507,7 @@ function moved(
     /** Whether the change updates the held session, such as a switch's own move. */
     update: boolean
   },
-): Session.Session | undefined {
+): Session.Any | undefined {
   const { chainId, startedChain, update } = options
   if (!session || update || startedChain === chainId) return session
   // A session without an access key on any chain as `accessKey` that holds some in `accessKeys` is
@@ -2524,9 +2529,9 @@ function moved(
  * a sign-in that names another chain on purpose, stays as it is.
  */
 function selected(
-  session: Session.Session | undefined,
+  session: Session.Any | undefined,
   options: { chainId: number },
-): Session.Session | undefined {
+): Session.Any | undefined {
   const { chainId } = options
   if (!session || Number(session.accessKey?.chainId) === chainId) return session
   if (!session.accessKeys?.some((entry) => Number(entry.chainId) === chainId))
@@ -2535,7 +2540,7 @@ function selected(
 }
 
 /** Returns the sorted IDs of the access keys of `session`, on every chain, as one string. */
-function accessKeyIds(session: Session.Session) {
+function accessKeyIds(session: Session.Any) {
   return [session.accessKey, ...(session.accessKeys ?? [])]
     .flatMap((entry) =>
       entry ? [entry.keyAuthorization.keyId.toLowerCase()] : [],
@@ -2545,9 +2550,7 @@ function accessKeyIds(session: Session.Session) {
 }
 
 /** Returns the session as the store keeps it. */
-function toSaved(
-  session: Session.Session | undefined,
-): Saved['state']['session'] {
+function toSaved(session: Session.Any | undefined): Saved['state']['session'] {
   if (!session) return undefined
   const { account, ...rest } = session
   return account ? { ...rest, account: TempoAccount.serialize(account) } : rest
@@ -2557,7 +2560,7 @@ function toSaved(
 function fromSaved(
   saved: Saved['state']['session'],
   options: TempoAccount.deserialize.Options = {},
-): Session.Session | undefined {
+): Session.Any | undefined {
   if (!saved) return undefined
   // A session that an earlier release saved names `accessKey` as `key`, and `accessKeys` as `keys`.
   const {
@@ -2566,13 +2569,13 @@ function fromSaved(
     keys: earlierAccessKeys,
     ...rest
   } = saved as typeof saved & {
-    key?: Session.Session['accessKey']
-    keys?: Session.Session['accessKeys']
+    key?: Session.Any['accessKey']
+    keys?: Session.Any['accessKeys']
   }
   const accessKey = rest.accessKey ?? earlierAccessKey
   const accessKeys = rest.accessKeys ?? earlierAccessKeys
-  return {
-    ...rest,
+  return Session.from({
+    ...(rest as Omit<Session.Any, 'account'>),
     ...(accessKey ? { accessKey } : {}),
     ...(accessKeys ? { accessKeys } : {}),
     ...(account
@@ -2582,7 +2585,21 @@ function fromSaved(
           }),
         }
       : {}),
-  }
+  } as Session.Any)
+}
+
+/**
+ * Returns when `session` stops acting, in milliseconds: the expiry of its access token, or of a
+ * local session's latest access key, which no token outlives.
+ */
+function expiry(session: Session.Any) {
+  if (!Session.local(session)) return session.expiresAt
+  return Math.max(
+    0,
+    ...[session.accessKey, ...(session.accessKeys ?? [])].map((entry) =>
+      entry ? (AccessKey.expiry(entry) ?? Number.MAX_SAFE_INTEGER) : 0,
+    ),
+  )
 }
 
 /** Returns `promise` settled: `undefined` when it resolves, its error when it rejects. */
@@ -2603,12 +2620,12 @@ function queue(store: Store, options: TempoAccount.deserialize.Options = {}) {
   // Whether the last write failed, which leaves an earlier copy in the store.
   let failed = false
   // The session that the last write failed to save, which no store holds.
-  let unsaved: Session.Session | undefined
+  let unsaved: Session.Any | undefined
 
   /** Runs `write` of `session` after every earlier write. A failed write fails only its own change. */
   const enqueue = (
     write: () => Promise<void>,
-    session: Session.Session | undefined,
+    session: Session.Any | undefined,
   ) => {
     const next = pending
       .catch(() => undefined)
@@ -2659,7 +2676,7 @@ function queue(store: Store, options: TempoAccount.deserialize.Options = {}) {
       return pending
     },
     /** Writes `session` after every earlier write. */
-    save: (name: string, session: Session.Session | undefined) =>
+    save: (name: string, session: Session.Any | undefined) =>
       enqueue(
         () =>
           store.setItem(name, {
@@ -2960,8 +2977,10 @@ export namespace machines {
       /** Whether the instance holds no session, so no sign-in followed the sign-out. */
       sessionless: (args) => !args.context.session,
       /** Whether {@link select} selects `params.status` for the context. */
-      selects: (args, params: { status: Session.Status['status'] }) =>
-        select(args.context) === params.status,
+      selects: (
+        args,
+        params: { status: Session.Status<Session.Any>['status'] },
+      ) => select(args.context) === params.status,
     },
     types: {
       context: {} as machines.session.Context,
@@ -3121,9 +3140,9 @@ export namespace machines {
        * The saved session whose access key expired, which the next authorization renews. Absent
        * after a change sets a session, after a sign-out, and after a refusal outside an authorization.
        */
-      renewing: Session.Session | undefined
+      renewing: Session.Any | undefined
       /** The signed-in session, or `undefined` while signed out. */
-      session: Session.Session | undefined
+      session: Session.Any | undefined
       /** The `version` that the latest sign-out produced, until another change follows it. */
       signedOut: number | undefined
       /**
@@ -3158,12 +3177,12 @@ export namespace machines {
            * The instance's session whose access key expired, which another context emptied to renew
            * it. The next authorization here renews it too, and the status shows it while one runs.
            */
-          renewing?: Session.Session | undefined
+          renewing?: Session.Any | undefined
           /**
            * The session that another tab saved, which the store already holds, or `undefined` for an
            * empty store that no sign-out emptied, such as a renewal of an expired session.
            */
-          session: Session.Session | undefined
+          session: Session.Any | undefined
           /** Whether the session is another user's, which overtakes a restore that started before it. */
           signIn: boolean
           /** Another tab saved a newer session, or emptied it, which this instance sets without a write. */
@@ -3200,7 +3219,7 @@ export namespace machines {
            */
           expired: boolean
           /** The session that the store holds. A change that completed first is newer, so it stays. */
-          session: Session.Session | undefined
+          session: Session.Any | undefined
           /** The store's session loaded. */
           type: 'hydrate'
         }
@@ -3254,9 +3273,9 @@ export namespace machines {
            * The session whose access key expired, which `load` emptied. The next authorization in
            * this instance renews it, and the status shows it while one runs.
            */
-          renewing?: Session.Session | undefined
+          renewing?: Session.Any | undefined
           /** The new session, or `undefined` to empty it. */
-          session: Session.Session | undefined
+          session: Session.Any | undefined
           /** Whether the change is a sign-in, which overtakes a restore that started before it. */
           signIn?: boolean | undefined
           /** A change set the session. */
@@ -3394,7 +3413,10 @@ export namespace machines {
     // live tokens, such as after a sign-in whose save the store refused. The sign-out erases the
     // store, so both end.
     const unsaved =
-      failed && before && local && before.user.id !== local.user.id
+      failed &&
+      before &&
+      local &&
+      Session.subject(before) !== Session.subject(local)
         ? local
         : undefined
     if (!stored || !ended)
@@ -3412,15 +3434,23 @@ export namespace machines {
     const later =
       held &&
       !own &&
-      stored.user.id === ended.user.id &&
+      Session.subject(stored) === Session.subject(ended) &&
       accessKeyIds(stored) === accessKeyIds(ended) &&
       stored.refreshToken !== ended.refreshToken &&
-      stored.expiresAt >= ended.expiresAt
+      expiry(stored) >= expiry(ended)
     // A stored copy of the ended session's own tokens, such as one that another context saved again.
-    const stale = held && !own && stored.refreshToken === ended.refreshToken
+    const stale =
+      held &&
+      !own &&
+      stored.refreshToken === ended.refreshToken &&
+      Session.subject(stored) === Session.subject(ended)
     // A stored session of the same user can be another tab's restore of the session that ends, which
     // the logout ends.
-    const kept = !own && !later && !stale && stored.user.id !== ended.user.id
+    const kept =
+      !own &&
+      !later &&
+      !stale &&
+      Session.subject(stored) !== Session.subject(ended)
 
     return {
       empty: later || stale,
@@ -3433,18 +3463,18 @@ export namespace machines {
   export declare namespace ending {
     type Options = {
       /** The stored session before the sign-out emptied it. */
-      before: Session.Session | undefined
+      before: Session.Any | undefined
       /** The instance's session once the sign-out holds the lock, such as a later sign-in's. */
-      current: Session.Session | undefined
+      current: Session.Any | undefined
       /**
        * Whether the last write before the sign-out failed, so an empty `before` can be a save that
        * the store refused.
        */
       failed: boolean
       /** The instance's session before the sign-out emptied it. */
-      local: Session.Session | undefined
+      local: Session.Any | undefined
       /** The stored session once the sign-out holds the lock. */
-      stored: Session.Session | undefined
+      stored: Session.Any | undefined
     }
 
     type ReturnType = {
@@ -3453,12 +3483,12 @@ export namespace machines {
       /** Whether the store holds another user's later sign-in, which keeps the Tempo ID session. */
       kept: boolean
       /** The session whose tokens the sign-out revokes, or `undefined` for none. */
-      session: Session.Session | undefined
+      session: Session.Any | undefined
       /**
        * The instance's session, whose save failed, that ends beside `session` when the store held
        * another user's session. Absent otherwise.
        */
-      unsaved: Session.Session | undefined
+      unsaved: Session.Any | undefined
     }
   }
 
@@ -3471,6 +3501,8 @@ export namespace machines {
     options: machines.adopts.Options,
   ): machines.adopts.ReturnType {
     const { entries, held, refreshToken, stored } = options
+    // A local session holds no tokens that another context rotates.
+    if (Session.local(held)) return false
     const expiresAt =
       refreshToken === held.refreshToken
         ? held.expiresAt
@@ -3484,11 +3516,11 @@ export namespace machines {
       /** The rotations that the store records, oldest first. */
       entries: readonly Rotation[]
       /** The session that the sign-in replaced. */
-      held: Session.Session
+      held: Session.Any
       /** The token that another context can hold: the held session's own, or its successor. */
       refreshToken: string
       /** The session that the store holds. */
-      stored: Session.Session | undefined
+      stored: Session.Any | undefined
     }
 
     type ReturnType = boolean
@@ -3805,7 +3837,7 @@ export namespace machines {
     const { current, ended, refused, stored } = options
     if (current.signIns !== refused.signIns)
       return { empty: false, session: ended }
-    if (stored && stored.user.id !== ended.user.id)
+    if (stored && Session.subject(stored) !== Session.subject(ended))
       return { empty: false, session: ended }
     return { empty: true, session: stored ?? ended }
   }
@@ -3815,18 +3847,18 @@ export namespace machines {
       /** The instance's context now, under the lock. */
       current: session.Context
       /** The session that the refusal emptied. */
-      ended: Session.Session
+      ended: Session.Any
       /** The instance's context right after the refusal. */
       refused: session.Context
       /** The session that the store holds now, under the lock. */
-      stored: Session.Session | undefined
+      stored: Session.Any | undefined
     }
 
     type ReturnType = {
       /** Whether the store empties. */
       empty: boolean
       /** The session whose refresh token the end revokes. */
-      session: Session.Session
+      session: Session.Any
     }
   }
 
@@ -3857,12 +3889,12 @@ export namespace machines {
    * user's session, or the same user's session with later tokens, which a refresh issues.
    */
   export function newer(
-    stored: Session.Session | undefined,
-    current: Session.Session | undefined,
+    stored: Session.Any | undefined,
+    current: Session.Any | undefined,
   ) {
     if (!stored || !current) return stored !== current
-    if (stored.user.id !== current.user.id) return true
-    return stored.expiresAt > current.expiresAt
+    if (Session.subject(stored) !== Session.subject(current)) return true
+    return expiry(stored) > expiry(current)
   }
 
   /**
@@ -3883,12 +3915,12 @@ export namespace machines {
   export declare namespace overwrites {
     type Options = {
       /** The session that the instance holds before the sign-in. */
-      held: Session.Session | undefined
+      held: Session.Any | undefined
       /** The session that the store holds before the sign-in's save. */
-      stored: Session.Session | undefined
+      stored: Session.Any | undefined
     }
 
-    type ReturnType = Session.Session | undefined
+    type ReturnType = Session.Any | undefined
   }
 
   /**
@@ -3902,13 +3934,15 @@ export namespace machines {
     options: machines.yields.Options,
   ): machines.yields.ReturnType {
     const { kept, overwritten } = options
+    // A local session holds no tokens, so neither yields to the other.
+    if (Session.local(kept) || Session.local(overwritten)) return false
     // A DPoP key binds each access token, and the instance holds only the key that bound `kept`, so
     // a session that another key binds is of no use to it.
     if (Api.jkt(kept.accessToken) !== Api.jkt(overwritten.accessToken))
       return false
     // Another context that loaded `kept` adopts `overwritten` only if it is newer, so an equal
     // expiry keeps `kept`, whose token that context can still hold.
-    if (kept.user.id !== overwritten.user.id) return false
+    if (Session.subject(kept) !== Session.subject(overwritten)) return false
     // A call in progress, such as a retry after a limit, checked the account of `kept`, so the yield
     // never switches the instance to another Tempo Account of the user.
     if (kept.address?.toLowerCase() !== overwritten.address?.toLowerCase())
@@ -3973,9 +4007,9 @@ export namespace machines {
   export declare namespace yields {
     type Options = {
       /** The session that the sign-in saved. */
-      kept: Session.Session
+      kept: Session.Any
       /** The session of another context that the sign-in's save replaced. */
-      overwritten: Session.Session
+      overwritten: Session.Any
     }
 
     type ReturnType = boolean
@@ -4054,9 +4088,9 @@ export namespace machines {
     const { chainId, current, stored } = options
 
     // One public key can act on several chains, so the chain and the key ID identify an entry.
-    const id = (entry: NonNullable<Session.Session['accessKey']>) =>
+    const id = (entry: NonNullable<Session.Any['accessKey']>) =>
       `${Number(entry.chainId)}:${entry.keyAuthorization.keyId.toLowerCase()}`
-    const ids = (session: Session.Session) =>
+    const ids = (session: Session.Any) =>
       [session.accessKey, ...(session.accessKeys ?? [])]
         .flatMap((entry) => (entry ? [id(entry)] : []))
         .sort()
@@ -4064,7 +4098,7 @@ export namespace machines {
     const relaid =
       !!stored &&
       !!current &&
-      stored.user.id === current.user.id &&
+      Session.subject(stored) === Session.subject(current) &&
       ids(current) !== '' &&
       ids(stored) === ids(current) &&
       (stored.accessKey && id(stored.accessKey)) !==
@@ -4082,7 +4116,7 @@ export namespace machines {
         entry ? [[id(entry), entry]] : [],
       ),
     )
-    const latest = (entry: NonNullable<Session.Session['accessKey']>) =>
+    const latest = (entry: NonNullable<Session.Any['accessKey']>) =>
       entries.get(id(entry)) ?? entry
     const {
       accessKey: _accessKey,
@@ -4113,12 +4147,12 @@ export namespace machines {
       /** The instance's chain, or `undefined` before the stored selection loads. */
       chainId: number | undefined
       /** The session that the instance holds. */
-      current: Session.Session | undefined
+      current: Session.Any | undefined
       /** The session that the store holds. */
-      stored: Session.Session | undefined
+      stored: Session.Any | undefined
     }
 
-    type ReturnType = Session.Session | undefined
+    type ReturnType = Session.Any | undefined
   }
 
   /**
@@ -4132,18 +4166,18 @@ export namespace machines {
     const { current, failed, stored } = options
     if (!failed) return machines.newer(stored, current)
     if (!stored || !current) return false
-    if (stored.user.id !== current.user.id) return false
-    return stored.expiresAt > current.expiresAt
+    if (Session.subject(stored) !== Session.subject(current)) return false
+    return expiry(stored) > expiry(current)
   }
 
   export declare namespace replaces {
     type Options = {
       /** The instance's session. */
-      current: Session.Session | undefined
+      current: Session.Any | undefined
       /** Whether the last write to the store failed. */
       failed: boolean
       /** The session that the store holds. */
-      stored: Session.Session | undefined
+      stored: Session.Any | undefined
     }
 
     type ReturnType = boolean
@@ -4167,7 +4201,7 @@ export namespace machines {
   export declare namespace empties {
     type Options = {
       /** The instance's session. */
-      current: Session.Session | undefined
+      current: Session.Any | undefined
       /** Whether the last write to the store failed. */
       failed: boolean
     }
@@ -4191,14 +4225,14 @@ export namespace machines {
   export declare namespace renews {
     type Options = {
       /** The instance's session. */
-      current: Session.Session | undefined
+      current: Session.Any | undefined
       /** Whether the access key of `current` expired, which the runner reads from the clock. */
       expired: boolean
       /** The session that the store holds. */
-      stored: Session.Session | undefined
+      stored: Session.Any | undefined
     }
 
-    type ReturnType = Session.Session | undefined
+    type ReturnType = Session.Any | undefined
   }
 
   /**
@@ -4214,7 +4248,9 @@ export namespace machines {
    * Returns the status of `snapshot`, and the session to show: the expired session while
    * `reauthorizing`, the session while `signedIn`, and none otherwise.
    */
-  export function status(snapshot: machines.session.Snapshot): Session.Status {
+  export function status(
+    snapshot: machines.session.Snapshot,
+  ): Session.Status<Session.Any> {
     const { context } = snapshot
     if (snapshot.matches('signedIn') && context.session)
       return { session: context.session, status: 'signedIn' }
@@ -4245,8 +4281,8 @@ export namespace machines {
   export function keeps(options: {
     context: machines.session.Context
     event: {
-      renewing?: Session.Session | undefined
-      session: Session.Session | undefined
+      renewing?: Session.Any | undefined
+      session: Session.Any | undefined
     }
   }): Pick<machines.session.Context, 'moved' | 'renewing'> {
     const { context, event } = options
@@ -4293,7 +4329,7 @@ export namespace machines {
       /** The chain that the instance selects now. */
       selected: number
       /** The session that the instance holds now. */
-      session: Session.Session | undefined
+      session: Session.Any | undefined
     }
 
     type ReturnType = boolean
@@ -4325,10 +4361,13 @@ export namespace machines {
     options: machines.rotated.Options,
   ): machines.rotated.ReturnType {
     const { current, lifetime, now, started, startedAt } = options
+    // A local session holds no tokens to refresh.
+    if (Session.local(current)) return false
     // An instance that held no session when the call started, such as one that has not read the
     // store yet, decides by the time alone.
     if (started && !started.refreshToken) return false
-    if (started && current.user.id !== started.user.id) return false
+    if (started && Session.subject(current) !== Session.subject(started))
+      return false
     // An access token that expired while the call waited, such as in a suspended tab, refreshes.
     if (current.expiresAt <= now) return false
     // The lifetime of a token counts from its request, which starts before its response, so only
@@ -4348,13 +4387,13 @@ export namespace machines {
   export declare namespace rotated {
     type Options = {
       /** The session that the refresh read under the lock. */
-      current: Session.Session
+      current: Session.Any
       /** The lifetime of the access token of `current`, in milliseconds. Absent when unknown. */
       lifetime: number | undefined
       /** The time of the read under the lock, in milliseconds since the epoch. */
       now: number
       /** The instance's session when the refresh started. Absent for an instance without one, such as one that has not read the store yet. */
-      started: Session.Session | undefined
+      started: Session.Any | undefined
       /** When the refresh started, in milliseconds since the epoch. */
       startedAt: number
     }
@@ -4372,7 +4411,7 @@ export namespace machines {
   ): machines.refusing.ReturnType {
     const { context, stored } = options
     if (!stored) return false
-    return context.refusing.includes(stored.user.id)
+    return context.refusing.includes(Session.subject(stored))
   }
 
   export declare namespace refusing {
@@ -4380,7 +4419,7 @@ export namespace machines {
       /** The instance's context. */
       context: session.Context
       /** The session that the store holds. */
-      stored: Session.Session | undefined
+      stored: Session.Any | undefined
     }
 
     type ReturnType = boolean
@@ -4395,15 +4434,15 @@ export namespace machines {
   ): machines.signsIn.ReturnType {
     const { current, session } = options
     if (!session) return false
-    return current?.user.id !== session.user.id
+    return !Session.same(current, session)
   }
 
   export declare namespace signsIn {
     type Options = {
       /** The instance's session before the adoption. */
-      current: Session.Session | undefined
+      current: Session.Any | undefined
       /** The instance's session after the adoption. */
-      session: Session.Session | undefined
+      session: Session.Any | undefined
     }
 
     type ReturnType = boolean
@@ -4448,7 +4487,7 @@ export namespace machines {
       /** Whether the message names a sign-out. */
       signOut: boolean
       /** The session that the store holds, or `undefined` when it holds none or the read failed. */
-      stored: Session.Session | undefined
+      stored: Session.Any | undefined
     }
 
     type ReturnType = boolean
@@ -4463,15 +4502,15 @@ export namespace machines {
   ): machines.switches.ReturnType {
     const { current, stored } = options
     if (!stored || !current) return false
-    return stored.user.id !== current.user.id
+    return Session.subject(stored) !== Session.subject(current)
   }
 
   export declare namespace switches {
     type Options = {
       /** The instance's session. */
-      current: Session.Session | undefined
+      current: Session.Any | undefined
       /** The session that the store holds. */
-      stored: Session.Session | undefined
+      stored: Session.Any | undefined
     }
 
     type ReturnType = boolean
@@ -4490,7 +4529,7 @@ export namespace machines {
    */
   export function select(
     context: machines.session.Context,
-  ): Session.Status['status'] {
+  ): Session.Status<Session.Any>['status'] {
     if (context.loaded && context.session) return 'signedIn'
     if (context.authorizations > 0 && context.renewing) return 'reauthorizing'
     if (!context.loaded || context.authorizations > 0) return 'pending'
@@ -4498,7 +4537,7 @@ export namespace machines {
   }
 
   /** Returns the guard of `settling`'s transition to `status`. */
-  function selects(status: Session.Status['status']) {
+  function selects(status: Session.Status<Session.Any>['status']) {
     return { params: { status }, type: 'selects' } as const
   }
 }

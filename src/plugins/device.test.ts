@@ -114,7 +114,7 @@ describe('device', () => {
 
     expect({
       error: String(error),
-      user: (await accounts.session.get())?.user.id,
+      user: (await accounts.session.get())?.user?.id,
     }).toMatchInlineSnapshot(`
       {
         "error": "Accounts.RequestError: Refused.",

@@ -1,0 +1,89 @@
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# Local owner keys [An app holds a Tempo Account's owner key, and signs in without Tempo ID.]
+
+## Overview
+
+The <SourceLink name="local" path="src/plugins/local.ts">`local`</SourceLink> plugin keeps a secp256k1 private key in the instance's [store](/docs/guides/sessions) and makes its account the session's. Each sign-in authorizes an [access key](/docs/guides/access-keys) that the owner key signs, so <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink>, `pay`, and <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> send with it as with a Tempo ID sign-in, and the owner key signs only access keys and the app's challenge.
+
+Choose it for a program that holds its own funds, such as a CLI's wallet, a test, or a demo. For a user's account, sign in with Tempo ID: the user's passkey stays with the user, and only an access key reaches the app.
+
+:::warning
+The store keeps the private key as it is, and whoever reads it holds the account. `Store.file` keeps it in a `0600` file. A store that other parties read, such as `Store.postgres` or `Store.redis`, refuses it with <SourceLink name="SharedStoreError" path="src/plugins/local.ts">`SharedStoreError`</SourceLink>.
+:::
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { local, viem } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  // Each sign-in authorizes an access key that sends up to 100 OUSD for 7 days.
+  accessKey: () => ({
+    expiry: '7d',
+    limits: [{ limit: '100', token: 'ousd' }],
+  }),
+  chain: 'testnet',
+  clientId: 'cli:acme-example',
+  plugins: [local({ name: 'Acme' }), viem()],
+  store: Store.file('~/.acme/accounts.json'),
+})
+```
+
+```ts [index.ts]
+import { accounts } from './tempo.config.js'
+
+const session = (await accounts.local.get())
+  ? await accounts.local.signIn()
+  : await accounts.local.create()
+
+console.log(`Fund ${session.address} to pay.`)
+```
+
+An instance with `local` receives no default <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink>. It can hold `device` or `dialog` beside it, for a program that offers both.
+
+## Actions
+
+| Action                         | Does                                                                                                                                                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `local.create()`               | Creates an owner key, stores it, and signs in. Throws <SourceLink name="ExistsError" path="src/plugins/local.ts">`ExistsError`</SourceLink> while the store holds one                                                     |
+| `local.signIn()`               | Signs in with the stored owner key. A live access key on the chain serves a call without `accessKey`. Throws <SourceLink name="MissingError" path="src/plugins/local.ts">`MissingError`</SourceLink> without an owner key |
+| `local.import({ privateKey })` | Stores the private key as the owner key, and signs in                                                                                                                                                                     |
+| `local.get()`                  | Returns the owner key's address, name, and creation, or `undefined`                                                                                                                                                       |
+| `local.export()`               | Returns the private key, such as for a backup                                                                                                                                                                             |
+| `local.remove()`               | Signs out, and deletes the owner key. The account and its funds stay on chain                                                                                                                                             |
+
+Each sign-in takes `accessKey`, the access key's [permissions](/docs/guides/access-keys), else the instance's `accessKey`, else up to 5 OUSD for a day.
+
+## The local session
+
+A local session's `kind` is `'local'`, and its `address` is the owner key's account. Tempo ID issues it no tokens and names no user, so <SourceLink name="local" path="src/Session.ts">`Session.local`</SourceLink> tells it apart:
+
+```ts
+import { Session } from 'accounts'
+
+const session = await accounts.session.get()
+if (session && !Session.local(session)) console.log(session.user.email)
+```
+
+An instance's session type is <SourceLink name="Any" path="src/Session.ts">`Session.Any`</SourceLink> with the `local` plugin, and <SourceLink name="Session" path="src/Session.ts">`Session.Session`</SourceLink> without it. It expires with its access keys, since it holds no tokens to refresh. A sign-out keeps the owner key, which the next `local.signIn` takes.
+
+The calls that read Tempo ID throw <SourceLink name="LocalSessionError" path="src/Accounts.ts">`Accounts.LocalSessionError`</SourceLink> with a local session: `session.accessToken`, `account.get`, `connections`, the <SourceLink name="funding" path="src/plugins/funding.ts">`funding`</SourceLink> plugin, and `backend.save`. A backend signs in a local account with <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe`</SourceLink> instead: `local.signIn` signs its challenge with the owner key, and returns its result as `auth`.
+
+## Migrate from version 0
+
+Version 0's `secp256k1` adapter kept its private key in a <SourceLink name="filesystem" path="src/Store.ts">`Storage.filesystem`</SourceLink> file. With `v0`, the first read of a store without an owner key takes the file's active secp256k1 account, so its address and funds carry over:
+
+```ts [tempo.config.ts]
+export const accounts = Accounts.create({
+  plugins: [
+    local({
+      name: 'Acme',
+      v0: { key: 'acme-local', path: '~/.acme/wallet.json' }, // [!code ++]
+    }),
+    viem(),
+  ],
+  store: Store.file('~/.acme/accounts.json'),
+})
+```
+
+`key` is the v0 storage's `key`, `tempo-cli` by default. The v0 file stays as it is, and its access keys stay unused: the owner signs a new one at the first sign-in.

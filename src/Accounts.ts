@@ -39,7 +39,7 @@ import * as Payment from './internal/Payment.js'
 import type { Permissions } from './Permissions.js'
 import * as Plugin from './Plugin.js'
 import type { backend } from './plugins/backend.js'
-import type * as Session from './Session.js'
+import * as Session from './Session.js'
 import type { Store } from './Store.js'
 import type * as TempoAccount from './internal/TempoAccount.js'
 
@@ -174,6 +174,21 @@ export class EverywhereNotAllowedError extends Error {
  * A backend's `complete` received a session ID without a redirect in progress, such as a callback
  * that arrived twice, or more than 10 minutes after `start`. Start the sign-in again.
  */
+/**
+ * Thrown for a call that needs a Tempo ID session, such as `account.get`, `connections`, or a read
+ * of the access token, while the instance holds a `local` plugin's session, which Tempo ID issued no
+ * tokens for.
+ */
+export class LocalSessionError extends Error {
+  override readonly name = 'Accounts.LocalSessionError'
+
+  constructor() {
+    super(
+      'The session belongs to a local owner key, which Tempo ID issued no tokens for. Sign in with Tempo ID for this call.',
+    )
+  }
+}
+
 export class PendingNotFoundError extends Error {
   override readonly name = 'Accounts.PendingNotFoundError'
 
@@ -1357,7 +1372,7 @@ export type Accounts<
        * const session = await accounts.session.refresh()
        * ```
        */
-      refresh: () => Promise<Session.Session | undefined>
+      refresh: () => Promise<Session.Of<plugins> | undefined>
       /**
        * The status of the session, `pending`, `reauthorizing`, `signedIn`, or `signedOut`, with
        * the session to show: `get` returns it, and `subscribe` calls its listener with each new
@@ -1380,7 +1395,7 @@ export type Accounts<
        * })
        * ```
        */
-      status: InternalSession.Status
+      status: InternalSession.Status<Session.Of<plugins>>
       /**
        * Calls `listener` with each new session and the one before it, at each sign-in and
        * sign-out. Returns the function that unsubscribes. An instance without a session never
@@ -1397,8 +1412,8 @@ export type Accounts<
        */
       subscribe: (
         listener: (
-          session: Session.Session | undefined,
-          previous: Session.Session | undefined,
+          session: Session.Of<plugins> | undefined,
+          previous: Session.Of<plugins> | undefined,
         ) => void,
       ) => () => void
     }
@@ -2028,13 +2043,13 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
 
   // The refresh in progress for an access token that expires, which every caller in the meantime
   // awaits, so concurrent requests rotate the refresh token once.
-  let refreshing: Promise<Session.Session | undefined> | undefined
+  let refreshing: Promise<Session.Any | undefined> | undefined
   // The `session.refresh` call in progress, which every overlapping call awaits, so they send one
   // request, also before the instance first reads the store, or while that refresh saves its tokens.
-  let rotating: Promise<Session.Session | undefined> | undefined
+  let rotating: Promise<Session.Any | undefined> | undefined
   // The `session.get` call with `reauthorize: true` in progress, which every overlapping call
   // with `reauthorize: true` awaits, so a page that restores from two places sends one authorization.
-  let restoring: Promise<Session.Session | undefined> | undefined
+  let restoring: Promise<Session.Any | undefined> | undefined
   /**
    * Returns the access token that authenticates a read of the user's own data, such as
    * `account.get`, in place of the session cookie. Tempo ID's own pages send its session cookie, with
@@ -2049,7 +2064,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     if (page !== undefined && Api.sameHost(config, { page })) return undefined
     await context.session.load()
     const current = context.session.get()
-    if (!current) return undefined
+    if (!current || Session.local(current)) return undefined
     if (
       page !== undefined &&
       Api.unbound(config, { accessToken: current.accessToken })
@@ -2081,8 +2096,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     if (!current) throw new SignedOutError()
     // A renewal that signs in another user sends none of that user's tokens to a call that started
     // for the renewed user.
-    if (renewing && current.user.id !== renewing.user.id)
+    if (renewing && Session.subject(current) !== Session.subject(renewing))
       throw new SignedOutError()
+    if (Session.local(current)) throw new LocalSessionError()
     const token = await (async () => {
       if (current.expiresAt - 30_000 > Date.now()) return current.accessToken
       refreshing ??= Core.refresh(context, { margin: 30_000 }).finally(() => {
@@ -2112,7 +2128,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       if (!latest) throw new SignedOutError()
       // A call that started for one user never sends the token of another user that another
       // context signed in.
-      if (latest.user.id !== current.user.id) throw new SignedOutError()
+      if (Session.subject(latest) !== Session.subject(current))
+        throw new SignedOutError()
+      if (Session.local(latest)) throw new LocalSessionError()
       // A session without a refresh token keeps its access token until its expiry. A token that
       // expires within 5 seconds can expire before the request arrives, so the call sends none.
       // A refreshed session keeps the token that Tempo ID issued, whatever its lifetime.
@@ -2177,7 +2195,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         // Only the session that holds the sent access token lost its tokens at the disconnection.
         // Another user's sign-in that commits before the read keeps its refresh token live.
         const revoked =
-          started?.accessToken === token ? started.refreshToken : undefined
+          started && started.accessToken === token
+            ? started.refreshToken
+            : undefined
         const result = await AccountActions.disconnect(config, {
           accessToken: token,
         })
@@ -2189,7 +2209,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         // session rejects, since the store still holds its access key. The disconnection revoked
         // the refresh token that it read, so the sign-out sends no revocation of it.
         const current = context.session.get()
-        if (!current || current.user.id === started?.user.id)
+        if (!current || Session.same(started, current))
           await signOut({ revoked }).catch((error: unknown) => {
             if (typeof error === 'object' && error && unanswered.has(error))
               return
@@ -2518,7 +2538,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     options: { accessToken: string; chainId: number },
   ) {
     const { accessToken, chainId } = options
-    const keeps = (held: Session.Session | undefined) =>
+    const keeps = (held: Session.Any | undefined) =>
       InternalSession.machines.keepsAccount({
         accessToken,
         account,
@@ -2545,7 +2565,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
    * instance's chain, and sets it there, beside the sign-in. A failed read leaves the first
    * signature to read it.
    */
-  function readMoved(moved: Session.Session) {
+  function readMoved(moved: Session.Any) {
     // A third-party app reads no account, as `switchChain` describes.
     if (ClientId.thirdParty(config.clientId)) return
     const chainId = chain.get()
@@ -2559,7 +2579,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         const latest = await session.reload()
         if (
           !latest ||
-          latest.user.id !== moved.user.id ||
+          Session.subject(latest) !== Session.subject(moved) ||
           latest.account ||
           latest.accessKey ||
           chain.get() !== chainId
@@ -2619,7 +2639,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
             // found none.
             const next = (() => {
               if (moved.accessKey) return moved
-              if (account && latest.user.id === held?.user.id)
+              if (account && Session.same(held, latest))
                 return { ...moved, account }
               if (moved.account && !moved.accessKeys?.length) {
                 const { account: _, ...rest } = moved
@@ -2636,7 +2656,8 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
                 // the selected chain, so the selection stays with it.
                 const current = session.get()
                 if (
-                  current?.accessToken !== next.accessToken ||
+                  !current ||
+                  current.accessToken !== next.accessToken ||
                   current.accessKey?.keyAuthorization.keyId !==
                     next.accessKey?.keyAuthorization.keyId
                 )
@@ -2859,7 +2880,7 @@ export type SessionGet<plugins extends readonly Plugin.Plugin[]> =
     : unknown) &
     ((
       parameters?: Core.getSession.Parameters,
-    ) => Promise<Session.Session | undefined>)
+    ) => Promise<Session.Of<plugins> | undefined>)
 
 /** The access key of each sign-in of an instance without `accessKey`. */
 const defaultAccessKey: Permissions = {

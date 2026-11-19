@@ -292,7 +292,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       // The account of each session on each chain, so a client rebuilds no access key at each read.
       const accounts = new Map<
         number,
-        WeakMap<Session.Session, LocalAccount | undefined>
+        WeakMap<Session.Any, LocalAccount | undefined>
       >()
       // The account of `current` for each page's client whose retry renews an expired access key.
       const renewing_accounts = new WeakMap<LocalAccount, LocalAccount>()
@@ -541,9 +541,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * when the client is created. A fill that would attach the key authorization waits for this
        * read, up to {@link markReadLimit} after it starts.
        */
-      function hydrate(
-        session: Pick<Session.Session, 'accessKey' | 'accessKeys'>,
-      ) {
+      function hydrate(session: Pick<Session.Any, 'accessKey' | 'accessKeys'>) {
         for (const accessKey of [
           session.accessKey,
           ...(session.accessKeys ?? []),
@@ -553,7 +551,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
 
       /** Reads the store's mark of `accessKey` into `registrations`. */
       function hydrateAccessKey(
-        accessKey: NonNullable<Session.Session['accessKey']>,
+        accessKey: NonNullable<Session.Any['accessKey']>,
       ) {
         const held = store()
         if (!held) return
@@ -662,7 +660,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * `expiresAt`, such as IndexedDB or the secure store of `expo`, would keep them for good. A
        * status without a session to show yet, `pending`, drops none.
        */
-      function follow(status: Session.Status) {
+      function follow(status: Session.Status<Session.Any>) {
         if (status.status === 'pending') return
         const { session } = status
         const names = [
@@ -869,9 +867,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           chainId: number
           /** Whether a retry on the page renews the access key. Defaults to `false`. */
           renews?: boolean | undefined
-          session?:
-            | Pick<Session.Session, 'accessKey' | 'accessKeys'>
-            | undefined
+          session?: Pick<Session.Any, 'accessKey' | 'accessKeys'> | undefined
         },
       ): Transport {
         const { chainId, renews = false, session: fixed } = options
@@ -1238,7 +1234,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * `undefined`, so the read sends the session cookie, as `account.get` does. Elsewhere it throws.
        * Returns `undefined` when the instance holds another user's session.
        */
-      async function accessToken(session: Session.Session) {
+      async function accessToken(session: Session.Any) {
         const read = sessionTokens.get(config)
         const token = await (async () => {
           // An instance that the `relay` plugin extends without a session refreshes through the
@@ -1247,7 +1243,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           if (Api.page() === undefined) return read()
           return read().catch(() => undefined)
         })()
-        if (context.session.get()?.user.id !== session.user.id) return undefined
+        if (!Session.same(context.session.get(), session)) return undefined
         return token
       }
 
@@ -1292,7 +1288,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         const address = (
           typeof accessKey === 'string' ? accessKey : accessKey.accessKeyAddress
         ).toLowerCase()
-        const strip = <entry extends Session.Session['accessKey']>(
+        const strip = <entry extends Session.Any['accessKey']>(
           entry: entry,
         ) => {
           if (!entry || entry.keyAuthorization.keyId.toLowerCase() !== address)
@@ -1320,7 +1316,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * Returns a live access token of `session`, refreshed through the context when it expires
        * within 30 seconds.
        */
-      async function refreshed(session: Session.Session) {
+      async function refreshed(session: Session.Any) {
+        if (Session.local(session)) return undefined
         if (session.expiresAt - 30_000 > Date.now()) return session.accessToken
         return (await Core.refresh(context, { margin: 30_000 }))?.accessToken
       }
@@ -1422,7 +1419,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           refusal: () => Error
           /** Whether a retry on the page renews the access key. Defaults to `false`. */
           renews?: boolean | undefined
-          session: Pick<Session.Session, 'accessKey' | 'accessKeys'>
+          session: Pick<Session.Any, 'accessKey' | 'accessKeys'>
         },
       ) {
         const { chainId, refusal, renews = false, session } = options
@@ -1459,7 +1456,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * It reads only `options.limits`, the limits that count toward the refusal.
        */
       async function spent(
-        accessKey: NonNullable<Session.Session['accessKey']>,
+        accessKey: NonNullable<Session.Any['accessKey']>,
         options: {
           chainId: number
           limits: Retry.counted.ReturnType
@@ -1680,7 +1677,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         // Only the expired access key's user and account keep the renewal, so any other renewal ends.
         const headless =
           renewed?.accessKey &&
-          renewed.user.id === before.user.id &&
+          renewed.user.id === Session.subject(before) &&
           onChain &&
           Address.isEqual(renewed.accessKey.account, onChain.account)
             ? renewed
@@ -1780,7 +1777,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           })())
         const session = SignIn.toSession(result)
         if (
-          session.user.id !== before.user.id ||
+          Session.subject(session) !== Session.subject(before) ||
           !session.accessKey ||
           (expected && !Address.isEqual(session.accessKey.account, expected))
         ) {
@@ -1801,7 +1798,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         // commit moves the new access key to `accessKeys`. They come from the latest session of the
         // same user, so a retry on another chain that committed during this one stays.
         const latest = context.session.get()
-        const held = latest?.user.id === before.user.id ? latest : before
+        const held = Session.same(latest, before) ? latest : before
         const others = [held.accessKey, ...(held.accessKeys ?? [])].filter(
           (entry): entry is NonNullable<typeof entry> =>
             !!entry && Number(entry.chainId) !== chainId,
@@ -1827,7 +1824,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         await change.commit(
           moved.accessKey ||
             moved === next ||
-            latest?.user.id !== moved.user.id ||
+            !Session.same(latest, moved) ||
             !latest.account ||
             latest.accessKey
             ? moved
@@ -1940,7 +1937,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           relayed: boolean
           signal: AbortSignal | undefined
           /** The session that the call started with. */
-          state: Session.Session | undefined
+          state: Session.Any | undefined
           /** Reads the spending of the access key on the chain. */
           transport: Transport
         },
@@ -1985,7 +1982,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             !before ||
             !current ||
             !next ||
-            after?.user.id !== before.user.id ||
+            !Session.same(after, before) ||
             !Address.isEqual(next.account, current.account)
           )
             throw new RetryAccountError({ cause: error, kind: failure.kind })
@@ -2024,7 +2021,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             )
               return false
             if (
-              after?.user.id !== before.user.id ||
+              !Session.same(after, before) ||
               !next ||
               !Address.isEqual(next.account, current.account)
             )
@@ -2481,7 +2478,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
               // A client's own `transport` sends past the relay route.
               relayed: !transport && !!routing(chainId).relay,
               signal: retries.signal,
-              state: state as Session.Session | undefined,
+              state: state as Session.Any | undefined,
               transport: reads,
             }),
           signal: retries.signal,
@@ -2912,7 +2909,7 @@ export declare namespace viem {
      * fixed session must not outlive its request, since its account signs with that one user's
      * access key.
      */
-    session?: Pick<Session.Session, 'accessKey' | 'account'> | undefined
+    session?: Pick<Session.Any, 'accessKey' | 'account'> | undefined
   }
 
   /** A client of the plugin, with its account and its chain. */
@@ -3025,7 +3022,7 @@ export declare namespace viem {
         /** Closes the screen, and rejects with the signal's reason. */
         signal: AbortSignal | undefined
         /** The session that the payment started with. */
-        state: Session.Session | undefined
+        state: Session.Any | undefined
       },
     ) => Promise<void>
     /**
@@ -3046,9 +3043,7 @@ export declare namespace viem {
      * Starts the store reads of the registrations of the access keys of `session`. The next fill of
      * each access key waits for its read.
      */
-    hydrate: (
-      session: Pick<Session.Session, 'accessKey' | 'accessKeys'>,
-    ) => void
+    hydrate: (session: Pick<Session.Any, 'accessKey' | 'accessKeys'>) => void
     /**
      * Records the registration that `signed` attached, after another sender, such as an MPP endpoint
      * that broadcasts a charge, reports that the transaction landed. `confirm` reads the chain, and
@@ -3450,7 +3445,7 @@ function lapsedCause(error: unknown) {
 }
 
 /** Returns the store key of the registration of the session's access key `accessKey`. */
-function markName(accessKey: NonNullable<Session.Session['accessKey']>) {
+function markName(accessKey: NonNullable<Session.Any['accessKey']>) {
   const { address, chainId } = KeyAuthorization.fromRpc(
     accessKey.keyAuthorization,
   )
@@ -3553,7 +3548,7 @@ function build(
  * lives keeps the session, but not this access key.
  */
 function lapsed(
-  session: Pick<Session.Session, 'accessKey' | 'accessKeys'> | undefined,
+  session: Pick<Session.Any, 'accessKey' | 'accessKeys'> | undefined,
   options: lapsed.Options,
 ) {
   const accessKey = accessKeyOn(session, options)
@@ -3567,7 +3562,7 @@ function lapsed(
  * `Accounts.SignedOutError` once the session expired, or `Accounts.AccessKeyRequiredError` while an
  * access key on another chain keeps it, as an account that `Signer.fromSession` reads anew throws.
  */
-function lapse(session: Session.Session | undefined) {
+function lapse(session: Session.Any | undefined) {
   return !session || Session.expired(session)
     ? new SignedOutError()
     : new AccessKeyRequiredError()
@@ -3578,9 +3573,7 @@ function lapse(session: Session.Session | undefined) {
  * `Accounts.AccessKeyRequiredError` while an access key of the session on another chain lives, or
  * else `Accounts.SignedOutError`, as `lapse` returns for the instance's session.
  */
-function lapse_fixed(
-  session: Pick<Session.Session, 'accessKey' | 'accessKeys'>,
-) {
+function lapse_fixed(session: Pick<Session.Any, 'accessKey' | 'accessKeys'>) {
   const live = [session.accessKey, ...(session.accessKeys ?? [])].some(
     (entry) => entry && !AccessKey_internal.expired(entry),
   )
@@ -3662,7 +3655,7 @@ type Sender = (
 
 /** Returns the access key of `session` on `options.chainId`, from `accessKey` or `accessKeys`. */
 function accessKeyOn(
-  session: Pick<Session.Session, 'accessKey' | 'accessKeys'> | undefined,
+  session: Pick<Session.Any, 'accessKey' | 'accessKeys'> | undefined,
   options: { chainId: number },
 ) {
   return [session?.accessKey, ...(session?.accessKeys ?? [])].find(

@@ -179,7 +179,7 @@ export function dialog<const options extends dialog.Options = {}>(
        * `accessKey` or `accessKeys`, of `session`. The session's own access key is the default.
        */
       const target = (
-        session: Session.Session | undefined,
+        session: Session.Any | undefined,
         parameters: dialog.AccessKeyTarget,
       ) => {
         const entries = [

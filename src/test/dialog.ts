@@ -76,7 +76,7 @@ export function dialog(options: dialog.Options = {}) {
          */
         async signIn(
           parameters: dialog.signIn.Parameters = {},
-        ): Promise<Session.Session> {
+        ): Promise<Session.Any> {
           const change = context.session.change()
           const permissions = SignIn.accessKey(context, parameters.accessKey)
 

@@ -1231,7 +1231,7 @@ describe('fetch', () => {
           204,
         ]
       `)
-    expect(restored?.user.id).toMatchInlineSnapshot(`"user_1"`)
+    expect(restored?.user?.id).toMatchInlineSnapshot(`"user_1"`)
     expect(
       await store.getItem(`tempo-id:session:${name}:chain`),
     ).toMatchInlineSnapshot(`4217`)

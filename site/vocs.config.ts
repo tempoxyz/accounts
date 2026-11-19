@@ -81,6 +81,11 @@ export default defineConfig({
         }),
         item({ icon: 'laptop', link: '/docs/guides/cli', text: 'CLI' }),
         item({
+          icon: 'key',
+          link: '/docs/guides/local',
+          text: 'Local owner keys',
+        }),
+        item({
           icon: 'smartphone',
           link: '/docs/guides/mobile',
           text: 'Mobile',

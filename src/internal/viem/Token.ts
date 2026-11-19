@@ -50,7 +50,7 @@ import * as Retry from './Retry.js'
  * ```
  */
 export function ownerSends(
-  session: Pick<Session.Session, 'accessKey' | 'accessKeys'> | undefined,
+  session: Pick<Session.Any, 'accessKey' | 'accessKeys'> | undefined,
   options: ownerSends.Options,
 ) {
   if (!session) return false
@@ -89,7 +89,7 @@ export declare namespace ownerSends {
  * ```
  */
 export function payable(
-  session: Pick<Session.Session, 'accessKey' | 'accessKeys'> | undefined,
+  session: Pick<Session.Any, 'accessKey' | 'accessKeys'> | undefined,
   options: payable.Options,
 ): payable.ReturnType | undefined {
   const { chainId, feeToken, relayed } = options
@@ -323,7 +323,7 @@ const decimals = 6
 
 /** Returns the access key of `session` on `options.chainId`, from `accessKey` or `accessKeys`. */
 function accessKeyOn(
-  session: Pick<Session.Session, 'accessKey' | 'accessKeys'> | undefined,
+  session: Pick<Session.Any, 'accessKey' | 'accessKeys'> | undefined,
   options: { chainId: number },
 ) {
   return [session?.accessKey, ...(session?.accessKeys ?? [])].find(

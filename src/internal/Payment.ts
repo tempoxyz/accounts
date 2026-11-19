@@ -35,7 +35,7 @@ export type Payment = {
    * Absent, the instance's session sends it.
    */
   session?:
-    | Pick<Session.Session, 'accessKey' | 'accessKeys' | 'account'>
+    | Pick<Session.Any, 'accessKey' | 'accessKeys' | 'account'>
     | undefined
   /** The recipient's address. */
   to: `0x${string}`

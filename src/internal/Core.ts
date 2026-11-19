@@ -14,7 +14,7 @@ import * as Api from './Api.js'
 import * as ClientId from './ClientId.js'
 import * as Permissions from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
-import type * as Session from '../Session.js'
+import * as Session from '../Session.js'
 import * as InternalSession from './Session.js'
 import type * as TempoAccount from './TempoAccount.js'
 import * as SignIn from './SignIn.js'
@@ -218,7 +218,11 @@ async function run(
   // same user does not.
   if (!change.overtaken()) {
     const latest = await context.session.reload().catch(() => undefined)
-    if (latest && latest !== held && latest.user.id !== session.user.id)
+    if (
+      latest &&
+      latest !== held &&
+      Session.subject(latest) !== Session.subject(session)
+    )
       throw new SupersededError()
   }
   await change.commit(session)
@@ -252,7 +256,7 @@ function refusal(error: unknown): error is RequestError {
 export function refresh(
   context: Plugin.Context,
   options: refresh.Options = {},
-): Promise<Session.Session | undefined> {
+): Promise<Session.Any | undefined> {
   const { margin } = options
   // The instance's session, and the time, when the call starts, before it waits for the lock.
   const started = context.session.get()
@@ -355,9 +359,9 @@ export function refresh(
     // token then, so its rotation stays unknown, as after an unanswered attempt.
     let refused = false
     // The session that another context saved over the sent token, which a refusal of it keeps.
-    let replaced: Session.Session | undefined
+    let replaced: Session.Any | undefined
     // The stored session that the loop read after a refusal, which the refusal's handling reuses.
-    let stored: Session.Session | undefined
+    let stored: Session.Any | undefined
     // When Tempo ID first refused the sent token, which bounds every later send of it.
     let refusedAt: number | undefined
     // Tempo ID's first refusal of the sent token.
@@ -558,7 +562,7 @@ export declare namespace getAccount {
 export async function getSession(
   context: Plugin.Context,
   options: getSession.Options,
-): Promise<Session.Session | undefined> {
+): Promise<Session.Any | undefined> {
   const { delegate = (fn) => fn(), restore } = options
   // An authorization that runs now, such as `accounts.authorize` beside a sign-in, sets the session
   // that the read returns, so a read without a session waits for it, in place of a second
@@ -649,7 +653,7 @@ export declare namespace getSession {
     reauthorize?:
       | boolean
       | authorize.Parameters
-      | (() => Promise<Session.Session | undefined>)
+      | (() => Promise<Session.Any | undefined>)
       | undefined
   }
 
@@ -712,7 +716,7 @@ export async function upgradeAccount(
       const latest = await context.session.reload()
       // An account belongs to one chain, so a switch during the upgrade keeps the session's account.
       if (context.chain.get() !== chainId) return
-      if (latest?.user.id !== current.user.id) return
+      if (!Session.same(latest, current)) return
       const change = context.session.change({ update: true })
       await change.commit({ ...latest, account: upgraded })
     })

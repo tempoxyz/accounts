@@ -59,7 +59,7 @@ describe('backend', () => {
     })
     const { accessKey, accessKeys, ...stored } = (await store.getItem(
       `tempo-id:session:${id}`,
-    )) as Session.Session
+    )) as Session.Any
     await store.setItem(`tempo-id:session:${id}`, {
       ...stored,
       key: accessKey,
@@ -105,7 +105,7 @@ describe('backend', () => {
     })
     const write = writes[0]!
     const { expiry } = KeyAuthorization.fromRpc(
-      (write.value as Session.Session).accessKey!.keyAuthorization,
+      (write.value as Session.Any).accessKey!.keyAuthorization,
     )
 
     expect((write.expiresAt ?? 0) - expiry! * 1000).toMatchInlineSnapshot(

@@ -86,8 +86,23 @@ export class SignerRequiredError extends Error {
  * ```
  */
 export function expired(accessKey: AccessKey) {
+  const at = expiry(accessKey)
+  return at !== undefined && at <= Date.now()
+}
+
+/**
+ * When the access key expires, in milliseconds, or `undefined` for one that never expires.
+ *
+ * @example
+ * ```ts
+ * import { AccessKey } from 'accounts/internal'
+ *
+ * const at = AccessKey.expiry(session.accessKey)
+ * ```
+ */
+export function expiry(accessKey: AccessKey) {
   const { expiry } = KeyAuthorization.fromRpc(accessKey.keyAuthorization)
-  return Boolean(expiry) && expiry! * 1000 <= Date.now()
+  return expiry ? expiry * 1000 : undefined
 }
 
 /**

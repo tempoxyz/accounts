@@ -273,7 +273,7 @@ export const accounts = Accounts.create({ // [!code ++]
 
 ### Removed adapters
 
-Version 1 has no replacement for the adapters that hold an owner key in the app: `local`, `secp256k1`, `webAuthn`, `turnkey`, and `privy`. The app holds only an access key, never a Tempo Account's owner key. See [Removed APIs](#removed-apis).
+The <SourceLink name="local" path="src/plugins/local.ts">`local`</SourceLink> plugin replaces the `local` and `secp256k1` adapters: it holds a secp256k1 owner key, and takes a version 0 file's account with `v0`. See [Local owner keys](/docs/guides/local). Version 1 has no replacement for the other adapters that hold an owner key in the app: `webAuthn`, `turnkey`, and `privy`. See [Removed APIs](#removed-apis).
 
 ### Removed surface
 
@@ -296,7 +296,7 @@ Each export, option, member, and RPC method of version 0, in alphabetical order.
 | `cli`                                     | <SourceLink name="device" path="src/plugins/device.ts">`device`</SourceLink>                                                                                                                                                           | [CLI](#cli)                                 |
 | `CliAuth`                                 | Removed. Tempo ID serves the device grant                                                                                                                                                                                              | [Removed APIs](#removed-apis)               |
 | `Connector`                               | <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId`</SourceLink>                                                                                                                                                            | [Wagmi](#wagmi)                             |
-| `dangerous_secp256k1`                     | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `dangerous_secp256k1`                     | <SourceLink name="local" path="src/plugins/local.ts">`local`</SourceLink>                                                                                                                                                              | [Local owner keys](/docs/guides/local)      |
 | `deviceCode`                              | <SourceLink name="device" path="src/plugins/device.ts">`device`</SourceLink>                                                                                                                                                           | [CLI](#cli)                                 |
 | `Dialog`                                  | Removed. The <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin owns the dialog                                                                                                                       | [Removed APIs](#removed-apis)               |
 | `dialog`                                  | <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> of `accounts/plugins`                                                                                                                                     | [Sign-in](#sign-in)                         |
@@ -338,7 +338,7 @@ Each export, option, member, and RPC method of version 0, in alphabetical order.
 | `Kv.from`                                 | <SourceLink name="from" path="src/Store.ts">`Store.from`</SourceLink>                                                                                                                                                                  | [Stores](#stores)                           |
 | `Kv.memory`                               | <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink>                                                                                                                                                      | [Stores](#stores)                           |
 | `Kv.NonceStorage`                         | <SourceLink name="sessions" path="src/cloudflare/DurableObject.ts">`DurableObject.sessions`</SourceLink> of `accounts/cloudflare`                                                                                                      | [Stores](#stores)                           |
-| `local`                                   | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `local`                                   | <SourceLink name="local" path="src/plugins/local.ts">`local`</SourceLink>                                                                                                                                                              | [Local owner keys](/docs/guides/local)      |
 | `Mach.fund`                               | <SourceLink name="open" path="src/plugins/funding.ts">`accounts.funding.open`</SourceLink>                                                                                                                                             | [RPC methods](#rpc-methods)                 |
 | `Mach.getFundingUrl`                      | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
 | `Mach.token`                              | Removed. A limit names the token as `'mach'`                                                                                                                                                                                           | [Access keys](#access-keys)                 |
@@ -368,7 +368,7 @@ Each export, option, member, and RPC method of version 0, in alphabetical order.
 | `Remote`                                  | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
 | `Rpc`                                     | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
 | `Schema`                                  | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
-| `secp256k1`                               | Removed                                                                                                                                                                                                                                | [Removed APIs](#removed-apis)               |
+| `secp256k1`                               | <SourceLink name="local" path="src/plugins/local.ts">`local`</SourceLink>                                                                                                                                                              | [Local owner keys](/docs/guides/local)      |
 | `secureMmkv`                              | Removed. <SourceLink name="expo" path="src/plugins/expo.ts">`expo`</SourceLink> sets the store, or <SourceLink name="from" path="src/Store.ts">`Store.from`</SourceLink> wraps one                                                     | [React Native](#react-native)               |
 | `storage` (option)                        | <SourceLink name="create.store" path="src/Accounts.ts">`store`</SourceLink>                                                                                                                                                            | [Session and storage](#session-and-storage) |
 | `Storage.combine`                         | Removed                                                                                                                                                                                                                                | [Session and storage](#session-and-storage) |
@@ -489,13 +489,14 @@ The provider's members map to the instance's:
 
 A Tempo ID sign-in plugin replaces each adapter that reaches Tempo Wallet. An instance without a sign-in plugin receives <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink>.
 
-| Version 0                                                      | Version 1                                                                                                |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `tempoWallet()`, `dialog()`, or no `adapter`                   | <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog()`</SourceLink>                           |
-| `cli()`, `deviceCode()`                                        | <SourceLink name="device" path="src/plugins/device.ts">`device()`</SourceLink> ([CLI](#cli))             |
-| `mobileWebAuth()`, `tempoWallet()` of `accounts/mobileWebAuth` | <SourceLink name="expo" path="src/plugins/expo.ts">`expo()`</SourceLink> ([React Native](#react-native)) |
-| `local()`, `secp256k1()`, `turnkey()`, `webAuthn()`, `privy()` | Removed ([Removed APIs](#removed-apis))                                                                  |
-| `postMessage()`                                                | Removed ([Removed APIs](#removed-apis))                                                                  |
+| Version 0                                                      | Version 1                                                                                                            |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `tempoWallet()`, `dialog()`, or no `adapter`                   | <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog()`</SourceLink>                                       |
+| `cli()`, `deviceCode()`                                        | <SourceLink name="device" path="src/plugins/device.ts">`device()`</SourceLink> ([CLI](#cli))                         |
+| `mobileWebAuth()`, `tempoWallet()` of `accounts/mobileWebAuth` | <SourceLink name="expo" path="src/plugins/expo.ts">`expo()`</SourceLink> ([React Native](#react-native))             |
+| `local()`, `secp256k1()`                                       | <SourceLink name="local" path="src/plugins/local.ts">`local()`</SourceLink> ([Local owner keys](/docs/guides/local)) |
+| `turnkey()`, `webAuthn()`, `privy()`                           | Removed ([Removed APIs](#removed-apis))                                                                              |
+| `postMessage()`                                                | Removed ([Removed APIs](#removed-apis))                                                                              |
 
 These adapter options have no replacement:
 
@@ -924,7 +925,8 @@ const connector = tempoId({ // [!code ++]
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `tempoWallet()` of `wagmi/connectors`                    | <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId()`</SourceLink> of `accounts/wagmi`                                                                                          |
 | `Connector`, `dialog`, `tempoWallet` of `accounts/wagmi` | <SourceLink name="tempoId" path="src/wagmi/index.ts">`tempoId()`</SourceLink> of `accounts/wagmi`                                                                                          |
-| `webAuthn`, `dangerous_secp256k1` of `accounts/wagmi`    | Removed ([Removed APIs](#removed-apis))                                                                                                                                                    |
+| `dangerous_secp256k1` of `accounts/wagmi`                | <SourceLink name="local" path="src/plugins/local.ts">`local`</SourceLink> ([Local owner keys](/docs/guides/local))                                                                         |
+| `webAuthn` of `accounts/wagmi`                           | Removed ([Removed APIs](#removed-apis))                                                                                                                                                    |
 | `Hooks.wallet.useTransfer` of `wagmi/tempo`              | `Hooks.token.useTransferSync` of `wagmi/tempo`                                                                                                                                             |
 | `Hooks.wallet.useSwap` of `wagmi/tempo`                  | `Hooks.dex.useSellSync`, `Hooks.dex.useBuySync` of `wagmi/tempo`                                                                                                                           |
 | `Hooks.wallet.useDeposit` of `wagmi/tempo`               | <SourceLink name="open" path="src/plugins/funding.ts">`accounts.funding.open()`</SourceLink> of an instance                                                                                |
@@ -1204,23 +1206,23 @@ Version 0's provider rejects with an RPC error and its code. An instance throws 
 
 Version 1 has no replacement for these APIs.
 
-| Version 0                                                    | Reason                                                                                                                   |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `local`, `secp256k1`, `turnkey`, `webAuthn`, `privy`         | An instance holds no owner key                                                                                           |
-| `Adapter`                                                    | A plugin of <SourceLink name="from" path="src/Plugin.ts">`Plugin.from`</SourceLink> extends an instance                  |
-| `Remote`, `Dialog`, `Messenger`, `Mount`, `postMessage`      | Tempo ID is the only wallet side                                                                                         |
-| `Handoff`, `handoff`                                         | Version 1 has no phone handoff                                                                                           |
-| `IntersectionObserver`                                       | The <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin reads the support of the browser |
-| `Keystore`, `accessKey.keystores`                            | The instance creates and keeps the access key                                                                            |
-| `Schema`, `Rpc`, `ProviderRequest`, `wallet_getCapabilities` | The instance serves no RPC request                                                                                       |
-| `Handler.codeAuth`, `Handler.deviceCode`, `CliAuth`          | Tempo ID serves the device grant                                                                                         |
-| `Handler.webAuthn`, `WebAuthnCeremony`                       | Tempo ID runs each passkey ceremony                                                                                      |
-| `Handler.oidcProvider`, `Identity`, `identity`               | Tempo ID issues each token, with the verified <SourceLink name="Session.user" path="src/Session.ts">`user`</SourceLink>  |
-| `Handler.exchange`                                           | The page reads each quote through <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.dex`</SourceLink>         |
-| `hc`                                                         | `hono/client` exports it                                                                                                 |
-| `Mach.getFundingUrl`                                         | <SourceLink name="open" path="src/plugins/funding.ts">`accounts.funding.open()`</SourceLink> opens the deposit page      |
-| `icon`, `name`, `rdns`, `theme`                              | Tempo ID's approval page names the app, and takes no theme                                                               |
-| `cacheTtl`, `kv` of `Handler.relay`                          | The <SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink> plugin holds no cache                      |
+| Version 0                                                    | Reason                                                                                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `turnkey`, `webAuthn`, `privy`                               | An instance holds no owner key but the <SourceLink name="local" path="src/plugins/local.ts">`local`</SourceLink> plugin's |
+| `Adapter`                                                    | A plugin of <SourceLink name="from" path="src/Plugin.ts">`Plugin.from`</SourceLink> extends an instance                   |
+| `Remote`, `Dialog`, `Messenger`, `Mount`, `postMessage`      | Tempo ID is the only wallet side                                                                                          |
+| `Handoff`, `handoff`                                         | Version 1 has no phone handoff                                                                                            |
+| `IntersectionObserver`                                       | The <SourceLink name="dialog" path="src/plugins/dialog.ts">`dialog`</SourceLink> plugin reads the support of the browser  |
+| `Keystore`, `accessKey.keystores`                            | The instance creates and keeps the access key                                                                             |
+| `Schema`, `Rpc`, `ProviderRequest`, `wallet_getCapabilities` | The instance serves no RPC request                                                                                        |
+| `Handler.codeAuth`, `Handler.deviceCode`, `CliAuth`          | Tempo ID serves the device grant                                                                                          |
+| `Handler.webAuthn`, `WebAuthnCeremony`                       | Tempo ID runs each passkey ceremony                                                                                       |
+| `Handler.oidcProvider`, `Identity`, `identity`               | Tempo ID issues each token, with the verified <SourceLink name="Session.user" path="src/Session.ts">`user`</SourceLink>   |
+| `Handler.exchange`                                           | The page reads each quote through <SourceLink name="viem" path="src/plugins/viem.ts">`accounts.dex`</SourceLink>          |
+| `hc`                                                         | `hono/client` exports it                                                                                                  |
+| `Mach.getFundingUrl`                                         | <SourceLink name="open" path="src/plugins/funding.ts">`accounts.funding.open()`</SourceLink> opens the deposit page       |
+| `icon`, `name`, `rdns`, `theme`                              | Tempo ID's approval page names the app, and takes no theme                                                                |
+| `cacheTtl`, `kv` of `Handler.relay`                          | The <SourceLink name="relay" path="src/plugins/relay.ts">`relay`</SourceLink> plugin holds no cache                       |
 
 ## Next steps
 

@@ -222,11 +222,12 @@ export declare namespace react {
 export declare namespace useSession {
   /**
    * The status of the session, the session to show, and a flag for each status: a `Session.Status`
-   * with the flags. The type narrows on `status` and on each flag.
+   * with the flags. The type narrows on `status` and on each flag. An instance with the `local`
+   * plugin shows a `Session.Any`.
    */
-  type ReturnType = {
-    [status in Session.Status['status']]: Extract<
-      Session.Status,
+  type ReturnType<session extends Session.Any = Session.Session> = {
+    [status in Session.Status<session>['status']]: Extract<
+      Session.Status<session>,
       { status: status }
     > & {
       /** Whether the status is `pending`: the instance restores or authorizes, with no session to show. */
@@ -238,14 +239,17 @@ export declare namespace useSession {
       /** Whether the status is `signedOut`. */
       isSignedOut: status extends 'signedOut' ? true : false
     }
-  }[Session.Status['status']]
+  }[Session.Status<session>['status']]
 }
 
 /** The status of a server render. */
-const pending: Session.Status = { session: undefined, status: 'pending' }
+const pending: Session.Status<Session.Any> = {
+  session: undefined,
+  status: 'pending',
+}
 
 /** Returns `status` with a flag for each status. */
-function withFlags(status: Session.Status): useSession.ReturnType {
+function withFlags(status: Session.Status<Session.Any>): useSession.ReturnType {
   return {
     ...status,
     isPending: status.status === 'pending',

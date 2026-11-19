@@ -46,7 +46,7 @@ import * as Token from '../internal/viem/Token.js'
 import * as Accounts from '../Accounts.js'
 import * as Plugin from '../Plugin.js'
 import { RetryClosedError, settings, viem } from '../plugins/viem.js'
-import type * as Session from '../Session.js'
+import * as Session from '../Session.js'
 
 /**
  * The Tempo Account holds less of a subscription's token than its first period costs, so no dialog
@@ -387,7 +387,7 @@ export function mpp(options: mpp.Options = {}) {
       // Tempo Account. One subscription per instance holds it, so a discarded manager holds none.
       let ends = 0
       instance.session.subscribe((next, before) => {
-        if (!before || next?.user.id !== before.user.id) ends++
+        if (!before || !Session.same(next, before)) ends++
       })
 
       /** Returns the client of the chain of `chainId`, which the viem plugin resolves. */
@@ -760,9 +760,12 @@ export function mpp(options: mpp.Options = {}) {
           // The instance's session sends its identity while it holds the same user, as the access
           // key's payer below does.
           const started = ends
-          const user = context.session.get()?.user.id
+          const held = context.session.get()
           const identity = prover(
-            () => ends !== started || context.session.get()?.user.id !== user,
+            () =>
+              ends !== started ||
+              !held ||
+              !Session.same(context.session.get(), held),
           )
           return create({
             ...settings,
@@ -1443,7 +1446,7 @@ export declare namespace mpp {
      * `accounts.connections.connect`, whose access key pays. Defaults to the instance's session, read at
      * each payment.
      */
-    session?: Pick<Session.Session, 'accessKey'> | undefined
+    session?: Pick<Session.Any, 'accessKey'> | undefined
     /**
      * The account that the app supplied to the sign-in as its access key, which signs for a
      * session's access key without material. Absent, a session's access key without material throws
@@ -1681,11 +1684,12 @@ export declare namespace mpp {
  * active or parked on another chain, of `options.account`, whose access key thus still pays for it.
  */
 function owns(
-  current: Session.Session | undefined,
-  options: { account: Address.Address; session: Session.Session },
+  current: Session.Any | undefined,
+  options: { account: Address.Address; session: Session.Any },
 ) {
   const { account, session } = options
-  if (!current || current.user.id !== session.user.id) return false
+  if (!current || Session.subject(current) !== Session.subject(session))
+    return false
   return [current.accessKey, ...(current.accessKeys ?? [])].some(
     (held) => held && Address.isEqual(held.account, account),
   )

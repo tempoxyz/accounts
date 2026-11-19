@@ -847,7 +847,7 @@ describe('tempoId', () => {
             Plugin.from({
               hooks: {
                 afterSignIn: (_context, session) => {
-                  signIns.push(session.user.id)
+                  signIns.push(session.user!.id)
                 },
               },
               id: 'record',
