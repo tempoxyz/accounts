@@ -515,7 +515,8 @@ export function create(
       }
 
       // A private key that a redemption sent without a known outcome is sent again, since Tempo ID
-      // returns the same key authorization for it. The stored access keys stay until it delivers.
+      // returns the same key authorization for it, unless the user approved other limits or scopes
+      // since. The stored access keys stay until it delivers.
       const privateKey = stored.pending ?? Secp256k1.randomPrivateKey()
       if (!stored.pending) await write(name, { ...stored, pending: privateKey })
 
@@ -524,8 +525,12 @@ export function create(
           return await redeem({ accessToken, privateKey })
         } catch (error) {
           if (!(error instanceof RequestError)) throw error
-          // Another app or connection holds the access key, so the next redemption sends a new one.
-          if (error.reason === 'access_key_taken')
+          // Another app or connection holds the access key, or the access key has a key
+          // authorization with other limits or scopes, so the next redemption sends a new one.
+          if (
+            error.reason === 'access_key_pending' ||
+            error.reason === 'access_key_taken'
+          )
             await write(name, { ...stored, pending: undefined })
           // Tempo ID refuses with `allowance_redeemed` only while the access key that the allowance
           // delivered is live, so the token predates that delivery on Tempo ID's clock, whatever the

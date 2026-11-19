@@ -1236,6 +1236,7 @@ describe('RequestError', () => {
     const reasons = [
       'access_key_changing',
       'access_key_endpoint_failed',
+      'access_key_pending',
       'access_key_taken',
       'allowance_redeemed',
       'already_decided',
