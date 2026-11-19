@@ -226,7 +226,7 @@ export const accounts = Accounts.create({
 
 :::
 
-<SourceLink name="mpp.maxAmount" path="src/mpp/index.ts">`mpp({ maxAmount: '0.05' })`</SourceLink> sets it for the instance. On a page, Tempo ID's payment page pays a charge above the access key's whole limit, as [Fetch the paid content](#fetch-the-paid-content) describes. Elsewhere, such a charge rejects with <SourceLink name="LimitError" path="src/mpp/index.ts">`mpp.LimitError`</SourceLink>.
+<SourceLink name="mpp.maxAmount" path="src/mpp/index.ts">`mpp({ maxAmount: '0.05' })`</SourceLink> sets it for the instance. On a page, Tempo ID's payment page pays a charge above the access key's whole limit, as [Fetch the paid content](#fetch-the-paid-content) describes. Elsewhere, such a charge rejects with <SourceLink name="LimitError" path="src/mpp/index.ts">`mpp.LimitError`</SourceLink>. So does a charge that a concurrent charge of the same access key left above the limit, such as in a Worker that pays a user's requests in parallel.
 
 ### Turn off the deposit page
 
