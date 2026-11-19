@@ -507,7 +507,7 @@ describe('tempoId', () => {
       chains: [tempo],
       connectors: [
         tempoId({
-          clientId: 'https://app.example.com',
+          clientId: 'tempo-example-web',
           dpop: await Dpop.create(),
           fetch: (input, init) => {
             requests.push(new URL(String(input)).pathname)

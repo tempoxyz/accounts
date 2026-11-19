@@ -323,7 +323,7 @@ test.describe('third-party app', () => {
     })
   })
 
-  test('receives no response for a request of the app’s own form', async ({
+  test('refuses or receives no response for a request of the app’s own form', async ({
     capture,
     email,
     errors,
@@ -331,22 +331,24 @@ test.describe('third-party app', () => {
   }) => {
     await page.goto(urls.custom)
 
-    await test.step('rejects `email.sendCode` as a request with no response', async () => {
+    await test.step('rejects `email.sendCode` with `rejected` before any request', async () => {
       await page.getByLabel('Email').fill(email)
+      const before = requests(page)
       const sent = await Playwright.run(page, { name: 'Send code' })
 
       expect(sent).toEqual({
         state: 'rejected',
         value: {
-          code: 'server_error',
+          code: 'invalid_request',
           message:
-            'The code request received no response. Check the connection, and request the code again.',
+            'Email sign-in refused: the client ID names a third-party app, which signs in only on an approval page. Sign in with `dialog.signIn` or `redirect.signIn`.',
           name: 'Accounts.RequestError',
-          reason: null,
-          status: 0,
+          reason: 'rejected',
+          status: 400,
         },
       })
-      expect(errors.splice(0)).toEqual(blocked('/v1/auth/code'))
+      expect(before).toEqual([])
+      expect(errors.splice(0)).toEqual([])
       await capture('no code')
     })
 
