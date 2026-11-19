@@ -712,6 +712,15 @@ const defaultSignInIds = new Set(['device', 'dialog', 'passkey', 'redirect'])
 /** The members of every connector's instance, whatever its plugins. */
 type Base = Accounts.Accounts<readonly [ReturnType<typeof viem>]>
 
+/** The options of the connector's `saved`. */
+type SavedOptions = {
+  /**
+   * Whether the caller's call created the instance before `saved`, such as a `connect` with
+   * `chainId`, so the instance's first load is current. Defaults to `false`.
+   */
+  created?: boolean | undefined
+}
+
 /** The `signIn` of a sign-in plugin's namespace. */
 type SignInFn = {
   signIn: (parameters: {
@@ -800,9 +809,9 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
      */
     async function connectInstance(
       parameters: tempoId.ConnectParameters<plugins>,
+      options: SavedOptions = {},
     ): Promise<Address.Address> {
       const { accessKey, isReconnecting, signIn } = parameters
-      const instance = getInstance()
 
       // The user's denial rejects the sign-in, or, on the page that a redirect returns to, the
       // restore of its callback.
@@ -810,7 +819,10 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
         // wagmi's `reconnect` calls `isAuthorized` first, which reads the store outside a
         // page, so a reconnect takes its session without a second read.
         if (isReconnecting) return await restored()
-        const current = await saved()
+        // The first `connect` creates the instance, here or in its `getChainId`, and its first
+        // load is current, so the store is read once.
+        const current = await saved(options)
+        const instance = getInstance()
         // Over a session that {@link foreign} names, `connect` signs in again.
         if (current && accessKey === undefined && !foreign(current))
           return current
@@ -1357,7 +1369,9 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
      * load, whose read is current. A page's other tabs send that message, so a page reads nothing
      * more.
      */
-    async function saved(): Promise<Session.Session | undefined> {
+    async function saved(
+      options: SavedOptions = {},
+    ): Promise<Session.Session | undefined> {
       // A call that creates the instance, such as the `isAuthorized` of the first `reconnect`,
       // starts its first load, whose read comes after the call starts, so it reads no more. A load
       // that started before the call can miss another context's later change.
@@ -1369,7 +1383,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           : false
       const session = await restored()
       if (typeof document !== 'undefined') return session
-      if (loading) return session
+      if (loading || options.created) return session
       // A held session can be stale: another context can end it, or save one that replaces it.
       // A failed read keeps the held session, or leaves none. No commit follows the adoption, so the
       // reload runs the plugins' hooks.
@@ -1460,6 +1474,8 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
     return {
       async connect(parameters = {}) {
         const { chainId, withCapabilities } = parameters
+        // `getChainId` can create the instance, so the call records it first.
+        const created = instance === undefined
         const previous = chainId === undefined ? undefined : await getChainId()
         const target = chainId === previous ? undefined : chainId
         if (
@@ -1479,7 +1495,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
         const address = await (async () => {
           if (target !== undefined)
             await getInstance().switchChain({ chainId: target })
-          return connectInstance(parameters)
+          return connectInstance(parameters, { created })
         })().catch(async (error: unknown) => {
           // A connection that fails, such as at a closed dialog, keeps the earlier chain, also in
           // the store, unless another switch, a new session, or a later call happened during it.

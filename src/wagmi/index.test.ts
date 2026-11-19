@@ -1052,6 +1052,66 @@ describe('tempoId', () => {
     `)
   })
 
+  test('reads the shared `Store.file` once at the first `connect` of a process with a held session, also with `chainId`', async () => {
+    const key =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]'
+    const path = Path.join(
+      await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-')),
+      'store.json',
+    )
+    const file = Store.file(path)
+    await file.setItem(key, await (await sessionStore()).getItem(key))
+    const reads: string[] = []
+    const store = Store.from({
+      ...file,
+      async getItem(name) {
+        if (name === key) reads.push(name)
+        return file.getItem(name)
+      },
+    })
+    async function connectOnce(chainId?: typeof tempo.id) {
+      const config = createConfig({
+        chains: [tempo],
+        connectors: [
+          tempoId({
+            clientId: 'https://app.example.com',
+            store,
+            url: 'http://127.0.0.1:9',
+          }),
+        ],
+        transports: {
+          [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }),
+        },
+      })
+      reads.length = 0
+
+      await connect(config, { chainId, connector: config.connectors[0]! })
+
+      return {
+        chainId: chainId ?? null,
+        reads: reads.length,
+        status: getConnection(config).status,
+      }
+    }
+
+    const results = [await connectOnce(), await connectOnce(tempo.id)]
+
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "chainId": null,
+          "reads": 1,
+          "status": "connected",
+        },
+        {
+          "chainId": 4217,
+          "reads": 1,
+          "status": "connected",
+        },
+      ]
+    `)
+  })
+
   test('rejects a call that names the connected account by address once the session ends', async () => {
     const store = await sessionStore()
     const config = createConfig({
