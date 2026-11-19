@@ -211,22 +211,21 @@ const accounts = Accounts.create({
 })
 ```
 
-### Keep the key set across Worker isolates
+### Keep the key set across instances
 
-On Cloudflare Workers, each new isolate starts without the key set. <SourceLink name="cacheApi" path="src/cloudflare/KeySet.ts">`KeySet.cacheApi`</SourceLink> of `accounts/cloudflare` keeps the set in the Cache API of the Worker's location, so a new isolate verifies without a fetch. Its background fetches run in `waitUntil`.
+Each new process starts without Tempo ID's key set. <SourceLink name="Runtime" path="src/internal/KeySet.ts">`keySet.cache`</SourceLink> takes a <SourceLink name="Store" path="src/Store.ts">`Store`</SourceLink> that the instances share, so a new instance verifies with its copy, without a fetch. <SourceLink name="Runtime" path="src/internal/KeySet.ts">`keySet.defer`</SourceLink> keeps the background fetches and writes running after the response.
 
-```ts [worker.ts]
-import { Accounts, KeySet } from 'accounts/cloudflare'
-import { tokens } from 'accounts/plugins'
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { createClient } from 'redis'
 
-const accounts = Accounts.create({
+const redis = await createClient({ url: process.env.REDIS_URL }).connect()
+
+export const accounts = Accounts.create({
   clientId: 'https://app.example',
-  keySet: KeySet.cacheApi(), // [!code hl]
-  plugins: [tokens()],
+  keySet: { cache: Store.redis(redis) }, // [!code hl]
 })
 ```
-
-Another runtime passes a <SourceLink name="Store" path="src/Store.ts">`Store`</SourceLink> as `keySet.cache`, such as `Store.redis`, and its own `keySet.defer` for background work.
 
 ### Reach Tempo ID at an internal address
 

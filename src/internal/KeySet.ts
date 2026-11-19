@@ -77,8 +77,8 @@ export type Status = 'expired' | 'fresh' | 'stale'
  * fetch started. From `maxAge`, a verification waits for a new set, so a signing key that the issuer
  * removed stops verifying within `maxAge`. A token that names a `kid` that the set lacks, such as
  * after a rotation, first checks a set that another fetch stored meanwhile, and then waits for a
- * fetch, at most once each 30 seconds after the last fetch ended. Within those 30 seconds, it throws
- * the key set as unavailable if the last fetch failed. Each verification that waits for a fetch
+ * fetch, at most once each 30 seconds after the last fetch started and ended. Within those 30
+ * seconds, it throws the key set as unavailable while a fetch runs or after one failed. Each verification that waits for a fetch
  * starts its own, since a Worker cancels the subrequests of a request when it ends, and a shared
  * fetch could then never settle. `machines.keySet` holds the lifecycle, and {@link decide} and
  * {@link rotate} choose each step.
@@ -263,8 +263,10 @@ export declare namespace decide {
 /**
  * Returns the step for a token that names a `kid` that the set of `snapshot` lacks, at `now`: wait
  * to `fetch` a set, `refuse` the token, or throw the key set as `unavailable`. A fetch follows at
- * most once each cooldown after the last fetch ended. Within it, the token is refused, unless the
- * last fetch failed, since the issuer's current set is then unknown.
+ * most once each cooldown after the last fetch started and after the last fetch ended, so tokens of
+ * unknown `kid`s start at most one fetch each cooldown. Within it, the token is refused once the
+ * last fetch returned a set, and otherwise throws the key set as unavailable, since a fetch in
+ * progress or one that failed leaves the issuer's current set unknown.
  *
  * @example
  * ```ts
@@ -282,9 +284,12 @@ export function rotate(
   snapshot: machines.keySet.Snapshot,
   options: rotate.Options,
 ): 'fetch' | 'refuse' | 'unavailable' {
-  if (!cooling({ at: snapshot.context.ended, now: options.now })) return 'fetch'
-  if (snapshot.hasTag('failed')) return 'unavailable'
-  return 'refuse'
+  const { ended, started } = snapshot.context
+  const { now } = options
+  if (!cooling({ at: started, now }) && !cooling({ at: ended, now }))
+    return 'fetch'
+  if (snapshot.matches('loaded')) return 'refuse'
+  return 'unavailable'
 }
 
 export declare namespace rotate {
@@ -344,9 +349,10 @@ export declare namespace status {
 /** The state machines that this module runs. */
 export namespace machines {
   /**
-   * The key set of one verifier: `empty` before any set, `loaded` with a set, and `failing` and
-   * `unavailable`, tagged `failed`, while the last fetch failed, with and without a set. A set from
-   * a fetch or the cache replaces only an older one. The context keeps when the last fetch started
+   * The key set of one verifier: `empty` before any set, `pending` while a fetch for the first set
+   * runs, and `unavailable` after it failed, and with a set, `loaded` after the last fetch returned
+   * it, `refreshing` while a fetch runs, and `failing` after the last fetch failed. A set from a
+   * fetch or the cache replaces only an older one. The context keeps when the last fetch started
    * and ended, which {@link decide} and {@link rotate} compare with the cooldown.
    */
   export const keySet = setup({
@@ -375,38 +381,48 @@ export namespace machines {
     id: 'keySet',
     initial: 'empty',
     on: {
-      'fetch.start': { actions: 'start' },
+      'cache.read': { actions: 'adopt' },
+      'fetch.end': { actions: ['adopt', 'end'], target: '.loaded' },
     },
     states: {
       empty: {
         on: {
           'cache.read': { actions: 'adopt', target: 'loaded' },
-          'fetch.end': { actions: ['adopt', 'end'], target: 'loaded' },
           'fetch.fail': { actions: 'end', target: 'unavailable' },
+          'fetch.start': { actions: 'start', target: 'pending' },
         },
       },
       failing: {
         on: {
-          'cache.read': { actions: 'adopt' },
-          'fetch.end': { actions: ['adopt', 'end'], target: 'loaded' },
           'fetch.fail': { actions: 'end' },
+          'fetch.start': { actions: 'start', target: 'refreshing' },
         },
-        tags: ['failed'],
       },
       loaded: {
         on: {
-          'cache.read': { actions: 'adopt' },
-          'fetch.end': { actions: ['adopt', 'end'] },
           'fetch.fail': { actions: 'end', target: 'failing' },
+          'fetch.start': { actions: 'start', target: 'refreshing' },
+        },
+      },
+      pending: {
+        on: {
+          'cache.read': { actions: 'adopt', target: 'refreshing' },
+          'fetch.fail': { actions: 'end', target: 'unavailable' },
+          'fetch.start': { actions: 'start' },
+        },
+      },
+      refreshing: {
+        on: {
+          'fetch.fail': { actions: 'end', target: 'failing' },
+          'fetch.start': { actions: 'start' },
         },
       },
       unavailable: {
         on: {
           'cache.read': { actions: 'adopt', target: 'failing' },
-          'fetch.end': { actions: ['adopt', 'end'], target: 'loaded' },
           'fetch.fail': { actions: 'end' },
+          'fetch.start': { actions: 'start', target: 'pending' },
         },
-        tags: ['failed'],
       },
     },
   })

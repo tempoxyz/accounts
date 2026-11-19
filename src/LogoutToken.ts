@@ -51,7 +51,7 @@ const refusals = [
  * `KeySet.create` of `accounts/internal` describes. A set younger than half of `maxAge` verifies as
  * it is, an older one verifies while a background fetch replaces it, and from `maxAge` a
  * verification waits for a fetch. A token that names an unknown `kid` waits for a fetch, at most
- * once each 30 seconds after the last fetch ended. Each fetch ends within `timeout`. The
+ * once each 30 seconds after the last fetch started and ended. Each fetch ends within `timeout`. The
  * configuration's `keySet` keeps the set beyond the verifier, such as for a new Worker isolate.
  * Create one verifier for each Worker isolate or process.
  *

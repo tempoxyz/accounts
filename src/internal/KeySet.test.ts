@@ -41,6 +41,8 @@ describe('machines.keySet', () => {
           "empty",
           "failing",
           "loaded",
+          "pending",
+          "refreshing",
           "unavailable",
         ]
       `)
@@ -165,6 +167,40 @@ describe('rotate', () => {
         "fetch",
       ]
     `)
+  })
+
+  test('starts at most one fetch each cooldown for tokens of unknown `kid`s', () => {
+    const actor = createActor(KeySet.machines.keySet).start()
+    actor.send({ entry: entry(0), now: 0, type: 'fetch.end' })
+    const start = 2 * KeySet.cooldown
+    const first = KeySet.rotate(actor.getSnapshot(), { now: start })
+    actor.send({ now: start, type: 'fetch.start' })
+    // Later tokens arrive while the fetch runs, and once it ends.
+    const running = KeySet.rotate(actor.getSnapshot(), { now: start + 1 })
+    actor.send({ entry: entry(start + 2), now: start + 2, type: 'fetch.end' })
+
+    expect([
+      first,
+      running,
+      KeySet.rotate(actor.getSnapshot(), { now: start + 3 }),
+    ]).toMatchInlineSnapshot(`
+      [
+        "fetch",
+        "unavailable",
+        "refuse",
+      ]
+    `)
+  })
+
+  test('fetches again a cooldown after a fetch that never ends', () => {
+    const actor = createActor(KeySet.machines.keySet).start()
+    actor.send({ entry: entry(0), now: 0, type: 'fetch.end' })
+    const start = 2 * KeySet.cooldown
+    actor.send({ now: start, type: 'fetch.start' })
+
+    expect(
+      KeySet.rotate(actor.getSnapshot(), { now: start + KeySet.cooldown }),
+    ).toMatchInlineSnapshot(`"fetch"`)
   })
 
   test('throws the key set as unavailable within the cooldown of a failed fetch', () => {
