@@ -87,6 +87,27 @@ export declare namespace ChainInvalidError {
 }
 
 /**
+ * `Accounts.create` or `Accounts.from` received a `chain` that is neither `mainnet`, `testnet`, nor a
+ * chain ID, such as the string of an environment variable.
+ */
+export class ChainNameInvalidError extends Error {
+  override readonly name = 'Accounts.ChainNameInvalidError'
+
+  constructor(options: ChainNameInvalidError.Options) {
+    super(
+      `Invalid chain: ${JSON.stringify(options.chain)} names no chain. Pass \`mainnet\`, \`testnet\`, or the chain's ID as a number.`,
+    )
+  }
+}
+
+export declare namespace ChainNameInvalidError {
+  type Options = {
+    /** The `chain` that the configuration received. */
+    chain: unknown
+  }
+}
+
+/**
  * Tempo ID lists no chain with the access key's chain ID, so the account of a `viem` client signs
  * no message or typed data on it. Sign in with an access key on a listed chain.
  */
@@ -1510,6 +1531,8 @@ export type Accounts<
  *
  * @throws {ClientIdRequiredError} Outside a browser without `clientId`, where no page's origin can
  *   serve as one.
+ * @throws {ChainNameInvalidError} For a `chain` that is neither `mainnet`, `testnet`, nor a chain
+ *   ID.
  *
  * @example
  * ```ts
@@ -1536,9 +1559,19 @@ export function from(options: from.Options = {}): Config {
 
   // Every authorization reads the user from the ID token, which needs `openid` and `email`.
   const scopes = scope.split(' ').filter(Boolean)
+  // A `chain` from an untyped source, such as an environment variable, can name no chain, and an
+  // instance without a chain ID fails only at its first request.
+  const chainId = (() => {
+    if (typeof chain === 'number' && Number.isSafeInteger(chain) && chain > 0)
+      return chain
+    if (chain === undefined) return Chains.ids.mainnet
+    if (Object.hasOwn(Chains.ids, chain as string))
+      return Chains.ids[chain as keyof typeof Chains.ids]
+    throw new ChainNameInvalidError({ chain })
+  })()
   const config: Config = {
     ...rest,
-    chainId: typeof chain === 'number' ? chain : Chains.ids[chain ?? 'mainnet'],
+    chainId,
     clientId,
     scope: [...new Set(['openid', 'email', ...scopes])].join(' '),
     url: url ?? defaultUrl,
@@ -1647,6 +1680,8 @@ export declare namespace from {
  *
  * @throws {ClientIdRequiredError} Outside a browser without `clientId`, where no page's origin can
  *   serve as one.
+ * @throws {ChainNameInvalidError} For a `chain` that is neither `mainnet`, `testnet`, nor a chain
+ *   ID.
  * @throws {Error} For a plugin whose `id` is a member of every instance: `account`, `authorize`,
  *   `chain`, `config`, `connection`, `connections`, `handler`, `session`, `signOut`, or
  *   `switchChain`.

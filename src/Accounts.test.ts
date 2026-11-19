@@ -447,6 +447,28 @@ describe('create', () => {
     )
   })
 
+  test('throws ChainNameInvalidError for a `chain` that names no chain, such as an environment variable', () => {
+    const errors = ['localnet', '1337', 'Testnet'].map((chain) => {
+      try {
+        return Accounts.from({ chain: chain as never, clientId: 'client_acme' })
+          .chainId
+      } catch (error) {
+        return String(error)
+      }
+    })
+
+    expect(errors).toMatchInlineSnapshot(`
+      [
+        "Accounts.ChainNameInvalidError: Invalid chain: "localnet" names no chain. Pass \`mainnet\`, \`testnet\`, or the chain's ID as a number.",
+        "Accounts.ChainNameInvalidError: Invalid chain: "1337" names no chain. Pass \`mainnet\`, \`testnet\`, or the chain's ID as a number.",
+        "Accounts.ChainNameInvalidError: Invalid chain: "Testnet" names no chain. Pass \`mainnet\`, \`testnet\`, or the chain's ID as a number.",
+      ]
+    `)
+    expect(
+      Accounts.from({ chain: 'testnet', clientId: 'client_acme' }).chainId,
+    ).toMatchInlineSnapshot(`42431`)
+  })
+
   test('keeps an own `__proto__` member as a member of a log or JSON of `config`', () => {
     const config = Accounts.from({
       clientId: 'client_acme',
