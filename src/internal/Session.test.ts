@@ -2203,6 +2203,19 @@ describe('machines.session', () => {
         true,
       ],
       [
+        "a sign-out with everywhere on a local store, through the store's connect, before a later sign-in of the sender",
+        {
+          at: 2,
+          connected: true,
+          everywhere: true,
+          local: true,
+          signedIn: 0,
+          signOut: true,
+          stored: renewed,
+        },
+        false,
+      ],
+      [
         'a sign-out without everywhere on a local store',
         { at: 2, local: true, signedIn: 1, signOut: true, stored: renewed },
         false,
@@ -2213,6 +2226,7 @@ describe('machines.session', () => {
       test(`returns ${expected} for ${name}`, () => {
         const result = machines.signsOut({
           at: undefined,
+          connected: undefined,
           everywhere: undefined,
           local: undefined,
           signedIn: 0,

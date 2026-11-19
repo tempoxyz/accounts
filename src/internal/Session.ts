@@ -671,7 +671,8 @@ export function create(options: create.Options): create.ReturnType {
       machines.signsOut({
         at: options.at,
         everywhere: options.everywhere,
-        local: options.connected ? false : store?.local,
+        connected: options.connected,
+        local: store?.local,
         signedIn,
         signOut: options.signOut,
         stored: read?.stored,
@@ -4419,8 +4420,9 @@ export namespace machines {
 
   /**
    * Returns whether another tab's sign-out message signs the instance out: the store holds no
-   * session, or the sign-out ended the Tempo ID session with `everywhere`, the store is local, and
-   * the instance signed in before the message. A local store, such as `Store.memory`,
+   * session, or the sign-out ended the Tempo ID session with `everywhere`, the store is local, the
+   * message came from another tab and not through the store's `connect`, and the instance signed
+   * in before the message. A local store, such as `Store.memory`,
    * holds each tab's own session, which the other tab's sign-out cannot empty. Its logout revoked
    * the tokens of the browser's Tempo ID session, also those of that store. A sign-in after the
    * message, such as while the message waited for the lock, follows the logout, so it stays.
@@ -4428,10 +4430,14 @@ export namespace machines {
   export function signsOut(
     options: machines.signsOut.Options,
   ): machines.signsOut.ReturnType {
-    const { at, everywhere, local, signedIn, signOut, stored } = options
+    const { at, connected, everywhere, local, signedIn, signOut, stored } =
+      options
     if (!signOut) return false
     if (!stored) return true
-    if (everywhere !== true || local !== true) return false
+    // A message through the store's `connect` comes from an instance on the same store, so the
+    // stored session is the sender's too, as on a shared store.
+    if (everywhere !== true || local !== true || connected === true)
+      return false
     // A message without a time orders nothing, so the logout can follow any session.
     return at === undefined || signedIn <= at
   }
@@ -4443,6 +4449,8 @@ export namespace machines {
        * message that states no time.
        */
       at: number | undefined
+      /** Whether the message came through the store's `connect`, from an instance on the same store. */
+      connected: boolean | undefined
       /** Whether the other tab's sign-out ended the Tempo ID session too. */
       everywhere: boolean | undefined
       /** Whether the store holds only this tab's values, as `Store.memory` does. */

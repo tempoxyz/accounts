@@ -2729,40 +2729,6 @@ describe('signOut', () => {
     expect(await other.session.get()).toMatchInlineSnapshot(`undefined`)
   })
 
-  test("keeps a sign-in that follows another instance's sign-out with `everywhere` on the same store, without a page", async () => {
-    const memory = Store.memory()
-    // Holds each message until the test releases it, so the sign-in commits before any delivery.
-    const held: (() => void)[] = []
-    const store = Store.from({
-      ...memory,
-      connect: (key, listener) =>
-        memory.connect!(key, (message) => held.push(() => listener(message))),
-    })
-    const accounts = create(store)
-    const other = create(store)
-    // A third instance on the store, whose sign-out with `everywhere` precedes the sign-in.
-    const post = memory.connect!(name, () => undefined)
-    await accounts.test.commit(session())
-    await other.session.get()
-    held.length = 0
-
-    post({ at: Date.now(), everywhere: true, signOut: true })
-    await accounts.test.commit(
-      Session.from({
-        ...session(),
-        user: { email: 'b@example.com', id: 'user_2' },
-      }),
-    )
-    for (const deliver of held.splice(0)) deliver()
-
-    await expect
-      .poll(async () => (await other.session.get())?.user.id)
-      .toBe('user_2')
-    expect((await accounts.session.get())?.user.id).toMatchInlineSnapshot(
-      `"user_2"`,
-    )
-  })
-
   test('keeps the signed-out mark of a sign-out that starts during a sign-in and ends the session after its commit', async () => {
     const memory = Store.memory()
     // The sign-out's read of the session waits until the sign-in commits. Later reads run at once.
