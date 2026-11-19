@@ -182,10 +182,11 @@ export function create(options: create.Options): create.ReturnType {
   // request, unless this instance runs a refresh. The refresh then saves its new tokens first, and
   // the sign-out revokes them. Any other change waits for the lock, so it follows a sign-out that
   // asked for the lock first, which empties the tokens that another tab's refresh saved after it.
-  const receive = (data: unknown) => {
+  const receive = (data: unknown, connected?: boolean) => {
     const message = data as Message | undefined
     const options = {
       at: message?.at,
+      connected,
       everywhere: message?.everywhere === true,
       signOut: message?.signOut === true,
     }
@@ -206,7 +207,10 @@ export function create(options: create.Options): create.ReturnType {
   // change directly, so one instance's sign-out empties the others' sessions at once, as across tabs.
   // The store holds `receive` weakly, and the `post` that it returns holds `receive` while the
   // instance lives.
-  const post = enabled && !channel ? store?.connect?.(name, receive) : undefined
+  const post =
+    enabled && !channel
+      ? store?.connect?.(name, (data) => receive(data, true))
+      : undefined
   const actor = enabled
     ? createActor(
         machines.session.provide({
@@ -616,6 +620,11 @@ export function create(options: create.Options): create.ReturnType {
     /** When the other tab posted its message, in milliseconds since the epoch. */
     at?: number | undefined
     /**
+     * Whether the message came through the store's `connect`, from an instance on the same store. The
+     * store then holds that instance's values too, so it counts as shared, not local.
+     */
+    connected?: boolean | undefined
+    /**
      * Whether another tab's sign-out ends the Tempo ID session too. Without it, the sign-out marks
      * the store signed out, so this instance holds the mark too.
      */
@@ -662,7 +671,7 @@ export function create(options: create.Options): create.ReturnType {
       machines.signsOut({
         at: options.at,
         everywhere: options.everywhere,
-        local: store?.local,
+        local: options.connected ? false : store?.local,
         signedIn,
         signOut: options.signOut,
         stored: read?.stored,

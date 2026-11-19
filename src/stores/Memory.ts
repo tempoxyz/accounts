@@ -49,6 +49,9 @@ export function create(): Store.Store {
       const set =
         listeners.get(key) ?? new Set<WeakRef<(message: unknown) => void>>()
       listeners.set(key, set)
+      // Each connection and each post drops the references of collected listeners, so the set
+      // holds about as many references as live instances, also where no instance posts.
+      for (const ref of set) if (!ref.deref()) set.delete(ref)
       set.add(new WeakRef(listener))
       // The function holds `listener`, so the instance that holds the function keeps its listener.
       return (message) => {

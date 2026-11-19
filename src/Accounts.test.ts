@@ -2612,10 +2612,14 @@ describe('signOut', () => {
     'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
 
   /** Returns an instance whose `test.commit` commits a session after `before` resolves. */
-  function create(store: Store.Store) {
+  function create(
+    store: Store.Store,
+    options: Pick<Accounts.create.Options, 'clientId' | 'fetch'> = {},
+  ) {
     return Accounts.create({
       chain: 42431,
       clientId: 'https://app.example.com',
+      ...options,
       plugins: [
         Plugin.from({
           actions: (context) => ({
@@ -2727,6 +2731,43 @@ describe('signOut', () => {
 
     await expect.poll(() => other.session.status.get().status).toBe('signedOut')
     expect(await other.session.get()).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test("keeps a sign-in that follows another instance's sign-out with `everywhere` on the same store, without a page", async () => {
+    const memory = Store.memory()
+    // Holds each message until the test releases it, so the sign-in commits before any delivery.
+    const held: (() => void)[] = []
+    const store = Store.from({
+      ...memory,
+      connect: (key, listener) =>
+        memory.connect!(key, (message) => held.push(() => listener(message))),
+    })
+    // A first-party app, whose sign-out ends the Tempo ID session. Tempo ID accepts each request.
+    const options = {
+      clientId: 'wallet',
+      fetch: () => Promise.resolve(Response.json({})),
+    }
+    const accounts = create(store, options)
+    const other = create(store, options)
+    await accounts.test.commit(session())
+    await other.session.get()
+    held.length = 0
+
+    await accounts.signOut({ everywhere: true })
+    await accounts.test.commit(
+      Session.from({
+        ...session(),
+        user: { email: 'b@example.com', id: 'user_2' },
+      }),
+    )
+    for (const deliver of held.splice(0)) deliver()
+
+    await expect
+      .poll(async () => (await other.session.get())?.user.id)
+      .toBe('user_2')
+    expect((await accounts.session.get())?.user.id).toMatchInlineSnapshot(
+      `"user_2"`,
+    )
   })
 
   test('keeps the signed-out mark of a sign-out that starts during a sign-in and ends the session after its commit', async () => {
