@@ -104,6 +104,36 @@ test.describe('popup', () => {
     })
   })
 
+  test('fills the email field of the sign-in in a popup with `loginHint`', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    await page.goto(Web.url({ loginHint: email, path: Apps.web.paths.dialog }))
+
+    const window = await Playwright.popup(page, {
+      open: () => Playwright.start(page, { name: 'Sign in in a popup' }),
+    })
+    await window.waitForURL(`${TempoId.url}/**`)
+
+    await test.step('fills the email field with the hint', async () => {
+      await expect(Playwright.form(window)).toHaveValue(email)
+      await capture('filled', window)
+    })
+
+    await test.step('signs in with the filled address', async () => {
+      await window.getByRole('button', { name: 'Continue with email' }).click()
+      await window
+        .getByRole('textbox', { exact: true, name: 'Code' })
+        .fill(await code(email))
+
+      expect(
+        await Playwright.outcome(page, { name: 'Sign in in a popup' }),
+      ).toMatchObject({ state: 'fulfilled', value: { email } })
+    })
+  })
+
   test('signs in through a popup for a request with `resource` on a page that signs in in a frame, and receives a token for the resource', async ({
     capture,
     code,
