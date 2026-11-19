@@ -1,7 +1,8 @@
 /**
  * Tests the headers of a request that sends an access token, as `Actions.fetch` and `backend.fetch`
  * build them, the requests to Tempo ID that carry a secret, and the read of a challenge signature
- * from Tempo ID's response.
+ * from Tempo ID's response, and the refusal of a token response without an access token or a
+ * lifetime.
  * @module
  */
 import { decodeJwt } from 'jose'
@@ -317,6 +318,57 @@ describe('tokens', () => {
     )
 
     expect(tokens.expiresAt - sentAt).toMatchInlineSnapshot(`300000`)
+  })
+
+  test('throws server_error with status 200 for a response without an access token or a finite lifetime, and quotes none of it', () => {
+    const responses = [
+      { expires_in: 300, refresh_token: 'refresh-token' },
+      { access_token: '', expires_in: 300, refresh_token: 'refresh-token' },
+      { access_token: 'access-token', refresh_token: 'refresh-token' },
+      {
+        access_token: 'access-token',
+        expires_in: '300',
+        refresh_token: 'refresh-token',
+      },
+    ] as unknown as readonly Api.TokenResponse[]
+
+    const errors = responses.map((response) => {
+      try {
+        return Api.tokens(response)
+      } catch (error) {
+        const { cause, code, message, status } = error as RequestError
+        return { cause, code, message, status }
+      }
+    })
+
+    expect(errors).toMatchInlineSnapshot(`
+      [
+        {
+          "cause": undefined,
+          "code": "server_error",
+          "message": "Invalid response: the token response holds no access token or no lifetime. Check the instance's \`url\`, then retry the request.",
+          "status": 200,
+        },
+        {
+          "cause": undefined,
+          "code": "server_error",
+          "message": "Invalid response: the token response holds no access token or no lifetime. Check the instance's \`url\`, then retry the request.",
+          "status": 200,
+        },
+        {
+          "cause": undefined,
+          "code": "server_error",
+          "message": "Invalid response: the token response holds no access token or no lifetime. Check the instance's \`url\`, then retry the request.",
+          "status": 200,
+        },
+        {
+          "cause": undefined,
+          "code": "server_error",
+          "message": "Invalid response: the token response holds no access token or no lifetime. Check the instance's \`url\`, then retry the request.",
+          "status": 200,
+        },
+      ]
+    `)
   })
 })
 
