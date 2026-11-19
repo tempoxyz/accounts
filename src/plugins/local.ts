@@ -137,8 +137,9 @@ type Stored = {
  */
 export function local(options: local.Options = {}) {
   const { name, v0 } = options
-  // The instance, which `extend` receives, for its sign-out in `local.remove`.
-  let instance: { signOut: () => Promise<void> } | undefined
+  // Each instance of the plugin, by the context that `extend` and `actions` share, for its sign-out in
+  // `local.remove`. One plugin can serve several instances.
+  const instances = new WeakMap<object, { signOut: () => Promise<void> }>()
 
   return Plugin.from({
     actions: (context) => {
@@ -324,6 +325,8 @@ export function local(options: local.Options = {}) {
             address: owner.address,
             ...(challenged ? { challengeSignature: challenged.signature } : {}),
             kind: 'local',
+            // Orders this session after the one it replaces, also within one millisecond.
+            revision: Math.max(Date.now(), (own?.revision ?? 0) + 1),
           })
           await change.commit(session)
           return challenged ? { ...session, auth: challenged.auth } : session
@@ -436,7 +439,8 @@ export function local(options: local.Options = {}) {
           // the app's challenge, so none restores the removed account, and it runs the hooks.
           const current =
             context.session.get() ?? (await context.session.load())
-          if (current && Session.local(current)) await instance?.signOut()
+          if (current && Session.local(current))
+            await instances.get(context)?.signOut()
         },
         /**
          * Signs in with the stored owner key. A live access key of the session on the instance's
@@ -458,8 +462,8 @@ export function local(options: local.Options = {}) {
         },
       }
     },
-    extend: (extended) => {
-      instance = extended
+    extend: (instance, context) => {
+      instances.set(context, instance)
       return {}
     },
     id: 'local',

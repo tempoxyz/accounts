@@ -16,7 +16,6 @@ import {
 import { RequestError, SupersededError } from '../Accounts.js'
 import * as Session from '../Session.js'
 import type { Store } from '../Store.js'
-import * as AccessKey from './AccessKey.js'
 import * as Api from './Api.js'
 import * as Lock from './Lock.js'
 import * as StoreValue from './StoreValue.js'
@@ -2589,17 +2588,12 @@ function fromSaved(
 }
 
 /**
- * Returns when `session` stops acting, in milliseconds: the expiry of its access token, or of a
- * local session's latest access key, which no token outlives.
+ * Returns the order of `session` among saved copies of one session: the expiry of its access token,
+ * which each refresh moves later, or a local session's revision, which each sign-in moves later. A
+ * local session's access keys are no order, since a sign-in can add one that expires sooner.
  */
-function expiry(session: Session.Any) {
-  if (!Session.local(session)) return session.expiresAt
-  return Math.max(
-    0,
-    ...[session.accessKey, ...(session.accessKeys ?? [])].map((entry) =>
-      entry ? (AccessKey.expiry(entry) ?? Number.MAX_SAFE_INTEGER) : 0,
-    ),
-  )
+function order(session: Session.Any) {
+  return Session.local(session) ? session.revision : session.expiresAt
 }
 
 /** Returns `promise` settled: `undefined` when it resolves, its error when it rejects. */
@@ -3437,7 +3431,7 @@ export namespace machines {
       Session.subject(stored) === Session.subject(ended) &&
       accessKeyIds(stored) === accessKeyIds(ended) &&
       stored.refreshToken !== ended.refreshToken &&
-      expiry(stored) >= expiry(ended)
+      order(stored) >= order(ended)
     // A stored copy of the ended session's own tokens, such as one that another context saved again.
     const stale =
       held &&
@@ -3894,7 +3888,7 @@ export namespace machines {
   ) {
     if (!stored || !current) return stored !== current
     if (Session.subject(stored) !== Session.subject(current)) return true
-    return expiry(stored) > expiry(current)
+    return order(stored) > order(current)
   }
 
   /**
@@ -4167,7 +4161,7 @@ export namespace machines {
     if (!failed) return machines.newer(stored, current)
     if (!stored || !current) return false
     if (Session.subject(stored) !== Session.subject(current)) return false
-    return expiry(stored) > expiry(current)
+    return order(stored) > order(current)
   }
 
   export declare namespace replaces {

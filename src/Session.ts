@@ -48,6 +48,11 @@ export type LocalSession = Omit<
   kind: 'local'
   receivedAt?: undefined
   refreshToken?: undefined
+  /**
+   * When the `local` plugin last signed in, in milliseconds, and greater than each earlier
+   * revision. Of two saved copies of one local session, the greater revision is the later one.
+   */
+  revision: number
   user?: undefined
 }
 
