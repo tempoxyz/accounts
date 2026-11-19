@@ -170,7 +170,8 @@ export function react(options: react.Options = {}) {
          *   authorization that the app sets with `reauthorizeOnMount` fails, as the errors of
          *   `accounts.authorize` list.
          */
-        useSession(): useSession.ReturnType {
+        // The instance types it by its session, which `Accounts.Members` names.
+        useSession(): useSession.ReturnType<Session.Any> {
           const status = React.useSyncExternalStore(
             instance.session.status.subscribe,
             instance.session.status.get,
@@ -249,7 +250,9 @@ const pending: Session.Status<Session.Any> = {
 }
 
 /** Returns `status` with a flag for each status. */
-function withFlags(status: Session.Status<Session.Any>): useSession.ReturnType {
+function withFlags<session extends Session.Any>(
+  status: Session.Status<session>,
+): useSession.ReturnType<session> {
   return {
     ...status,
     isPending: status.status === 'pending',
@@ -257,7 +260,7 @@ function withFlags(status: Session.Status<Session.Any>): useSession.ReturnType {
     isSignedIn: status.status === 'signedIn',
     isSignedOut: status.status === 'signedOut',
     // The flags follow `status`, which the type cannot infer from the comparisons.
-  } as useSession.ReturnType
+  } as useSession.ReturnType<session>
 }
 
 /** The state machines that this module runs. */

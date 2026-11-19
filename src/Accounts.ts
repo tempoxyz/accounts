@@ -39,6 +39,7 @@ import * as Payment from './internal/Payment.js'
 import type { Permissions } from './Permissions.js'
 import * as Plugin from './Plugin.js'
 import type { backend } from './plugins/backend.js'
+import type * as React from './react/index.js'
 import * as Session from './Session.js'
 import type { Store } from './Store.js'
 import type * as TempoAccount from './internal/TempoAccount.js'
@@ -608,7 +609,7 @@ export type Config = {
 export type Accounts<
   plugins extends readonly Plugin.Plugin[] = readonly Plugin.Plugin[],
 > = Plugin.Namespaces<plugins> &
-  Plugin.Members<plugins> & {
+  Members<plugins> & {
     /** The user's Tempo Account that Tempo ID selects for the app. */
     account: {
       /**
@@ -2064,7 +2065,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     if (page !== undefined && Api.sameHost(config, { page })) return undefined
     await context.session.load()
     const current = context.session.get()
-    if (!current || Session.local(current)) return undefined
+    if (!current) return undefined
+    // Tempo ID holds no account of a local session, so a read without its token never reaches it.
+    if (Session.local(current)) throw new LocalSessionError()
     if (
       page !== undefined &&
       Api.unbound(config, { accessToken: current.accessToken })
@@ -2614,6 +2617,8 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         // third-party app has no CORS grant for the read, so the switch sends no read.
         const account =
           held &&
+          // A local session's account is the owner key's on every chain, so Tempo ID reads none.
+          !Session.local(held) &&
           !InternalSession.toChain(held, { chainId }).accessKey &&
           !ClientId.thirdParty(config.clientId)
             ? await Core.getAccount(context, {
@@ -2838,6 +2843,17 @@ export declare namespace create {
     store?: Store | false | undefined
   }
 }
+
+/**
+ * The members that `plugins` add to the instance, with `useSession` of the `react` plugin typed by
+ * the instance's session: `Session.Any` with the `local` plugin, else `Session.Session`.
+ */
+export type Members<plugins extends readonly Plugin.Plugin[]> =
+  Plugin.Members<plugins> extends { useSession(): unknown }
+    ? Omit<Plugin.Members<plugins>, 'useSession'> & {
+        useSession(): React.useSession.ReturnType<Session.Of<plugins>>
+      }
+    : Plugin.Members<plugins>
 
 /**
  * The sign-in to the app that `pay` of an instance of `plugins` returns with the `siwe` plugin on a

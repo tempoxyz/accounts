@@ -1546,6 +1546,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         // The access key on the client's chain, else one on another chain, whose account and
         // permissions the new access key takes, such as after `switchChain`. A session that never
         // held an access key requests none.
+        // Tempo ID holds no account of a local session, so neither its authorization nor its dialog
+        // renews the access key: the app signs a new one with `local.signIn`.
+        if (before && Session.local(before)) throw error
         const onChain = accessKeyOn(before, { chainId })
         const previous = onChain ?? before?.accessKey ?? before?.accessKeys?.[0]
         if (!before || !previous) throw error

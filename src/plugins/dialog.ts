@@ -432,7 +432,7 @@ export function dialog<const options extends dialog.Options = {}>(
          * route once, also for a signed-out page. The first call takes it only while it is pending,
          * or for 10 seconds after it settles, since a sign-out or a sign-in through the app's own
          * routes changes the session that it read. Each later call, and a call after a sign-in started, reads it again. Without
-         * `backend`, it is the instance's stored session, or `null`.
+         * `backend`, it is the instance's stored Tempo ID session, or `null`, also for a `local` plugin's session.
          * @throws {Accounts.RequestError} With `backend`, for a failed read, such as a 503
          *   `temporarily_unavailable`, or a `server_error` for a session without its method or account.
          * @throws {DOMException} With the name `AbortError`, if a sign-in is in progress at the call
@@ -445,8 +445,11 @@ export function dialog<const options extends dialog.Options = {}>(
          * ```
          */
         session: (async () => {
-          if (backend === undefined)
-            return (await context.session.load()) ?? null
+          if (backend === undefined) {
+            // The dialog shows a Tempo ID session, not a `local` plugin's beside it.
+            const stored = await context.session.load()
+            return stored && !Session.local(stored) ? stored : null
+          }
           const coordinator = backendOf(context, { backend })
           if (machines.signingIn(coordinator.getSnapshot()))
             throw machines.cancelled()

@@ -302,16 +302,19 @@ export type Context = {
  *
  * @example
  * ```ts
- * import { Accounts, Plugin } from 'accounts'
+ * import { Accounts, Plugin, Session } from 'accounts'
  *
  * function profile() {
  *   return Plugin.from({
  *     actions: (context) => ({
- *       email: () => context.session.get()?.user.email,
+ *       // A `local` plugin's session names no user.
+ *       email: () => context.session.get()?.user?.email,
  *     }),
  *     extend: (instance) => ({ clientIdOf: () => instance.config.clientId }),
  *     hooks: {
- *       afterSignIn: (context, session) => analytics.identify(session.user.id),
+ *       afterSignIn: (context, session) => {
+ *         if (!Session.local(session)) analytics.identify(session.user.id)
+ *       },
  *     },
  *     id: 'profile',
  *     setup: (context) => void fetch(new URL('/health', context.config.url)),

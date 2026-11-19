@@ -462,3 +462,61 @@ describe('local with mpp', () => {
     ).toEqual([null])
   })
 })
+
+describe('local with Tempo ID calls', () => {
+  test('switchChain moves a local session to a chain without an access key, and signIn signs one there', async () => {
+    const accounts = Accounts.create({
+      chain: 4217,
+      chains: [4217, 42431],
+      clientId: 'cli:mercator',
+      plugins: [local(), viem()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const { address } = await accounts.local.create()
+
+    await accounts.switchChain({ chainId: 42431 })
+    const session = await accounts.local.signIn()
+
+    expect(accounts.chain.get()).toBe(42431)
+    expect(session.address).toBe(address)
+    expect(session.accessKey!.chainId).toBe(42431)
+    expect(
+      session.accessKeys!.map((entry) => entry.chainId).sort((a, b) => a - b),
+    ).toEqual([4217, 42431])
+  })
+
+  test('account.get throws LocalSessionError, and sends no request', async () => {
+    const { accounts } = instance()
+    await accounts.local.create()
+
+    await expect(accounts.account.get()).rejects.toBeInstanceOf(
+      Accounts.LocalSessionError,
+    )
+  })
+
+  test("a viem transaction without the chain's access key rejects, and opens no Tempo ID sign-in", async () => {
+    const accounts = Accounts.create({
+      chain: 4217,
+      chains: [4217, 42431],
+      clientId: 'cli:mercator',
+      plugins: [local(), viem()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.local.create()
+    await accounts.switchChain({ chainId: 42431 })
+
+    const error = await accounts.viem.token
+      .transferSync({
+        amount: 1n,
+        to: '0x0000000000000000000000000000000000000001',
+        token: '0x20c0000000000000000000000000000000000000',
+      })
+      .catch((error: Error) => error)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).name).not.toBe('Accounts.RetryAccountError')
+    expect(await accounts.session.get()).toMatchObject({ kind: 'local' })
+  })
+})

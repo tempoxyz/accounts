@@ -303,9 +303,18 @@ export function local(options: local.Options = {}) {
                 return { auth, signature }
               })()
             : undefined
-          const others = (own?.accessKeys ?? []).filter(
-            (entry) =>
-              entry.chainId !== accessKey.chainId && !AccessKey.expired(entry),
+          // The live access keys of other chains, once each: a switch keeps the moved key in both
+          // `accessKey` and `accessKeys`.
+          const others = [own?.accessKey, ...(own?.accessKeys ?? [])].filter(
+            (entry, index, entries): entry is AccessKey.AccessKey =>
+              !!entry &&
+              entry.chainId !== accessKey.chainId &&
+              !AccessKey.expired(entry) &&
+              entries.findIndex(
+                (other) =>
+                  other?.keyAuthorization.keyId ===
+                  entry.keyAuthorization.keyId,
+              ) === index,
           )
           const session = Session.from({
             accessKey,
