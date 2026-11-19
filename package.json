@@ -50,9 +50,11 @@
   "sideEffects": [
     "./dist/*.native.js",
     "./dist/expo/index.js",
+    "./dist/lite/index.native.js",
     "./dist/plugins/index.native.js",
     "./src/*.native.ts",
     "./src/expo/index.ts",
+    "./src/lite/index.native.ts",
     "./src/plugins/index.native.ts"
   ],
   "exports": {
@@ -89,6 +91,20 @@
       "src": "./src/internal/index.ts",
       "types": "./dist/internal/index.d.ts",
       "default": "./dist/internal/index.js"
+    },
+    "./lite": {
+      "src": "./src/lite/index.ts",
+      "types": "./dist/lite/index.d.ts",
+      "react-native": {
+        "types": "./dist/lite/index.native.d.ts",
+        "default": "./dist/lite/index.native.js"
+      },
+      "default": "./dist/lite/index.js"
+    },
+    "./lite.native": {
+      "src": "./src/lite/index.native.ts",
+      "types": "./dist/lite/index.native.d.ts",
+      "default": "./dist/lite/index.native.js"
     },
     "./mpp": {
       "src": "./src/mpp/index.ts",

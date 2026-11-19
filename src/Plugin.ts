@@ -174,10 +174,15 @@ export declare namespace Challenge {
 /** What each of a plugin's functions receives from its instance. */
 export type Context = {
   /**
-   * Returns the access key of a sign-in that names none, or `undefined` for a sign-in without an
-   * access key.
+   * Returns the instance's `accessKey` for a sign-in that names none, or `undefined` for an
+   * instance without one, or for a sign-in without an access key.
    */
   accessKey: () => Permissions | undefined
+  /**
+   * Returns the access key of a sign-in of an instance without `accessKey` that names none: up to 5
+   * OUSD for a day. `undefined` for an instance with `accessKey`, also `false`.
+   */
+  defaultAccessKey: () => Permissions | undefined
   /** The instance's chain, which `switchChain` selects. */
   chain: {
     /**

@@ -64,13 +64,21 @@ export function plugin(): Mpp {
               (await get()).mcp(client).callTool(...args),
           }),
           session: (parameters) => {
-            // A manager created with a session pays for that session alone, as the loaded plugin's
-            // does. A sign-out before its first request ends it, also after a later sign-in.
-            const held = !overrides?.session && !!context.session.get()
+            // A manager created with a session pays with that session's access key alone, as the
+            // loaded plugin's does. A sign-out before its first request ends it, also after a later
+            // sign-in, and so does another access key, such as after `switchChain`.
+            const held = overrides?.session ? undefined : context.session.get()
+            const keyId = held?.accessKey?.keyAuthorization.keyId
             const started = ends
             return SessionManager.deferred(async () => {
               const payer = await get()
-              if (held && ends !== started) throw new Accounts.SignedOutError()
+              if (
+                held &&
+                (ends !== started ||
+                  context.session.get()?.accessKey?.keyAuthorization.keyId !==
+                    keyId)
+              )
+                throw new Accounts.SignedOutError()
               return payer.session(parameters)
             })
           },

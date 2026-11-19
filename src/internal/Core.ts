@@ -143,7 +143,10 @@ async function run(
         ? Promise.reject(foreign)
         : Actions.authorize(config, {
             accessKey:
-              derived ?? SignIn.accessKey(context, parameters.accessKey),
+              derived ??
+              SignIn.accessKey(context, parameters.accessKey, {
+                challenge: parameters.challenge !== undefined,
+              }),
             account: derived
               ? (parameters.account ?? renewing?.account)
               : parameters.account,

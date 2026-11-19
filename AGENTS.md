@@ -73,6 +73,7 @@
 - One module is one namespace of types, constants, functions, and errors, read as `Module.operation(...)`.
 - Name every module file in PascalCase, after its namespace, in `src/internal/` too: `Session.ts`, `Popup.ts`. Folders stay lowercase, such as `actions/` and `internal/viem/`.
 - The root entry exports only `AccessToken`, `Accounts`, `Challenge`, `LogoutToken`, `Permissions`, `Plugin`, `Session`, and `Store`, which sit at the top of `src/`. Every other module goes in `src/internal/`, and `accounts/internal` exports those that apps can use.
+- The root entry's `Accounts` is `src/internal/DefaultAccounts.ts`: `src/Accounts.ts` with a `create` that adds the `dialog`, `funding`, and `mpp` plugins. `accounts/lite` exports `src/Accounts.ts` itself. `src/Accounts.ts` never imports a default plugin, so the bundle of `accounts/lite` holds none.
 - Prefer stateless functions. Create an instance only for dependencies or lifecycle state, through `Module.create(options)` returning a plain object.
 - `Accounts.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons, except a lock on a resource of the whole device that no instance owns, such as the `expo` preset's lock on the device's secure store.
 - Inject platform capabilities (fetch, storage, clock, `open`) through options. Keep them out of pure modules.
@@ -356,7 +357,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 
 ## Repository Layout
 
-- `src/` is the published package `accounts`. Its entries are in `package.json` `exports`: `.`, `./cloudflare`, `./expo`, `./internal`, `./mpp`, `./plugins`, `./react`, `./test`, and `./wagmi`.
+- `src/` is the published package `accounts`. Its entries are in `package.json` `exports`: `.`, `./cloudflare`, `./expo`, `./internal`, `./lite`, `./mpp`, `./plugins`, `./react`, `./test`, and `./wagmi`.
 - `src/actions/` holds the actions that `Actions` exports. `src/plugins/` holds the plugins.
 - `src/stores/` holds each store that `Store` exports, such as `Store.memory`. `Store.ts` holds only the `Store` type and `Store.from`.
 - `src/internal/handlers/` holds each route handler, such as `Relay.ts`, the relay route. `src/internal/Handler.ts` holds the `Handler` type that each returns.

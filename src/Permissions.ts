@@ -123,9 +123,8 @@ export type Limit = {
  * What an app's access key may do. `Accounts.create` takes it, or a function that returns it, for
  * each sign-in, and each sign-in and `authorize` take it as `accessKey`, or `false` for no access
  * key. {@link resolve} turns it into the key authorization request at each call. Without `expiry`,
- * Tempo ID fills the
- * [default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry)
- * from the app's refresh token lifetime, at most one year. Without `limits`, the access key spends
+ * a sign-in and `authorize` request an access key that expires a day after the request. Without
+ * `limits`, the access key spends
  * any amount. Without `scopes`, {@link resolve} fills them from `limits`. An access key that never
  * expires (`expiry: false`), spends any amount (no `limits`), or makes any call (`scopes: 'any'`)
  * is an
@@ -149,8 +148,8 @@ export type Permissions<chainId extends number = number> = {
    * years away. For `false`, the request sends an expiry of 0. Tempo ID accepts it only for a headless sign-in of a
    * first-party app with the `tempo-id:sign` scope, and refuses it elsewhere with
    * [`invalid_expiry`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_expiry).
-   * Absent, the request sends no expiry, and Tempo ID fills it with the app's refresh token
-   * lifetime from the sign-in, at most one year. The default refresh token lifetime is 30 days.
+   * Absent, a sign-in and `authorize` request `'1d'`. {@link resolve} leaves it absent, and Tempo
+   * ID then fills it with the app's refresh token lifetime, at most one year.
    */
   expiry?: Duration | number | false | undefined
   /**

@@ -99,7 +99,9 @@ export function device(options: device.Options = {}) {
         // The request names the instance's chain, so the stored selection loads first. A failed read
         // keeps the chain.
         await context.chain.load().catch(() => undefined)
-        const accessKey = SignIn.accessKey(context, parameters.accessKey)
+        const accessKey = SignIn.accessKey(context, parameters.accessKey, {
+          challenge: parameters.challenge !== undefined,
+        })
         if (!accessKey && parameters.challenge === undefined)
           throw new AccessKeyRequiredError()
 

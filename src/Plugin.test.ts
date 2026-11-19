@@ -86,15 +86,35 @@ describe('Plugin', () => {
   })
 
   test("bundles the default funding plugin with the instance, without the dialog's modules", async () => {
-    const { chunks } = await bundle(
+    const {
+      loaded: { files: instance },
+    } = await bundle(
       `import { Accounts } from '${Path.join(source, 'index.ts')}'
       import { email } from '${Path.join(source, 'plugins/index.ts')}'
       export const tempoId = Accounts.create({ clientId: 'client_test', plugins: [email()] })`,
     )
-    const instance = chunks.find((files) => files.includes('Accounts.ts')) ?? []
 
     expect(instance).toContain('plugins/funding.ts')
     expect(modules.dialog.filter((file) => instance.includes(file))).toEqual([])
+  })
+
+  test('bundles no default plugin with the instance of `accounts/lite`', async () => {
+    const { chunks, loaded } = await bundle(
+      `import { Accounts } from '${Path.join(source, 'lite/index.ts')}'
+      import { email } from '${Path.join(source, 'plugins/index.ts')}'
+      export const tempoId = Accounts.create({ clientId: 'client_test', plugins: [email()] })`,
+    )
+    const files = chunks.flat()
+
+    expect(loaded.files).toContain('plugins/email.ts')
+    expect(
+      [
+        'internal/DefaultDialog.ts',
+        'internal/DefaultMpp.ts',
+        'mpp/index.ts',
+        'plugins/funding.ts',
+      ].filter((file) => files.includes(file)),
+    ).toEqual([])
   })
 
   test("loads `accounts.connections` and the router of `accounts.handler` from chunks of their own, so a page's instance bundles neither", async () => {

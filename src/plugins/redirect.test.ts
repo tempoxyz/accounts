@@ -41,9 +41,12 @@ describe('redirect', () => {
     expect(Fs.readdirSync(directory)).toMatchInlineSnapshot(`[]`)
   })
 
-  test('requests an access key of 5 OUSD for a day without `accessKey`, a day of expiry for one without `expiry`, and none for `accessKey: false`', async () => {
+  test('requests an access key of 5 OUSD for a day without `accessKey`, a day of expiry for one without `expiry`, and none for `accessKey: false` or a sign-in with a challenge', async () => {
     /** Returns the key authorization that a sign-in of an instance with `accessKey` requests. */
-    async function requested(accessKey: Accounts.create.Options['accessKey']) {
+    async function requested(
+      accessKey: Accounts.create.Options['accessKey'],
+      challenge?: string,
+    ) {
       const urls: string[] = []
       const accounts = Accounts.create({
         accessKey,
@@ -62,7 +65,7 @@ describe('redirect', () => {
         url: 'http://127.0.0.1:9',
       })
       const start = Math.floor(Date.now() / 1000)
-      await accounts.redirect.signIn()
+      await accounts.redirect.signIn(challenge ? { challenge } : {})
       const encoded = new URL(urls[0]!).searchParams.get('key_authorization')
       if (!encoded) return null
       const { expiry, limits } = JSON.parse(
@@ -73,6 +76,7 @@ describe('redirect', () => {
 
     const results = {
       absent: await requested(undefined),
+      challenge: await requested(undefined, 'Sign in to Example'),
       disabled: await requested(false),
       withoutExpiry: await requested({
         limits: [{ limit: '20', token: 'pathusd' }],
@@ -84,6 +88,7 @@ describe('redirect', () => {
     expect([86400, 86401]).toContain(results.withoutExpiry?.expiresIn)
     expect({
       absent: results.absent?.limits,
+      challenge: results.challenge,
       disabled: results.disabled,
       withoutExpiry: results.withoutExpiry?.limits,
     }).toMatchInlineSnapshot(`
@@ -94,6 +99,7 @@ describe('redirect', () => {
             "token": "0x20c0000000000000000000006a37DA5C996874BE",
           },
         ],
+        "challenge": null,
         "disabled": null,
         "withoutExpiry": [
           {

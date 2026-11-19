@@ -25,6 +25,7 @@ import { Account } from 'viem/tempo'
 import { Bytes, Hash, Json, Secp256k1 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import * as Accounts from './Accounts.js'
+import * as DefaultAccounts from './internal/DefaultAccounts.js'
 import * as StoreValue from './internal/StoreValue.js'
 import * as Plugin from './Plugin.js'
 import * as Session from './Session.js'
@@ -346,8 +347,40 @@ describe('create', () => {
     `)
   })
 
+  test('adds no plugin, and the root entry adds the `dialog`, `funding`, and `mpp` plugins that `plugins` lacks', () => {
+    const options = {
+      chain: 42431,
+      clientId: 'example',
+      plugins: [Plugin.from({ actions: () => ({}), id: 'test' })],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    } satisfies Accounts.create.Options
+    const names = ['dialog', 'fetch', 'funding', 'mpp', 'test']
+
+    const lite = Accounts.create(options)
+    const root = DefaultAccounts.create(options)
+
+    expect({
+      lite: names.filter((name) => name in lite),
+      root: names.filter((name) => name in root),
+    }).toMatchInlineSnapshot(`
+      {
+        "lite": [
+          "test",
+        ],
+        "root": [
+          "dialog",
+          "fetch",
+          "funding",
+          "mpp",
+          "test",
+        ],
+      }
+    `)
+  })
+
   test('holds `fetch` and `mpp` of the `mpp` plugin without one in `plugins`, which load the plugin at the first request', async () => {
-    const accounts = Accounts.create({
+    const accounts = DefaultAccounts.create({
       chain: 42431,
       clientId: 'example',
       store: Store.memory(),
@@ -382,8 +415,8 @@ describe('create', () => {
     `)
   })
 
-  test("ends a session manager of the default `mpp` plugin at a change of user before its first request, so it never pays for the next user's session", async () => {
-    const accounts = Accounts.create({
+  test('ends a session manager of the default `mpp` plugin at a change of user or of access key before its first request, so it never pays with another access key', async () => {
+    const accounts = DefaultAccounts.create({
       chain: 42431,
       clientId: 'example',
       plugins: [
@@ -420,18 +453,28 @@ describe('create', () => {
         user: { email: `${id}@example.com`, id },
       })
     }
-    await accounts.test.commit(await signedIn('user_1'))
-    const manager = accounts.mpp.session()
+    /** Returns the outcome of the first request of a manager created before a sign-in of `id`. */
+    const refused = async (id: string) => {
+      await accounts.test.commit(await signedIn('user_1'))
+      const manager = accounts.mpp.session()
 
-    await accounts.test.commit(await signedIn('user_2'))
-    const error = await manager
-      .fetch('http://127.0.0.1:9/stream')
-      .catch((error: Error) => error)
+      await accounts.test.commit(await signedIn(id))
+      return manager.fetch('http://127.0.0.1:9/stream').then(
+        () => 'sent',
+        (error: Error) => error.name,
+      )
+    }
 
-    // The manager sends no request with the access key of `user_2`.
-    expect(error instanceof Error ? error.name : error).toMatchInlineSnapshot(
-      `"Accounts.SignedOutError"`,
-    )
+    // Neither manager sends a request with the later access key.
+    expect({
+      otherKey: await refused('user_1'),
+      otherUser: await refused('user_2'),
+    }).toMatchInlineSnapshot(`
+      {
+        "otherKey": "Accounts.SignedOutError",
+        "otherUser": "Accounts.SignedOutError",
+      }
+    `)
   })
 
   test('keeps the client secret out of a log or JSON of the instance and its `config`', () => {
