@@ -102,7 +102,7 @@ describe('machines.sheet', () => {
     const { actor, effects } = start()
 
     actor.send(show('a'))
-    actor.send({ reason: 'unavailable', type: 'fallback' })
+    actor.send({ activated: false, reason: 'unavailable', type: 'fallback' })
     actor.send({ type: 'popup.open' })
     const early = actor.getSnapshot().value
     actor.send(challenge('a'))
@@ -119,6 +119,85 @@ describe('machines.sheet', () => {
       'reveal',
       'arm',
       ['popup', 'https://id.example/oauth2/authorize?q-a&challenge=m'],
+    ])
+  })
+
+  test.each([
+    {
+      activated: true,
+      deferred: false,
+      expected: { failed: 'popup' },
+      method: 'google',
+      name: "opens a method's popup at once for a gesture",
+    },
+    {
+      activated: false,
+      deferred: false,
+      expected: { failed: 'offered' },
+      method: 'google',
+      name: "offers a method's popup without a gesture",
+    },
+    {
+      activated: true,
+      deferred: false,
+      expected: { failed: 'offered' },
+      method: undefined,
+      name: 'offers a popup without a method for a gesture',
+    },
+    {
+      activated: true,
+      deferred: true,
+      expected: { failed: 'offered' },
+      method: 'google',
+      name: "offers a method's popup for a gesture before a deferred request's URL",
+    },
+  ] as const)("$name at a loaded page's embed.popup", (row) => {
+    const { actor, effects } = start()
+    const popupUrl = 'https://id.example/oauth2/authorize?client_id=a'
+
+    actor.send({ trusted: true, type: 'embed.loaded' })
+    actor.send(
+      row.deferred ? show('a') : { ...show('a'), deferred: false, popupUrl },
+    )
+    actor.send({ id: 'a', type: 'embed.ready' })
+    actor.send({
+      activated: row.activated,
+      id: 'a',
+      ...(row.method ? { method: row.method } : {}),
+      type: 'embed.popup',
+    })
+
+    expect(actor.getSnapshot().value).toEqual({
+      open: { dialog: 'revealed', frame: row.expected },
+    })
+    expect(effects.filter((entry) => Array.isArray(entry))).toEqual([
+      ['post', 'q-a', undefined],
+      ...(row.expected.failed === 'popup'
+        ? [['popup', `${popupUrl}&method=google`]]
+        : []),
+    ])
+  })
+
+  test("opens a method's offered popup with the method at Continue", () => {
+    const { actor, effects } = start()
+
+    actor.send({ trusted: true, type: 'embed.loaded' })
+    actor.send({
+      ...show('a'),
+      deferred: false,
+      popupUrl: 'https://id.example/oauth2/authorize?client_id=a',
+    })
+    actor.send({
+      activated: false,
+      id: 'a',
+      method: 'google',
+      type: 'embed.popup',
+    })
+    actor.send({ type: 'popup.open' })
+
+    expect(effects.at(-1)).toEqual([
+      'popup',
+      'https://id.example/oauth2/authorize?client_id=a&method=google',
     ])
   })
 

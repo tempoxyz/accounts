@@ -313,7 +313,13 @@ export function create(options: create.Options): create.ReturnType {
     // Only this frame's page, at Tempo ID's origin, sends the sign-in's messages.
     if (event.origin !== origin || event.source !== frame.contentWindow) return
     const message = parse(event.data)
-    if (message) actor.send(message)
+    if (!message) return
+    // A click in the frame also activates this page, so the popup can open within that gesture.
+    actor.send(
+      message.type === 'embed.popup'
+        ? { ...message, activated: Popup.activated() }
+        : message,
+    )
   }
 
   // The offer of a popup, which `offer` fills in place of the frame.
@@ -1137,7 +1143,12 @@ function parse(data: unknown): machines.sheet.Message | undefined {
     typeof value.height === 'number'
   )
     return { height: value.height, type: 'embed.resize' }
-  if (value.type === 'tempo-id:embed.popup') return { id, type: 'embed.popup' }
+  if (value.type === 'tempo-id:embed.popup')
+    return {
+      id,
+      ...(value.method === 'google' ? { method: 'google' as const } : {}),
+      type: 'embed.popup',
+    }
   // Every other message concerns a request, so it names one.
   if (id === undefined) return undefined
   if (value.type === 'tempo-id:embed.close') return { id, type: 'embed.close' }
@@ -1211,11 +1222,18 @@ export namespace machines {
       conceal: () => {},
       /** Posts the end of the current request to the page. `Sheet.ts` provides it. */
       end: () => {},
-      /** Raises `fallback` for `params.reason`. */
-      fail: raise((_, params: { reason: 'popup' | 'unavailable' }) => ({
+      /** Raises `fallback` for `params.reason`, with the method and the gesture of an `embed.popup`. */
+      fail: raise(({ event }, params: { reason: 'popup' | 'unavailable' }) => ({
+        activated: event.type === 'embed.popup' && event.activated,
+        method: event.type === 'embed.popup' ? event.method : undefined,
         reason: params.reason,
         type: 'fallback' as const,
       })),
+      /** Holds the method of the popup that `fallback` offers, which the popup starts. */
+      hold: assign(({ context, event }) => {
+        if (event.type !== 'fallback' || !context.current) return {}
+        return { current: { ...context.current, method: event.method } }
+      }),
       /** Replaces the frame with the offer of a popup, on `fallback`. `Sheet.ts` provides it. */
       offer: () => {},
       /** Runs the current request's `onCallback`, on `embed.callback` or `popup.callback`. `Sheet.ts` provides it. */
@@ -1248,6 +1266,7 @@ export namespace machines {
               onClose: event.onClose,
             },
             id: event.id,
+            method: undefined,
             popupUrl: event.popupUrl,
             timeout: event.timeout,
           },
@@ -1286,6 +1305,11 @@ export namespace machines {
     guards: {
       animate: ({ event }) =>
         (event.type === 'close' || event.type === 'hide') && event.animate,
+      // A method's popup opens within the click in the frame that selected the method.
+      automatic: ({ event }) =>
+        event.type === 'fallback' &&
+        event.method !== undefined &&
+        event.activated,
       current: ({ context }) => context.current !== undefined,
       failed: stateIn('#sheet.open.frame.failed'),
       // A popup without an ID concerns the frame, which takes no request.
@@ -1458,7 +1482,7 @@ export namespace machines {
                     invoke: {
                       id: 'popup',
                       input: ({ context }) => ({
-                        url: context.current?.popupUrl ?? '',
+                        url: machines.popupUrl(context),
                       }),
                       src: 'popup',
                     },
@@ -1476,10 +1500,17 @@ export namespace machines {
               loaded: {
                 on: {
                   'embed.loaded': { actions: 'trust' },
-                  fallback: {
-                    actions: 'offer',
-                    target: 'failed',
-                  },
+                  fallback: [
+                    {
+                      actions: ['hold', 'offer'],
+                      guard: and(['automatic', 'ready']),
+                      target: 'failed.popup',
+                    },
+                    {
+                      actions: ['hold', 'offer'],
+                      target: 'failed',
+                    },
+                  ],
                 },
               },
               loading: {
@@ -1560,6 +1591,8 @@ export namespace machines {
             handlers: Handlers
             /** The ID of the request, which the page names in each message about it. */
             id: string
+            /** The method that the fallback popup starts, as `method` of its URL. Absent for none. */
+            method: 'google' | undefined
             /**
              * The `/oauth2/authorize` URL of the request, which a fallback popup opens. Absent until
              * a deferred request's challenge arrives.
@@ -1605,6 +1638,11 @@ export namespace machines {
       | {
           /** The ID of the request that needs the popup. Absent when the frame cannot take any request. */
           id?: string | undefined
+          /**
+           * The sign-in method that the user selected in the frame, which the popup starts: `google`,
+           * which refuses frames. Absent if the popup shows the sign-in page.
+           */
+          method?: 'google' | undefined
           /** The sign-in needs a page that the frame cannot show. */
           type: 'embed.popup'
         }
@@ -1623,7 +1661,11 @@ export namespace machines {
 
     /** An event of the machine: a message from the page, a call of the dialog, or a DOM or popup event. */
     export type Event =
-      | Message
+      | Exclude<Message, { type: 'embed.popup' }>
+      | (Extract<Message, { type: 'embed.popup' }> & {
+          /** Whether the page holds a gesture, such as the click in the frame that sent the message. */
+          activated: boolean
+        })
       | {
           /** Whether the dialog is open and plays its exit, which reduced motion turns off. */
           animate: boolean
@@ -1635,6 +1677,10 @@ export namespace machines {
           type: 'dismiss'
         }
       | {
+          /** Whether the page holds a gesture, so a method's popup opens at once in place of the offer. */
+          activated: boolean
+          /** The method that the popup starts. Absent for none. */
+          method?: 'google' | undefined
           /** Why the dialog offers the popup: the sign-in needs it, or the frame cannot show the sign-in. */
           reason: 'popup' | 'unavailable'
           /** The frame gives way to the offer of a popup, for good. */
@@ -1709,6 +1755,15 @@ export namespace machines {
 
     /** A snapshot of {@link machine}. */
     export type Snapshot = ReturnType<Actor['getSnapshot']>
+  }
+
+  /** Returns the URL of the current request's fallback popup, with the method that it starts. */
+  export function popupUrl(context: machines.sheet.Context) {
+    const current = context.current
+    if (!current?.popupUrl || !current.method) return current?.popupUrl ?? ''
+    const url = new URL(current.popupUrl)
+    url.searchParams.set('method', current.method)
+    return url.href
   }
 
   /** Returns whether the dialog offers a popup in place of its frame, which then takes no request. */
