@@ -1,7 +1,7 @@
 /**
  * Returns a redirect's callback from the root of the site to the path that started the sign-in.
  * Without a registration, the root of an origin is its only redirect URI, and the demos of the
- * "Redirect" and "Redirect (Backend)" guides are on other pages.
+ * "Redirect" and "Backend" guides are on other pages.
  * @module
  */
 

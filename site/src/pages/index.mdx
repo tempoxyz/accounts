@@ -545,7 +545,7 @@ Render the button once the user signs in.
 ::::
 
 </Tab>
-<Tab title="Redirect (Backend)">
+<Tab title="Backend">
 
 The server runs the sign-in through a redirect to Tempo ID, and keeps each session with its tokens and access key. The browser holds only a session ID, in an HTTP-only cookie, so the page needs no instance. The [`backend`](https://github.com/tempoxyz/accounts/tree/main/examples/backend) example runs these steps in a Hono server.
 
@@ -788,7 +788,7 @@ Each example is a small app that installs as it is.
     description="Sign-in through a redirect that the server runs, with the session on the server."
     icon="server"
     name="backend"
-    title="Redirect (Backend)"
+    title="Backend"
   />
   <ExampleCard
     description="Sign-in through a wagmi connector, with wagmi's hooks."

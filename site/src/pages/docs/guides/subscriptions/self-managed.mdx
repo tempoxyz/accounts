@@ -44,7 +44,7 @@ bun add accounts hono react react-dom viem
 
 <SourceLink name="Limit.period" path="src/Permissions.ts">`period`</SourceLink> takes a duration or whole seconds, and the scope makes the merchant the only recipient. `APP_URL` holds the app's origin.
 
-As in [Redirect (Backend)](/docs/guides/backend), the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin keeps each session in a store on the server, since a session holds an access key's private key.
+As in [Backend](/docs/guides/backend), the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin keeps each session in a store on the server, since a session holds an access key's private key.
 
 ```ts [tempo.config.ts]
 import { Accounts, Store } from 'accounts'
@@ -498,7 +498,7 @@ export const accounts = Accounts.create({
   <PageCard
     description="Hold the session of each user on a server."
     icon="server"
-    title="Redirect (Backend)"
+    title="Backend"
     to="/docs/guides/backend"
   />
 </Cards>

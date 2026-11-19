@@ -80,19 +80,14 @@ export default defineConfig({
           text: 'Dialog',
         }),
         item({
-          icon: 'log-in',
-          link: '/docs/guides/redirect',
-          text: 'Redirect (Web)',
-        }),
-        item({
           icon: 'smartphone',
           link: '/docs/guides/mobile',
-          text: 'Redirect (Mobile)',
+          text: 'Mobile',
         }),
         item({
           icon: 'server',
           link: '/docs/guides/backend',
-          text: 'Redirect (Backend)',
+          text: 'Backend',
         }),
         item({
           icon: 'ethereum',

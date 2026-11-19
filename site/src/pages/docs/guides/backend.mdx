@@ -3,7 +3,7 @@ import { Demo } from '../../../components/Demo.tsx'
 import { PageCard } from '../../../components/PageCard.tsx'
 import { SourceLink } from '../../../components/SourceLink.tsx'
 
-# Redirect (Backend) [The server of an app signs a user in with a redirect, and keeps the session.]
+# Backend [The server of an app signs a user in with a redirect, and keeps the session.]
 
 ## Overview
 
@@ -63,7 +63,7 @@ export const accounts = Accounts.create({
 <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> keeps sessions in the process, so a restart loses them. In production, use a store that each replica shares, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>.
 :::
 
-To send transactions with the access key of each session, add <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> and the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, as the Redirect (Backend) tab of [Getting started](/#walkthrough) shows. For a local Tempo ID or another chain, [Use another Tempo ID or chain](/docs/guides/viem#use-another-tempo-id-or-chain) sets the instance.
+To send transactions with the access key of each session, add <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> and the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, as the Backend tab of [Getting started](/#walkthrough) shows. For a local Tempo ID or another chain, [Use another Tempo ID or chain](/docs/guides/viem#use-another-tempo-id-or-chain) sets the instance.
 
 | Store                                                                                           | Sessions live in                                                                   |
 | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |

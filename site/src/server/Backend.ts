@@ -1,5 +1,5 @@
 /**
- * Serves the routes of the demo of "Redirect (Backend)", under `/api/backend`: the sign-in routes of
+ * Serves the routes of the demo of "Backend", under `/api/backend`: the sign-in routes of
  * the `backend` plugin, and a route that reads the user of a request's session. The session stays
  * in the store, and the page holds only the session cookie.
  * @module
