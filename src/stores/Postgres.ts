@@ -13,7 +13,9 @@ import type * as Store from '../Store.js'
  * transactions, though only one of them creates it.
  * Each value is stored as ox's `Json`, so a `bigint` survives. A write with an expiry deletes the
  * expired rows in a query beside it, and a read skips them. `takeItem` reads and deletes in one
- * `delete … returning`, so replicas that share the table take each value once.
+ * `delete … returning`, so replicas that share the table take each value once. `update` writes only
+ * if the row still holds the value it read, so replicas that share the table write the logout
+ * index of a `sid` without losing each other's sessions, in a read and a write.
  *
  * `client` is any client with `query(text, values)`, such as a `pg` pool.
  *
@@ -130,6 +132,72 @@ export function create(
         client.query(upsert, values),
       ])
       if (write.status === 'rejected') throw write.reason
+    },
+    async update(key, fn) {
+      await ready()
+      // The text of the row that the previous attempt read, or `null` for no row.
+      let previous: string | null | undefined
+      // The attempts in a row whose write matched no row while the read value stayed the same.
+      let unchanged = 0
+      while (true) {
+        const now = Date.now()
+        const { rows } = await client.query(
+          `select value from ${table} where key = $1 and (expires_at is null or expires_at > $2)`,
+          [key, now],
+        )
+        const [row] = rows as readonly { value: string }[]
+        // A write that matched no row while the read value stayed the same is a refusal, such as
+        // by a row-level security policy, or a peer that wrote the key and then restored it. A
+        // peer rarely does so three times in a row, so the third such attempt rejects.
+        unchanged =
+          previous !== undefined && previous === (row?.value ?? null)
+            ? unchanged + 1
+            : 0
+        if (unchanged >= 3)
+          throw new Error(
+            'Refused write: the conditional write of the store matched no row. Grant the role update and delete on the table.',
+          )
+        const { expiresAt, result, value } = fn(
+          row ? StoreValue.parse(row.value) : undefined,
+        )
+        // Serialization throws before the write starts, so no query is left without a handler. A
+        // value without a JSON form, such as a function, rejects, and never deletes the row.
+        const next =
+          value === undefined
+            ? undefined
+            : (StoreValue.stringify(value) as string | undefined)
+        if (value !== undefined && next === undefined)
+          throw new TypeError(
+            'Unserializable value: the value has no JSON form. Write a value that JSON holds.',
+          )
+        const expires = expiresAt === undefined ? null : Math.ceil(expiresAt)
+        // Each write lands only if the row still holds the text that `fn` read, in one
+        // statement, so of concurrent updates that read one value only one writes, and each
+        // other reads again. A row that expired counts as absent, also one that expired after
+        // the read, so the write reads the clock again.
+        const written = await (async () => {
+          const now = Date.now()
+          if (row && next === undefined)
+            return client.query(
+              `delete from ${table} where key = $1 and value = $2 and (expires_at is null or expires_at > $3) returning key`,
+              [key, row.value, now],
+            )
+          if (row)
+            return client.query(
+              `update ${table} set value = $2, expires_at = $3 where key = $1 and value = $4 and (expires_at is null or expires_at > $5) returning key`,
+              [key, next, expires, row.value, now],
+            )
+          if (next === undefined)
+            // An absent entry that stays absent is already written.
+            return { rows: [key] }
+          return client.query(
+            `insert into ${table} (key, value, expires_at) values ($1, $2, $3) on conflict (key) do update set value = excluded.value, expires_at = excluded.expires_at where ${table}.expires_at <= $4 returning key`,
+            [key, next, expires, now],
+          )
+        })()
+        if (written.rows.length > 0) return result
+        previous = row?.value ?? null
+      }
     },
     async takeItem(key) {
       await ready()

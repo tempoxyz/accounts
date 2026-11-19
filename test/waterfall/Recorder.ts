@@ -337,8 +337,8 @@ export function popup<
 }
 
 /**
- * Returns `create`, which returns a store, with each `getItem`, `removeItem`, `setItem`, and
- * `takeItem` of the store recorded as `store.<name>.<method>`.
+ * Returns `create`, which returns a store, with each `getItem`, `removeItem`, `setItem`,
+ * `takeItem`, and `update` of the store recorded as `store.<name>.<method>`.
  */
 export function store<fn extends (...args: never[]) => unknown>(
   name: string,
@@ -356,7 +356,8 @@ export function store<fn extends (...args: never[]) => unknown>(
           (property !== 'getItem' &&
             property !== 'removeItem' &&
             property !== 'setItem' &&
-            property !== 'takeItem')
+            property !== 'takeItem' &&
+            property !== 'update')
         )
           return member
         return (...args: unknown[]) => {

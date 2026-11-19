@@ -24,6 +24,39 @@ describe('BackendSessions.create', () => {
     ).toMatchInlineSnapshot(`true`)
   })
 
+  test('writes the index through `update` of a store whose `update` takes its own `lock`', async () => {
+    const memory = Store.memory()
+    // A store builds `update` on its own `lock`, which does not reenter.
+    const store = Store.from({
+      ...memory,
+      async update(key, fn) {
+        return memory.lock!(key, async () => {
+          const { expiresAt, result, value } = fn(await memory.getItem(key))
+          if (value === undefined) await memory.removeItem(key)
+          else
+            await memory.setItem(
+              key,
+              value,
+              expiresAt === undefined ? {} : { expiresAt },
+            )
+          return result
+        })
+      },
+    })
+    const sessions = replica(store)
+
+    const linked = await Promise.race([
+      sessions.link({ expiresAt: Date.now() + 3_600_000, id: 'a', sid: 'sid' }),
+      new Promise((resolve) => setTimeout(() => resolve('pending'), 1_000)),
+    ])
+
+    expect(linked).toMatchInlineSnapshot(`
+      {
+        "closed": false,
+      }
+    `)
+  })
+
   test('keeps the close of a `sid` once another replica links a session of it at the same time', async () => {
     const store = Store.memory()
     const [a, b] = [replica(remote(store)), replica(remote(store))]
