@@ -33,10 +33,10 @@ import type * as Session from '../Session.js'
  * `everywhere`, since the logout sends the app's cookies, not the browser's. The plugin then sets a
  * flag at the start of `signOut`, in the instance's `store`. The next `signIn` requests
  * `prompt=login`, so Tempo ID shows its sign-in page before it returns to the app. A sign-in
- * without a sign-out before it reuses the browser's session. Each sign-in sends the saved session's
- * email as `login_hint`, so once the browser's Tempo ID session expires, the sign-in page holds the
- * user's address. A refused refresh ends the session, so the app passes the email it kept as
- * `loginHint`.
+ * without a sign-out before it reuses the browser's session. Each sign-in sends the email of the
+ * last signed-in user as `login_hint`, so once the browser's Tempo ID session expires, the sign-in
+ * page holds the user's address. The `store` keeps the email after the session expires, and
+ * `signOut` removes it. A sign-in's `loginHint` comes before it.
  *
  * Without `open`, the plugin's `restore` hook completes the redirect at the first `session.get()`
  * of a page load. It checks the callback's state, redeems its code once, and removes `code`, `iss`,
@@ -106,6 +106,24 @@ export function redirect(options: redirect.Options = {}) {
   // The number of sign-outs of each instance, so a sign-in removes the flag only when no sign-out
   // started since it read the flag.
   const signOuts = new WeakMap<Plugin.Context['config'], number>()
+  // The email that each instance wrote last, so a refresh of the same user's session writes nothing.
+  const hinted = new WeakMap<Plugin.Context['config'], string>()
+  // The count of each instance's sign-outs in both modes, and its pending write of the email.
+  const hintOuts = new WeakMap<Plugin.Context['config'], number>()
+  const hintWrites = new WeakMap<Plugin.Context['config'], Promise<void>>()
+  // The instances whose last removal of the email failed. They send no stored email until a write.
+  const unhinted = new WeakSet<Plugin.Context['config']>()
+  // Removes the stored email. A store that throws or rejects marks the instance as unhinted.
+  const unhint = async (context: Plugin.Context) => {
+    hinted.delete(context.config)
+    try {
+      await DefaultStore.get(context.config.store)?.removeItem(
+        hintKey(context.config),
+      )
+    } catch {
+      unhinted.add(context.config)
+    }
+  }
 
   return Plugin.from({
     actions: (context) => {
@@ -247,16 +265,29 @@ export function redirect(options: redirect.Options = {}) {
           const kept = loading.catch(() => undefined)
           const change = open && context.session.change({ loading: kept })
           // The saved session names the user, so once the browser's Tempo ID session expires, the
-          // sign-in page holds their address. After a restart, only the store holds it. A failed read
-          // only drops the hint. A session that a refused refresh ended names no one, so the app's
-          // `loginHint` comes first.
-          const hint = async () =>
-            parameters.loginHint ||
-            (
-              context.session.get() ??
-              context.session.renewing() ??
-              (await context.session.load().catch(() => undefined))
-            )?.user.email
+          // sign-in page holds their address. After a restart, only the store holds it. A refresh
+          // that the server refuses erases the session, so the stored email of the last sign-in
+          // follows it. A failed read only drops the hint. The app's `loginHint` comes first.
+          // The store reads both in one round.
+          const hint = async () => {
+            if (parameters.loginHint) return parameters.loginHint
+            const current = context.session.get() ?? context.session.renewing()
+            if (current) return current.user.email
+            const [session, email] = await Promise.all([
+              context.session.load().catch(() => undefined),
+              // A pending write of the email settles first. Without one, the read joins the round.
+              (async () => {
+                const pending = hintWrites.get(context.config)
+                if (pending) await pending
+                return DefaultStore.get(context.config.store)?.getItem(
+                  hintKey(context.config),
+                )
+              })().catch(() => undefined),
+            ])
+            if (session) return session.user.email
+            if (unhinted.has(context.config)) return undefined
+            return typeof email === 'string' ? email : undefined
+          }
           /** Returns the request, on the selected chain. */
           const request = () => ({
             accessKey: SignIn.accessKey(context, parameters.accessKey),
@@ -368,19 +399,65 @@ export function redirect(options: redirect.Options = {}) {
       }
     },
     hooks: {
+      afterSignIn(context, session) {
+        // A hook can run during or after a sign-out, such as for a refresh that commits while the
+        // sign-out ends the session, or behind an earlier plugin's hook. The write waits until every
+        // running sign-out settles, and runs only if no sign-out started since the hook and the
+        // session still holds the user. It runs beside the sign-in, since a sign-out can wait for
+        // the sign-in's change. A failed write only drops the hint of a later sign-in.
+        const { email } = session.user
+        const started = hintOuts.get(context.config) ?? 0
+        const kept = () =>
+          (hintOuts.get(context.config) ?? 0) === started &&
+          context.session.get()?.user.email === email
+        const store = DefaultStore.get(context.config.store)
+        const write = (async () => {
+          // The memo is read after the earlier writes settle, since one of them can replace or
+          // remove the email that it names.
+          await hintWrites.get(context.config)
+          await context.session.ended()
+          if (!kept() || hinted.get(context.config) === email) return
+          // The memo follows a write that succeeds, so a failed write retries at the next sign-in.
+          await store?.setItem(hintKey(context.config), email)
+          if (kept()) {
+            hinted.set(context.config, email)
+            unhinted.delete(context.config)
+            return
+          }
+          // A sign-out started during the write. A failed removal marks the instance as unhinted.
+          await unhint(context)
+        })().catch(() => undefined)
+        hintWrites.set(context.config, write)
+      },
+      afterSignOut(context) {
+        // Another tab's sign-out, also from an instance without this plugin, removes the email too.
+        // A sign-in that commits before a delayed hook runs keeps its email.
+        if (context.session.get()) return
+        return unhint(context)
+      },
       async beforeSignOut(context) {
+        // A sign-out removes the stored email, so the next sign-in page holds no address. A failed
+        // removal never fails the sign-out, and the instance then sends no stored email.
+        hintOuts.set(context.config, (hintOuts.get(context.config) ?? 0) + 1)
+        const removed = unhint(context)
         // A system browser's Tempo ID session outlives the app's sign-out, also one with
         // `everywhere`, since its logout sends the app's cookies, not the browser's. The flag is set
         // before the sign-out starts, so a sign-in that overlaps the sign-out, or follows a sign-out
         // that rejects, sends `prompt=login`. A failed write of the stored flag never fails the
         // sign-out.
-        if (!open) return
+        if (!open) return removed
         const flag = Hex.fromBytes(Bytes.random(16))
         signingOut.set(context.config, flag)
         signOuts.set(context.config, (signOuts.get(context.config) ?? 0) + 1)
-        await DefaultStore.get(context.config.store)
-          ?.setItem(signedOutKey(context.config), flag)
-          .catch(() => undefined)
+        await Promise.all([
+          removed,
+          (async () => {
+            await DefaultStore.get(context.config.store)?.setItem(
+              signedOutKey(context.config),
+              flag,
+            )
+          })().catch(() => undefined),
+        ])
       },
       restore(context) {
         // Only a page in a window holds a redirect's callback.
@@ -489,6 +566,14 @@ export declare namespace redirect {
       resource?: Accounts.Config['resource']
     }
   }
+}
+
+/**
+ * Returns the store's key of the email of the app's last signed-in user. The key names the
+ * deployment and the app, as the session's key does.
+ */
+function hintKey(config: Plugin.Context['config']) {
+  return `tempo-id:login-hint:${JSON.stringify([new URL(config.url).origin, config.clientId])}`
 }
 
 /**
