@@ -67,6 +67,8 @@ export function email(options: email.Options = {}) {
          *     refuse the request.
          *   - `backend_sign_in_not_permitted`: On a backend, the app has no client secret or keys,
          *     or does not hold backend sign-in.
+         * @throws {Accounts.RequestError} With `rejected` and status 400, when `clientId` names a
+         *   third-party app, such as an origin. The call sends no request.
          * @throws {Accounts.RequestError} With `server_error` and `status` 0, when the request
          *   receives no response, such as offline.
          *
@@ -106,6 +108,8 @@ export function email(options: email.Options = {}) {
          * [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md) describes each
          * `reason`.
          *
+         * @throws {Accounts.RequestError} With `rejected` and status 400, when `clientId` names a
+         *   third-party app, such as an origin. The call sends no request.
          * @throws {Accounts.RequestError} With `invalid_field`, the field `code`, and status 0,
          *   when `code` holds other than 6 digits. The call sends no request, and prompts for no
          *   passkey, so the code stays valid.
