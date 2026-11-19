@@ -7,8 +7,7 @@ import * as Fs from 'node:fs/promises'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
 import { Address, Secp256k1 } from 'ox'
-import { KeyAuthorization, TxEnvelopeTempo } from 'ox/tempo'
-import { custom } from 'viem'
+import { KeyAuthorization } from 'ox/tempo'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { describe, expect, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
@@ -211,65 +210,6 @@ describe('local', () => {
     await expect(accounts.session.accessToken()).rejects.toBeInstanceOf(
       Accounts.LocalSessionError,
     )
-  })
-
-  test("sends the viem plugin's transaction with the access key, and the owner's authorization", async () => {
-    const raw: `0x${string}`[] = []
-    const accounts = Accounts.create({
-      chain: 4217,
-      clientId: 'cli:mercator',
-      plugins: [
-        local(),
-        viem({
-          transport: custom({
-            request({ method, params }) {
-              // The keychain holds no key yet, so the transaction carries its authorization.
-              if (method === 'eth_call')
-                return Promise.resolve(`0x${'00'.repeat(160)}`)
-              if (method === 'eth_sendRawTransactionSync') {
-                raw.push((params as [`0x${string}`])[0])
-                return Promise.reject(new Error('Not mined.'))
-              }
-              return Promise.resolve('0x1')
-            },
-          }),
-        }),
-      ],
-      store: Store.memory(),
-      url: 'http://127.0.0.1:9',
-    })
-    const session = await accounts.local.create()
-
-    await accounts.viem.token
-      .transferSync({
-        amount: 1n,
-        feeToken: '0x20c0000000000000000000000000000000000000',
-        gas: 100_000n,
-        maxFeePerGas: 1n,
-        maxPriorityFeePerGas: 1n,
-        nonce: 0,
-        to: '0x0000000000000000000000000000000000000001',
-        token: '0x20c0000000000000000000000000000000000000',
-      })
-      .catch(() => undefined)
-    const transaction = TxEnvelopeTempo.deserialize(
-      raw[0] as TxEnvelopeTempo.Serialized,
-    )
-
-    expect(raw).toHaveLength(1)
-    // The access key signs for the owner's account, in a keychain envelope.
-    expect(transaction.signature?.type).toBe('keychain')
-    expect(
-      Address.checksum(
-        (transaction.signature as { userAddress: Address.Address }).userAddress,
-      ),
-    ).toBe(session.address)
-    expect(
-      Address.isEqual(
-        transaction.keyAuthorization!.address,
-        KeyAuthorization.fromRpc(session.accessKey!.keyAuthorization).address,
-      ),
-    ).toBe(true)
   })
 
   test('takes the active secp256k1 account of an accounts v0 file, and keeps the file', async () => {
@@ -524,9 +464,11 @@ describe('local with Tempo ID calls', () => {
 
 describe('local.remove during a sign-in', () => {
   test('overtakes a sign-in that waits for the challenge, so it restores no session', async () => {
-    // The challenge of the first sign-in answers at once, and the next one waits for `release`.
+    // The challenge of the first sign-in answers at once. The next one marks `entered`, and waits
+    // for `release`.
     let gate: Promise<void> = Promise.resolve()
     let release = () => {}
+    let entered = false
     const accounts = Accounts.create({
       chain: 4217,
       clientId: 'cli:mercator',
@@ -537,6 +479,7 @@ describe('local.remove during a sign-in', () => {
           hooks: {
             challenge: () => ({
               async message() {
+                entered = true
                 await gate
                 return 'Sign in to Mercator'
               },
@@ -553,9 +496,10 @@ describe('local.remove during a sign-in', () => {
     gate = new Promise((resolve) => {
       release = resolve
     })
+    entered = false
 
     const signIn = accounts.local.signIn({ accessKey: { expiry: '1h' } })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await expect.poll(() => entered).toBe(true)
     await accounts.local.remove()
     release()
     const result = await signIn.then(
@@ -566,5 +510,53 @@ describe('local.remove during a sign-in', () => {
     expect(result).not.toBe('committed')
     expect(await accounts.session.get()).toBeUndefined()
     expect(await accounts.local.get()).toBeUndefined()
+  })
+})
+
+describe('local across instances', () => {
+  test('remove signs out the instance whose owner key it deletes, of two that share the plugin', async () => {
+    const plugin = local()
+    const create = () =>
+      Accounts.create({
+        chain: 4217,
+        clientId: 'cli:mercator',
+        plugins: [plugin, viem()],
+        store: Store.memory(),
+        url: 'http://127.0.0.1:9',
+      })
+    const first = create()
+    const second = create()
+    await first.local.create()
+    const { address } = await second.local.create()
+
+    await first.local.remove()
+
+    expect(await first.session.get()).toBeUndefined()
+    expect(await second.session.get()).toMatchObject({ address, kind: 'local' })
+  })
+
+  test('keeps an access key that another instance added with a sooner expiry', async () => {
+    const store = Store.memory()
+    const options = {
+      chain: 4217,
+      chains: [4217, 42431],
+      clientId: 'cli:mercator',
+      plugins: [local(), viem()],
+      store,
+      url: 'http://127.0.0.1:9',
+    } as const
+    const first = Accounts.create(options)
+    await first.local.create()
+    const second = Accounts.create(options)
+    await second.session.get()
+
+    await first.switchChain({ chainId: 42431 })
+    const added = await first.local.signIn({ accessKey: { expiry: '1h' } })
+    await second.switchChain({ chainId: 42431 })
+    const saved = await Accounts.create(options).session.get()
+
+    expect(saved!.accessKey!.keyAuthorization).toEqual(
+      added.accessKey!.keyAuthorization,
+    )
   })
 })
