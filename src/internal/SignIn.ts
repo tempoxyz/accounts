@@ -8,6 +8,7 @@ import { RequestError } from '../Accounts.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
+import * as AccessKey from './AccessKey.js'
 import type * as TempoAccount from './TempoAccount.js'
 import type { Tokens } from './Tokens.js'
 import type { User } from './User.js'
@@ -42,7 +43,8 @@ export type External = Permissions & {
 }
 
 /**
- * Returns the access key of a sign-in, or `undefined` for a sign-in without an access key. Throws a
+ * Returns the access key of a sign-in, or `undefined` for a sign-in without an access key. An
+ * access key without `expiry` expires `AccessKey.defaultExpiry` after the sign-in. Throws a
  * `TypeError` on a page whose instance's `store` has `json`, for an access key that the sign-in
  * generates, before any request.
  */
@@ -51,10 +53,14 @@ export function accessKey(
   value: AccessKeyOption_external,
 ): Permissions | External | undefined {
   const resolved = (() => {
-    if (value === false) return undefined
-    if (typeof value === 'function') return value()
-    if (value) return value
-    return context.accessKey()
+    const given = (() => {
+      if (value === false) return undefined
+      if (typeof value === 'function') return value()
+      if (value) return value
+      return context.accessKey()
+    })()
+    if (!given || given.expiry !== undefined) return given
+    return { ...given, expiry: AccessKey.defaultExpiry }
   })()
   // A page generates a non-extractable access key, which the save of the session would refuse after
   // Tempo ID spent the sign-in's code. An access key of `account` or `publicKey` holds no such key.

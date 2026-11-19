@@ -301,7 +301,7 @@ export const accounts = Accounts.create({
 
 ### Pay without an access key
 
-An instance without the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin sends each payment on the payment page, and the user approves each one there. Without <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink>, the sign-in requests no access key. The payment page of a third-party app then pays from the account selected for the app, else the user's oldest.
+An instance without the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin sends each payment on the payment page, and the user approves each one there. With <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> set to `false`, the sign-in requests no access key. The payment page of a third-party app then pays from the account selected for the app, else the user's oldest.
 
 With the plugin, the payment page also sends `accounts.token.transfer` and `transferSync` on a page, for a session whose access keys sign no transaction on the chain, and that no sign-in renews. Only the amount, the memo, the recipient, and the token apply, and the action returns what Viem's own action returns.
 
@@ -309,8 +309,9 @@ With the plugin, the payment page also sends `accounts.token.transfer` and `tran
 import { Accounts } from 'accounts'
 import { react } from 'accounts/react'
 
-// No `accessKey` and no `viem` plugin, so the payment page sends each payment.
+// No access key and no `viem` plugin, so the payment page sends each payment.
 export const accounts = Accounts.create({
+  accessKey: false,
   chain: 'testnet',
   plugins: [react()],
 })

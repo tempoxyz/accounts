@@ -346,6 +346,42 @@ describe('create', () => {
     `)
   })
 
+  test('holds `fetch` and `mpp` of the `mpp` plugin without one in `plugins`, which load the plugin at the first request', async () => {
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'example',
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const errors = await Promise.all([
+      accounts.fetch('http://127.0.0.1:9/fortune').then(
+        () => 'sent',
+        (error: Error) => error.name,
+      ),
+      accounts
+        .mpp({ maxAmount: '1' })
+        .fetch('http://127.0.0.1:9/fortune')
+        .then(
+          () => 'sent',
+          (error: Error) => error.name,
+        ),
+    ])
+
+    // The loaded plugin reads the stored session before it sends a request.
+    expect(errors).toMatchInlineSnapshot(`
+      [
+        "Accounts.SignedOutError",
+        "Accounts.SignedOutError",
+      ]
+    `)
+    expect(accounts.mpp.session().state).toMatchInlineSnapshot(`
+      {
+        "status": "idle",
+      }
+    `)
+  })
+
   test('keeps the client secret out of a log or JSON of the instance and its `config`', () => {
     const accounts = Accounts.create({
       chain: 42431,

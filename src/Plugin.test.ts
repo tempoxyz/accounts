@@ -39,7 +39,9 @@ describe('Plugin', () => {
   test.each(Object.keys(modules) as (keyof typeof modules)[])(
     "bundles none of another plugin's modules for an app of %s",
     async (name) => {
-      const { entry: included } = await bundle(
+      const {
+        loaded: { files: included },
+      } = await bundle(
         `import { Accounts, Store } from '${Path.join(source, 'index.ts')}'
         import { ${name} } from '${Path.join(source, 'plugins', 'index.ts')}'
         import { tempo } from 'viem/tempo/chains'
@@ -66,12 +68,21 @@ describe('Plugin', () => {
     expect(imports).not.toContain('react')
   })
 
-  test('imports no mppx from the entry of the plugins, whose mpp plugin has an entry of its own', async () => {
-    const { imports } = await bundle(
+  test('imports no mppx from the entry of the plugins, or from an instance before its first payment', async () => {
+    const { loaded } = await bundle(
       `export * from '${Path.join(source, 'plugins/index.ts')}'`,
     )
+    const { lazy, loaded: instance } = await bundle(
+      `import { Accounts } from '${Path.join(source, 'index.ts')}'
+      export const tempoId = Accounts.create({ clientId: 'client_test' })`,
+    )
 
-    expect(imports.filter((name) => name.startsWith('mppx'))).toEqual([])
+    expect(loaded.imports.filter((name) => name.startsWith('mppx'))).toEqual([])
+    expect(instance.imports.filter((name) => name.startsWith('mppx'))).toEqual(
+      [],
+    )
+    expect(instance.files).not.toContain('mpp/index.ts')
+    expect(lazy).toContain('mpp/index.ts')
   })
 
   test("bundles the default funding plugin with the instance, without the dialog's modules", async () => {

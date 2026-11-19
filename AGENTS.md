@@ -368,7 +368,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 ## Tooling
 
 - Pin every dependency in the `pnpm-workspace.yaml` catalog, and reference it as `catalog:`.
-- Optional platform libraries (React, wagmi, Expo, mppx) are optional peers.
+- Optional platform libraries (React, wagmi, Expo) are optional peers. `mppx` is a peer, since every instance holds the `mpp` plugin.
 - zile builds the package. `postinstall` runs `zile dev`.
 - Each push to `main` publishes `<breaking>.<commit time>.<n>` under `latest`, such as `1.20261118194700.0`, so `accounts` installs the current commit of `main`, without waiting on CI, with a GitHub release that lists the squash commit titles since the last one. `.github/workflows/release.yml` describes the release, and `scripts/release.ts` picks the version.
 - The pull request title is the changelog entry. A breaking title (`feat!:`, or `BREAKING CHANGE:` in the commit body) raises `<breaking>`. Describe a breaking change in the pull request body with each change in a `diff` fence: the old usage as removed lines, and the new usage as added lines.

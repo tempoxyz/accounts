@@ -164,9 +164,6 @@
     "expo-web-browser": {
       "optional": true
     },
-    "mppx": {
-      "optional": true
-    },
     "react": {
       "optional": true
     },

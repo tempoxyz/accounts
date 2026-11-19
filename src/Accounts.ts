@@ -32,6 +32,7 @@ import * as ClientId from './internal/ClientId.js'
 import * as CliStore from './internal/CliStore.js'
 import * as Core from './internal/Core.js'
 import * as DefaultDialog from './internal/DefaultDialog.js'
+import * as DefaultMpp from './internal/DefaultMpp.js'
 import * as DefaultStore from './internal/DefaultStore.js'
 import * as Hint from './internal/Hint.js'
 import * as InstanceChain from './internal/InstanceChain.js'
@@ -563,9 +564,10 @@ export type Config = {
 
 /**
  * A Tempo ID instance: its configuration, its session, and the namespace of each plugin. An instance
- * without a sign-in plugin holds the `dialog` plugin, and an instance without the `funding` plugin
- * holds it with its default options. Each plugin's namespace sits beside these members, under the
- * plugin's `id`. No plugin may take the name of a member, or `Accounts.create` throws.
+ * without a sign-in plugin holds the `dialog` plugin, and an instance without the `funding` or the
+ * `mpp` plugin holds it with its default options. Each plugin's namespace sits beside these
+ * members, under the plugin's `id`. No plugin may take the name of a member, or `Accounts.create`
+ * throws.
  *
  * The members and the plugins' actions throw {@link RequestError} for each refusal of Tempo ID, and
  * the package's other error classes, such as {@link SupersededError} for a sign-in that another
@@ -574,7 +576,7 @@ export type Config = {
 export type Accounts<
   plugins extends readonly Plugin.Plugin[] = readonly Plugin.Plugin[],
 > = Plugin.Namespaces<WithFunding<WithSignIn<plugins>>> &
-  Plugin.Members<plugins> & {
+  Plugin.Members<WithMpp<plugins>> & {
     /** The user's Tempo Account that Tempo ID selects for the app. */
     account: {
       /**
@@ -1641,9 +1643,13 @@ export declare namespace from {
  * expired one through an authorization in progress, loads none of the chunk before the session
  * ends or an action runs.
  *
- * Every instance holds the `funding` plugin, which opens Tempo ID's deposit page. An instance
- * without it receives it with its default options. An app passes `funding()` only to set its
- * options.
+ * Every instance holds the `funding` plugin, which opens Tempo ID's deposit page, and the `mpp`
+ * plugin of `accounts/mpp`, which adds `accounts.fetch` and `accounts.mpp`. An instance without one
+ * of them receives it with its default options. The `mpp` plugin's code loads from a chunk of its
+ * own at the first payment. An app passes `funding()` or `mpp()` only to set its options.
+ *
+ * Without `accessKey`, each sign-in requests an access key that may transfer up to 5 OUSD, and
+ * expires a day after the sign-in. `accessKey: false` requests none.
  *
  * @throws {ClientIdRequiredError} Outside a browser without `clientId`, where no page's origin can
  *   serve as one.
@@ -1686,10 +1692,16 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   } = options
   // The instance resolves a plain object again at each sign-in, so a duration expiry counts from
   // that sign-in.
-  const accessKey =
-    typeof accessKey_option === 'function'
-      ? accessKey_option
-      : () => accessKey_option
+  // An access key without `expiry` expires a day after the sign-in.
+  const accessKey = () => {
+    const value = (() => {
+      if (accessKey_option === false) return undefined
+      if (typeof accessKey_option === 'function') return accessKey_option()
+      return accessKey_option ?? defaultAccessKey
+    })()
+    if (!value || value.expiry !== undefined) return value
+    return { ...value, expiry: AccessKey_internal.defaultExpiry }
+  }
   const named = Plugin.flatten(entries)
   // The plugins' options apply first, in order, and the options that `create` receives win.
   const given = Object.fromEntries(
@@ -1749,15 +1761,17 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   }
   const config = from(merged)
   // An instance without a sign-in plugin signs in with the dialog, which loads on demand. Every
-  // instance opens the deposit page, so one without the `funding` plugin receives it.
+  // instance opens the deposit page and pays MPP endpoints, so one without the `funding` or the
+  // `mpp` plugin receives it. The `mpp` plugin loads at the first payment.
   const plugins: readonly Plugin.Plugin[] = (() => {
-    const signIn = named.some((plugin) =>
-      DefaultDialog.signInIds.has(plugin.id),
-    )
-    const withFunding = named.some((plugin) => plugin.id === 'funding')
-      ? named
-      : [...named, funding()]
-    return signIn ? withFunding : [...withFunding, DefaultDialog.plugin()]
+    const ids = new Set(named.map((plugin) => plugin.id))
+    const signIn = [...ids].some((id) => DefaultDialog.signInIds.has(id))
+    return [
+      ...named,
+      ...(ids.has('funding') ? [] : [funding()]),
+      ...(signIn ? [] : [DefaultDialog.plugin()]),
+      ...(ids.has('mpp') ? [] : [DefaultMpp.plugin()]),
+    ]
   })()
   // A store of one user's, a CLI's shared file, or a browser's IndexedDB holds the session. A
   // backend's instance passes no store, since it serves many users.
@@ -2706,13 +2720,17 @@ export declare namespace create {
     plugins extends readonly Plugin.Option[] = readonly Plugin.Option[],
   > = Omit<from.Options, 'par' | 'store'> & {
     /**
-     * The access key of each sign-in that names none: what it may do, or a function that the
-     * instance calls at each sign-in to return it. A duration expiry, such as `'7d'`, counts from
-     * the sign-in. Without an expiry, Tempo ID fills it with the app's refresh token lifetime, as
-     * [Default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry)
-     * describes. Absent, a sign-in without `accessKey` requests no access key.
+     * The access key of each sign-in that names none: what it may do, a function that the instance
+     * calls at each sign-in to return it, or `false` for no access key. A duration expiry, such as
+     * `'7d'`, counts from the sign-in. Without an expiry, the access key expires a day after the
+     * sign-in, as one of a sign-in's own `accessKey` does. Defaults to an access key that may
+     * transfer up to 5 OUSD, and expires a day after the sign-in.
      */
-    accessKey?: Permissions | (() => Permissions | undefined) | undefined
+    accessKey?:
+      | Permissions
+      | false
+      | (() => Permissions | undefined)
+      | undefined
     /**
      * The IDs of the chains that `switchChain` may select, and that a stored selection may restore.
      * Defaults to Tempo's built-in chains: mainnet, testnet, devnet, and a local node. The
@@ -2767,14 +2785,17 @@ export declare namespace create {
     /**
      * The plugins, each of which adds a namespace with its `id`. An entry can be a list, such as a
      * preset that combines plugins, or a falsy value, which adds nothing. Defaults to none, with
-     * the `dialog` plugin added. The built-in plugins come from `accounts/plugins`, and
-     * `Plugin.from` defines another. Each plugin's `setup` runs once, in the order of `plugins`.
+     * the `dialog`, `funding`, and `mpp` plugins added. The built-in plugins come from
+     * `accounts/plugins`, and `Plugin.from` defines another. Each plugin's `setup` runs once, in the
+     * order of `plugins`.
      *
      * - `backend`, as `accounts.backend`: a backend's sessions, one for each user.
      * - `device`, as `accounts.device`: the device grant, such as in a CLI.
      * - `dialog`, as `accounts.dialog`: Tempo ID's sign-in in a dialog or popup.
      * - `email`, as `accounts.email`: an emailed code in the app's own UI.
      * - `funding`, as `accounts.funding`: Tempo ID's deposit page, on every instance.
+     * - `mpp`, from `accounts/mpp`, as `accounts.fetch` and `accounts.mpp`: the payments of MPP
+     *   endpoints, on every instance.
      * - `passkey`, as `accounts.passkey`: a passkey in the app's own UI.
      * - `redirect`, as `accounts.redirect`: a redirect to Tempo ID's pages.
      * - `viem`, as `accounts.viem`: a Viem client with the session's access key.
@@ -2844,6 +2865,15 @@ export type SessionGet<plugins extends readonly Plugin.Plugin[]> =
       parameters?: Core.getSession.Parameters,
     ) => Promise<Session.Session | undefined>)
 
+/** `plugins`, with the `mpp` plugin and its default options when none of them is `mpp`. */
+export type WithMpp<plugins extends readonly Plugin.Plugin[]> =
+  // A list whose IDs the type does not name may hold the plugin, so its type promises none.
+  string extends plugins[number]['id']
+    ? plugins
+    : 'mpp' extends plugins[number]['id']
+      ? plugins
+      : readonly [...plugins, DefaultMpp.Mpp]
+
 /** `plugins`, with the `funding` plugin and its default options when none of them is `funding`. */
 export type WithFunding<plugins extends readonly Plugin.Plugin[]> =
   // A list whose IDs the type does not name may hold the plugin, so its type promises none.
@@ -2852,6 +2882,12 @@ export type WithFunding<plugins extends readonly Plugin.Plugin[]> =
     : 'funding' extends plugins[number]['id']
       ? plugins
       : readonly [...plugins, ReturnType<typeof funding>]
+
+/** The access key of each sign-in of an instance without `accessKey`. */
+const defaultAccessKey: Permissions = {
+  expiry: AccessKey_internal.defaultExpiry,
+  limits: [{ limit: '5', token: 'ousd' }],
+}
 
 /** Where Tempo ID runs unless `create` receives a `url`. */
 const defaultUrl = 'https://id.tempo.xyz'
