@@ -59,23 +59,15 @@ export function plugin(): Mpp {
           }),
           session: (parameters) => {
             // A manager created with a session pays with that session's access key alone, as the
-            // loaded plugin's does. A sign-out before its first request ends it, also after a later
-            // sign-in, and so does another access key, such as after `switchChain`.
+            // loaded plugin's does. Each sign-in generates a new access key, so another access key
+            // at its first request means a sign-out, another user, or `switchChain`.
             const held = overrides?.session ? undefined : context.session.get()
-            // Whether a change of the session replaced or dropped its access key. One subscription
-            // per manager holds it, and ends at the first such change.
-            let ended = false
-            if (held) {
-              const keyId = held.accessKey?.keyAuthorization.keyId
-              const unsubscribe = instance.session.subscribe((next) => {
-                if (next?.accessKey?.keyAuthorization.keyId === keyId) return
-                ended = true
-                unsubscribe()
-              })
-            }
+            const keyId = held?.accessKey?.keyAuthorization.keyId
             return SessionManager.deferred(async () => {
               const payer = await get()
-              if (ended) throw new Accounts.SignedOutError()
+              const active =
+                context.session.get()?.accessKey?.keyAuthorization.keyId
+              if (held && active !== keyId) throw new Accounts.SignedOutError()
               return payer.session(parameters)
             })
           },
