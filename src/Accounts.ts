@@ -171,10 +171,6 @@ export class EverywhereNotAllowedError extends Error {
 }
 
 /**
- * A backend's `complete` received a session ID without a redirect in progress, such as a callback
- * that arrived twice, or more than 10 minutes after `start`. Start the sign-in again.
- */
-/**
  * Thrown for a call that needs a Tempo ID session, such as `account.get`, `connections`, or a read
  * of the access token, while the instance holds a `local` plugin's session, which Tempo ID issued no
  * tokens for.
@@ -189,6 +185,10 @@ export class LocalSessionError extends Error {
   }
 }
 
+/**
+ * A backend's `complete` received a session ID without a redirect in progress, such as a callback
+ * that arrived twice, or more than 10 minutes after `start`. Start the sign-in again.
+ */
 export class PendingNotFoundError extends Error {
   override readonly name = 'Accounts.PendingNotFoundError'
 

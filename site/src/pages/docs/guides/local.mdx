@@ -71,7 +71,7 @@ The calls that read Tempo ID throw <SourceLink name="LocalSessionError" path="sr
 
 ## Migrate from version 0
 
-Version 0's `secp256k1` adapter kept its private key in a <SourceLink name="filesystem" path="src/Store.ts">`Storage.filesystem`</SourceLink> file. With `v0`, the first read of a store without an owner key takes the file's active secp256k1 account, so its address and funds carry over:
+Version 0's `secp256k1` adapter kept its private key in a `Storage.filesystem` file of `accounts/cli`. With `v0`, the first read of a store without an owner key takes the file's active secp256k1 account, so its address and funds carry over:
 
 ```ts [tempo.config.ts]
 export const accounts = Accounts.create({
