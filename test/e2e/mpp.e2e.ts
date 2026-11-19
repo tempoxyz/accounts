@@ -110,9 +110,15 @@ function backendSession(options: {
 
 /**
  * Returns the `fetch` of a merchant that charges the amount of each request's path in pathUSD to
- * `recipient`, and broadcasts each charge's transaction on the node.
+ * `recipient`, and broadcasts each charge's transaction on the node. A paid request of the amount
+ * `together` waits until a second one arrives, so both fill before either broadcasts.
  */
-function merchant(options: { recipient: `0x${string}` }) {
+function merchant(options: {
+  recipient: `0x${string}`
+  together?: string | undefined
+}) {
+  // The paid requests of the amount `together` that wait for the second one.
+  const waiting: (() => void)[] = []
   const payment = Mppx.create({
     methods: [
       tempo.charge({
@@ -130,10 +136,66 @@ function merchant(options: { recipient: `0x${string}` }) {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
     const amount = new URL(request.url).pathname.slice(1)
+    if (amount === options.together && request.headers.has('authorization')) {
+      const { promise, resolve } = Promise.withResolvers<void>()
+      waiting.push(resolve)
+      if (waiting.length === 2)
+        for (const release of waiting.splice(0)) release()
+      await promise
+    }
     const result = await payment.tempo.charge({ amount })(request)
     if (result.status === 402) return result.challenge
     return result.withReceipt(new Response('paid'))
   }) as typeof globalThis.fetch
+}
+
+/**
+ * Returns the payer of a backend's session, with a merchant that broadcasts the charges of 0.6
+ * only once two of them arrive.
+ */
+function backendPayer(options: { session: Session.Session }) {
+  const accounts = Accounts.create({
+    chain: Chain.chain.id,
+    clientId: 'https://app.example.com',
+    plugins: [
+      viem({ transport: http(Chain.rpcUrl) }),
+      mpp({
+        fetch: merchant({
+          recipient: privateKeyToAddress(generatePrivateKey()),
+          together: '0.6',
+        }),
+      }),
+    ],
+    store: Store.memory(),
+  })
+  return accounts.mpp({ session: options.session })
+}
+
+/** Shows each outcome of a backend's charges on `page`, so a capture holds it. */
+async function show(page: Page, outcomes: readonly string[]) {
+  await page.setContent(
+    `<ul>${outcomes.map((value) => `<li>${value.replaceAll('<', '&lt;')}</li>`).join('')}</ul>`,
+  )
+}
+
+/**
+ * Pays two charges of 0.6 at once, and returns the status or the error of each, sorted.
+ */
+async function together(payer: { fetch: typeof globalThis.fetch }) {
+  const outcomes = await Promise.allSettled(
+    [0, 1].map(() =>
+      payer
+        .fetch('https://merchant.test/0.6')
+        .then((response) => response.status),
+    ),
+  )
+  return outcomes
+    .map((outcome) =>
+      outcome.status === 'fulfilled'
+        ? String(outcome.value)
+        : `${(outcome.reason as Error).name}: ${(outcome.reason as Error).message}`,
+    )
+    .sort()
 }
 
 /** Runs the control `name` of the MPP page, and returns what its payment returned or threw. */
@@ -495,103 +557,77 @@ test.describe('mpp', () => {
   })
 
   test.describe('backend', () => {
-    test('rejects a charge with LimitError once a concurrent charge of the access key spent the limit', async () => {
+    test('rejects a charge with LimitError once a concurrent charge of the access key spent the limit', async ({
+      capture,
+      page,
+    }) => {
       // A Worker or Node server pays the requests of one user in parallel with one access key. The
-      // limit covers one charge of 0.6 after the first of 0.1, so of two at once, one lands and the
-      // other reverts on the chain after both filled.
+      // limit covers one charge of 0.6 after the first of 0.1. The merchant broadcasts neither
+      // charge of 0.6 before both credentials arrive, so both fill and one reverts on the chain.
       const owner = generatePrivateKey()
       await Chain.fund({ address: privateKeyToAddress(owner) })
-      const accounts = Accounts.create({
-        chain: Chain.chain.id,
-        clientId: 'https://app.example.com',
-        plugins: [
-          viem({ transport: http(Chain.rpcUrl) }),
-          mpp({
-            fetch: merchant({
-              recipient: privateKeyToAddress(generatePrivateKey()),
-            }),
-          }),
-        ],
-        store: Store.memory(),
-      })
-      const payer = accounts.mpp({
+      const payer = backendPayer({
         session: backendSession({ limit: parseUnits('1', 6), owner }),
       })
 
-      expect((await payer.fetch('https://merchant.test/0.1')).status).toBe(200)
+      await test.step('pays a first charge of 0.1', async () => {
+        expect((await payer.fetch('https://merchant.test/0.1')).status).toBe(
+          200,
+        )
+        await show(page, ['200'])
+        await capture('paid 0.1')
+      })
 
-      const outcomes = await Promise.allSettled(
-        [0, 1].map(() =>
-          payer
-            .fetch('https://merchant.test/0.6')
-            .then((response) => response.status),
-        ),
-      )
-      expect(
-        outcomes
-          .map((outcome) =>
-            outcome.status === 'fulfilled'
-              ? String(outcome.value)
-              : `${(outcome.reason as Error).name}: ${(outcome.reason as Error).message}`,
-          )
-          .map((value) =>
+      await test.step('pays two charges of 0.6 at once, and rejects the reverted one', async () => {
+        const outcomes = await together(payer)
+        await show(page, outcomes)
+        expect(
+          outcomes.map((value) =>
             value.replace(/limit of [\d.]+ left/, 'limit of <left> left'),
-          )
-          .sort(),
-      ).toEqual([
-        '200',
-        `mpp.LimitError: The charge of 0.6 exceeds the access key's limit of <left> left for token ${pathUsd}. Sign in with an access key whose limit covers the charge.`,
-      ])
+          ),
+        ).toEqual([
+          '200',
+          `mpp.LimitError: The charge of 0.6 exceeds the access key's limit of <left> left for token ${pathUsd}. Sign in with an access key whose limit covers the charge.`,
+        ])
+        await capture('rejected with LimitError')
+      })
     })
-    test("returns the endpoint's response for a reverted charge of an access key without limits", async () => {
+
+    test("returns the endpoint's response for a reverted charge of an access key without limits", async ({
+      capture,
+      page,
+    }) => {
       // Once a first charge registers the access key, the owner holds 1 pathUSD, so of two charges of
       // 0.6 at once, one lands and the other reverts for the balance. The access key has no limits,
       // so no limit refuses the charge.
       const owner = generatePrivateKey()
       await Chain.fund({ address: privateKeyToAddress(owner) })
-      const accounts = Accounts.create({
-        chain: Chain.chain.id,
-        clientId: 'https://app.example.com',
-        plugins: [
-          viem({ transport: http(Chain.rpcUrl) }),
-          mpp({
-            fetch: merchant({
-              recipient: privateKeyToAddress(generatePrivateKey()),
-            }),
-          }),
-        ],
-        store: Store.memory(),
-      })
-      const payer = accounts.mpp({ session: backendSession({ owner }) })
+      const payer = backendPayer({ session: backendSession({ owner }) })
 
-      expect((await payer.fetch('https://merchant.test/0.1')).status).toBe(200)
-      const held = await Chain.balance({
-        address: privateKeyToAddress(owner),
-        token: pathUsd,
-      })
-      await Chain.send({
-        amount: held - parseUnits('1', 6),
-        privateKey: owner,
-        to: privateKeyToAddress(generatePrivateKey()),
-        token: pathUsd,
+      await test.step('pays a first charge of 0.1, and spends all but 1 pathUSD', async () => {
+        expect((await payer.fetch('https://merchant.test/0.1')).status).toBe(
+          200,
+        )
+        const held = await Chain.balance({
+          address: privateKeyToAddress(owner),
+          token: pathUsd,
+        })
+        await Chain.send({
+          amount: held - parseUnits('1', 6),
+          privateKey: owner,
+          to: privateKeyToAddress(generatePrivateKey()),
+          token: pathUsd,
+        })
+        await show(page, ['200'])
+        await capture('paid 0.1')
       })
 
-      const outcomes = await Promise.allSettled(
-        [0, 1].map(() =>
-          payer
-            .fetch('https://merchant.test/0.6')
-            .then((response) => response.status),
-        ),
-      )
-      expect(
-        outcomes
-          .map((outcome) =>
-            outcome.status === 'fulfilled'
-              ? String(outcome.value)
-              : `${(outcome.reason as Error).name}: ${(outcome.reason as Error).message}`,
-          )
-          .sort(),
-      ).toEqual(['200', '500'])
+      await test.step("pays two charges of 0.6 at once, and returns the endpoint's response", async () => {
+        const outcomes = await together(payer)
+        await show(page, outcomes)
+        expect(outcomes).toEqual(['200', '500'])
+        await capture('returned 500')
+      })
     })
   })
 

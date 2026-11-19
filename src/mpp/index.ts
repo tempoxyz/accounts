@@ -22,7 +22,7 @@ import * as TempoId from 'mppx/extensions/identity/tempo'
 import { McpClient } from 'mppx/mcp/client'
 import { Address, Hash, Hex } from 'ox'
 import { KeyAuthorization, TempoAddress, TxEnvelopeTempo } from 'ox/tempo'
-import type { Chain, Client, Transport } from 'viem'
+import type { Chain, Client, TransactionReceipt, Transport } from 'viem'
 import {
   BaseError,
   createClient,
@@ -2257,12 +2257,35 @@ function create(options: {
   }
 
   /**
+   * Returns the receipt read of the transaction of a charge's credential, which reads the chain at
+   * most once, so `superseded` and `reverted` share one read. Returns `undefined` for a
+   * credential that names no transaction.
+   */
+  function receiptOf(serialized: string): Inclusion | undefined {
+    const signed = transaction(serialized)
+    if (!signed) return undefined
+    const client = getClient({ chainId })
+    let pending: Promise<Inclusion.Settled> | undefined
+    const receipt: Inclusion = {
+      read() {
+        pending ??= getTransactionReceipt(client, { hash: signed.hash }).then(
+          (value) => (receipt.settled = { receipt: value }),
+          (error: unknown) => (receipt.settled = { error }),
+        )
+        return pending
+      },
+      settled: undefined,
+    }
+    return receipt
+  }
+
+  /**
    * Returns whether the chain refuses the signed transaction of `serialized` for good, since it
    * attaches the key authorization of an access key that another sender registered, such as a
    * charge of another instance on the same `store`. Records the registration then, so the next
    * charge attaches no key authorization. Returns `false` after a failed read.
    */
-  async function superseded(serialized: string) {
+  async function superseded(serialized: string, receipt: Inclusion) {
     if (!account) return false
     const signed = transaction(serialized)
     if (!signed?.keyAuthorization) return false
@@ -2284,12 +2307,10 @@ function create(options: {
     // The receipt read follows the registration read, so a transaction of this request that
     // registered the access key shows its receipt. Once the chain holds the access key, a
     // transaction that attaches its key authorization never lands.
-    const included = await getTransactionReceipt(client, {
-      hash: signed.hash,
-    }).then(
-      () => true,
-      (error: unknown) => !(error instanceof TransactionReceiptNotFoundError),
-    )
+    const read = await receipt.read()
+    const included =
+      'receipt' in read ||
+      !(read.error instanceof TransactionReceiptNotFoundError)
     if (included) return false
     landed(signed.serialized, () => Promise.resolve(true))
     return true
@@ -2299,22 +2320,20 @@ function create(options: {
    * Returns {@link LimitError} for a charge whose transaction landed and reverted since the limit
    * that remains no longer covers it, such as after a concurrent charge of the same access key
    * spent the limit between the fill and the broadcast. Only a failed response reads the receipt and
-   * the limit, in parallel. Returns `undefined` for a transaction that succeeded or that the chain
+   * the limit, in parallel. A receipt that `superseded` read is not read again, and a successful one
+   * reads no limit. Returns `undefined` for a transaction that succeeded or that the chain
    * holds no receipt of, for another credential, and after a failed read.
    */
   async function reverted(
-    serialized: string,
+    receipt: Inclusion,
     charge: { amount: bigint; token: Address.Address } | undefined,
   ) {
     // Without signed limits, the access key spends any amount, so a revert is not of a limit.
     if (!account || !charge || !limits) return undefined
-    const signed = transaction(serialized)
-    if (!signed) return undefined
+    if (receipt.settled && !failed(receipt.settled)) return undefined
     const client = getClient({ chainId })
-    const [receipt, read] = await Promise.all([
-      getTransactionReceipt(client, { hash: signed.hash }).catch(
-        () => undefined,
-      ),
+    const [settled, read] = await Promise.all([
+      receipt.read(),
       Actions.accessKey
         .getRemainingLimit(client, {
           accessKey: account.accessKeyAddress,
@@ -2323,7 +2342,7 @@ function create(options: {
         })
         .catch(() => undefined),
     ])
-    if (receipt?.status !== 'reverted') return undefined
+    if (!failed(settled)) return undefined
     if (!read || read.remaining >= charge.amount) return undefined
     return new LimitError({
       amount: formatUnits(charge.amount, 6),
@@ -2446,6 +2465,7 @@ function create(options: {
         call.end?.()
         return response
       }
+      const receipt = call.credential ? receiptOf(call.credential) : undefined
       // Another instance on the store can register the access key while this charge carries its
       // key authorization, so the endpoint's broadcast fails. The first transaction never lands
       // then, so the charge sends once more, without the key authorization.
@@ -2456,7 +2476,8 @@ function create(options: {
         // sends again.
         call.credentials === 1 &&
         resendable(input, init) &&
-        (await superseded(call.credential))
+        receipt &&
+        (await superseded(call.credential, receipt))
       ) {
         // The failed response is not the app's, so its body buffers nothing.
         void response.body?.cancel().catch(() => undefined)
@@ -2465,8 +2486,7 @@ function create(options: {
       // A concurrent charge of the access key can spend the limit after this charge's fill, so its
       // transaction lands and reverts, and the endpoint fails. The charge then rejects as one above
       // the limit that remains does before its signature.
-      const limited =
-        call.credential && (await reverted(call.credential, call.charge))
+      const limited = receipt && (await reverted(receipt, call.charge))
       if (limited) {
         // The failed response is not the app's, so its body buffers nothing.
         void response.body?.cancel().catch(() => undefined)
@@ -2643,6 +2663,24 @@ function create(options: {
     },
   }
   return created
+}
+
+/** The receipt read of a charge's transaction, which settles once. */
+type Inclusion = {
+  /** Reads the receipt, once. A later call returns the same read. */
+  read: () => Promise<Inclusion.Settled>
+  /** The settled read. Absent before the read settles. */
+  settled: Inclusion.Settled | undefined
+}
+
+declare namespace Inclusion {
+  /** The receipt, or the read's error, such as `TransactionReceiptNotFoundError`. */
+  type Settled = { error: unknown } | { receipt: TransactionReceipt }
+}
+
+/** Returns whether a settled receipt read shows a transaction that landed and reverted. */
+function failed(settled: Inclusion.Settled) {
+  return 'receipt' in settled && settled.receipt.status === 'reverted'
 }
 
 /**
