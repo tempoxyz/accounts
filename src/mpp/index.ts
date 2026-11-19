@@ -679,8 +679,14 @@ export function mpp(options: mpp.Options = {}) {
           TempoId.Client.prover({
             accessToken: () => accessToken,
             dpop: Api.bound(accessToken) ? instance.config.dpop : undefined,
-            idToken: () =>
-              ended() ? undefined : context.session.get()?.idToken,
+            // A refresh without an ID token keeps the earlier one in the session, for a sign-out's
+            // hint, so the request sends it only before its expiry, which names no user to an API.
+            idToken: () => {
+              const idToken = ended()
+                ? undefined
+                : context.session.get()?.idToken
+              return idToken && !Api.expired(idToken) ? idToken : undefined
+            },
             scope,
           })
         return {
@@ -1271,9 +1277,9 @@ export declare namespace mpp {
      * Sends the session's Tempo ID identity with each request to the origins of `scope`, for an
      * endpoint that verifies it with mppx's Tempo ID extension (`mppx/extensions/identity/tempo`):
      * the access token, with a new proof of the instance's `dpop` key for a DPoP token, and the ID
-     * token, which names the user's email address. A token refresh may return no ID token, and then
-     * the requests carry none until the next sign-in, so an endpoint that requires the email can
-     * refuse a long session. A payer of a fixed `session` or a named
+     * token, which names the user's email address, until it expires. A token refresh may return no
+     * ID token, and once the earlier one expires the requests carry none until the next sign-in, so
+     * an endpoint that requires the email can refuse a long session. A payer of a fixed `session` or a named
      * `account` sends none. Defaults to no identity.
      *
      * @example

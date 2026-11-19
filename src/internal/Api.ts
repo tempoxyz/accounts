@@ -500,6 +500,21 @@ export function jkt(token: string) {
 }
 
 /**
+ * Returns whether the JWT `token` names an `exp` that has passed. A token without one that decodes
+ * returns `false`, so the caller still sends it, and the issuer or API decides.
+ */
+export function expired(token: string) {
+  try {
+    const payload = token.split('.')[1] ?? ''
+    if (!segment.test(payload)) return false
+    const { exp } = JSON.parse(Base64.toString(payload)) as { exp?: unknown }
+    return typeof exp === 'number' && exp * 1_000 <= Date.now()
+  } catch {
+    return false
+  }
+}
+
+/**
  * Throws `invalid_dpop_proof` for a DPoP token that the instance's `dpop` key does not bind: the
  * instance holds no key, or another key. Tempo ID and APIs refuse each request with such a token,
  * so the caller sends none.
