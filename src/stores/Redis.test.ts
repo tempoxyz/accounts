@@ -142,6 +142,163 @@ describe('Store.redis', () => {
     `)
   }, 120_000)
 
+  test('behavior: links a session of a `sid` in a read and a conditional write', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    const commands: string[] = []
+    const accounts = Accounts.create({
+      clientId: 'https://app.example.com',
+      url: 'http://127.0.0.1:9',
+    })
+    const store = Redis.create({
+      sendCommand(args) {
+        commands.push(args[0]!)
+        return client.call(...(args as [string, ...string[]]))
+      },
+    })
+    const sessions = BackendSessions.create(accounts.config, {
+      shared: true,
+      store,
+    })
+
+    await sessions.link({
+      expiresAt: Date.now() + 3_600_000,
+      id: 'a-sid',
+      sid: 'sid',
+    })
+    client.disconnect()
+    await container.stop()
+
+    expect(commands).toMatchInlineSnapshot(`
+      [
+        "GET",
+        "EVAL",
+        "GET",
+        "GET",
+      ]
+    `)
+  }, 120_000)
+
+  test('behavior: writes no update while a replica without `update` holds the lock of the key', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    let refused = 0
+    const store = Redis.create({
+      async sendCommand(args) {
+        const reply = await client.call(...(args as [string, ...string[]]))
+        if (args[0] === 'EVAL' && reply === 'LOCKED') refused++
+        return reply
+      },
+    })
+
+    let write: Promise<undefined> | undefined
+    await store.lock!('index', async () => {
+      const index = (await store.getItem('index')) ?? []
+      write = store.update!('index', (value) => ({
+        result: undefined,
+        value: [...((value as string[] | undefined) ?? []), 'new'],
+      }))
+      await expect.poll(() => refused).toBeGreaterThan(0)
+      await store.setItem('index', [...(index as string[]), 'old'])
+    })
+    await write
+    const index = await store.getItem('index')
+    client.disconnect()
+    await container.stop()
+
+    expect(index).toMatchInlineSnapshot(`
+      [
+        "old",
+        "new",
+      ]
+    `)
+  }, 120_000)
+
+  test('behavior: updates an entry on Redis Cluster, where the entry and its lock occupy two hash slots', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withCommand(['redis-server', '--cluster-enabled', 'yes'])
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    await client.call('CLUSTER', 'ADDSLOTSRANGE', '0', '16383')
+    await expect
+      .poll(async () => String(await client.call('CLUSTER', 'INFO')), {
+        timeout: 30_000,
+      })
+      .toContain('cluster_state:ok')
+    const store = Redis.create({
+      sendCommand(args) {
+        return client.call(...(args as [string, ...string[]]))
+      },
+    })
+    const append = (entry: string) =>
+      store.update!('tempo-id:sid:sid', (value) => ({
+        result: undefined,
+        value: [...((value as string[] | undefined) ?? []), entry],
+      }))
+
+    await Promise.all([append('a'), append('b')])
+    const index = (await store.getItem('tempo-id:sid:sid')) as string[]
+    client.disconnect()
+    await container.stop()
+
+    expect([...index].sort()).toMatchInlineSnapshot(`
+      [
+        "a",
+        "b",
+      ]
+    `)
+  }, 120_000)
+
+  test('behavior: updates an entry with a client that returns each integer reply as a string', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    let writes = 0
+    const store = Redis.create({
+      async sendCommand(args) {
+        const reply = await client.call(...(args as [string, ...string[]]))
+        if (args[0] === 'EVAL' && args[2] === '2') writes++
+        return typeof reply === 'number' ? String(reply) : reply
+      },
+    })
+
+    await store.update!('index', () => ({ result: undefined, value: ['a'] }))
+    const index = await store.getItem('index')
+    client.disconnect()
+    await container.stop()
+
+    expect({ index, writes }).toMatchInlineSnapshot(`
+      {
+        "index": [
+          "a",
+        ],
+        "writes": 1,
+      }
+    `)
+  }, 30_000)
+
   test('behavior: a hold whose lease another replica took deletes no lock of that replica', async () => {
     const container = await new GenericContainer('redis:7.4-alpine')
       .withExposedPorts(6379)

@@ -12,9 +12,11 @@ import type * as Store from '../Store.js'
  * is, such as `tempo-id:session:<id>`. `takeItem` reads and deletes with one `GETDEL`, so replicas
  * that share the database take each value once. `lock` holds the key `<key>:lock` for at most 30
  * seconds, set to a token of the hold with `SET` and `NX`, and releases it with an `EVAL` that
- * deletes only that token. So the `backend` plugin's replicas write the logout index of each `sid`
- * one at a time, and a logout token ends every session of the `sid`. The store needs Redis 6.2 or
- * later.
+ * deletes only that token. `update` reads with `GET` and writes with an `EVAL` that sets the key
+ * only if it still holds the value read and no `lock` holds the key, and reads again otherwise. On
+ * Redis Cluster, where the key and its lock occupy two hash slots, `update` writes under `lock`. So the `backend` plugin's
+ * replicas write the logout index of each `sid` in a read and a write, without the lock, and a
+ * logout token ends every session of the `sid`. The store needs Redis 6.2 or later.
  *
  * `client` is any client with `sendCommand(args)`, such as a `redis` client.
  *
@@ -66,61 +68,154 @@ export function create(client: create.Client): Store.Store {
     }
   }
 
-  return {
-    async getItem(key) {
-      const value = await send(['GET', key])
-      return typeof value === 'string' ? StoreValue.parse(value) : undefined
-    },
-    json: true,
-    // Each replica holds its own client, so a lock in memory orders no other replica's writes, such
-    // as two sign-ins of one `sid` that rewrite its logout index at once.
-    async lock(key, fn) {
-      const name = `${key}:lock`
-      // Each hold sets a token of its own, so a holder whose lease expired deletes no lock that
-      // another replica took since.
-      const token = crypto.randomUUID()
-      while (
-        (await send(['SET', name, token, 'NX', 'PX', String(lease)])) !== 'OK'
+  // Redis Cluster refuses a script whose keys occupy two hash slots, such as an entry and its lock.
+  // After such a refusal, `update` writes under `lock`, as a replica without `update` does.
+  let slots: 'one' | 'split' = 'one'
+
+  async function getItem(key: string) {
+    const value = await send(['GET', key])
+    return typeof value === 'string' ? StoreValue.parse(value) : undefined
+  }
+
+  // Each replica holds its own client, so a lock in memory orders no other replica's writes, such
+  // as two sign-ins of one `sid` that rewrite its logout index at once.
+  async function lock<result>(key: string, fn: () => Promise<result>) {
+    const name = `${key}:lock`
+    // Each hold sets a token of its own, so a holder whose lease expired deletes no lock that
+    // another replica took since.
+    const token = crypto.randomUUID()
+    while (
+      (await send(['SET', name, token, 'NX', 'PX', String(lease)])) !== 'OK'
+    )
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    try {
+      return await fn()
+    } finally {
+      // A failed release leaves the lease, which expires within `lease`.
+      await send(['EVAL', release, '1', name, token]).catch(() => undefined)
+    }
+  }
+
+  async function removeItem(key: string) {
+    await send(['DEL', key])
+  }
+
+  async function setItem(
+    key: string,
+    value: unknown,
+    options: { expiresAt?: number | undefined } = {},
+  ) {
+    const { expiresAt } = options
+    // Serialization throws before any command, also for a write that only deletes.
+    const text = StoreValue.stringify(value)
+    // JSON has no form of a top-level `undefined`, function, or symbol, so its text is `undefined`.
+    if (text === undefined)
+      throw new TypeError(
+        'Unserializable value: the value has no JSON form, such as `undefined` or a function. Call `removeItem` to delete the entry.',
       )
-        await new Promise((resolve) => setTimeout(resolve, 10))
-      try {
-        return await fn()
-      } finally {
-        // A failed release leaves the lease, which expires within `lease`.
-        await send(['EVAL', release, '1', name, token]).catch(() => undefined)
-      }
-    },
-    async removeItem(key) {
+    // Redis refuses an expiry that is not in the future, and the entry would expire at once.
+    if (expiresAt !== undefined && expiresAt <= Date.now()) {
       await send(['DEL', key])
-    },
-    async setItem(key, value, options = {}) {
-      const { expiresAt } = options
-      // Serialization throws before any command, also for a write that only deletes.
-      const text = StoreValue.stringify(value)
-      // JSON has no form of a top-level `undefined`, function, or symbol, so its text is `undefined`.
-      if (text === undefined)
-        throw new TypeError(
-          'Unserializable value: the value has no JSON form, such as `undefined` or a function. Call `removeItem` to delete the entry.',
+      return
+    }
+    await send([
+      'SET',
+      key,
+      text,
+      // `PXAT` takes whole milliseconds, so a fraction rounds up, and the entry never expires early.
+      ...(expiresAt === undefined
+        ? []
+        : ['PXAT', String(Math.ceil(expiresAt))]),
+    ])
+  }
+
+  const update: NonNullable<Store.Store['update']> = async (key, fn) => {
+    if (slots === 'split')
+      return lock(key, async () => {
+        const { expiresAt, result, value } = fn(await getItem(key))
+        if (value === undefined) await removeItem(key)
+        else await setItem(key, value, { expiresAt })
+        return result
+      })
+
+    // The text that the previous attempt read, and the attempts in a row whose write found another
+    // value while that text stayed the same.
+    let read: unknown
+    let unchanged = 0
+    while (true) {
+      const previous = await send(['GET', key])
+      // A peer rarely writes the key and then restores it three times in a row, so the third such
+      // refusal rejects, such as for a client that alters an argument of each command.
+      unchanged = read !== undefined && previous === read ? unchanged + 1 : 0
+      read = previous ?? null
+      if (unchanged >= 3)
+        throw new Error(
+          'Refused write: the conditional write of the store found another value three times. Send each argument of a command as it is.',
         )
-      // Redis refuses an expiry that is not in the future, and the entry would expire at once.
-      if (expiresAt !== undefined && expiresAt <= Date.now()) {
-        await send(['DEL', key])
-        return
-      }
-      await send([
-        'SET',
+      const { expiresAt, result, value } = fn(
+        typeof previous === 'string' ? StoreValue.parse(previous) : undefined,
+      )
+      // Serialization throws before the write, so a value without a JSON form never deletes the
+      // entry.
+      const next =
+        value === undefined
+          ? undefined
+          : (StoreValue.stringify(value) as string | undefined)
+      if (value !== undefined && next === undefined)
+        throw new TypeError(
+          'Unserializable value: the value has no JSON form. Write a value that JSON holds.',
+        )
+      // An absent entry that stays absent is already written.
+      if (typeof previous !== 'string' && next === undefined) return result
+      // An expiry that passed deletes the entry, as `setItem` does.
+      const expired = expiresAt !== undefined && expiresAt <= Date.now()
+      const written = await send([
+        'EVAL',
+        swap,
+        '2',
         key,
-        text,
-        // `PXAT` takes whole milliseconds, so a fraction rounds up, and the entry never expires early.
-        ...(expiresAt === undefined
-          ? []
-          : ['PXAT', String(Math.ceil(expiresAt))]),
-      ])
-    },
+        `${key}:lock`,
+        typeof previous === 'string' ? previous : '',
+        typeof previous === 'string' ? '1' : '0',
+        next === undefined || expired ? '' : next,
+        expiresAt === undefined ? '' : String(Math.ceil(expiresAt)),
+      ]).catch((error: unknown) => {
+        if (
+          error instanceof Error &&
+          error.message === 'EVAL failed with CROSSSLOT.'
+        )
+          return 'split'
+        throw error
+      })
+      if (written === 'OK') return result
+      if (written === 'split') {
+        slots = 'split'
+        return update(key, fn)
+      }
+      if (written === 'LOCKED') {
+        // The holder of the lock can write the same text again, which is no refusal.
+        read = undefined
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        continue
+      }
+      if (written !== 'CHANGED')
+        throw new Error(
+          'Unexpected reply: the conditional write of the store returned no status. Return each status reply as a string.',
+        )
+    }
+  }
+
+  return {
+    getItem,
+    json: true,
+    lock,
+    removeItem,
+    setItem,
     async takeItem(key) {
       const value = await send(['GETDEL', key])
       return typeof value === 'string' ? StoreValue.parse(value) : undefined
     },
+    update,
   }
 }
 
@@ -129,6 +224,24 @@ export function create(client: create.Client): Store.Store {
  * longer loses the lock to the next replica.
  */
 const lease = 30_000
+
+/**
+ * Writes `ARGV[3]` to the key `KEYS[1]`, with the expiry `ARGV[4]` if any, or deletes it for an empty
+ * `ARGV[3]`, only if the key still holds `ARGV[1]`, or is absent for an `ARGV[2]` of `0`. A
+ * `lock` of the key, at `KEYS[2]`, also refuses the write, so a replica that writes the key under
+ * `lock` with `setItem`, such as a replica of an earlier version, overwrites no update. Returns
+ * the status `OK` for a write, `LOCKED` for a held lock, and `CHANGED` for another value. A status
+ * reply stays a string in each client, which can map an integer reply to a string or a `bigint`.
+ */
+const swap = [
+  "if redis.call('EXISTS', KEYS[2]) == 1 then return redis.status_reply('LOCKED') end",
+  "local current = redis.call('GET', KEYS[1])",
+  "if (ARGV[2] == '0' and current) or (ARGV[2] == '1' and current ~= ARGV[1]) then return redis.status_reply('CHANGED') end",
+  "if ARGV[3] == '' then redis.call('DEL', KEYS[1])",
+  "elseif ARGV[4] == '' then redis.call('SET', KEYS[1], ARGV[3])",
+  "else redis.call('SET', KEYS[1], ARGV[3], 'PXAT', ARGV[4]) end",
+  "return redis.status_reply('OK')",
+].join(' ')
 
 /** Deletes the lock only if it still holds the token of the hold that releases it. */
 const release =
