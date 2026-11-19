@@ -305,6 +305,16 @@ export default defineConfig({
     {
       items: [
         item({
+          icon: 'puzzle',
+          link: '/docs/guides/plugins',
+          text: 'Plugins',
+        }),
+      ],
+      text: 'Extending',
+    },
+    {
+      items: [
+        item({
           icon: 'flask',
           link: '/docs/guides/testing',
           text: 'End-to-end tests',

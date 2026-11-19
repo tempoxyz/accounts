@@ -1,0 +1,439 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# Plugins [A plugin adds a namespace of actions to the instance, and runs code at the instance's sign-in and sign-out.]
+
+## Overview
+
+Each sign-in method and each set of actions of the package is a plugin, such as `dialog` and `viem`. An app writes a plugin of its own with <SourceLink name="from" path="src/Plugin.ts">`Plugin.from`</SourceLink>, as the built-in plugins do. Its actions share the instance's configuration and [session](/docs/guides/user-session), and its hooks run at the instance's sign-in and sign-out.
+
+The plugin's `id` names its namespace on the instance, such as `accounts.analytics`. The instance's type holds the namespace and each action, inferred from the plugin, so an app declares no types for it.
+
+The demo adds an `analytics` plugin. Its action tracks an event of the signed-in user, and its hooks track each sign-in and sign-out.
+
+<Demo name="Plugins" title="Track events with a plugin" />
+
+## Walkthrough
+
+These steps add an `analytics` plugin to a React app.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts react react-dom viem
+```
+
+```sh [bun]
+bun add accounts react react-dom viem
+```
+
+:::
+
+### Define the plugin
+
+A function takes the plugin's options and returns the plugin, as each built-in plugin does. <SourceLink name="id" path="src/Plugin.ts">`id`</SourceLink> names the namespace. <SourceLink name="actions" path="src/Plugin.ts">`actions`</SourceLink> runs once at <SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink>, and returns the namespace.
+
+Each action reads the instance through the <SourceLink name="Context" path="src/Plugin.ts">`context`</SourceLink> that `actions` receives. `track` attaches the instance's chain and the signed-in user's ID to each event.
+
+```ts [analytics.ts]
+import { Plugin } from 'accounts'
+
+export function analytics(options: analytics.Options) {
+  const { send } = options
+
+  return Plugin.from({
+    // [!code hl:start]
+    actions: (context) => ({
+      track: (name: string) =>
+        send({
+          chainId: context.chain.get(),
+          name,
+          userId: context.session.get()?.user.id,
+        }),
+    }),
+    id: 'analytics',
+    // [!code hl:end]
+  })
+}
+
+export declare namespace analytics {
+  type Event = {
+    chainId: number
+    name: string
+    userId?: string | undefined
+  }
+
+  type Options = {
+    send: (event: Event) => void
+  }
+}
+```
+
+If an `id` names a member of every instance, such as `session`, or the `id` of another plugin, `Accounts.create` throws. A plugin with the `id` of a sign-in plugin, such as `dialog`, replaces the default `dialog` plugin.
+
+### Track sign-ins and sign-outs
+
+<SourceLink name="afterSignIn" path="src/Plugin.ts">`afterSignIn`</SourceLink> runs after each change that sets a session, with the session. <SourceLink name="afterSignOut" path="src/Plugin.ts">`afterSignOut`</SourceLink> runs after each sign-out. In a browser, both also run after a sign-in or a sign-out in another tab.
+
+The sign-in waits for each `afterSignIn` hook, so the hook sends the event without an `await`.
+
+```ts [analytics.ts]
+import { Plugin } from 'accounts'
+
+export function analytics(options: analytics.Options) {
+  const { send } = options
+
+  return Plugin.from({
+    actions: (context) => ({
+      track: (name: string) =>
+        send({
+          chainId: context.chain.get(),
+          name,
+          userId: context.session.get()?.user.id,
+        }),
+    }),
+    // [!code hl:start]
+    hooks: {
+      afterSignIn: (context, session) =>
+        send({
+          chainId: context.chain.get(),
+          name: 'signIn',
+          userId: session.user.id,
+        }),
+      afterSignOut: (context) =>
+        send({ chainId: context.chain.get(), name: 'signOut' }),
+    },
+    // [!code hl:end]
+    id: 'analytics',
+  })
+}
+
+export declare namespace analytics {
+  type Event = {
+    chainId: number
+    name: string
+    userId?: string | undefined
+  }
+
+  type Options = {
+    send: (event: Event) => void
+  }
+}
+```
+
+### Add the plugin to the instance
+
+`send` posts each event to the app's API with [`navigator.sendBeacon`](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/sendBeacon), which returns before the request completes.
+
+:::code-group
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+import { analytics } from './analytics.js'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [
+    react(),
+    // [!code hl:start]
+    analytics({
+      send: (event) => {
+        navigator.sendBeacon('/api/events', JSON.stringify(event))
+      },
+    }),
+    // [!code hl:end]
+  ],
+})
+```
+
+```ts [analytics.ts]
+import { Plugin } from 'accounts'
+
+export function analytics(options: analytics.Options) {
+  const { send } = options
+
+  return Plugin.from({
+    actions: (context) => ({
+      track: (name: string) =>
+        send({
+          chainId: context.chain.get(),
+          name,
+          userId: context.session.get()?.user.id,
+        }),
+    }),
+    hooks: {
+      afterSignIn: (context, session) =>
+        send({
+          chainId: context.chain.get(),
+          name: 'signIn',
+          userId: session.user.id,
+        }),
+      afterSignOut: (context) =>
+        send({ chainId: context.chain.get(), name: 'signOut' }),
+    },
+    id: 'analytics',
+  })
+}
+
+export declare namespace analytics {
+  type Event = {
+    chainId: number
+    name: string
+    userId?: string | undefined
+  }
+
+  type Options = {
+    send: (event: Event) => void
+  }
+}
+```
+
+:::
+
+### Call the action
+
+The instance holds the plugin's namespace under its `id`, so `accounts.analytics.track` sends an event.
+
+:::code-group
+
+```tsx [App.tsx]
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in
+      </button>
+    )
+
+  return (
+    // [!code hl:start]
+    <button
+      onClick={() => accounts.analytics.track('checkout.start')}
+      type="button"
+    >
+      Check out
+    </button>
+    // [!code hl:end]
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { react } from 'accounts/react'
+import { analytics } from './analytics.js'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [
+    react(),
+    analytics({
+      send: (event) => {
+        navigator.sendBeacon('/api/events', JSON.stringify(event))
+      },
+    }),
+  ],
+})
+```
+
+:::
+
+::::
+
+## Use cases
+
+Each use case sets an option of <SourceLink name="from" path="src/Plugin.ts">`Plugin.from`</SourceLink>, or passes plugins to <SourceLink name="create" path="src/Accounts.ts">`Accounts.create`</SourceLink>.
+
+### Run code at creation
+
+<SourceLink name="setup" path="src/Plugin.ts">`setup`</SourceLink> runs once at `Accounts.create`, after the plugin's `actions`. This plugin subscribes to the instance's chain with <SourceLink name="Context.chain.subscribe" path="src/Plugin.ts">`context.chain.subscribe`</SourceLink>, and tracks each `switchChain`.
+
+```ts [chains.ts]
+import { Plugin } from 'accounts'
+
+export function chains(options: chains.Options) {
+  const { send } = options
+
+  return Plugin.from({
+    id: 'chains',
+    // [!code hl:start]
+    setup: (context) => {
+      context.chain.subscribe((chainId, previous) => send({ chainId, previous }))
+    },
+    // [!code hl:end]
+  })
+}
+
+export declare namespace chains {
+  type Options = {
+    send: (event: { chainId: number; previous: number }) => void
+  }
+}
+```
+
+### Add members to the instance
+
+<SourceLink name="extend" path="src/Plugin.ts">`extend`</SourceLink> adds members to the instance itself, beside its namespaces. It receives the instance, so a member calls the instance's own members, such as <SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch`</SourceLink>. If a member's name is a member of the instance already, `Accounts.create` throws.
+
+:::code-group
+
+```ts [api.ts]
+import { Plugin } from 'accounts'
+
+export function api(options: api.Options) {
+  const { url } = options
+
+  return Plugin.from({
+    // [!code hl:start]
+    extend: (instance) => ({
+      api: (path: string) =>
+        instance.session.fetch({ url: new URL(path, url).href }),
+    }),
+    // [!code hl:end]
+    id: 'api',
+  })
+}
+
+export declare namespace api {
+  type Options = {
+    url: string
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { api } from './api.js'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [api({ url: 'https://api.example' })],
+})
+
+const response = await accounts.api('/me')
+```
+
+:::
+
+### Set options of the instance
+
+<SourceLink name="config" path="src/Plugin.ts">`config`</SourceLink> returns options of `Accounts.create`, such as the `redirectUri` of a platform. The options that `Accounts.create` receives win over them, and a later plugin's options win over an earlier plugin's.
+
+```ts [platform.ts]
+import { Plugin } from 'accounts'
+
+export function platform(options: platform.Options) {
+  const { redirectUri } = options
+
+  return Plugin.from({
+    config: () => ({ redirectUri }), // [!code hl]
+    id: 'platform',
+  })
+}
+
+export declare namespace platform {
+  type Options = {
+    redirectUri: string
+  }
+}
+```
+
+### Combine plugins in a preset
+
+An entry of `plugins` can be a list of plugins, such as the list that a preset returns. <SourceLink name="Option" path="src/Plugin.ts">`Plugin.Option`</SourceLink> types each entry. `Accounts.create` flattens each list in order, and the instance's type holds the namespace of each plugin.
+
+:::code-group
+
+```ts [preset.ts]
+import { Plugin } from 'accounts'
+import { redirect, viem } from 'accounts/plugins'
+
+export function preset(options: preset.Options) {
+  const { redirectUri } = options
+
+  return [
+    Plugin.from({ config: () => ({ redirectUri }), id: 'preset' }),
+    redirect(),
+    viem(),
+  ] satisfies readonly Plugin.Option[]
+}
+
+export declare namespace preset {
+  type Options = {
+    redirectUri: string
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { preset } from './preset.js'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [preset({ redirectUri: 'https://app.example/callback' })], // [!code hl]
+})
+```
+
+:::
+
+### Add a plugin conditionally
+
+A falsy entry of `plugins` adds nothing, so `enabled && analytics()` adds the plugin only while `enabled` holds.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { analytics } from './analytics.js'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [
+    // [!code hl:start]
+    import.meta.env.PROD &&
+      analytics({
+        send: (event) => {
+          navigator.sendBeacon('/api/events', JSON.stringify(event))
+        },
+      }),
+    // [!code hl:end]
+  ],
+})
+```
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Send transactions and sign messages with a Viem client whose account follows the session."
+    icon="viem"
+    title="Viem"
+    to="/docs/guides/viem"
+  />
+  <PageCard
+    description="Sign the user in to the app with a signed message, beside the Tempo ID sign-in."
+    icon="ethereum"
+    title="Sign-In With Ethereum"
+    to="/docs/guides/siwe"
+  />
+  <PageCard
+    description="Replace the dialog plugin in a test build, and sign in with no dialog."
+    icon="flask"
+    title="End-to-end tests"
+    to="/docs/guides/testing"
+  />
+</Cards>

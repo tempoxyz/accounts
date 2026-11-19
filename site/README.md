@@ -72,7 +72,7 @@ topic({
 | `link`   | Path of the page. Of a `topic`, optional, the path of its overview, the item "Overview" |
 | `text`   | Label of the item                                                                       |
 
-Most icons come from Tempo's design system, `@tempoxyz/ds`. The topic of a brand shows the brand's official mark in one color, so that it follows the text color as each other icon does:
+Most icons come from Tempo's design system, `@tempoxyz/ds`. `puzzle` comes from [Lucide](https://lucide.dev/icons/puzzle), since the design system holds no such icon. The topic of a brand shows the brand's official mark in one color, so that it follows the text color as each other icon does:
 
 | Icon    | Source                                                                                                     |
 | ------- | ---------------------------------------------------------------------------------------------------------- |
