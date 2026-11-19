@@ -39,7 +39,9 @@ describe('Plugin', () => {
   test.each(Object.keys(modules) as (keyof typeof modules)[])(
     "bundles none of another plugin's modules for an app of %s",
     async (name) => {
-      const { entry: included } = await bundle(
+      const {
+        loaded: { files: included },
+      } = await bundle(
         `import { Accounts, Store } from '${Path.join(source, 'index.ts')}'
         import { ${name} } from '${Path.join(source, 'plugins', 'index.ts')}'
         import { tempo } from 'viem/tempo/chains'
@@ -66,24 +68,53 @@ describe('Plugin', () => {
     expect(imports).not.toContain('react')
   })
 
-  test('imports no mppx from the entry of the plugins, whose mpp plugin has an entry of its own', async () => {
-    const { imports } = await bundle(
+  test('imports no mppx from the entry of the plugins, or from an instance before its first payment', async () => {
+    const { loaded } = await bundle(
       `export * from '${Path.join(source, 'plugins/index.ts')}'`,
     )
+    const { lazy, loaded: instance } = await bundle(
+      `import { Accounts } from '${Path.join(source, 'index.ts')}'
+      export const tempoId = Accounts.create({ clientId: 'client_test' })`,
+    )
 
-    expect(imports.filter((name) => name.startsWith('mppx'))).toEqual([])
+    expect(loaded.imports.filter((name) => name.startsWith('mppx'))).toEqual([])
+    expect(instance.imports.filter((name) => name.startsWith('mppx'))).toEqual(
+      [],
+    )
+    expect(instance.files).not.toContain('mpp/index.ts')
+    expect(lazy).toContain('mpp/index.ts')
   })
 
   test("bundles the default funding plugin with the instance, without the dialog's modules", async () => {
-    const { chunks } = await bundle(
+    const {
+      loaded: { files: instance },
+    } = await bundle(
       `import { Accounts } from '${Path.join(source, 'index.ts')}'
       import { email } from '${Path.join(source, 'plugins/index.ts')}'
       export const tempoId = Accounts.create({ clientId: 'client_test', plugins: [email()] })`,
     )
-    const instance = chunks.find((files) => files.includes('Accounts.ts')) ?? []
 
     expect(instance).toContain('plugins/funding.ts')
     expect(modules.dialog.filter((file) => instance.includes(file))).toEqual([])
+  })
+
+  test('bundles no default plugin with the instance of `accounts/lite`', async () => {
+    const { chunks, loaded } = await bundle(
+      `import { Accounts } from '${Path.join(source, 'lite/index.ts')}'
+      import { email } from '${Path.join(source, 'plugins/index.ts')}'
+      export const tempoId = Accounts.create({ clientId: 'client_test', plugins: [email()] })`,
+    )
+    const files = chunks.flat()
+
+    expect(loaded.files).toContain('plugins/email.ts')
+    expect(
+      [
+        'internal/DefaultDialog.ts',
+        'internal/DefaultMpp.ts',
+        'mpp/index.ts',
+        'plugins/funding.ts',
+      ].filter((file) => files.includes(file)),
+    ).toEqual([])
   })
 
   test("loads `accounts.connections` and the router of `accounts.handler` from chunks of their own, so a page's instance bundles neither", async () => {

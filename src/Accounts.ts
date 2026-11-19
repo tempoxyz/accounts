@@ -31,7 +31,6 @@ import * as Chains from './internal/Chains.js'
 import * as ClientId from './internal/ClientId.js'
 import * as CliStore from './internal/CliStore.js'
 import * as Core from './internal/Core.js'
-import * as DefaultDialog from './internal/DefaultDialog.js'
 import * as DefaultStore from './internal/DefaultStore.js'
 import * as Hint from './internal/Hint.js'
 import * as InstanceChain from './internal/InstanceChain.js'
@@ -40,7 +39,6 @@ import * as Payment from './internal/Payment.js'
 import type { Permissions } from './Permissions.js'
 import * as Plugin from './Plugin.js'
 import type { backend } from './plugins/backend.js'
-import { funding } from './plugins/funding.js'
 import type * as Session from './Session.js'
 import type { Store } from './Store.js'
 import type * as TempoAccount from './internal/TempoAccount.js'
@@ -562,10 +560,10 @@ export type Config = {
 }
 
 /**
- * A Tempo ID instance: its configuration, its session, and the namespace of each plugin. An instance
- * without a sign-in plugin holds the `dialog` plugin, and an instance without the `funding` plugin
- * holds it with its default options. Each plugin's namespace sits beside these members, under the
- * plugin's `id`. No plugin may take the name of a member, or `Accounts.create` throws.
+ * A Tempo ID instance: its configuration, its session, and the namespace of each plugin. Each
+ * plugin's namespace sits beside these members, under the plugin's `id`. No plugin may take the
+ * name of a member, or `Accounts.create` throws. The root entry's `Accounts.Accounts` adds the
+ * plugins that its `Accounts.create` adds.
  *
  * The members and the plugins' actions throw {@link RequestError} for each refusal of Tempo ID, and
  * the package's other error classes, such as {@link SupersededError} for a sign-in that another
@@ -573,7 +571,7 @@ export type Config = {
  */
 export type Accounts<
   plugins extends readonly Plugin.Plugin[] = readonly Plugin.Plugin[],
-> = Plugin.Namespaces<WithFunding<WithSignIn<plugins>>> &
+> = Plugin.Namespaces<plugins> &
   Plugin.Members<plugins> & {
     /** The user's Tempo Account that Tempo ID selects for the app. */
     account: {
@@ -1616,11 +1614,12 @@ export declare namespace from {
 
 /**
  * Creates an instance: its configuration, the session of its user, and one namespace for each
- * plugin. Each plugin adds a sign-in method or another set of actions, such as `email` or `viem`,
- * under its own name, such as `accounts.email`. An app bundles only the plugins that it imports.
- * `create` takes the options of `Accounts.from` but `par`, which each plugin of a redirect or a
- * dialog sets. With no options, the instance signs in through the dialog, with the page's origin
- * as its client ID.
+ * plugin in `plugins`. Each plugin adds a sign-in method or another set of actions, such as `email`
+ * or `viem`, under its own name, such as `accounts.email`. `create` takes the options of
+ * `Accounts.from` but `par`, which each plugin of a redirect or a dialog sets. `accounts/lite`
+ * exports it as `Accounts.create`, which adds no plugin, so an app bundles only the plugins that it
+ * names. The root entry's `Accounts.create` adds the `dialog`, `funding`, and `mpp` plugins that
+ * `plugins` lacks. An instance without a sign-in plugin signs in only through `authorize`.
  *
  * In a browser, the instance holds the session of its user and saves it to `store`, which
  * defaults to IndexedDB. Elsewhere, an instance with a `cli:` client ID saves it to the file of
@@ -1632,18 +1631,8 @@ export declare namespace from {
  * results, but keeps nothing. A backend keeps each user's session with the `backend` plugin
  * instead.
  *
- * An instance without a sign-in plugin (`backend`, `device`, `dialog`, `email`, `passkey`, or
- * `redirect`) receives the `dialog` plugin with its default options. Its code loads from a chunk
- * of its own on the first call of an action, so an app that names its sign-in plugins bundles none
- * of it. In a browser, the chunk loads as the instance is created on a page without a saved
- * session or with an expired one, and once the session ends. It then preloads the dialog's frame,
- * as the `dialog` plugin's `preload` describes. A page that restores a live session, or renews an
- * expired one through an authorization in progress, loads none of the chunk before the session
- * ends or an action runs.
- *
- * Every instance holds the `funding` plugin, which opens Tempo ID's deposit page. An instance
- * without it receives it with its default options. An app passes `funding()` only to set its
- * options.
+ * Without `accessKey`, each sign-in without a challenge requests an access key that may transfer up
+ * to 5 OUSD, and expires a day after the sign-in. `accessKey: false` requests none.
  *
  * @throws {ClientIdRequiredError} Outside a browser without `clientId`, where no page's origin can
  *   serve as one.
@@ -1656,19 +1645,12 @@ export declare namespace from {
  *
  * @example
  * ```ts
- * import { Accounts } from 'accounts'
- * import { email, viem } from 'accounts/plugins'
+ * import { Accounts } from 'accounts/lite'
+ * import { dialog, viem } from 'accounts/plugins'
  *
- * const accounts = Accounts.create({
- *   // Each sign-in requests an access key that may transfer up to 10 OUSD for a day.
- *   accessKey: {
- *     expiry: '1d',
- *     limits: [{ limit: '10', token: 'ousd' }],
- *   },
- *   plugins: [email(), viem()],
- * })
+ * const accounts = Accounts.create({ plugins: [dialog(), viem()] })
  *
- * const session = await accounts.session.get()
+ * await accounts.dialog.signIn()
  * ```
  */
 export function create<const plugins extends readonly Plugin.Option[] = []>(
@@ -1685,11 +1667,16 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     ...rest
   } = options
   // The instance resolves a plain object again at each sign-in, so a duration expiry counts from
-  // that sign-in.
-  const accessKey =
-    typeof accessKey_option === 'function'
-      ? accessKey_option
-      : () => accessKey_option
+  // that sign-in. An access key without `expiry` expires a day after the sign-in.
+  const accessKey = () => {
+    const value = (() => {
+      if (accessKey_option === false) return undefined
+      if (typeof accessKey_option === 'function') return accessKey_option()
+      return accessKey_option
+    })()
+    if (!value || value.expiry !== undefined) return value
+    return { ...value, expiry: AccessKey_internal.defaultExpiry }
+  }
   const named = Plugin.flatten(entries)
   // The plugins' options apply first, in order, and the options that `create` receives win.
   const given = Object.fromEntries(
@@ -1748,17 +1735,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       })
   }
   const config = from(merged)
-  // An instance without a sign-in plugin signs in with the dialog, which loads on demand. Every
-  // instance opens the deposit page, so one without the `funding` plugin receives it.
-  const plugins: readonly Plugin.Plugin[] = (() => {
-    const signIn = named.some((plugin) =>
-      DefaultDialog.signInIds.has(plugin.id),
-    )
-    const withFunding = named.some((plugin) => plugin.id === 'funding')
-      ? named
-      : [...named, funding()]
-    return signIn ? withFunding : [...withFunding, DefaultDialog.plugin()]
-  })()
+  const plugins: readonly Plugin.Plugin[] = named
   // A store of one user's, a CLI's shared file, or a browser's IndexedDB holds the session. A
   // backend's instance passes no store, since it serves many users.
   const enabled = merged.store !== undefined || typeof indexedDB !== 'undefined'
@@ -1957,6 +1934,8 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
 
   const context: Plugin.Context = {
     accessKey,
+    defaultAccessKey: () =>
+      accessKey_option === undefined ? defaultAccessKey : undefined,
     chain: {
       configured: chain.configured,
       get: chain.get,
@@ -2706,13 +2685,19 @@ export declare namespace create {
     plugins extends readonly Plugin.Option[] = readonly Plugin.Option[],
   > = Omit<from.Options, 'par' | 'store'> & {
     /**
-     * The access key of each sign-in that names none: what it may do, or a function that the
-     * instance calls at each sign-in to return it. A duration expiry, such as `'7d'`, counts from
-     * the sign-in. Without an expiry, Tempo ID fills it with the app's refresh token lifetime, as
-     * [Default expiry](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#default-expiry)
-     * describes. Absent, a sign-in without `accessKey` requests no access key.
+     * The access key of each sign-in that names none: what it may do, a function that the instance
+     * calls at each sign-in to return it, or `false` for no access key. A duration expiry, such as
+     * `'7d'`, counts from the sign-in. Without an expiry, the access key expires a day after the
+     * sign-in, as one of a sign-in's own `accessKey` does. Defaults to an access key that may
+     * transfer up to 5 OUSD, and expires a day after the sign-in. The default applies to no sign-in
+     * with a challenge, whose signature stays an EIP-191 signature, and to no page whose `store`
+     * has `json`, which cannot keep the access key.
      */
-    accessKey?: Permissions | (() => Permissions | undefined) | undefined
+    accessKey?:
+      | Permissions
+      | false
+      | (() => Permissions | undefined)
+      | undefined
     /**
      * The IDs of the chains that `switchChain` may select, and that a stored selection may restore.
      * Defaults to Tempo's built-in chains: mainnet, testnet, devnet, and a local node. The
@@ -2766,15 +2751,18 @@ export declare namespace create {
       | undefined
     /**
      * The plugins, each of which adds a namespace with its `id`. An entry can be a list, such as a
-     * preset that combines plugins, or a falsy value, which adds nothing. Defaults to none, with
-     * the `dialog` plugin added. The built-in plugins come from `accounts/plugins`, and
-     * `Plugin.from` defines another. Each plugin's `setup` runs once, in the order of `plugins`.
+     * preset that combines plugins, or a falsy value, which adds nothing. Defaults to none. The
+     * root entry's `Accounts.create` adds the `dialog`, `funding`, and `mpp` plugins that it lacks.
+     * The built-in plugins come from `accounts/plugins`, and `Plugin.from` defines another. Each
+     * plugin's `setup` runs once, in the order of `plugins`.
      *
      * - `backend`, as `accounts.backend`: a backend's sessions, one for each user.
      * - `device`, as `accounts.device`: the device grant, such as in a CLI.
      * - `dialog`, as `accounts.dialog`: Tempo ID's sign-in in a dialog or popup.
      * - `email`, as `accounts.email`: an emailed code in the app's own UI.
-     * - `funding`, as `accounts.funding`: Tempo ID's deposit page, on every instance.
+     * - `funding`, as `accounts.funding`: Tempo ID's deposit page.
+     * - `mpp`, from `accounts/mpp`, as `accounts.fetch` and `accounts.mpp`: the payments of MPP
+     *   endpoints.
      * - `passkey`, as `accounts.passkey`: a passkey in the app's own UI.
      * - `redirect`, as `accounts.redirect`: a redirect to Tempo ID's pages.
      * - `viem`, as `accounts.viem`: a Viem client with the session's access key.
@@ -2790,16 +2778,6 @@ export declare namespace create {
     store?: Store | false | undefined
   }
 }
-
-/** `plugins`, with the `dialog` plugin when none of them signs the user in. */
-export type WithSignIn<plugins extends readonly Plugin.Plugin[]> =
-  // A list whose IDs the type does not name, such as a widened `Plugin.Plugin[]`, may hold a
-  // sign-in plugin, so its type promises no dialog.
-  string extends plugins[number]['id']
-    ? plugins
-    : [Extract<plugins[number]['id'], DefaultDialog.SignInId>] extends [never]
-      ? readonly [...plugins, DefaultDialog.Dialog]
-      : plugins
 
 /**
  * The sign-in to the app that `pay` of an instance of `plugins` returns with the `siwe` plugin on a
@@ -2844,14 +2822,11 @@ export type SessionGet<plugins extends readonly Plugin.Plugin[]> =
       parameters?: Core.getSession.Parameters,
     ) => Promise<Session.Session | undefined>)
 
-/** `plugins`, with the `funding` plugin and its default options when none of them is `funding`. */
-export type WithFunding<plugins extends readonly Plugin.Plugin[]> =
-  // A list whose IDs the type does not name may hold the plugin, so its type promises none.
-  string extends plugins[number]['id']
-    ? plugins
-    : 'funding' extends plugins[number]['id']
-      ? plugins
-      : readonly [...plugins, ReturnType<typeof funding>]
+/** The access key of each sign-in of an instance without `accessKey`. */
+const defaultAccessKey: Permissions = {
+  expiry: AccessKey_internal.defaultExpiry,
+  limits: [{ limit: '5', token: 'ousd' }],
+}
 
 /** Where Tempo ID runs unless `create` receives a `url`. */
 const defaultUrl = 'https://id.tempo.xyz'

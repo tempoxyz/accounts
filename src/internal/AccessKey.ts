@@ -13,6 +13,9 @@ import { Account, Secp256k1 } from 'viem/tempo'
 import { RequestError } from '../Accounts.js'
 import type { WithAccount } from '../Permissions.js'
 
+/** The expiry of a sign-in's access key that names none. */
+export const defaultExpiry = '1d' as const
+
 /**
  * An app's access key, as the session holds it. A browser access key is a non-extractable WebCrypto
  * key pair, and any other a secp256k1 private key. An access key that the app supplied as

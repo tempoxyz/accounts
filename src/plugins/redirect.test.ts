@@ -41,6 +41,76 @@ describe('redirect', () => {
     expect(Fs.readdirSync(directory)).toMatchInlineSnapshot(`[]`)
   })
 
+  test('requests an access key of 5 OUSD for a day without `accessKey`, a day of expiry for one without `expiry`, and none for `accessKey: false` or a sign-in with a challenge', async () => {
+    /** Returns the key authorization that a sign-in of an instance with `accessKey` requests. */
+    async function requested(
+      accessKey: Accounts.create.Options['accessKey'],
+      challenge?: string,
+    ) {
+      const urls: string[] = []
+      const accounts = Accounts.create({
+        accessKey,
+        chain: 42431,
+        clientId: 'example-mobile',
+        plugins: [
+          redirect({
+            open(url) {
+              urls.push(url)
+              return Promise.resolve(undefined)
+            },
+          }),
+        ],
+        redirectUri: 'com.example.app:/callback',
+        store: Store.memory(),
+        url: 'http://127.0.0.1:9',
+      })
+      const start = Math.floor(Date.now() / 1000)
+      await accounts.redirect.signIn(challenge ? { challenge } : {})
+      const encoded = new URL(urls[0]!).searchParams.get('key_authorization')
+      if (!encoded) return null
+      const { expiry, limits } = JSON.parse(
+        Buffer.from(encoded, 'base64url').toString(),
+      ) as { expiry: number; limits?: unknown }
+      return { expiresIn: expiry - start, limits }
+    }
+
+    const results = {
+      absent: await requested(undefined),
+      challenge: await requested(undefined, 'Sign in to Example'),
+      disabled: await requested(false),
+      withoutExpiry: await requested({
+        limits: [{ limit: '20', token: 'pathusd' }],
+      }),
+    }
+
+    // A second can pass between the sign-in's start and its request.
+    expect([86400, 86401]).toContain(results.absent?.expiresIn)
+    expect([86400, 86401]).toContain(results.withoutExpiry?.expiresIn)
+    expect({
+      absent: results.absent?.limits,
+      challenge: results.challenge,
+      disabled: results.disabled,
+      withoutExpiry: results.withoutExpiry?.limits,
+    }).toMatchInlineSnapshot(`
+      {
+        "absent": [
+          {
+            "limit": "0x4c4b40",
+            "token": "0x20c0000000000000000000006a37DA5C996874BE",
+          },
+        ],
+        "challenge": null,
+        "disabled": null,
+        "withoutExpiry": [
+          {
+            "limit": "0x1312d00",
+            "token": "0x20C0000000000000000000000000000000000000",
+          },
+        ],
+      }
+    `)
+  })
+
   test("passes open the redirect URI of the sign-in URL, which an option of Accounts.create sets over a preset's", async () => {
     const opened: Opened[] = []
     const accounts = Accounts.create({

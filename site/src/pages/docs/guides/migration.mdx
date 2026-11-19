@@ -81,7 +81,7 @@ export const accounts = Accounts.create({
 
 :::
 
-<SourceLink name="Session.accessKey" path="src/Session.ts">`session.accessKey.account`</SourceLink> is the address of the Tempo Account that the access key acts for, not the access key's address. Without the <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> option, a sign-in requests no access key, and <SourceLink name="account.get" path="src/Accounts.ts">`accounts.account.get()`</SourceLink> reads the Tempo Account from Tempo ID.
+<SourceLink name="Session.accessKey" path="src/Session.ts">`session.accessKey.account`</SourceLink> is the address of the Tempo Account that the access key acts for, not the access key's address. With the <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> option set to `false`, a sign-in requests no access key, and <SourceLink name="account.get" path="src/Accounts.ts">`accounts.account.get()`</SourceLink> reads the Tempo Account from Tempo ID.
 
 :::code-group
 

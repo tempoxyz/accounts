@@ -22,9 +22,10 @@ import {
   test,
 } from 'vite-plus/test'
 import { Account } from 'viem/tempo'
-import { Bytes, Hash, Json } from 'ox'
+import { Bytes, Hash, Json, Secp256k1 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import * as Accounts from './Accounts.js'
+import * as DefaultAccounts from './internal/DefaultAccounts.js'
 import * as StoreValue from './internal/StoreValue.js'
 import * as Plugin from './Plugin.js'
 import * as Session from './Session.js'
@@ -342,6 +343,136 @@ describe('create', () => {
         "files": [],
         "given": true,
         "saved": true,
+      }
+    `)
+  })
+
+  test('adds no plugin, and the root entry adds the `dialog`, `funding`, and `mpp` plugins that `plugins` lacks', () => {
+    const options = {
+      chain: 42431,
+      clientId: 'example',
+      plugins: [Plugin.from({ actions: () => ({}), id: 'test' })],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    } satisfies Accounts.create.Options
+    const names = ['dialog', 'fetch', 'funding', 'mpp', 'test']
+
+    const lite = Accounts.create(options)
+    const root = DefaultAccounts.create(options)
+
+    expect({
+      lite: names.filter((name) => name in lite),
+      root: names.filter((name) => name in root),
+    }).toMatchInlineSnapshot(`
+      {
+        "lite": [
+          "test",
+        ],
+        "root": [
+          "dialog",
+          "fetch",
+          "funding",
+          "mpp",
+          "test",
+        ],
+      }
+    `)
+  })
+
+  test('holds `fetch` and `mpp` of the `mpp` plugin without one in `plugins`, which load the plugin at the first request', async () => {
+    const accounts = DefaultAccounts.create({
+      chain: 42431,
+      clientId: 'example',
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const errors = await Promise.all([
+      accounts.fetch('http://127.0.0.1:9/fortune').then(
+        () => 'sent',
+        (error: Error) => error.name,
+      ),
+      accounts
+        .mpp({ maxAmount: '1' })
+        .fetch('http://127.0.0.1:9/fortune')
+        .then(
+          () => 'sent',
+          (error: Error) => error.name,
+        ),
+    ])
+
+    // The loaded plugin reads the stored session before it sends a request.
+    expect(errors).toMatchInlineSnapshot(`
+      [
+        "Accounts.SignedOutError",
+        "Accounts.SignedOutError",
+      ]
+    `)
+    expect(accounts.mpp.session().state).toMatchInlineSnapshot(`
+      {
+        "status": "idle",
+      }
+    `)
+  })
+
+  test('ends a session manager of the default `mpp` plugin at a change of user or of access key before its first request, so it never pays with another access key', async () => {
+    const accounts = DefaultAccounts.create({
+      chain: 42431,
+      clientId: 'example',
+      plugins: [
+        Plugin.from({
+          actions: (context) => ({
+            commit: (session: Session.Session) =>
+              context.session.change().commit(session),
+          }),
+          id: 'test',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    /** Returns a session of `id` whose access key spends any token on Tempo testnet. */
+    const signedIn = async (id: string) => {
+      const owner = Account.fromSecp256k1(Secp256k1.randomPrivateKey())
+      const privateKey = Secp256k1.randomPrivateKey()
+      const accessKey = Account.fromSecp256k1(privateKey, { access: owner })
+      return Session.from({
+        accessKey: {
+          account: owner.address,
+          chainId: 42431,
+          keyAuthorization: KeyAuthorization.toRpc(
+            await owner.signKeyAuthorization(accessKey, {
+              chainId: 42431n,
+              expiry: Math.floor(Date.now() / 1000) + 86_400,
+            }),
+          ),
+          privateKey,
+        },
+        accessToken: 'access-token',
+        expiresAt: Date.now() + 3_600_000,
+        user: { email: `${id}@example.com`, id },
+      })
+    }
+    /** Returns the outcome of the first request of a manager created before a sign-in of `id`. */
+    const refused = async (id: string) => {
+      await accounts.test.commit(await signedIn('user_1'))
+      const manager = accounts.mpp.session()
+
+      await accounts.test.commit(await signedIn(id))
+      return manager.fetch('http://127.0.0.1:9/stream').then(
+        () => 'sent',
+        (error: Error) => error.name,
+      )
+    }
+
+    // Neither manager sends a request with the later access key.
+    expect({
+      otherKey: await refused('user_1'),
+      otherUser: await refused('user_2'),
+    }).toMatchInlineSnapshot(`
+      {
+        "otherKey": "Accounts.SignedOutError",
+        "otherUser": "Accounts.SignedOutError",
       }
     `)
   })

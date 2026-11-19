@@ -290,7 +290,9 @@ export function redirect(options: redirect.Options = {}) {
           }
           /** Returns the request, on the selected chain. */
           const request = () => ({
-            accessKey: SignIn.accessKey(context, parameters.accessKey),
+            accessKey: SignIn.accessKey(context, parameters.accessKey, {
+              challenge: parameters.challenge !== undefined,
+            }),
             challenge: parameters.challenge,
             funding: parameters.funding,
             resource: parameters.resource,

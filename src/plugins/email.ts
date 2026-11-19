@@ -218,8 +218,10 @@ export function email(options: email.Options = {}) {
           const loading = context.chain.load().catch(() => undefined)
           const change = context.session.change({ loading })
           await loading
-          const accessKey = SignIn.accessKey(context, parameters.accessKey)
           const { challenge, code, link, userIp } = parameters
+          const accessKey = SignIn.accessKey(context, parameters.accessKey, {
+            challenge: challenge !== undefined,
+          })
           const getFn = options.getFn ?? config.getFn
           const { createFn } = options
 

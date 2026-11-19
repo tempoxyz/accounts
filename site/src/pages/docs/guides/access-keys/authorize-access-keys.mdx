@@ -156,7 +156,7 @@ Each use case sets one property of the <SourceLink name="Permissions" path="src/
 
 ### Authorize an access key after sign-in
 
-An app can sign a user in without an access key, and request one at the first payment. An instance without <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> requests none at sign-in. On an instance with one, pass `false` as the sign-in's <SourceLink name="signIn.method.accessKey" path="src/plugins/dialog.ts">`accessKey`</SourceLink>.
+An app can sign a user in without an access key, and request one at the first payment. An instance with <SourceLink name="create.accessKey" path="src/Accounts.ts">`accessKey`</SourceLink> set to `false` requests none at sign-in. Without it, each sign-in requests an access key that may transfer up to 5 OUSD for a day. For one sign-in without an access key, pass `false` as the sign-in's <SourceLink name="signIn.method.accessKey" path="src/plugins/dialog.ts">`accessKey`</SourceLink>.
 
 A second button calls <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> with <SourceLink name="signIn.method.accessKey" path="src/plugins/dialog.ts">`accessKey`</SourceLink>, which overrides the instance's. The user holds a Tempo ID session, so the dialog opens on the approval page only, and the returned session replaces the instance's session.
 
@@ -202,7 +202,11 @@ export function App() {
 import { Accounts } from 'accounts'
 import { react } from 'accounts/react'
 
-export const accounts = Accounts.create({ chain: 'testnet', plugins: [react()] })
+export const accounts = Accounts.create({
+  accessKey: false,
+  chain: 'testnet',
+  plugins: [react()],
+})
 ```
 
 :::

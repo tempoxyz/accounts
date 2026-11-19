@@ -278,11 +278,13 @@ export function dialog<const options extends dialog.Options = {}>(
         const entries = pending.get(context.config) ?? new Set()
         pending.set(context.config, entries.add(entry))
         try {
-          const accessKey = SignIn.accessKey(context, page.accessKey)
           // A plugin's challenge, such as the `siwe` plugin's, signs the user in to the app too. Its
           // message arrives after the dialog or the popup opens.
           const source =
             page.challenge === undefined ? context.challenge() : undefined
+          const accessKey = SignIn.accessKey(context, page.accessKey, {
+            challenge: page.challenge !== undefined || source !== undefined,
+          })
           let message: string | undefined
           const result = await DialogActions.signIn(config, {
             accessKey,
