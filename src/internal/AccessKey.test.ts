@@ -1,10 +1,13 @@
 /**
- * Tests the material check and the conversion of a stored access key to a Viem account.
+ * Tests the material check, the conversion of a stored access key to a Viem account, and the
+ * modules that a browser bundle of the app's own access key keeps.
  * @module
  */
+import * as Path from 'node:path'
 import { Address, Hex, Secp256k1 } from 'ox'
 import { AccountConfig, KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { Account } from 'viem/tempo'
+import { rolldown } from 'vite/rolldown'
 import { describe, expect, test } from 'vite-plus/test'
 import * as AccessKey from './AccessKey.js'
 
@@ -30,6 +33,44 @@ describe('held', () => {
 
   test('holds no material without an access key', () => {
     expect(AccessKey.held(undefined)).toMatchInlineSnapshot(`false`)
+  })
+})
+
+describe('own', () => {
+  test("keeps no mnemonic or HD key derivation in a browser bundle that checks the app's own public key", async () => {
+    const build = await rolldown({
+      input: 'entry',
+      onLog: () => undefined,
+      platform: 'browser',
+      plugins: [
+        {
+          name: 'entry',
+          resolveId: (id) => (id === 'entry' ? id : undefined),
+          load: (id) =>
+            id === 'entry'
+              ? `export { own } from ${JSON.stringify(Path.join(import.meta.dirname, 'AccessKey.ts'))}`
+              : undefined,
+        },
+      ],
+    })
+    const output = await build.generate({ format: 'esm' })
+    await build.close()
+
+    const kept = output.output
+      .flatMap((chunk) =>
+        chunk.type === 'chunk'
+          ? Object.entries(chunk.modules).filter(
+              ([, module]) => module.renderedLength > 0,
+            )
+          : [],
+      )
+      .map(([path]) => path.replace(/^.*node_modules\//, ''))
+      .filter((path) =>
+        /@scure\/bip(32|39)\/|ox\/_esm\/core\/(HdKey|Mnemonic|internal\/mnemonic)\.js$/.test(
+          path,
+        ),
+      )
+    expect(kept).toMatchInlineSnapshot(`[]`)
   })
 })
 

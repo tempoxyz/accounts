@@ -154,8 +154,10 @@ export function own(accessKey: own.Options | undefined): own.ReturnType {
       // A compressed public key holds 32 bytes after its prefix, as a private key does, so only
       // the uncompressed form passes.
       if (parsed.y === undefined) throw new TypeError('Compressed public key.')
-      const curve = accessKey.type === 'p256' ? P256 : Secp256k1
-      curve.noble.ProjectivePoint.fromHex(PublicKey.toHex(parsed).slice(2))
+      // Each branch reads `noble` from its namespace, so that a bundle keeps no other export of it,
+      // such as its mnemonic derivation.
+      const curve = accessKey.type === 'p256' ? P256.noble : Secp256k1.noble
+      curve.ProjectivePoint.fromHex(PublicKey.toHex(parsed).slice(2))
       return parsed
     } catch {
       throw new RequestError({
