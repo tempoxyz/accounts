@@ -2612,14 +2612,10 @@ describe('signOut', () => {
     'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
 
   /** Returns an instance whose `test.commit` commits a session after `before` resolves. */
-  function create(
-    store: Store.Store,
-    options: Pick<Accounts.create.Options, 'clientId' | 'fetch'> = {},
-  ) {
+  function create(store: Store.Store) {
     return Accounts.create({
       chain: 42431,
       clientId: 'https://app.example.com',
-      ...options,
       plugins: [
         Plugin.from({
           actions: (context) => ({
@@ -2742,18 +2738,15 @@ describe('signOut', () => {
       connect: (key, listener) =>
         memory.connect!(key, (message) => held.push(() => listener(message))),
     })
-    // A first-party app, whose sign-out ends the Tempo ID session. Tempo ID accepts each request.
-    const options = {
-      clientId: 'wallet',
-      fetch: () => Promise.resolve(Response.json({})),
-    }
-    const accounts = create(store, options)
-    const other = create(store, options)
+    const accounts = create(store)
+    const other = create(store)
+    // A third instance on the store, whose sign-out with `everywhere` precedes the sign-in.
+    const post = memory.connect!(name, () => undefined)
     await accounts.test.commit(session())
     await other.session.get()
     held.length = 0
 
-    await accounts.signOut({ everywhere: true })
+    post({ at: Date.now(), everywhere: true, signOut: true })
     await accounts.test.commit(
       Session.from({
         ...session(),
