@@ -1406,7 +1406,9 @@ export type Accounts<
      * reject only when no logout runs. The session stays empty in both cases. The store keeps the
      * refresh token of a revocation without an answer, and the next `signOut` revokes it beside
      * its own. If that revocation receives no answer again, a `signOut` without a session, such as
-     * the retry, rejects too.
+     * the retry, rejects too. A store that rejects its reads and writes, such as a Redis that is
+     * down, still holds the session, so the sign-out revokes the instance's refresh token, and
+     * rejects with the store's error.
      *
      * @throws {EverywhereNotAllowedError} For `everywhere` from an app that is not first-party.
      *   The call signs nothing out.
