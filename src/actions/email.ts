@@ -35,6 +35,9 @@ function firstParty(auth: Config) {
 /**
  * Emails the user a sign-in code. The response is the same for every address.
  *
+ * @throws {Accounts.RequestError} With `rejected` and status 400, when `clientId` names a third-party
+ *   app, such as an origin. The call sends no request.
+ *
  * @example
  * ```ts
  * await Actions.email.sendCode(auth, { email: 'user@example.com' })
@@ -71,7 +74,8 @@ export declare namespace sendCode {
  * relying party does not cover the page, throws it too. Then authorize through
  * `Actions.redirect.start`.
  *
- * A `code` that holds other than 6 digits throws `invalid_field` with status 0, before any request.
+ * A third-party `clientId` throws `rejected` with status 400, before the check of `code`. A `code`
+ * that holds other than 6 digits throws `invalid_field` with status 0. Neither sends a request.
  *
  * A new user of an app whose first account is a passkey receives the passkey account's registration in
  * place of the authorization, and the call registers the passkey, whose proof signs the access key,
@@ -82,6 +86,9 @@ export declare namespace sendCode {
  * A wallet.tempo passkey's account that waits for its upgrade signs the access key as the passkey's own
  * account, and `upgradeAvailable` is `true`. `Actions.account.upgrade` with the access key then upgrades
  * the account with one more prompt, after Tempo ID registers the access key.
+ *
+ * @throws {Accounts.RequestError} With `rejected` and status 400, when `clientId` names a third-party
+ *   app, such as an origin. The call sends no request.
  *
  * @example
  * ```ts
