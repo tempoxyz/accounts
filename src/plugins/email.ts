@@ -149,6 +149,8 @@ export function email(options: email.Options = {}) {
          *     headless
          *     [ceiling](https://github.com/tempoxyz/id/blob/main/docs/errors.md#headless-ceiling).
          *     On a page, an app with `tempo-id:sign` has no ceiling.
+         *   - `access_key_pending`: The access key has a key authorization with other limits or
+         *     scopes, which the chain has not registered. Send a new access key.
          *   - `challenge_not_permitted`: The app sent a `challenge` without the `tempo-id:sign`
          *     scope.
          * @throws {Accounts.RequestError} On a page, when Tempo ID refuses the authorization. The

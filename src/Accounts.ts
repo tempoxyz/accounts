@@ -277,6 +277,7 @@ export declare namespace RequestError {
   type Reason =
     | 'access_key_changing'
     | 'access_key_endpoint_failed'
+    | 'access_key_pending'
     | 'access_key_taken'
     | 'allowance_redeemed'
     | 'already_decided'
@@ -750,6 +751,8 @@ export type Accounts<
      *   - `expiry_exceeds_maximum`, `limit_exceeds_maximum`: The access key exceeds the headless
      *     [ceiling](https://github.com/tempoxyz/id/blob/main/docs/errors.md#headless-ceiling). An
      *     app with `tempo-id:sign` has no ceiling.
+     *   - `access_key_pending`: The access key has a key authorization with other limits or
+     *     scopes, which the chain has not registered. Send a new access key.
      *   - `challenge_not_permitted`: The app sent a `challenge` without the `tempo-id:sign` scope.
      * @throws {RequestError} With `invalid_field`, `rate_limited`, `upstream_unavailable`, or
      *   `unexpected`, when a field is missing or malformed, or a retry later may succeed.
@@ -875,9 +878,12 @@ export type Accounts<
        * Later calls return the stored access keys without a request. Concurrent calls of one
        * connection redeem once, since the instance serializes them, so one process serves every
        * request of a connection. If a redemption ends without a response, the next call sends the
-       * same public key, and Tempo ID returns the same key authorization. A token that Tempo ID
-       * issues more than a minute after the last redemption names every live access key in
-       * `api_access_keys`, so the connection drops the others, as after a revocation. Without a
+       * same public key. Tempo ID returns the same key authorization, or refuses the public key
+       * with `access_key_pending` if the user approved other limits or scopes since. If the chain
+       * does not answer Tempo ID, that refusal is `upstream_unavailable`, and the call keeps the
+       * private key for the next call. A token that Tempo ID issues more than a minute after the
+       * last redemption names every live access key in `api_access_keys`, so the connection drops
+       * the others, as after a revocation. Without a
        * live access key, the call redeems the connection's allowance again. If Tempo ID refuses it
        * with `allowance_redeemed`, the access key that the allowance delivered is live, so the call
        * keeps the stored access keys, whatever the local clock says. If Tempo ID refuses it with
@@ -891,6 +897,8 @@ export type Accounts<
        * @throws {RequestError} When Tempo ID refuses the redemption, with one of these `reason`
        *   values, which [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md)
        *   describes:
+       *   - `access_key_pending`: The access key has a key authorization with other limits or
+       *     scopes, which the chain has not registered. The next call sends a new one.
        *   - `access_key_taken`: Another app or connection holds the access key. The next call
        *     sends a new one.
        *   - `allowance_redeemed`: The allowance was redeemed for another access key, or another
@@ -905,6 +913,8 @@ export type Accounts<
        *   - `rate_limited`: Too many requests from the API or for the user. Retry later.
        *   - `unknown_allowance`: The user approved no connection, the approval expired, or the
        *     app's grant ended. The app authorizes again.
+       *   - `upstream_unavailable`: A service that Tempo ID depends on failed, such as the chain.
+       *     The call keeps the private key that it sent. Retry later.
        *   - `webauthn_required`: Only a passkey owns the account, which cannot approve a
        *     connection.
        * @throws {RequestError} With status 0, when the issuer's key set cannot be fetched, as
