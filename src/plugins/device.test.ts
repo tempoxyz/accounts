@@ -6,6 +6,7 @@
 import { PGlite } from '@electric-sql/pglite'
 import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs'
+import * as Http from 'node:http'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
 import { P256, PublicKey } from 'ox'
@@ -286,5 +287,52 @@ describe('device', () => {
       `[Accounts.RequestError: The poll received no response. Check the connection, and poll again.]`,
     )
     expect((error as Accounts.RequestError).status).toMatchInlineSnapshot(`0`)
+  })
+
+  test('signIn waits 5 seconds between polls, as RFC 8628 sets, when the code response names no interval', async () => {
+    const polls: number[] = []
+    // A code that expires in 1 second, without `interval`, which RFC 8628 §3.2 makes optional.
+    const server = Http.createServer((request, response) => {
+      response.setHeader('content-type', 'application/json')
+      if (request.url === '/device/code') {
+        response.end(
+          JSON.stringify({
+            device_code: 'device-code',
+            expires_in: 1,
+            user_code: 'ZZVF-JWQT',
+            verification_uri: 'http://127.0.0.1/device',
+            verification_uri_complete: 'http://127.0.0.1/device?code=ZZVF-JWQT',
+          }),
+        )
+        return
+      }
+      polls.push(Date.now())
+      response.statusCode = 400
+      response.end(JSON.stringify({ error: 'authorization_pending' }))
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('No port.')
+    const accounts = Accounts.create({
+      accessKey: { expiry: '7d', limits: [{ limit: '100', token: 'ousd' }] },
+      chain: 42431,
+      clientId: 'cli:acme-example',
+      plugins: [device({ onCode: () => {} })],
+      store: false,
+      url: `http://127.0.0.1:${address.port}`,
+    })
+
+    const error = await accounts.device
+      .signIn()
+      .catch((error: unknown) => error)
+    await new Promise((resolve) => server.close(resolve))
+
+    // The first wait ends at the code's expiry, so one poll precedes the expiry.
+    expect({ error, polls: polls.length }).toMatchInlineSnapshot(`
+      {
+        "error": [Accounts.RequestError: Device code expired. Request a new code.],
+        "polls": 1,
+      }
+    `)
   })
 })

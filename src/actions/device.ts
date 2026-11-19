@@ -78,7 +78,7 @@ export async function authorize<
   const code = await Api.json<{
     device_code: string
     expires_in: number
-    interval: number
+    interval?: number | undefined
     user_code: string
     verification_uri: string
     verification_uri_complete: string
@@ -99,6 +99,9 @@ export async function authorize<
     }),
   )
 
+  // RFC 8628 §3.2: a response without `interval` means 5 seconds.
+  const interval = typeof code.interval === 'number' ? code.interval : 5
+
   // Whether the grant carries a challenge, whose signature the approval must hold.
   const challenged = options.challenge !== undefined
 
@@ -114,7 +117,7 @@ export async function authorize<
     const aborted = () =>
       signal?.reason ??
       Object.assign(new Error('The wait was aborted.'), { name: 'AbortError' })
-    let interval = code.interval
+    let delay = interval
     // Doubles at each transient failure in a row, and returns to 1 once a poll is answered.
     let backoff = 1
     let failure: unknown
@@ -138,7 +141,7 @@ export async function authorize<
             signal?.removeEventListener('abort', abort)
             resolve()
           },
-          Math.min(interval * backoff * 1000, deadline - Date.now()),
+          Math.min(delay * backoff * 1000, deadline - Date.now()),
         )
         signal?.addEventListener('abort', abort, { once: true })
       })
@@ -165,7 +168,7 @@ export async function authorize<
       if (signal?.aborted) throw aborted()
       if (!result) continue
       backoff = 1
-      if (result.slowDown) interval += 5
+      if (result.slowDown) delay += 5
     }
     throw new RequestError({
       cause: failure,
@@ -178,7 +181,7 @@ export async function authorize<
   return {
     deviceCode: code.device_code,
     expiresIn: code.expires_in,
-    interval: code.interval,
+    interval,
     userCode: code.user_code,
     verificationUri: code.verification_uri,
     verificationUriComplete: code.verification_uri_complete,
@@ -240,7 +243,7 @@ export declare namespace authorize {
     deviceCode: string
     /** Seconds until the code expires. */
     expiresIn: number
-    /** Seconds to wait between polls, as Tempo ID sets them. A `slow_down` adds 5. */
+    /** Seconds to wait between polls, as Tempo ID sets them, or 5 without a value (RFC 8628). A `slow_down` adds 5. */
     interval: number
     /** The code that the user confirms. */
     userCode: string
