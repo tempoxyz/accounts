@@ -88,8 +88,9 @@ export type Challenge = {
  * for a single process, or one per Durable Object on Cloudflare Workers. Several processes or
  * replicas that share `store` need session affinity, so each session reaches one process. If
  * `store` has `lock`, as `Store.memory` and `Store.redis` do, writes to the index of a `sid` wait for each
- * other across the instances on `store`. Without `lock`, instances that share `store` can lose
- * a `link` that runs at the same time as another write to the same index.
+ * other across the instances on `store`. If it has `update`, as `Store.postgres` does, each write
+ * lands only over the index it read, so no session drops out either. Without either, instances that
+ * share `store` can lose a `link` that runs at the same time as another write to the same index.
  *
  * @example
  * ```ts
@@ -147,7 +148,9 @@ export function create(
     const previous = indexing.get(sid)
     const updated = (async () => {
       await previous?.catch(() => undefined)
-      return store.lock ? store.lock(indexKey(sid), fn) : fn()
+      // `update` orders writes across processes alone, and a store may build it on its own
+      // `lock`, which does not reenter. So `lock` holds the index only for a store without `update`.
+      return store.lock && !store.update ? store.lock(indexKey(sid), fn) : fn()
     })().finally(() => {
       if (indexing.get(sid) === updated) indexing.delete(sid)
     })
@@ -155,13 +158,9 @@ export function create(
     return updated
   }
 
-  /** Reads the index of `sid`, without its expired entries. */
-  async function readIndex(sid: string): Promise<Index> {
-    const now = Date.now()
-    const stored = ((await store.getItem(indexKey(sid))) as
-      | Index
-      | null
-      | undefined) ?? { entries: [] }
+  /** Returns the `stored` index, without its entries that expired by `now`. */
+  function parseIndex(value: unknown, now: number): Index {
+    const stored = (value as Index | null | undefined) ?? { entries: [] }
     // A kept session holds the index past its close, so the close ends at `closedUntil`.
     const { closed, closedAt, closedUntil, ...read } = stored
     const open = closedUntil !== undefined && closedUntil <= now
@@ -194,11 +193,12 @@ export function create(
     write: (index: Index) => { index: Index; result: result },
   ): Promise<result> {
     const key = indexKey(sid)
-    const now = Date.now()
-    const next = write(await readIndex(sid))
-    const { closed, closedUntil, entries } = next.index
-    if (!closed && entries.length === 0) await store.removeItem(key)
-    else {
+    const plan = (value: unknown) => {
+      const now = Date.now()
+      const next = write(parseIndex(value, now))
+      const { closed, closedUntil, entries } = next.index
+      if (!closed && entries.length === 0)
+        return { expiresAt: undefined, result: next.result, value: undefined }
       // The index lasts as long as its longest session, and has no expiry beside a session
       // without one. A closed index outlasts a sign-in in progress, whose `link` then finds it
       // closed.
@@ -207,9 +207,24 @@ export function create(
         ...entries.map((entry) => entry.expiresAt ?? 0),
         closed ? (closedUntil ?? now + pendingLifetime * 2) : 0,
       )
-      await store.setItem(key, next.index, lasting ? {} : { expiresAt })
+      return {
+        ...(lasting ? {} : { expiresAt }),
+        result: next.result,
+        value: next.index,
+      }
     }
-    return next.result
+    // A store with `update` writes the index only over the value it read, so a write of another
+    // process between the two makes it read again, and no session drops out.
+    if (store.update) return store.update(key, plan)
+    const { expiresAt, result, value } = plan(await store.getItem(key))
+    if (value === undefined) await store.removeItem(key)
+    else
+      await store.setItem(
+        key,
+        value,
+        expiresAt === undefined ? {} : { expiresAt },
+      )
+    return result
   }
 
   /**
@@ -857,9 +872,9 @@ export declare namespace create {
      * through another process that shares the store, unless Tempo ID issued the session's tokens,
      * `issuedAt`, after that token. The caller then ends the session, and then
      * removes it with `unlink`. The index expires with its longest session. Writes to one index run
-     * in turn in this process. The store has no atomic update, so processes that share it and link
-     * one index at once can lose an entry. That session then ends at its next refresh, since Tempo
-     * ID revoked its refresh token.
+     * in turn in this process. If the store has `lock` or `update`, writes of processes that share
+     * it keep each entry. Without either, processes that link one index at once can lose an entry.
+     * That session then ends at its next refresh, since Tempo ID revoked its refresh token.
      */
     link: (options: link.Options) => Promise<link.ReturnType>
     /**

@@ -5,6 +5,8 @@
 import { PGlite } from '@electric-sql/pglite'
 import { WebCryptoP256 } from 'ox'
 import { describe, expect, onTestFinished, test } from 'vite-plus/test'
+import * as Accounts from '../Accounts.js'
+import * as BackendSessions from '../internal/BackendSessions.js'
 import * as Postgres from './Postgres.js'
 
 describe('Store.postgres', () => {
@@ -91,6 +93,87 @@ describe('Store.postgres', () => {
     ).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: closes each session of a `sid` that two replicas on one table link at the same time', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const [a, b] = [0, 1].map(() => {
+      const accounts = Accounts.create({
+        clientId: 'https://app.example.com',
+        url: 'http://127.0.0.1:9',
+      })
+      // Each replica holds its own store on the shared table, as each process of a backend does.
+      const store = Postgres.create({
+        query: (text, values) => database.query(text, [...values]),
+      })
+      return BackendSessions.create(accounts.config, { shared: true, store })
+    }) as [
+      ReturnType<typeof BackendSessions.create>,
+      ReturnType<typeof BackendSessions.create>,
+    ]
+    const expiresAt = Date.now() + 3_600_000
+    const sids = Array.from({ length: 10 }, (_, index) => `sid-${index}`)
+
+    await Promise.all(
+      sids.flatMap((sid) => [
+        a.link({ expiresAt, id: `a-${sid}`, sid }),
+        b.link({ expiresAt, id: `b-${sid}`, sid }),
+      ]),
+    )
+    const closed = await Promise.all(sids.map((sid) => a.close({ sid })))
+
+    expect(closed.map((entries) => entries.length)).toMatchInlineSnapshot(`
+      [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+      ]
+    `)
+  })
+
+  test('behavior: a `link` reads the index once and writes it once', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const queries: string[] = []
+    const accounts = Accounts.create({
+      clientId: 'https://app.example.com',
+      url: 'http://127.0.0.1:9',
+    })
+    const store = Postgres.create({
+      query: (text, values) => {
+        queries.push(text.slice(0, 40))
+        return database.query(text, [...values])
+      },
+    })
+    const sessions = BackendSessions.create(accounts.config, {
+      shared: true,
+      store,
+    })
+    await store.getItem('ready')
+    queries.length = 0
+
+    await sessions.link({
+      expiresAt: Date.now() + 3_600_000,
+      id: 'a',
+      sid: 'sid',
+    })
+
+    expect(queries).toMatchInlineSnapshot(`
+      [
+        "select value from "tempo_id_store" where",
+        "insert into "tempo_id_store" (key, value",
+        "select value from "tempo_id_store" where",
+        "select value from "tempo_id_store" where",
+      ]
+    `)
+  })
+
   test('behavior: a write with an expiry replaces its own expired row', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())
@@ -142,13 +225,90 @@ describe('Store.postgres', () => {
     expect(await store.getItem('pending')).toMatchInlineSnapshot(`"new"`)
   })
 
+  test('error: an update to a value without a JSON form rejects, and keeps the row', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const store = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+    await store.setItem('key', 'value')
+
+    const error = await store.update!('key', () => ({
+      result: undefined,
+      value: () => undefined,
+    })).catch((error: Error) => error.message)
+
+    expect(error).toMatchInlineSnapshot(
+      `"Unserializable value: the value has no JSON form. Write a value that JSON holds."`,
+    )
+    expect(await store.getItem('key')).toMatchInlineSnapshot(`"value"`)
+  })
+
+  test('behavior: an update retries when another replica writes the key and then deletes it between its reads', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const store = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+    await store.getItem('ready')
+    let calls = 0
+
+    await store.update!('key', () => {
+      calls += 1
+      // Another replica links the key before this write, and unlinks it before the next read.
+      if (calls === 1) {
+        void database.query(
+          `insert into tempo_id_store (key, value) values ('key', '"other"')`,
+        )
+        void Promise.resolve().then(() =>
+          database.query(`delete from tempo_id_store where key = 'key'`),
+        )
+      }
+      return { result: undefined, value: 'next' }
+    })
+
+    expect(await store.getItem('key')).toMatchInlineSnapshot(`"next"`)
+  })
+
+  test('error: an update that a policy refuses rejects, and does not retry without end', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    let queries = 0
+    const store = Postgres.create({
+      query: (text, values) => {
+        // A bound on the queries ends an update that retries without end.
+        queries += 1
+        if (queries > 20) throw new Error('Retried without end.')
+        return database.query(text, [...values])
+      },
+    })
+    await store.setItem('key', 'value')
+    // A policy shows each row to `select`, and hides each from `update` and `delete`.
+    await database.exec(`
+      create role app;
+      grant all on tempo_id_store to app;
+      alter table tempo_id_store enable row level security;
+      create policy reads on tempo_id_store for select to app using (true);
+      set role app;
+    `)
+
+    const error = await store.update!('key', () => ({
+      result: undefined,
+      value: 'next',
+    })).catch((error: Error) => error.message)
+
+    expect(error).toMatchInlineSnapshot(
+      `"Refused write: the conditional write of the store matched no row. Grant the role update and delete on the table."`,
+    )
+  })
+
   test('error: a value that does not serialize rejects before any query', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())
     const queries: string[] = []
     const store = Postgres.create({
       query(text, values) {
-        queries.push(text.split(' ')[0]!)
+        queries.push(text.slice(0, 40))
         return database.query(text, [...values])
       },
     })
@@ -168,7 +328,7 @@ describe('Store.postgres', () => {
     const queries: string[] = []
     const store = Postgres.create({
       query(text, values) {
-        queries.push(text.split(' ')[0]!)
+        queries.push(text.slice(0, 40))
         return database.query(text, [...values])
       },
     })

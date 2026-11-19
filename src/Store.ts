@@ -67,6 +67,21 @@ export type Store = {
    * `Store.file`, `Store.memory`, `Store.postgres`, and `Store.redis` set it.
    */
   takeItem?: ((key: string) => Promise<unknown>) | undefined
+  /**
+   * Reads the value at `key`, or `undefined`, passes it to `fn`, writes the `value` that `fn`
+   * returns, and resolves with its `result`. The write lands only if the value at `key` is still
+   * the one that `fn` read, also across processes that share the store. Otherwise `update` reads
+   * again and runs `fn` again, so `fn` must have no side effects. A `value` of `undefined`
+   * deletes the entry. The `backend` plugin writes the logout index of each `sid` with it, so
+   * concurrent sign-ins of one `sid` on different processes keep each session, in the round trips
+   * of a read and a write. `Store.postgres` sets it.
+   */
+  update?:
+    | (<result>(
+        key: string,
+        fn: (value: unknown) => update.Return<result>,
+      ) => Promise<result>)
+    | undefined
 }
 
 export declare namespace setItem {
@@ -76,6 +91,17 @@ export declare namespace setItem {
      * in progress. Absent, the entry stays until a deletion.
      */
     expiresAt?: number | undefined
+  }
+}
+
+export declare namespace update {
+  type Return<result> = {
+    /** When the written entry may be deleted, in milliseconds, as `setItem`'s `expiresAt`. */
+    expiresAt?: number | undefined
+    /** What `update` resolves with. */
+    result: result
+    /** The value to write at `key`, or `undefined` to delete it. */
+    value: unknown
   }
 }
 
