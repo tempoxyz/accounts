@@ -12,7 +12,13 @@
  * @module
  */
 import type { Page } from '@playwright/test'
-import { parseUnits } from 'viem'
+import { Accounts, Session, Store } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { viem } from 'accounts/plugins'
+import { Mppx, Store as MppxStore, tempo } from 'mppx/server'
+import { Address, Secp256k1 } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
+import { createClient, http, parseUnits } from 'viem'
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts'
 import * as Apps from '../Apps.js'
 import * as Chain from '../Chain.js'
@@ -60,6 +66,70 @@ function challenged(errors: string[]) {
   expect(
     errors.splice(0).filter((error) => !error.includes('status of 402')),
   ).toEqual([])
+}
+
+/** pathUSD, a dev genesis token that the faucet drips, which each backend charge pays in. */
+const pathUsd = '0x20c0000000000000000000000000000000000000'
+
+/**
+ * Returns a backend's session for the Tempo Account of `owner`, whose access key the owner
+ * authorizes with `limit` of pathUSD for an hour, as a sign-in at Tempo ID returns it.
+ */
+function backendSession(options: { limit: bigint; owner: `0x${string}` }) {
+  const { limit, owner } = options
+  const privateKey = Secp256k1.randomPrivateKey()
+  const authorization = KeyAuthorization.from({
+    address: Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey })),
+    chainId: BigInt(Chain.chain.id),
+    expiry: Math.floor(Date.now() / 1000) + 3600,
+    limits: [{ limit, token: pathUsd }],
+    type: 'secp256k1',
+  })
+  const signature = Secp256k1.sign({
+    payload: KeyAuthorization.getSignPayload(authorization),
+    privateKey: owner,
+  })
+  return Session.from({
+    accessKey: {
+      account: privateKeyToAddress(owner),
+      chainId: Chain.chain.id,
+      keyAuthorization: KeyAuthorization.toRpc(
+        KeyAuthorization.from(authorization, { signature }),
+      ),
+      privateKey,
+    },
+    accessToken: 'access-token',
+    expiresAt: Date.now() + 3_600_000,
+    user: { email: 'user@example.org', id: 'user_1' },
+  })
+}
+
+/**
+ * Returns the `fetch` of a merchant that charges the amount of each request's path in pathUSD to
+ * `recipient`, and broadcasts each charge's transaction on the node.
+ */
+function merchant(options: { recipient: `0x${string}` }) {
+  const payment = Mppx.create({
+    methods: [
+      tempo.charge({
+        chainId: Chain.chain.id,
+        currency: pathUsd,
+        getClient: () =>
+          createClient({ chain: Chain.chain, transport: http(Chain.rpcUrl) }),
+        recipient: options.recipient,
+        store: MppxStore.memory(),
+      }),
+    ],
+    realm: 'merchant.test',
+    secretKey: crypto.randomUUID(),
+  })
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init)
+    const amount = new URL(request.url).pathname.slice(1)
+    const result = await payment.tempo.charge({ amount })(request)
+    if (result.status === 402) return result.challenge
+    return result.withReceipt(new Response('paid'))
+  }) as typeof globalThis.fetch
 }
 
 /** Runs the control `name` of the MPP page, and returns what its payment returned or threw. */
@@ -417,6 +487,57 @@ test.describe('mpp', () => {
       })
 
       challenged(errors)
+    })
+  })
+
+  test.describe('backend', () => {
+    test('rejects a charge with LimitError once a concurrent charge of the access key spent the limit', async () => {
+      // A Worker or Node server pays the requests of one user in parallel with one access key. The
+      // limit covers one charge of 0.6 after the first of 0.1, so of two at once, one lands and the
+      // other reverts on the chain after both filled.
+      const owner = generatePrivateKey()
+      await Chain.fund({ address: privateKeyToAddress(owner) })
+      const accounts = Accounts.create({
+        chain: Chain.chain.id,
+        clientId: 'https://app.example.com',
+        plugins: [
+          viem({ transport: http(Chain.rpcUrl) }),
+          mpp({
+            fetch: merchant({
+              recipient: privateKeyToAddress(generatePrivateKey()),
+            }),
+          }),
+        ],
+        store: Store.memory(),
+      })
+      const payer = accounts.mpp({
+        session: backendSession({ limit: parseUnits('1', 6), owner }),
+      })
+
+      expect((await payer.fetch('https://merchant.test/0.1')).status).toBe(200)
+
+      const outcomes = await Promise.allSettled(
+        [0, 1].map(() =>
+          payer
+            .fetch('https://merchant.test/0.6')
+            .then((response) => response.status),
+        ),
+      )
+      expect(
+        outcomes
+          .map((outcome) =>
+            outcome.status === 'fulfilled'
+              ? String(outcome.value)
+              : `${(outcome.reason as Error).name}: ${(outcome.reason as Error).message}`,
+          )
+          .map((value) =>
+            value.replace(/limit of [\d.]+ left/, 'limit of <left> left'),
+          )
+          .sort(),
+      ).toEqual([
+        '200',
+        `mpp.LimitError: The charge of 0.6 exceeds the access key's limit of <left> left for token ${pathUsd}. Sign in with an access key whose limit covers the charge.`,
+      ])
     })
   })
 

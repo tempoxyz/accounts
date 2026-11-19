@@ -2264,29 +2264,8 @@ function create(options: {
    */
   async function superseded(serialized: string) {
     if (!account) return false
-    // Only a canonical, sender-signed 0x76 envelope that awaits no fee payer names the hash of the
-    // transaction that lands, as mppx derives it. A fee payer's signature, such as of a 0x78
-    // envelope, gives the transaction that lands another hash. A malformed credential sends nothing.
-    const signed = (() => {
-      try {
-        const { payload } = Credential.deserialize<{
-          signature?: string | undefined
-          type: string
-        }>(serialized)
-        if (payload.type !== 'transaction' || !payload.signature)
-          return undefined
-        const signed = payload.signature as TxEnvelopeTempo.Serialized
-        if (!signed.startsWith(TxEnvelopeTempo.serializedType)) return undefined
-        const envelope = TxEnvelopeTempo.deserialize(signed)
-        if (!envelope.keyAuthorization || !envelope.signature) return undefined
-        if (envelope.feePayerSignature === null) return undefined
-        if (TxEnvelopeTempo.serialize(envelope) !== signed) return undefined
-        return signed
-      } catch {
-        return undefined
-      }
-    })()
-    if (!signed) return false
+    const signed = transaction(serialized)
+    if (!signed?.keyAuthorization) return false
 
     const client = getClient({ chainId })
     const { accessKeyAddress } = account
@@ -2306,14 +2285,50 @@ function create(options: {
     // registered the access key shows its receipt. Once the chain holds the access key, a
     // transaction that attaches its key authorization never lands.
     const included = await getTransactionReceipt(client, {
-      hash: Hash.keccak256(signed),
+      hash: signed.hash,
     }).then(
       () => true,
       (error: unknown) => !(error instanceof TransactionReceiptNotFoundError),
     )
     if (included) return false
-    landed(signed, () => Promise.resolve(true))
+    landed(signed.serialized, () => Promise.resolve(true))
     return true
+  }
+
+  /**
+   * Returns {@link LimitError} for a charge whose transaction landed and reverted since the limit
+   * that remains no longer covers it, such as after a concurrent charge of the same access key
+   * spent the limit between the fill and the broadcast. Only a failed response reads the receipt and
+   * the limit, in parallel. Returns `undefined` for a transaction that succeeded or that the chain
+   * holds no receipt of, for another credential, and after a failed read.
+   */
+  async function reverted(
+    serialized: string,
+    charge: { amount: bigint; token: Address.Address } | undefined,
+  ) {
+    if (!account || !charge) return undefined
+    const signed = transaction(serialized)
+    if (!signed) return undefined
+    const client = getClient({ chainId })
+    const [receipt, read] = await Promise.all([
+      getTransactionReceipt(client, { hash: signed.hash }).catch(
+        () => undefined,
+      ),
+      Actions.accessKey
+        .getRemainingLimit(client, {
+          accessKey: account.accessKeyAddress,
+          account: account.address,
+          token: charge.token,
+        })
+        .catch(() => undefined),
+    ])
+    if (receipt?.status !== 'reverted') return undefined
+    if (!read || read.remaining >= charge.amount) return undefined
+    return new LimitError({
+      amount: formatUnits(charge.amount, 6),
+      limit: formatUnits(read.remaining, 6),
+      token: charge.token,
+    })
   }
 
   /**
@@ -2445,6 +2460,16 @@ function create(options: {
         // The failed response is not the app's, so its body buffers nothing.
         void response.body?.cancel().catch(() => undefined)
         return created.fetch(input, { ...init, [resent]: true } as RequestInit)
+      }
+      // A concurrent charge of the access key can spend the limit after this charge's fill, so its
+      // transaction lands and reverts, and the endpoint fails. The charge then rejects as one above
+      // the limit that remains does before its signature.
+      const limited =
+        call.credential && (await reverted(call.credential, call.charge))
+      if (limited) {
+        // The failed response is not the app's, so its body buffers nothing.
+        void response.body?.cancel().catch(() => undefined)
+        throw limited
       }
       return response
     },
@@ -2617,6 +2642,36 @@ function create(options: {
     },
   }
   return created
+}
+
+/**
+ * Returns the signed transaction of a charge's credential, with the hash of the transaction that
+ * lands and its key authorization. Only a canonical, sender-signed 0x76 envelope that awaits no fee
+ * payer names the hash of the transaction that lands, as mppx derives it. A fee payer's signature,
+ * such as of a 0x78 envelope, gives the transaction that lands another hash. Returns `undefined`
+ * for any other credential, and for a malformed one.
+ */
+function transaction(serialized: string) {
+  try {
+    const { payload } = Credential.deserialize<{
+      signature?: string | undefined
+      type: string
+    }>(serialized)
+    if (payload.type !== 'transaction' || !payload.signature) return undefined
+    const signed = payload.signature as TxEnvelopeTempo.Serialized
+    if (!signed.startsWith(TxEnvelopeTempo.serializedType)) return undefined
+    const envelope = TxEnvelopeTempo.deserialize(signed)
+    if (!envelope.signature) return undefined
+    if (envelope.feePayerSignature === null) return undefined
+    if (TxEnvelopeTempo.serialize(envelope) !== signed) return undefined
+    return {
+      hash: Hash.keccak256(signed),
+      keyAuthorization: envelope.keyAuthorization,
+      serialized: signed,
+    }
+  } catch {
+    return undefined
+  }
 }
 
 /**
