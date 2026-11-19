@@ -30,8 +30,8 @@ allowBuilds:
 
 catalog:
   '@changesets/cli': 3.0.3
-  '@cloudflare/vite-plugin': 1.69.0
-  '@cloudflare/workers-types': 5.20261110.1
+  '@cloudflare/vite-plugin': 1.69.1
+  '@cloudflare/workers-types': 5.20261112.1
   '@electric-sql/pglite': 0.5.16
   '@modelcontextprotocol/sdk': 1.32.2
   '@playwright/test': 1.65.0
@@ -70,7 +70,7 @@ catalog:
   vocs: 2.12.0
   wagmi: 3.7.9
   waku: 1.0.0-rc.5
-  wrangler: 4.160.1
+  wrangler: 4.161.0
   xstate: 5.33.4
   zile: 0.0.29
   zod: 4.6.7
