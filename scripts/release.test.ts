@@ -213,7 +213,7 @@ describe('resolve', () => {
     const { commit, cwd } = repository()
     const base = commit('feat: add Tab (#1)')
     commit(
-      'feat(web): add Tabs (#2)\n\nAdds Tabs.\n\n## Changelog\n\n- Added `Tabs`, which wrap\nover two lines.\n\nCo-authored-by: CI <ci@tempo.xyz>',
+      'feat(web): add Tabs (#2)\n\nAdds Tabs.\n\n## Changelog\n\n- Added `Tabs`, which wrap\nover two lines.\n\n---------\n\nCo-authored-by: CI <ci@tempo.xyz>',
     )
     commit(
       'refactor: drop Tab (#3)\n\n## Changelog\n\nRemoved `Tab`.\n\n```ts\nTabs.from()\n```\n\nBREAKING CHANGE: use Tabs.\nCo-authored-by: CI <ci@tempo.xyz>',
@@ -246,7 +246,7 @@ describe('resolve', () => {
 
       ### Other changes
 
-      - Fixed a link in the docs. (ed9cb83)
+      - Fixed a link in the docs. (3c8713f)
       "
     `)
   })

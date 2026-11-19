@@ -119,7 +119,10 @@ function entry(commit: Commit): string {
     .at(-1)!
     .split('\n')
     .every((line) => /^(?:BREAKING CHANGE|[A-Za-z][\w-]*): /.test(line))
-  const body = (trailers ? paragraphs.slice(0, -1) : paragraphs).join('\n\n')
+  const kept = trailers ? paragraphs.slice(0, -1) : paragraphs
+  // A squash of several authors puts a `---------` line before their trailers.
+  if (trailers && /^-{3,}$/.test(kept.at(-1)?.trim() ?? '')) kept.pop()
+  const body = kept.join('\n\n')
   const changelog =
     /^## Changelog[ \t]*\n(?<text>[\s\S]*?)(?=^#{1,6} |(?![\s\S]))/m
       .exec(body)
