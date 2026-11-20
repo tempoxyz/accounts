@@ -584,11 +584,9 @@ export async function getSession(
       if (ClientId.thirdParty(context.config.clientId)) return undefined
       // Outside a browser without `redirectUri`, such as a CLI or a server, no page origin can
       // serve as the redirect URI, so Tempo ID would refuse the authorization. The program signs in
-      // again, such as with the device grant.
-      if (
-        context.config.redirectUri === undefined &&
-        !globalThis.location?.origin
-      )
+      // again, such as with the device grant. `Api.page` counts a `location` getter that throws, as
+      // in Deno without `--location`, as no page.
+      if (context.config.redirectUri === undefined && Api.page() === undefined)
         return undefined
       const authorized = await run(context, {
         ...parameters,
