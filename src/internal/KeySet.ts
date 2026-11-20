@@ -35,6 +35,12 @@ export const maxAge = 10 * 60 * 1000
 export const timeout = 5_000
 
 /**
+ * The key of the property of an instance's configuration that holds its key functions, by
+ * `maxAge` and `timeout`, which the instance's verifiers share. The instance owns them.
+ */
+const sets = Symbol('keySet.sets')
+
+/**
  * The time that a verification waits for a fetch that another one started past that fetch's
  * `timeout`, in milliseconds, so it observes the end of that fetch.
  */
@@ -83,7 +89,9 @@ export type Status = 'expired' | 'fresh' | 'stale'
 
 /**
  * Returns the key function of jose's `jwtVerify` over the key set at `/oauth2/jwks` of `auth.url`.
- * Each verifier of `AccessToken`, `LogoutToken`, and `IdToken` holds one for its lifetime.
+ * Each verifier of `AccessToken`, `LogoutToken`, and `IdToken` holds one for its lifetime. The calls with
+ * the same `auth` object, `maxAge`, and `timeout`, and without `now`, return the same function, so the
+ * verifiers of one instance share its set and its fetches.
  *
  * The function verifies with the set in memory, or else the copy of `auth.keySet.cache`, or else
  * waits for a fetch. A set younger than half of `maxAge` verifies as it is. An older one verifies
@@ -125,6 +133,22 @@ export function create(
     now = Date.now,
     timeout: timeout_ = timeout,
   } = options
+  // The verifiers of one configuration, such as the access token and ID token verifiers of the
+  // `tokens` plugin, share its set, so the instance fetches it once. A clock of its own keeps its own set.
+  if (options.now === undefined) {
+    const owner = auth as { [sets]?: Map<string, JWTVerifyGetKey> }
+    if (!owner[sets] && Object.isExtensible(auth))
+      Object.defineProperty(auth, sets, { value: new Map() })
+    const registry = owner[sets]
+    if (!registry)
+      return create(auth, { maxAge: maxAge_, now, timeout: timeout_ })
+    const id = `${maxAge_}:${timeout_}`
+    const existing = registry.get(id)
+    if (existing) return existing
+    const keys = create(auth, { maxAge: maxAge_, now, timeout: timeout_ })
+    registry.set(id, keys)
+    return keys
+  }
   const { cache, defer = detach } = auth.keySet ?? {}
   const url = new URL('/oauth2/jwks', auth.url).href
   const actor = createActor(machines.keySet).start()

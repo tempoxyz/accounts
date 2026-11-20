@@ -209,6 +209,8 @@ export const accounts = Accounts.create({
 | <SourceLink name="create" path="src/stores/DurableObject.ts">`Store.durableObject(storage)`</SourceLink>            | The storage of the app's own Durable Object                                        |
 | <SourceLink name="create" path="src/stores/WorkersKv.ts">`Store.workersKv(namespace)`</SourceLink>                  | A Workers KV namespace. Another location can read a sign-out up to 60 seconds late |
 
+In a Cloudflare Worker, <SourceLink name="create" path="src/stores/File.ts">`Store.file`</SourceLink> throws <SourceLink name="NodeRequiredError" path="src/stores/File.ts">`Store.NodeRequiredError`</SourceLink>, since `node:fs` there keeps each file in the memory of one isolate. Use a Durable Object or Workers KV store.
+
 Each stored session holds a refresh token and an access key's private key. Give no other role access to the store.
 
 ### Read the session of a request

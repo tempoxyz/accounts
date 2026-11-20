@@ -40,8 +40,9 @@ class LockLostError extends Error {
 
 /**
  * Thrown by `Store.file` at creation in a runtime without Node's built-in modules, which is one
- * without `process.getBuiltinModule`, such as a browser or React Native. Run the program in Node,
- * Bun, or Deno, or use another store.
+ * without `process.getBuiltinModule`, such as a browser or React Native, and in a Cloudflare
+ * Worker, whose `node:fs` keeps each file in the memory of one isolate. Run the program in Node,
+ * Bun, or Deno, or use another store, such as `Store.workersKv` or a Durable Object in a Worker.
  *
  * @example
  * ```ts
@@ -59,7 +60,7 @@ export class NodeRequiredError extends Error {
 
   constructor() {
     super(
-      'Invalid runtime: the runtime has no file system modules. Run the program in Node, or use another store.',
+      'Invalid runtime: the runtime has no file system that persists. Run the program in Node, or use another store.',
     )
   }
 }
@@ -96,10 +97,12 @@ export class NodeRequiredError extends Error {
  *
  * The Node modules load through `process.getBuiltinModule`, with no import, so each bundler builds a
  * browser bundle without them. In a runtime without them, such as a browser, the call throws, so the
- * instance never runs without its store.
+ * instance never runs without its store. In a Cloudflare Worker, `node:fs` writes to the memory of
+ * one isolate, which other isolates never read and an eviction drops, so the call throws there too.
  *
  * @throws {InvalidFileError} When a read or a write finds a file that holds no valid JSON object.
- * @throws {NodeRequiredError} When the runtime has no file system modules, such as a browser.
+ * @throws {NodeRequiredError} When the runtime has no file system that persists, such as a browser
+ *   or a Cloudflare Worker.
  * @throws {TypeError} From `setItem`, for a value that holds a `CryptoKey`, which JSON keeps as `{}`. The
  *   write takes no lock and leaves the file as it was.
  *
