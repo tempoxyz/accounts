@@ -2416,7 +2416,7 @@ describe('session.get', () => {
 })
 
 describe('session.status', () => {
-  test("changes to `signedOut` at the access key's expiry while the instance stays open, and sends no request", async () => {
+  test("changes to `signedOut` at the access key's expiry while the instance stays open, and sends no request and no write", async () => {
     const owner = Account.fromSecp256k1(
       '0x0123456789012345678901234567890123456789012345678901234567890123',
     )
@@ -2426,30 +2426,28 @@ describe('session.status', () => {
     // The access key expires in 2 seconds, on the next whole second.
     const expiry = Math.floor(Date.now() / 1000) + 2
     const store = Store.memory()
-    await store.setItem(
-      'tempo-id:session:["http://127.0.0.1:9","client_1",1337]',
-      {
-        state: {
-          session: Session.from({
-            accessKey: {
-              account: owner.address,
-              chainId: 1337,
-              keyAuthorization: KeyAuthorization.toRpc(
-                await owner.signKeyAuthorization(accessKey, {
-                  chainId: 1337n,
-                  expiry,
-                }),
-              ),
-              privateKey,
-            },
-            accessToken: 'access-token',
-            expiresAt: Date.now() + 3_600_000,
-            user: { email: 'user@example.com', id: 'user_1' },
-          }),
-        },
-        version: 0,
+    const key = 'tempo-id:session:["http://127.0.0.1:9","client_1",1337]'
+    await store.setItem(key, {
+      state: {
+        session: Session.from({
+          accessKey: {
+            account: owner.address,
+            chainId: 1337,
+            keyAuthorization: KeyAuthorization.toRpc(
+              await owner.signKeyAuthorization(accessKey, {
+                chainId: 1337n,
+                expiry,
+              }),
+            ),
+            privateKey,
+          },
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 3_600_000,
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
       },
-    )
+      version: 0,
+    })
     const requests: string[] = []
     const accounts = Accounts.create({
       chain: 1337,
@@ -2464,29 +2462,37 @@ describe('session.status', () => {
       url: 'http://127.0.0.1:9',
     })
     await accounts.session.get()
+    const before = accounts.session.status.get().status
+    // Each status, and whether the access key had expired at it.
     const statuses: string[] = []
-    accounts.session.status.subscribe((status) => statuses.push(status.status))
+    accounts.session.status.subscribe((status) =>
+      statuses.push(`${status.status} ${Date.now() >= expiry * 1000}`),
+    )
 
     // `useSession` renders from the status, so a page that stays open shows the expiry with no
     // read of its own.
-    await new Promise((resolve) =>
-      setTimeout(resolve, expiry * 1000 - Date.now() + 500),
-    )
+    await expect
+      .poll(() => accounts.session.status.get().status, { timeout: 5_000 })
+      .toBe('signedOut')
 
     expect({
-      session: accounts.session.status.get().session?.user.id,
-      status: accounts.session.status.get().status,
+      before,
+      session: accounts.session.status.get().session,
       statuses,
     }).toMatchInlineSnapshot(`
       {
+        "before": "signedIn",
         "session": undefined,
-        "status": "signedOut",
         "statuses": [
-          "signedOut",
+          "signedOut true",
         ],
       }
     `)
     expect(requests).toMatchInlineSnapshot(`[]`)
+    // The store keeps the expired session, so the next load renews it, as before the change.
+    expect(await store.getItem(key)).toMatchObject({
+      state: { session: { accessToken: 'access-token' } },
+    })
   })
 })
 

@@ -206,8 +206,8 @@ export function same<session extends Any>(
  * Returns whether the session can no longer act: its access key expired, and no access key on another
  * chain lives, or, without an access key, its access token expired and it holds no refresh token. A
  * session without an access key that holds a refresh token never expires here, since its tokens
- * refresh. An instance empties its session at the access key's expiry, as `accounts.session.get()`
- * does for a saved session whose access key expired, so its status changes to `signedOut`.
+ * refresh. An instance's status changes to `signedOut` once its session expires, and
+ * `accounts.session.get()` empties such a session.
  *
  * @example
  * ```ts
