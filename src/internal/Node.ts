@@ -26,8 +26,10 @@ export function modules() {
   const process = Reflect.get(globalThis, 'process') as Process | undefined
   if (typeof process?.getBuiltinModule !== 'function') return undefined
   // With `nodejs_compat`, a Worker's `node:fs` keeps its files in the memory of one isolate, which
-  // other isolates never read and an eviction drops. A file there would lose each session.
+  // other isolates never read and an eviction drops. A file there would lose each session. workerd
+  // defines `WebSocketPair` under each flag, and `navigator` only under `global_navigator`.
   if (
+    typeof Reflect.get(globalThis, 'WebSocketPair') === 'function' ||
     (Reflect.get(globalThis, 'navigator') as Navigator | undefined)
       ?.userAgent === 'Cloudflare-Workers'
   )

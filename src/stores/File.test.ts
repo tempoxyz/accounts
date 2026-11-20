@@ -42,21 +42,31 @@ describe('Store.file', () => {
       },
       write: false,
     })
-    const miniflare = new Miniflare(
-      convertV4MiniflareOptions({
-        compatibilityDate: '2026-10-01',
-        compatibilityFlags: ['nodejs_compat'],
-        modules: true,
-        script: output.outputFiles[0]!.text,
-      }),
+    // `no_global_navigator` removes `navigator`, so the check holds without it.
+    const texts = await Promise.all(
+      [['nodejs_compat'], ['nodejs_compat', 'no_global_navigator']].map(
+        async (flags) => {
+          const miniflare = new Miniflare(
+            convertV4MiniflareOptions({
+              compatibilityDate: '2026-10-01',
+              compatibilityFlags: flags,
+              modules: true,
+              script: output.outputFiles[0]!.text,
+            }),
+          )
+          onTestFinished(() => miniflare.dispose())
+          const response = await miniflare.dispatchFetch('http://localhost/')
+          return response.text()
+        },
+      ),
     )
-    onTestFinished(() => miniflare.dispose())
 
-    const response = await miniflare.dispatchFetch('http://localhost/')
-
-    expect(await response.text()).toMatchInlineSnapshot(
-      `"Store.NodeRequiredError: Invalid runtime: the runtime has no file system that persists, such as a browser or a Worker. Run the program in Node, or use another store."`,
-    )
+    expect(texts).toMatchInlineSnapshot(`
+      [
+        "Store.NodeRequiredError: Invalid runtime: the runtime has no file system that persists. Run the program in Node, or use another store.",
+        "Store.NodeRequiredError: Invalid runtime: the runtime has no file system that persists. Run the program in Node, or use another store.",
+      ]
+    `)
   })
 
   test('behavior: a write to a damaged file rejects with the path and the fix, and quotes none of its tokens', async () => {

@@ -60,7 +60,7 @@ export class NodeRequiredError extends Error {
 
   constructor() {
     super(
-      'Invalid runtime: the runtime has no file system that persists, such as a browser or a Worker. Run the program in Node, or use another store.',
+      'Invalid runtime: the runtime has no file system that persists. Run the program in Node, or use another store.',
     )
   }
 }
