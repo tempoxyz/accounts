@@ -99,76 +99,54 @@ describe('Store.durableObject', () => {
     `)
   }, 30_000)
 
-  test('behavior: sends one refresh for two instances in one object, whose runtime has no Web Locks', async () => {
+  test('behavior: lock runs a second call of a key after the first settles, in a runtime without Web Locks', async () => {
     const { result } = await run([
-      'const requests = []',
-      'const create = () => Accounts.create({',
-      '  chain: 1337,',
-      "  clientId: 'https://app.example.com',",
-      '  async fetch(input, init) {',
-      "    const token = new URLSearchParams(String(init?.body)).get('refresh_token')",
-      '    requests.push(new URL(String(input)).pathname + " " + token)',
-      "    return Response.json({ access_token: 'access-token-1', expires_in: 3600, refresh_token: 'refresh-token-1', token_type: 'Bearer' })",
-      '  },',
-      '  store,',
-      "  url: 'http://127.0.0.1:9',",
-      '})',
-      'await store.setItem(\'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]\', {',
-      "  state: { session: Session.from({ accessToken: 'access-token', expiresAt: Date.now() + 3600000, refreshToken: 'refresh-token', user: { email: 'user@example.com', id: 'user_1' } }) },",
-      '  version: 0,',
-      '})',
-      'const instances = [create(), create()]',
-      'await Promise.all(instances.map((accounts) => accounts.session.get()))',
-      'const sessions = await Promise.all(instances.map((accounts) => accounts.session.refresh()))',
-      'return Response.json({ locks: typeof navigator.locks, refreshTokens: sessions.map((session) => session?.refreshToken), requests })',
+      'const order = []',
+      'let release',
+      'const held = new Promise((resolve) => { release = resolve })',
+      "const first = store.lock('session', async () => { order.push('first.start'); await held; order.push('first.end') })",
+      "const second = store.lock('session', async () => { order.push('second') })",
+      "const other = store.lock('other', async () => { order.push('other') })",
+      'release()',
+      'await Promise.all([first, second, other])',
+      'return Response.json({ locks: typeof navigator.locks, order })',
     ])
 
     expect(result).toMatchInlineSnapshot(`
       {
         "locks": "undefined",
-        "refreshTokens": [
-          "refresh-token-1",
-          "refresh-token-1",
-        ],
-        "requests": [
-          "/oauth2/token refresh-token",
+        "order": [
+          "first.start",
+          "other",
+          "first.end",
+          "second",
         ],
       }
     `)
   }, 30_000)
 
-  test('behavior: a sign-out of one instance in the object empties the session of another at once', async () => {
-    const { read } = await run([
-      'const requests = []',
-      'const create = () => Accounts.create({',
-      '  chain: 1337,',
-      "  clientId: 'https://app.example.com',",
-      '  async fetch(input) {',
-      '    requests.push(new URL(String(input)).pathname)',
-      '    return new Response(null, { status: 200 })',
-      '  },',
-      '  store,',
-      "  url: 'http://127.0.0.1:9',",
-      '})',
-      'await store.setItem(\'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]\', {',
-      "  state: { session: Session.from({ accessToken: 'access-token', expiresAt: Date.now() + 3600000, refreshToken: 'refresh-token', user: { email: 'user@example.com', id: 'user_1' } }) },",
-      '  version: 0,',
-      '})',
-      'const [first, second] = [create(), create()]',
-      'await Promise.all([first.session.get(), second.session.get()])',
-      'await first.signOut()',
-      'this.read = () => ({ first: first.session.status.get().status, requests, second: second.session.status.get().status })',
-      'return Response.json(null)',
+  test('behavior: connect delivers a post to the other listeners of its key only', async () => {
+    const { result } = await run([
+      'const received = []',
+      "const first = (message) => received.push(['first', message])",
+      "const second = (message) => received.push(['second', message])",
+      "const other = (message) => received.push(['other', message])",
+      "const post = store.connect('session', first)",
+      "store.connect('session', second)",
+      "store.connect('other', other)",
+      "post('signedOut')",
+      'await new Promise((resolve) => queueMicrotask(resolve))',
+      'return Response.json({ received })',
     ])
 
-    await expect.poll(read).toMatchObject({ second: 'signedOut' })
-    expect(await read()).toMatchInlineSnapshot(`
+    expect(result).toMatchInlineSnapshot(`
       {
-        "first": "signedOut",
-        "requests": [
-          "/oauth2/revoke",
+        "received": [
+          [
+            "second",
+            "signedOut",
+          ],
         ],
-        "second": "signedOut",
       }
     `)
   }, 30_000)
