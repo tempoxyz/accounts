@@ -177,9 +177,13 @@ export function create(
     }
   }
 
-  /** Starts a fetch that replaces a stale set after the response. */
+  /**
+   * Starts a fetch that replaces a stale set after the response, unless another verification
+   * started one within the cooldown while this one selected its key.
+   */
   function refresh() {
-    defer(fetchSet().catch(() => {}))
+    const step = decide(actor.getSnapshot(), { maxAge: maxAge_, now: now() })
+    if (step === 'refresh') defer(fetchSet().catch(() => {}))
   }
 
   /** Returns the set to verify with, and whether a background fetch should replace it. */

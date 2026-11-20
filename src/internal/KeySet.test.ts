@@ -238,6 +238,19 @@ describe('create', () => {
     expect(keys.deferred.length).toMatchInlineSnapshot(`1`)
   })
 
+  test('starts one background fetch for verifications of a stale set that arrive together', async () => {
+    const keys = await setup(Date.now() - KeySet.maxAge / 2)
+    const token = await first.sign()
+
+    await Promise.all([
+      keys.verify(token),
+      keys.verify(token),
+      keys.verify(token),
+    ])
+
+    expect(keys.deferred.length).toMatchInlineSnapshot(`1`)
+  })
+
   test('fetches in the foreground, without a background fetch, for an unknown `kid` in a stale set', async () => {
     const keys = await setup(Date.now() - KeySet.maxAge / 2)
 
