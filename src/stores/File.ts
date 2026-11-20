@@ -257,13 +257,14 @@ export function create(path?: string): Store.Store {
     async setItem(key, value, options = {}) {
       // JSON keeps a non-extractable `CryptoKey` as `{}`, which signs nothing after a restore, so such a
       // value rejects before the lock, and the file keeps its entries.
-      const text = StoreValue.stringify(value)
+      StoreValue.stringify(value)
       await update(
         (entries) => {
           entries[key] = { expiresAt: options.expiresAt, value }
         },
         // A write of the value and expiry that a live entry holds changes nothing, such as the
-        // signed-out mark and the empty session of a second sign-out.
+        // signed-out mark and the empty session of a second sign-out. The comparison reads the value
+        // when the queued write runs, as the write does, so a change after the call persists.
         {
           skip: (entries) => {
             const entry = entries[key]
@@ -271,7 +272,7 @@ export function create(path?: string): Store.Store {
               !!entry &&
               !Expiry.expired(entry) &&
               entry.expiresAt === options.expiresAt &&
-              StoreValue.stringify(entry.value) === text
+              StoreValue.stringify(entry.value) === StoreValue.stringify(value)
             )
           },
         },

@@ -186,6 +186,25 @@ describe('Store.file', () => {
     await Fs.rm(directory, { force: true, recursive: true })
   })
 
+  test('behavior: a write of the value that an entry holds persists a change that the value receives after the call, before the queued write', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    const store = File.create(path)
+    await store.setItem('key', { amount: 1 })
+    const value = { amount: 1 }
+
+    const write = store.setItem('key', value)
+    value.amount = 2
+    await write
+
+    expect(await File.create(path).getItem('key')).toMatchInlineSnapshot(`
+      {
+        "amount": 2,
+      }
+    `)
+    await Fs.rm(directory, { force: true, recursive: true })
+  })
+
   test('behavior: a write of another expiry or another value replaces the file', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const path = Path.join(directory, 'store.json')
