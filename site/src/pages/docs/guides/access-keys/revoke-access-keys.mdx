@@ -59,7 +59,7 @@ export const accounts = Accounts.create({
 
 ### Change the limits
 
-<SourceLink name="updateAccessKey" path="src/plugins/dialog.ts">`dialog.updateAccessKey`</SourceLink> returns the hash of the change's transaction. Each limit sets the amount that the access key can still spend, in base units, and keeps its period. A token that the list leaves out keeps its limit.
+<SourceLink name="updateAccessKey" path="src/plugins/dialog.ts">`dialog.updateAccessKey`</SourceLink> returns the hash of the change's transaction. Each limit sets the amount that the access key can still spend, in base units, and keeps its period. A token that the list leaves out keeps its limit. A negative limit, or two limits on one token, throws `Accounts.RequestError` with `invalid_field` before the dialog opens.
 
 :::code-group
 

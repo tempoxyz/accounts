@@ -1148,7 +1148,9 @@ export declare namespace signTypedData {
  *     account's passkey changes the access key on the approval page.
  *   - `invalid_field`: The access key is revoked, with `field: "address"`. Or a token of `limits`
  *     is one that the access key has no limit of, or appears twice, with `field` on that token. Or
- *     the request names neither `limits` nor `scopes`, or a field is malformed.
+ *     the request names neither `limits` nor `scopes`, or a field is malformed. A negative limit,
+ *     with `field` on that limit, and a token that appears twice throw before any request in every
+ *     `mode`, so a dialog opens no window.
  *   - An [access key rule](https://github.com/tempoxyz/id/blob/main/docs/errors.md#access-key-rules),
  *     such as `invalid_recipients`, with `field` on the scope, such as `scopes.0.recipients`.
  *   - `access_key_changing`: Another request changes the same limit or the scopes of the access
@@ -1198,6 +1200,31 @@ export async function updateAccessKey<
   const { accessKey, account, chainId } = options
   // The type parameter follows the caller's `mode`. The union of every mode narrows on it.
   const delivery: updateAccessKey.Options = options
+  // Tempo ID refuses a negative limit and two limits on one token, so they are refused before any
+  // request, and a dialog opens no window, as a sign-in refuses them.
+  const limits = options.limits ?? []
+  const negative = limits.findIndex((entry) => entry.limit < 0n)
+  if (negative !== -1)
+    throw new RequestError({
+      code: 'invalid_request',
+      field: `limits.${negative}.limit`,
+      message: `Invalid limit on ${limits[negative]!.token}: the limit is negative. Use a limit of 0 or more.`,
+      reason: 'invalid_field',
+      status: 0,
+    })
+  const repeated = limits.findIndex((entry, index) =>
+    limits
+      .slice(0, index)
+      .some((earlier) => Address.isEqual(earlier.token, entry.token)),
+  )
+  if (repeated !== -1)
+    throw new RequestError({
+      code: 'invalid_request',
+      field: `limits.${repeated}.token`,
+      message: `Duplicate limit for ${limits[repeated]!.token}. Limit each token once.`,
+      reason: 'invalid_field',
+      status: 0,
+    })
   const change = {
     ...(options.limits
       ? {
