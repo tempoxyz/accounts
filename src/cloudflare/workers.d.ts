@@ -1,5 +1,6 @@
 /**
- * The member of `cloudflare:workers` that `DurableObject.sessions` extends. A Worker's own types, from
+ * The members of `cloudflare:workers` that the entry uses: the class that `DurableObject.sessions`
+ * extends, and the `waitUntil` of `KeySet.cacheApi`. A Worker's own types, from
  * `@cloudflare/workers-types` or `wrangler types`, declare the full module.
  * @module
  */
@@ -17,4 +18,7 @@ declare module 'cloudflare:workers' {
     protected env: env
     constructor(ctx: unknown, env: env)
   }
+
+  /** Keeps the Worker running until `promise` settles, also after the response. */
+  export function waitUntil(promise: Promise<unknown>): void
 }

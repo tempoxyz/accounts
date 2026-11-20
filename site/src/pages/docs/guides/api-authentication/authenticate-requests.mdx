@@ -97,7 +97,7 @@ A browser sends a cross-origin request only if the API's CORS policy allows the 
 
 ### Create the instance<StepTag kind="server" />
 
-In the API, the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin adds <SourceLink name="tokens.verifyAccessToken" path="src/plugins/tokens.ts">`tokens.verifyAccessToken`</SourceLink>. It accepts only the access tokens of the app's <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink>, such as the page's origin. Create the instance once, since it caches Tempo ID's key set for 10 minutes.
+In the API, the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin adds <SourceLink name="tokens.verifyAccessToken" path="src/plugins/tokens.ts">`tokens.verifyAccessToken`</SourceLink>. It accepts only the access tokens of the app's <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink>, such as the page's origin. Create the instance once, since it keeps Tempo ID's key set for 10 minutes.
 
 ```ts [server.ts]
 import { Accounts } from 'accounts'
@@ -192,7 +192,14 @@ const accounts = Accounts.create({
 
 ### Refuse a removed signing key sooner
 
-<SourceLink name="create.maxAge" path="src/AccessToken.ts">`maxAge`</SourceLink> sets how long the instance keeps the key set, in milliseconds. A shorter time refuses the tokens of a [removed signing key](https://github.com/tempoxyz/id/blob/main/docs/access-tokens.md#signing-key-revocation) sooner. Defaults to 10 minutes.
+<SourceLink name="create.maxAge" path="src/AccessToken.ts">`maxAge`</SourceLink> sets how long the key set verifies, in milliseconds. A shorter time refuses the tokens of a [removed signing key](https://github.com/tempoxyz/id/blob/main/docs/access-tokens.md#signing-key-revocation) sooner. Defaults to 10 minutes. Few verifications wait for a fetch of the set:
+
+| Age of the key set             | Verification                                                   |
+| ------------------------------ | -------------------------------------------------------------- |
+| Before half of `maxAge`        | Verifies with the set                                          |
+| From half of `maxAge`          | Verifies with the set, and fetches a new set in the background |
+| From `maxAge`, or no set       | Waits for a fetch                                              |
+| A token names an unknown `kid` | Waits for a fetch, at most once each 30 seconds                |
 
 ```ts [server.ts]
 import { Accounts } from 'accounts'
@@ -201,6 +208,22 @@ import { tokens } from 'accounts/plugins'
 const accounts = Accounts.create({
   clientId: 'https://app.example',
   plugins: [tokens({ maxAge: 60_000 })], // [!code hl]
+})
+```
+
+### Keep the key set across instances
+
+Each new process starts without Tempo ID's key set. <SourceLink name="Runtime" path="src/internal/KeySet.ts">`keySet.cache`</SourceLink> takes a <SourceLink name="Store" path="src/Store.ts">`Store`</SourceLink> that the instances share, so a new instance verifies with its copy, without a fetch. <SourceLink name="Runtime" path="src/internal/KeySet.ts">`keySet.defer`</SourceLink> keeps the background fetches and writes running after the response.
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { createClient } from 'redis'
+
+const redis = await createClient({ url: process.env.REDIS_URL }).connect()
+
+export const accounts = Accounts.create({
+  clientId: 'https://app.example',
+  keySet: { cache: Store.redis(redis) }, // [!code hl]
 })
 ```
 

@@ -5,8 +5,6 @@
  */
 import {
   calculateJwkThumbprint,
-  createRemoteJWKSet,
-  customFetch,
   EmbeddedJWK,
   errors,
   type JWTPayload,
@@ -14,6 +12,7 @@ import {
 } from 'jose'
 import { Address, Base64, Bytes, Hash } from 'ox'
 import { type Config, RequestError } from './Accounts.js'
+import * as KeySet from './internal/KeySet.js'
 
 /**
  * Thrown by `verifyHash`, `verifyMessage`, and `verifyTypedData` of the `viem` plugin, and by
@@ -42,9 +41,6 @@ export declare namespace InvalidError {
 
 /** The `typ` header of an access key request token, which Tempo ID posts to an API's access key endpoint. */
 const accessKeyRequestType = 'access-key-request+jwt'
-
-/** How long after a key set's fetch an unknown `kid` fetches the set again, in milliseconds. */
-const cooldown = 30_000
 
 /** How long after its `iat` a DPoP proof verifies, in seconds, as at Tempo ID's own endpoints. */
 const proofMaxAge = 300
@@ -82,10 +78,13 @@ const screeningStates = ['blocked', 'clear', 'exit_only', 'pending'] as const
 
 /**
  * Creates a verifier of the access tokens that Tempo ID issues to the apps of `clientIds`, or to the
- * instance's own app by default, on jose's remote key set. A DPoP token verifies only with the
- * request's DPoP proof. The verifier holds the issuer's key set
- * for `maxAge`, and fetches it again for a token that names an unknown `kid`, at most once each 30
- * seconds after a successful fetch. Each fetch ends within `timeout`. Create one verifier for each Worker isolate or process.
+ * instance's own app by default. A DPoP token verifies only with the request's DPoP proof. The
+ * verifier holds the issuer's key set for `maxAge`, as `KeySet.create` of `accounts/internal`
+ * describes. A set younger than half of `maxAge` verifies as it is, an older one verifies while a
+ * background fetch replaces it, and from `maxAge` a verification waits for a fetch. A token that
+ * names an unknown `kid` waits for a fetch, at most once each 30 seconds after the last fetch started and ended.
+ * Each fetch ends within `timeout`. The configuration's `keySet` keeps the set beyond the verifier,
+ * such as for a new Worker isolate. Create one verifier for each Worker isolate or process.
  *
  * @example
  * ```ts
@@ -102,7 +101,6 @@ export function create(
   auth: create.Auth,
   options: create.Options = {},
 ): create.ReturnType {
-  const { maxAge = 10 * 60 * 1000, timeout = 5_000 } = options
   const clientIds =
     options.clientIds ?? (auth.clientId ? [auth.clientId] : undefined)
   if (!clientIds)
@@ -118,12 +116,9 @@ export function create(
   const audience = options.audience ?? issuer
   // The issuer adds its `userinfo` URL to the audience of every token with the `openid` scope.
   const own = [audience, `${issuer}/oauth2/userinfo`]
-  // jose shares a fetch in flight outside Workers, and on Workers each request fetches the set itself.
-  const keys = createRemoteJWKSet(new URL('/oauth2/jwks', auth.url), {
-    cacheMaxAge: maxAge,
-    cooldownDuration: cooldown,
-    timeoutDuration: timeout,
-    ...(auth.fetch ? { [customFetch]: auth.fetch } : {}),
+  const keys = KeySet.create(auth, {
+    maxAge: options.maxAge,
+    timeout: options.timeout,
   })
 
   /** Verifies a JWT of `typ` against the key set, and maps a refusal or an outage. */
@@ -240,7 +235,8 @@ export declare namespace create {
    * The configuration of Tempo ID: an instance's `config`, `Accounts.from`'s result, or only its
    * `url`, such as for an API that is no OAuth app and names `clientIds`.
    */
-  type Auth = Pick<Config, 'url'> & Partial<Pick<Config, 'clientId' | 'fetch'>>
+  type Auth = Pick<Config, 'url'> &
+    Partial<Pick<Config, 'clientId' | 'fetch' | 'keySet'>>
 
   type Options = {
     /**
@@ -264,9 +260,10 @@ export declare namespace create {
      */
     issuer?: string | undefined
     /**
-     * How long the verifier keeps a key set, in milliseconds. The next verification after it
-     * fetches the set again, so a key that the issuer removed stops verifying, and throws if that
-     * fetch fails. Defaults to 10 minutes.
+     * How long a key set verifies, in milliseconds. After half of it, a verification starts a
+     * background fetch of the set. From all of it, a verification waits for a new set, so a signing
+     * key that the issuer removed stops verifying, and throws if that fetch fails. Defaults to 10
+     * minutes.
      */
     maxAge?: number | undefined
     /**

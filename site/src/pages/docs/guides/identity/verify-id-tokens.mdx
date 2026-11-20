@@ -87,7 +87,7 @@ export const accounts = Accounts.create({ chain: 'testnet' })
 
 ### Create the server instance<StepTag kind="server" />
 
-On the server, create an instance with the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin. Its <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink> is the client ID of the app, the origin of the page. The instance caches Tempo ID's key set for 10 minutes, so create it once.
+On the server, create an instance with the <SourceLink name="tokens" path="src/plugins/tokens.ts">`tokens`</SourceLink> plugin. Its <SourceLink name="clientId" path="src/Accounts.ts">`clientId`</SourceLink> is the client ID of the app, the origin of the page. The instance keeps Tempo ID's key set for 10 minutes, so create it once.
 
 ```ts [server.ts]
 import { Accounts } from 'accounts'
@@ -227,7 +227,14 @@ const accounts = Accounts.create({
 
 ### Refresh the key set sooner
 
-<SourceLink name="create.maxAge" path="src/AccessToken.ts">`maxAge`</SourceLink> sets how long the instance keeps Tempo ID's key set, in milliseconds. A shorter time refuses the tokens of a removed signing key sooner. Defaults to 10 minutes.
+<SourceLink name="create.maxAge" path="src/AccessToken.ts">`maxAge`</SourceLink> sets how long Tempo ID's key set verifies, in milliseconds. A shorter time refuses the tokens of a removed signing key sooner. Defaults to 10 minutes. Few verifications wait for a fetch of the set:
+
+| Age of the key set             | Verification                                                   |
+| ------------------------------ | -------------------------------------------------------------- |
+| Before half of `maxAge`        | Verifies with the set                                          |
+| From half of `maxAge`          | Verifies with the set, and fetches a new set in the background |
+| From `maxAge`, or no set       | Waits for a fetch                                              |
+| A token names an unknown `kid` | Waits for a fetch, at most once each 30 seconds                |
 
 ```ts [server.ts]
 import { Accounts } from 'accounts'
@@ -236,6 +243,22 @@ import { tokens } from 'accounts/plugins'
 const accounts = Accounts.create({
   clientId: 'https://app.example',
   plugins: [tokens({ maxAge: 60_000 })], // [!code hl]
+})
+```
+
+### Keep the key set across instances
+
+Each new process starts without Tempo ID's key set. <SourceLink name="Runtime" path="src/internal/KeySet.ts">`keySet.cache`</SourceLink> takes a <SourceLink name="Store" path="src/Store.ts">`Store`</SourceLink> that the instances share, so a new instance verifies with its copy, without a fetch. <SourceLink name="Runtime" path="src/internal/KeySet.ts">`keySet.defer`</SourceLink> keeps the background fetches and writes running after the response.
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { createClient } from 'redis'
+
+const redis = await createClient({ url: process.env.REDIS_URL }).connect()
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  keySet: { cache: Store.redis(redis) }, // [!code hl]
 })
 ```
 

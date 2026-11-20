@@ -3,11 +3,9 @@
  * §3.1.3.7), and reads the user that each names.
  * @module
  */
-import { createRemoteJWKSet, customFetch, errors, jwtVerify } from 'jose'
+import { errors, jwtVerify } from 'jose'
 import { type Config, RequestError } from '../Accounts.js'
-
-/** How long after a key set's fetch an unknown `kid` fetches the set again, in milliseconds. */
-const cooldown = 30_000
+import * as KeySet from './KeySet.js'
 
 /**
  * The jose errors that refuse the token itself. Every other failure, such as a key set that cannot be
@@ -33,10 +31,13 @@ const types = ['application/jwt', 'jwt'] as const
 
 /**
  * Creates a verifier of the ID tokens that Tempo ID issues to the apps of `clientIds`, or to the
- * instance's own app by default, on jose's remote key set. The verifier holds the issuer's key set
- * for `maxAge`, and fetches it again for a token that names an unknown `kid`, at most once each 30
- * seconds after a successful fetch. Each fetch ends within `timeout`. Create one verifier for each
- * Worker isolate or process.
+ * instance's own app by default. The verifier holds the issuer's key set for `maxAge`, as
+ * `KeySet.create` of `accounts/internal` describes. A set younger than half of `maxAge` verifies as
+ * it is, an older one verifies while a background fetch replaces it, and from `maxAge` a
+ * verification waits for a fetch. A token that names an unknown `kid` waits for a fetch, at most
+ * once each 30 seconds after the last fetch started and ended. Each fetch ends within `timeout`. The
+ * configuration's `keySet` keeps the set beyond the verifier, such as for a new Worker isolate.
+ * Create one verifier for each Worker isolate or process.
  *
  * @example
  * ```ts
@@ -50,17 +51,11 @@ export function create(
   auth: Config,
   options: create.Options = {},
 ): create.ReturnType {
-  const {
-    clientIds = [auth.clientId],
-    maxAge = 10 * 60 * 1000,
-    timeout = 5_000,
-  } = options
+  const { clientIds = [auth.clientId] } = options
   const issuer = new URL(options.issuer ?? auth.url).origin
-  const keys = createRemoteJWKSet(new URL('/oauth2/jwks', auth.url), {
-    cacheMaxAge: maxAge,
-    cooldownDuration: cooldown,
-    timeoutDuration: timeout,
-    ...(auth.fetch ? { [customFetch]: auth.fetch } : {}),
+  const keys = KeySet.create(auth, {
+    maxAge: options.maxAge,
+    timeout: options.timeout,
   })
 
   return {
@@ -150,8 +145,10 @@ export declare namespace create {
      */
     issuer?: string | undefined
     /**
-     * How long the verifier keeps a key set, in milliseconds. The next verification after it
-     * fetches the set again. Defaults to 10 minutes.
+     * How long a key set verifies, in milliseconds. After half of it, a verification starts a
+     * background fetch of the set. From all of it, a verification waits for a new set, so a signing
+     * key that the issuer removed stops verifying, and throws if that fetch fails. Defaults to 10
+     * minutes.
      */
     maxAge?: number | undefined
     /**

@@ -29,7 +29,12 @@
  * @module
  */
 import { AccessToken, Accounts, Challenge, LogoutToken, Store } from 'accounts'
-import { Connections, DurableObject, Sessions } from 'accounts/cloudflare'
+import {
+  Connections,
+  DurableObject,
+  KeySet,
+  Sessions,
+} from 'accounts/cloudflare'
 import * as Internal from 'accounts/internal'
 import { backend, email, relay, siwe, viem } from 'accounts/plugins'
 import { env } from 'cloudflare:workers'
@@ -96,8 +101,15 @@ const url: string = import.meta.env.VITE_TEMPO_ID_URL
 /** The account that pays the fees of the `page` and `guarded` relays. */
 const feePayer = privateKeyToAccount(import.meta.env.VITE_FEE_PAYER)
 
-/** The options that each instance shares: the suite's node, and Tempo ID. */
-const shared = { chain: tempoLocalnet.id, url } as const
+/**
+ * The options that each instance shares: the suite's node, Tempo ID, and the key set of Tempo ID in
+ * the Cache API, which each new isolate starts from.
+ */
+const shared = {
+  chain: tempoLocalnet.id,
+  keySet: KeySet.cacheApi(),
+  url,
+} as const
 
 /**
  * Sends a request as `fetch` does, and returns each token response with a lifetime of
