@@ -257,12 +257,14 @@ export function passkey(options: passkey.Options = {}) {
         /**
          * Prepares a passkey sign-in ahead of the user's gesture, such as when the form shows, as
          * `Actions.passkey.prepare` does, and returns its handle. The handle's `signIn` starts the
-         * ceremony without a request, and sets the instance's session as `passkey.signIn` does.
+         * ceremony without a request, except as below, and sets the instance's session as
+         * `passkey.signIn` does.
          * Never throws. If Tempo ID refuses the options request, the handle's next `signIn` within 4
          * minutes, on the same chain, throws that refusal without a request. Create a new handle when
          * `accessKey` changes. If the signed-in user or the `select` default changes since the
          * options request, such as after a `signOut` here or in another tab, the handle's next
-         * `signIn` requests options of its own before the ceremony.
+         * `signIn` requests options of its own before the ceremony. Prepare a new handle after a
+         * `signOut` to keep that request out of the gesture.
          *
          * @example
          * ```ts
@@ -306,11 +308,11 @@ export function passkey(options: passkey.Options = {}) {
             session: Session.Any | undefined,
             selected: Promise<boolean | undefined>,
           ) => `${session ? Session.subject(session) : ''}:${await selected}`
-          const request = (available: boolean | undefined) => {
+          const request = (
+            available: boolean | undefined,
+            selected: Promise<boolean | undefined> = select(parameters),
+          ) => {
             const session = context.session.get()
-            // The read of the mark runs beside the realms read, and only the options request awaits
-            // it, so the handle keeps the chain of the call for its first request.
-            const selected = select(parameters)
             return {
               prepared: PasskeyActions.prepare(config, {
                 accessKey: resolved.accessKey,
@@ -324,22 +326,24 @@ export function passkey(options: passkey.Options = {}) {
               state: fixed ? undefined : state(session, selected),
             }
           }
+          // The read of the mark runs beside the realms read, and only the options request awaits
+          // it, so the handle keeps the chain of the call for its first request.
           let { prepared, state: requested } = request(parameters.available)
           return {
             available: prepared.available,
             async signIn() {
               // The prepared request names its chain, which a switch since can leave.
               const change = context.session.change({ chainId })
+              const selected = fixed ? undefined : select(parameters)
               const [before, now] = await Promise.all([
                 requested,
-                fixed
-                  ? undefined
-                  : state(context.session.get(), select(parameters)),
+                selected && state(context.session.get(), selected),
               ])
-              if (before !== now) {
-                // The realms read of the handle answered already, so the new options need none.
+              if (selected && before !== now) {
+                // The realms read and the mark read answered already, so the new options need neither.
                 ;({ prepared, state: requested } = request(
                   await prepared.available,
+                  selected,
                 ))
               }
               const result = await prepared.signIn({ getFn }).catch(change.fail)
