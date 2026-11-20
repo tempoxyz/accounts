@@ -1200,6 +1200,7 @@ export async function updateAccessKey<
   const { accessKey, account, chainId } = options
   // The type parameter follows the caller's `mode`. The union of every mode narrows on it.
   const delivery: updateAccessKey.Options = options
+
   // Tempo ID refuses a negative limit and two limits on one token, so they are refused before any
   // request, and a dialog opens no window, as a sign-in refuses them.
   const limits = options.limits ?? []
@@ -1212,10 +1213,14 @@ export async function updateAccessKey<
       reason: 'invalid_field',
       status: 0,
     })
+
+  // Tokens compare as lowercase text, so a malformed token reaches Tempo ID, which refuses it.
   const repeated = limits.findIndex((entry, index) =>
     limits
       .slice(0, index)
-      .some((earlier) => Address.isEqual(earlier.token, entry.token)),
+      .some(
+        (earlier) => earlier.token.toLowerCase() === entry.token.toLowerCase(),
+      ),
   )
   if (repeated !== -1)
     throw new RequestError({
@@ -1225,6 +1230,7 @@ export async function updateAccessKey<
       reason: 'invalid_field',
       status: 0,
     })
+
   const change = {
     ...(options.limits
       ? {

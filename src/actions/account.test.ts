@@ -70,6 +70,10 @@ describe('Actions.account.updateAccessKey', () => {
           { limit: 1n, token },
           { limit: 2n, token: token.toUpperCase().replace('0X', '0x') },
         ],
+        [
+          { limit: 1n, token: '0x20c0' },
+          { limit: 2n, token: '0x20C0' },
+        ],
       ].map((limits) =>
         AccountActions.updateAccessKey(auth, {
           ...options,
@@ -87,6 +91,10 @@ describe('Actions.account.updateAccessKey', () => {
         "errors": [
           {
             "field": "limits.0.limit",
+            "reason": "invalid_field",
+          },
+          {
+            "field": "limits.1.token",
             "reason": "invalid_field",
           },
           {
