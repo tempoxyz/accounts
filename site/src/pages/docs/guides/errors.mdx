@@ -256,7 +256,7 @@ export const accounts = Accounts.create({
 
 ### Ignore a closed dialog
 
-A closed dialog is no refusal. <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> throws a `DOMException` named `AbortError` for it, and for a sign-in that a later one replaces. A closed passkey prompt is none either: <SourceLink name="signIn" path="src/plugins/passkey.ts">`passkey.signIn`</SourceLink> and <SourceLink name="register" path="src/plugins/passkey.ts">`passkey.register`</SourceLink> throw an `Error` named `AbortError` for it, since React Native has no `DOMException`. The app checks the name alone.
+A closed dialog is no refusal. <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> throws a `DOMException` named `AbortError` for it, and for a sign-in that a later one replaces. A closed passkey prompt is none either: <SourceLink name="signIn" path="src/plugins/passkey.ts">`passkey.signIn`</SourceLink>, <SourceLink name="register" path="src/plugins/passkey.ts">`passkey.register`</SourceLink>, and <SourceLink name="signIn" path="src/plugins/email.ts">`email.signIn`</SourceLink> with `link` throw an `Error` named `AbortError` for it, since React Native has no `DOMException`. The app checks the name alone.
 
 If another sign-in or a sign-out completes first, it throws <SourceLink name="SupersededError" path="src/Accounts.ts">`Accounts.SupersededError`</SourceLink>. The app ignores both.
 

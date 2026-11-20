@@ -282,6 +282,23 @@ export declare namespace post {
 }
 
 /**
+ * Throws an `AbortError` for a ceremony that the user closed, as for a closed dialog, else the
+ * ceremony's error. The browser rejects a closed or timed-out prompt with a `NotAllowedError`, which
+ * ox wraps. The `AbortError` holds ox's error as its `cause`. It is an `Error`, since Hermes has no
+ * `DOMException`.
+ */
+export function closed(error: unknown): never {
+  const name = (error as { cause?: { name?: unknown } } | undefined)?.cause
+    ?.name
+  if (name === 'NotAllowedError' || name === 'AbortError')
+    throw Object.assign(new Error('The user closed the passkey prompt.'), {
+      cause: error,
+      name: 'AbortError',
+    })
+  throw error
+}
+
+/**
  * Signs the options of the passkey `step` with the passkey on the page, and repeats
  * `POST /v1/authorize` with the assertion and the step's expiry. Returns that response, and the
  * start of its request, after the ceremony, as `sentAt`. A failed
