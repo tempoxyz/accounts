@@ -2,6 +2,13 @@
  * A store in Redis, as `Store.redis` returns it.
  * @module
  */
+import {
+  type ActorRefFrom,
+  assign,
+  createActor,
+  type SnapshotFrom,
+  setup,
+} from 'xstate'
 import * as StoreValue from '../internal/StoreValue.js'
 import type * as Store from '../Store.js'
 
@@ -10,10 +17,12 @@ import type * as Store from '../Store.js'
  * with an expiry expires in Redis at `expiresAt`, through `SET` with `PXAT`, which takes whole
  * milliseconds, so a fraction rounds up. The store sends `GET`, `SET`, and `DEL` with each key as it
  * is, such as `tempo-id:session:<id>`. `takeItem` reads and deletes with one `GETDEL`, so replicas
- * that share the database take each value once. `lock` holds the key `<key>:lock` for at most 30
- * seconds, set to a token of the hold with `SET` and `NX`, and releases it with an `EVAL` that
- * deletes only that token. `update` reads with `GET` and writes with an `EVAL` that sets the key
- * only if it still holds the value read and no `lock` holds the key, and reads again otherwise. On
+ * that share the database take each value once. `lock` holds the key `<key>:lock` with a lease of
+ * 30 seconds, set to a token of the hold with `SET` and `NX`, renews the lease each 10 seconds
+ * while the hold runs, until the lease ends 120 seconds after the hold starts, and releases it with
+ * an `EVAL` that deletes only that token. A crashed holder's lock expires within 30 seconds, and a
+ * hung holder's at about 120 seconds. `update` reads with `GET` and writes with an `EVAL` that sets
+ * the key only if it still holds the value read and no `lock` holds the key, and reads again otherwise. On
  * Redis Cluster, where the key and its lock occupy two hash slots, `update` writes under `lock`. So the `backend` plugin's
  * replicas write the logout index of each `sid` in a read and a write, without the lock, and a
  * logout token ends every session of the `sid`. The store needs Redis 6.2 or later.
@@ -88,9 +97,30 @@ export function create(client: create.Client): Store.Store {
       (await send(['SET', name, token, 'NX', 'PX', String(lease)])) !== 'OK'
     )
       await new Promise((resolve) => setTimeout(resolve, 10))
+    // A hold that runs longer than the lease, such as a slow refresh, renews it, so no other replica
+    // takes the lock and sends the same refresh token. A crashed holder renews nothing, so its lock
+    // expires within `lease`. Each renewal caps the lease at the deadline of the hold, also if a
+    // timer runs late, so the lock of a hold that never settles expires at `holdLimit`.
+    const deadline = Date.now() + holdLimit
+    const renewal = createActor(
+      machines.renewal.provide({
+        actions: {
+          // The timer of the next renewal does not wait on this one. A failed renewal leaves the
+          // lease, which the next renewal extends, or which expires.
+          renew: () => {
+            const left = Math.min(lease, deadline - Date.now())
+            if (left <= 0) return
+            void send(['EVAL', renew, '1', name, token, String(left)]).catch(
+              () => undefined,
+            )
+          },
+        },
+      }),
+    ).start()
     try {
       return await fn()
     } finally {
+      renewal.send({ type: 'hold.end' })
       // A failed release leaves the lease, which expires within `lease`.
       await send(['EVAL', release, '1', name, token]).catch(() => undefined)
     }
@@ -220,10 +250,19 @@ export function create(client: create.Client): Store.Store {
 }
 
 /**
- * Milliseconds that a `lock` holds, so the lock of a crashed holder expires. An `fn` that runs
- * longer loses the lock to the next replica.
+ * Milliseconds that a `lock` holds without a renewal, so the lock of a crashed holder expires. A
+ * holder renews it each third of the lease while its `fn` runs.
  */
 const lease = 30_000
+
+/**
+ * Milliseconds after the start of a hold past which no renewal extends its lease, so a hold whose
+ * `fn` never settles frees the lock for other replicas.
+ */
+const holdLimit = 120_000
+
+/** Milliseconds between two renewals of a lease, a third of `lease`. */
+const renewalInterval = lease / 3
 
 /**
  * Writes `ARGV[3]` to the key `KEYS[1]`, with the expiry `ARGV[4]` if any, or deletes it for an empty
@@ -243,6 +282,10 @@ const swap = [
   "return redis.status_reply('OK')",
 ].join(' ')
 
+/** Extends the lease of the lock to `ARGV[2]` only if it still holds the token of the hold. */
+const renew =
+  "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('PEXPIRE', KEYS[1], ARGV[2]) end return 0"
+
 /** Deletes the lock only if it still holds the token of the hold that releases it. */
 const release =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0"
@@ -255,5 +298,83 @@ export declare namespace create {
   type Client = {
     /** Sends one command, such as `['GET', key]`, and resolves with its reply. */
     sendCommand: (args: string[]) => Promise<unknown>
+  }
+}
+
+export namespace machines {
+  /**
+   * The machine of the renewals of one hold of `lock`. In `renewing`, each `renewalInterval` renews
+   * the lease while the renewed lease ends within `holdLimit` of the start of the hold. The ninth
+   * renewal, at 90 seconds, extends the lease to 120 seconds, so a hold whose `fn` never settles
+   * frees the lock at about 120 seconds.
+   *
+   * | State      | Meaning                                                            |
+   * | ---------- | ------------------------------------------------------------------ |
+   * | `renewing` | The hold runs, and the next interval renews the lease.             |
+   * | `lapsing`  | The hold runs past its renewals, and its lease expires unrenewed.  |
+   * | `released` | The hold ended, so no renewal follows. The actor stops.            |
+   */
+  export const renewal = setup({
+    actions: {
+      /** Counts a renewal. */
+      count: assign((args) => ({ renewals: args.context.renewals + 1 })),
+      /** Extends the lease of the lock to `lease`, at most to the deadline of the hold, if the lock still holds the token of the hold. `create` provides it. */
+      renew: () => {},
+    },
+    delays: { renewalInterval },
+    guards: {
+      /** Whether the lease that the next renewal extends ends within `holdLimit` of the start of the hold. */
+      renewable: (args) =>
+        (args.context.renewals + 1) * renewalInterval + lease <= holdLimit,
+    },
+    types: {
+      context: {} as renewal.Context,
+      events: {} as renewal.Event,
+    },
+  }).createMachine({
+    context: { renewals: 0 },
+    id: 'renewal',
+    initial: 'renewing',
+    states: {
+      lapsing: {
+        on: { 'hold.end': { target: 'released' } },
+      },
+      released: { type: 'final' },
+      renewing: {
+        after: {
+          renewalInterval: [
+            {
+              actions: ['count', 'renew'],
+              guard: 'renewable',
+              // A reentry starts the timer of the next renewal.
+              reenter: true,
+              target: 'renewing',
+            },
+            { target: 'lapsing' },
+          ],
+        },
+        on: { 'hold.end': { target: 'released' } },
+      },
+    },
+  })
+
+  export declare namespace renewal {
+    /** The machine's context. */
+    type Context = {
+      /** The count of renewals of the hold's lease. */
+      renewals: number
+    }
+
+    /** An event of a hold. */
+    type Event = {
+      /** The `fn` of the hold settled, and the holder releases the lock. */
+      type: 'hold.end'
+    }
+
+    /** A running machine. */
+    type Actor = ActorRefFrom<typeof renewal>
+
+    /** A snapshot of the machine. */
+    type Snapshot = SnapshotFrom<typeof renewal>
   }
 }

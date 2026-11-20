@@ -8,6 +8,8 @@ import * as Util from 'node:util'
 import { Redis as IORedis } from 'ioredis'
 import { GenericContainer, Wait } from 'testcontainers'
 import { describe, expect, test } from 'vite-plus/test'
+import { createActor, initialTransition, transition, waitFor } from 'xstate'
+import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
 import * as BackendSessions from '../internal/BackendSessions.js'
 import * as Session from '../Session.js'
@@ -321,6 +323,49 @@ describe('Store.redis', () => {
     expect(lock).toMatchInlineSnapshot(`"other"`)
   }, 120_000)
 
+  test('behavior: a hold that runs past the lease keeps the lock', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    const store = Redis.create({
+      sendCommand: (args) => client.call(...(args as [string, ...string[]])),
+    })
+
+    // A hold such as a slow refresh, whose token request outlasts a third of the lease. Without a
+    // renewal, the lease only shortens, and another replica takes the lock once it expires.
+    const renewed = await store.lock!('key', async () => {
+      // The least time to live read so far. A renewal reads more than it.
+      let least = Number.POSITIVE_INFINITY
+      await expect
+        .poll(
+          async () => {
+            const ttl = await client.pttl('key:lock')
+            const longer = ttl > least
+            least = Math.min(least, ttl)
+            return longer
+          },
+          { interval: 500, timeout: 15_000 },
+        )
+        .toBe(true)
+      return true
+    })
+    const lock = await client.get('key:lock')
+    client.disconnect()
+    await container.stop()
+
+    expect({ lock, renewed }).toMatchInlineSnapshot(`
+      {
+        "lock": null,
+        "renewed": true,
+      }
+    `)
+  }, 120_000)
+
   test('behavior: sends one refresh for two processes on one Redis, whose Web Locks span one process', async () => {
     const container = await new GenericContainer('redis:7.4-alpine')
       .withExposedPorts(6379)
@@ -440,4 +485,125 @@ describe('Store.redis', () => {
       }
     `)
   }, 120_000)
+})
+
+describe('machines.renewal', () => {
+  test('renews the lease nine times, so it ends 120 seconds after the hold starts, then lets it lapse', async () => {
+    const renews: number[] = []
+    const actor = createActor(
+      Redis.machines.renewal.provide({
+        actions: {
+          renew: (args) => {
+            renews.push(args.context.renewals)
+          },
+        },
+        // A short interval runs the nine renewals at once, in the order of the real timers.
+        delays: { renewalInterval: 1 },
+      }),
+    ).start()
+
+    const lapsing = await waitFor(actor, (snapshot) =>
+      snapshot.matches('lapsing'),
+    )
+    actor.send({ type: 'hold.end' })
+
+    expect({ renewals: lapsing.context.renewals, renews })
+      .toMatchInlineSnapshot(`
+      {
+        "renewals": 9,
+        "renews": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+        ],
+      }
+    `)
+    expect(actor.getSnapshot().status).toMatchInlineSnapshot(`"done"`)
+  })
+
+  test('cancels the timer of the next renewal when the hold ends', () => {
+    const [initial] = initialTransition(Redis.machines.renewal)
+
+    const [released, actions] = transition(Redis.machines.renewal, initial, {
+      type: 'hold.end',
+    })
+
+    expect({
+      actions: actions.map((action) => action.type),
+      status: released.status,
+      value: released.value,
+    }).toMatchInlineSnapshot(`
+      {
+        "actions": [
+          "xstate.cancel",
+        ],
+        "status": "done",
+        "value": "released",
+      }
+    `)
+  })
+
+  test('reaches every state along its shortest paths, and handles every event type', () => {
+    const snapshots = getShortestPaths(Redis.machines.renewal, traversal).map(
+      (path) => path.state,
+    )
+
+    const reached = new Set(snapshots.map((snapshot) => snapshot.value))
+    const handled = new Set(
+      snapshots.flatMap((snapshot) =>
+        traversal
+          .events(snapshot)
+          .filter((event) => snapshot.can(event))
+          .map((event) => event.type),
+      ),
+    )
+
+    expect([...reached].sort()).toMatchInlineSnapshot(`
+      [
+        "lapsing",
+        "released",
+        "renewing",
+      ]
+    `)
+    expect([...handled].sort()).toEqual(Object.keys(events).sort())
+  })
+
+  /** The event of the timer of a renewal, which `after` sends in `renewing`. */
+  const interval = {
+    type: 'xstate.after.renewalInterval.renewal.renewing',
+  } as const
+
+  /** A machine event, or the event of the timer of a renewal. */
+  type Step = Redis.machines.renewal.Event | typeof interval
+
+  /** The events of each type that the runner sends from a snapshot. */
+  const events: {
+    [type in Step['type']]: (
+      snapshot: Redis.machines.renewal.Snapshot,
+    ) => readonly Step[]
+  } = {
+    'hold.end': (snapshot) =>
+      snapshot.status === 'active' ? [{ type: 'hold.end' }] : [],
+    'xstate.after.renewalInterval.renewal.renewing': (snapshot) =>
+      snapshot.matches('renewing') ? [interval] : [],
+  }
+
+  /** The traversal of the machine's graph, keyed by the state and the count of renewals. */
+  const traversal = {
+    // The traversal's type names only `Event`, though the machine handles every `Step`.
+    events: (snapshot: Redis.machines.renewal.Snapshot) =>
+      Object.values(events).flatMap((fn) =>
+        fn(snapshot),
+      ) as readonly Redis.machines.renewal.Event[],
+    // The guard bounds the count at nine, so the graph stays finite, and `lapsing` follows only the
+    // ninth renewal.
+    serializeState: (snapshot: Redis.machines.renewal.Snapshot) =>
+      JSON.stringify([snapshot.value, snapshot.context.renewals]),
+  }
 })
