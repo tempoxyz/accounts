@@ -49,6 +49,7 @@ describe('getSession', () => {
           return store.getItem(key)
         },
       },
+      redirectUri: 'https://app.example/',
       url: 'https://id.invalid',
     })
     await accounts.session.get()
@@ -68,6 +69,7 @@ describe('getSession', () => {
         )
         return globalThis.fetch(input, init)
       },
+      redirectUri: 'https://app.example/',
       store: Store.memory(),
       url: 'https://id.invalid',
     })
@@ -96,6 +98,7 @@ describe('getSession', () => {
           requests.push(`${init?.method ?? 'GET'} ${url.pathname}`)
         return globalThis.fetch(input, init)
       },
+      redirectUri: 'https://app.example/',
       store: memory,
       url: 'https://id.invalid',
     })
@@ -174,6 +177,7 @@ describe('getSession', () => {
         )
         return globalThis.fetch(input, init)
       },
+      redirectUri: 'https://app.example/',
       store: Store.memory(),
       url: 'https://id.invalid',
     })
