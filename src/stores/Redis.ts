@@ -99,16 +99,21 @@ export function create(client: create.Client): Store.Store {
       await new Promise((resolve) => setTimeout(resolve, 10))
     // A hold that runs longer than the lease, such as a slow refresh, renews it, so no other replica
     // takes the lock and sends the same refresh token. A crashed holder renews nothing, so its lock
-    // expires within `lease`.
+    // expires within `lease`. Each renewal caps the lease at the deadline of the hold, also if a
+    // timer runs late, so the lock of a hold that never settles expires at `holdLimit`.
+    const deadline = Date.now() + holdLimit
     const renewal = createActor(
       machines.renewal.provide({
         actions: {
           // The timer of the next renewal does not wait on this one. A failed renewal leaves the
           // lease, which the next renewal extends, or which expires.
-          renew: () =>
-            void send(['EVAL', renew, '1', name, token, String(lease)]).catch(
+          renew: () => {
+            const left = Math.min(lease, deadline - Date.now())
+            if (left <= 0) return
+            void send(['EVAL', renew, '1', name, token, String(left)]).catch(
               () => undefined,
-            ),
+            )
+          },
         },
       }),
     ).start()
@@ -313,7 +318,7 @@ export namespace machines {
     actions: {
       /** Counts a renewal. */
       count: assign((args) => ({ renewals: args.context.renewals + 1 })),
-      /** Extends the lease of the lock to `lease`, if the lock still holds the token of the hold. `create` provides it. */
+      /** Extends the lease of the lock to `lease`, at most to the deadline of the hold, if the lock still holds the token of the hold. `create` provides it. */
       renew: () => {},
     },
     delays: { renewalInterval },
