@@ -238,6 +238,17 @@ describe('create', () => {
     expect(keys.deferred.length).toMatchInlineSnapshot(`1`)
   })
 
+  test('fetches in the foreground, without a background fetch, for an unknown `kid` in a stale set', async () => {
+    const keys = await setup(Date.now() - KeySet.maxAge / 2)
+
+    // The one fetch fails, since nothing listens at the issuer address.
+    await expect(
+      keys.verify(await second.sign()),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[TypeError: fetch failed]`)
+
+    expect(keys.deferred.length).toMatchInlineSnapshot(`0`)
+  })
+
   test('throws the key set as unavailable for an unknown `kid` after a failed refresh', async () => {
     const keys = await setup(Date.now() - KeySet.maxAge / 2)
     await keys.verify(await first.sign())
@@ -247,7 +258,7 @@ describe('create', () => {
     await expect(
       keys.verify(await second.sign()),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: Key set unavailable: the last fetch of the key set failed. Retry later.]`,
+      `[Error: Key set unavailable: a fetch of the key set runs or failed. Retry later.]`,
     )
   })
 

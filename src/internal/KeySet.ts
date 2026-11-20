@@ -85,8 +85,8 @@ export type Status = 'expired' | 'fresh' | 'stale'
  *
  * @throws {errors.JWKSNoMatchingKey} If no signing key of the set matches the token, also after a
  * fetch.
- * @throws {Error} If the fetch fails, answers with a status other than 2xx, returns no key set, or
- * ends after `timeout`, such as with a `TimeoutError`, or if the last fetch failed within the
+ * @throws {Error} If the fetch fails, answers with a status other than 2xx or a redirect, returns no
+ * key set, or ends after `timeout`, as an `AbortError`, or if a fetch runs or failed within the
  * cooldown of a token that names an unknown `kid`.
  *
  * @example
@@ -139,11 +139,18 @@ export function create(
 
   async function fetchSet() {
     actor.send({ now: now(), type: 'fetch.start' })
+    // React Native's `AbortSignal` has no `timeout`, so a timer aborts the controller. The timer
+    // covers the body too.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeout_)
     try {
       const response = await (auth.fetch ?? fetch)(url, {
         headers: { accept: 'application/json' },
-        signal: AbortSignal.timeout(timeout_),
+        // A redirect could lead to another origin's key set, so the issuer's own answer counts.
+        redirect: 'manual',
+        signal: controller.signal,
       })
+      // A redirect answers with a 3xx status, or an opaque one with status 0.
       if (!response.ok)
         throw new Error(
           `Key set unavailable: the issuer answered with status ${response.status}. Retry later.`,
@@ -165,24 +172,37 @@ export function create(
     } catch (error) {
       actor.send({ now: now(), type: 'fetch.fail' })
       throw error
+    } finally {
+      clearTimeout(timer)
     }
   }
 
+  /** Starts a fetch that replaces a stale set after the response. */
+  function refresh() {
+    defer(fetchSet().catch(() => {}))
+  }
+
+  /** Returns the set to verify with, and whether a background fetch should replace it. */
   async function load() {
     const step = () =>
       decide(actor.getSnapshot(), { maxAge: maxAge_, now: now() })
     if (step() === 'fetch') await read()
     // A copy of the cache can be stale too, so the step follows the set that the read stored.
     const next = step()
-    if (next === 'fetch') return await fetchSet()
-    if (next === 'refresh') defer(fetchSet().catch(() => {}))
-    return actor.getSnapshot().context.entry!
+    if (next === 'fetch') return { entry: await fetchSet(), stale: false }
+    return {
+      entry: actor.getSnapshot().context.entry!,
+      stale: next === 'refresh',
+    }
   }
 
   return async (header, token) => {
-    const entry = await load()
+    const { entry, stale } = await load()
     try {
-      return await keysOf(entry)(header, token)
+      const key = await keysOf(entry)(header, token)
+      // The key is selected first, so a token of an unknown `kid` fetches in the foreground instead.
+      if (stale) refresh()
+      return key
     } catch (error) {
       if (!(error instanceof errors.JWKSNoMatchingKey)) throw error
       // Another fetch stored a newer set while this one checked, so the token checks it first.
@@ -195,13 +215,13 @@ export function create(
         }
       }
       const next = rotate(actor.getSnapshot(), { now: now() })
+      if (next === 'fetch') return await keysOf(await fetchSet())(header, token)
+      if (stale) refresh()
       if (next === 'refuse') throw error
-      if (next === 'unavailable')
-        throw new Error(
-          'Key set unavailable: the last fetch of the key set failed. Retry later.',
-          { cause: error },
-        )
-      return await keysOf(await fetchSet())(header, token)
+      throw new Error(
+        'Key set unavailable: a fetch of the key set runs or failed. Retry later.',
+        { cause: error },
+      )
     }
   }
 }
