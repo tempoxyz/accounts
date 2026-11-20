@@ -105,7 +105,7 @@ describe('Store.file', () => {
     Vm.runInContext(output.outputFiles[0]!.text, context)
 
     expect(context.outcome).toMatchInlineSnapshot(
-      `"Store.NodeRequiredError: Invalid runtime: the runtime has no file system modules. Run the program in Node, or use another store."`,
+      `"Store.NodeRequiredError: Invalid runtime: the runtime has no file system that persists, such as a browser or a Worker. Run the program in Node, or use another store."`,
     )
   })
 })

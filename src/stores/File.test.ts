@@ -3,16 +3,62 @@
  * @module
  */
 import * as Esbuild from 'esbuild'
+import { convertV4MiniflareOptions, Miniflare } from 'miniflare'
 import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs/promises'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
 import { WebCryptoP256 } from 'ox'
-import { describe, expect, test } from 'vite-plus/test'
+import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 import * as Session from '../Session.js'
 import * as File from './File.js'
 
 describe('Store.file', () => {
+  test('behavior: in a Worker with `nodejs_compat`, whose file system each isolate keeps in memory, creation throws NodeRequiredError', async () => {
+    // A Worker's `node:fs` writes to memory of its isolate, which other isolates never read and
+    // which an eviction drops, so a session there would vanish.
+    const output = await Esbuild.build({
+      bundle: true,
+      format: 'esm',
+      logLevel: 'silent',
+      platform: 'neutral',
+      stdin: {
+        contents: [
+          "import * as File from './File.ts'",
+          'export default {',
+          '  async fetch() {',
+          '    try {',
+          "      const store = File.create('/tmp/session.json')",
+          "      await store.setItem('session', { refreshToken: 'refresh-token' })",
+          "      return new Response('created')",
+          '    } catch (error) {',
+          "      return new Response(error.name + ': ' + error.message)",
+          '    }',
+          '  },',
+          '}',
+        ].join('\n'),
+        loader: 'ts',
+        resolveDir: import.meta.dirname,
+      },
+      write: false,
+    })
+    const miniflare = new Miniflare(
+      convertV4MiniflareOptions({
+        compatibilityDate: '2026-10-01',
+        compatibilityFlags: ['nodejs_compat'],
+        modules: true,
+        script: output.outputFiles[0]!.text,
+      }),
+    )
+    onTestFinished(() => miniflare.dispose())
+
+    const response = await miniflare.dispatchFetch('http://localhost/')
+
+    expect(await response.text()).toMatchInlineSnapshot(
+      `"Store.NodeRequiredError: Invalid runtime: the runtime has no file system that persists, such as a browser or a Worker. Run the program in Node, or use another store."`,
+    )
+  })
+
   test('behavior: a write to a damaged file rejects with the path and the fix, and quotes none of its tokens', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const path = Path.join(directory, 'session.json')
