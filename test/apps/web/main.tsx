@@ -11,6 +11,7 @@ import * as Mpp from './pages/Mpp.js'
 import * as Open from './pages/Open.js'
 import * as Popup from './pages/Popup.js'
 import * as Redirect from './pages/Redirect.js'
+import * as Restore from './pages/Restore.js'
 import * as Wagmi from './pages/Wagmi.js'
 
 /** Starts the page of each path. */
@@ -28,6 +29,7 @@ const pages: Readonly<Record<string, () => Promise<void>>> = {
   '/open/callback/': Open.callback,
   '/popup/': () => Popup.start(),
   '/redirect/': Redirect.start,
+  '/restore/': Restore.start,
   '/severed/': () =>
     Popup.start({ redirectUri: `${window.location.origin}/severed/` }),
   '/wagmi/': Wagmi.start,
