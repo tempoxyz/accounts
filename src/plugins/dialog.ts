@@ -715,25 +715,28 @@ export function dialog<const options extends dialog.Options = {}>(
       // A page that restores a session shows no sign-in, so it loads no frame. A failed read loads
       // it, since the page then shows a sign-in. The preload is an optimization, so the instance
       // waits for no read.
-      else
-        void context.session
-          .reload()
-          // The read's own `signedOut` ends no session: the page's authorization at mount can still
-          // restore one, so the read decides below, and only later ends load the frame.
-          .finally(follow)
-          .then(async (session) => {
-            if (session && !Session.expired(session)) return
-            // An authorization of the browser's Tempo ID session, such as the one of `react` or of a
-            // `session.get` with `reauthorize` at mount, restores a session without one, and renews
-            // an expired one without a sign-in, so the frame waits for an authorization that runs. The
-            // page starts it as it renders, after this read, so the frame waits for the page first.
-            await rendered()
-            await context.session.settled()
-            // Without an authorization, the instance can keep the expired session, which shows a
-            // sign-in.
-            const current = context.session.get()
-            if (!current || Session.expired(current)) load()
-          }, load)
+      else {
+        // The first load's `signedOut` ends no session: the page's authorization at mount can still
+        // restore one, so the read below decides. Only the ends after the first load load the frame.
+        const loading = instance.session.status.subscribe((status) => {
+          if (status.status === 'pending') return
+          loading()
+          follow()
+        })
+        void context.session.reload().then(async (session) => {
+          if (session && !Session.expired(session)) return
+          // An authorization of the browser's Tempo ID session, such as the one of `react` or of a
+          // `session.get` with `reauthorize` at mount, restores a session without one, and renews
+          // an expired one without a sign-in, so the frame waits for an authorization that runs. The
+          // page starts it as it renders, after this read, so the frame waits for the page first.
+          await rendered()
+          await context.session.settled()
+          // Without an authorization, the instance can keep the expired session, which shows a
+          // sign-in.
+          const current = context.session.get()
+          if (!current || Session.expired(current)) load()
+        }, load)
+      }
 
       return {}
     },
