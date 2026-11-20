@@ -7,6 +7,8 @@
   border: 1px solid var(--vocs-border-color-primary);
   border-radius: 0.5rem;
   color: var(--vocs-text-color-primary);
+  /* The steps stack by the width of the frame, which the page's column sets. */
+  container-type: inline-size;
   font-size: 0.875rem;
   line-height: 1.4;
   overflow: hidden;
@@ -107,6 +109,23 @@
 
 [data-demo-step-action] {
   flex-shrink: 0;
+}
+
+/* In a narrow frame, the control of a step goes under its text, aligned with the text. */
+@container (max-width: 30rem) {
+  [data-demo-step] {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+
+  [data-demo-step-text] {
+    flex-basis: calc(100% - 2.625rem);
+  }
+
+  [data-demo-step-action] {
+    flex-basis: 100%;
+    padding-left: 2.625rem;
+  }
 }
 
 [data-demo-button] {

@@ -23,6 +23,17 @@
   width: 11rem;
 }
 
+/* In a narrow frame, the step's control goes under its text, and the field fills the row. */
+@container (max-width: 30rem) {
+  [data-demo-field] {
+    flex-wrap: nowrap;
+  }
+
+  [data-demo-input] {
+    flex: 1;
+  }
+}
+
 [data-demo-input]:disabled {
   opacity: 0.5;
 }
