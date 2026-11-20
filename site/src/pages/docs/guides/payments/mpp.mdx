@@ -343,7 +343,7 @@ export const accounts = Accounts.create({
 
 For a DPoP token, each request carries a new proof of the instance's <SourceLink name="Config.dpop" path="src/Accounts.ts">`dpop`</SourceLink> key. A Bearer token, such as one that the store saved before the app set its <SourceLink name="Config.dpop" path="src/Accounts.ts">`dpop`</SourceLink> key, goes with the Bearer scheme and no proof.
 
-The ID token carries the user's email address when the sign-in requests the email scope. A payer of a fixed <SourceLink name="mpp.session" path="src/mpp/index.ts">`session`</SourceLink> sends no identity.
+The ID token carries the user's email address when the sign-in requests the email scope. The payer sends it only until it expires, after 10 hours, unless a refresh returns a new one. A payer of a fixed <SourceLink name="mpp.session" path="src/mpp/index.ts">`session`</SourceLink> sends no identity.
 
 ### Attribute each payment
 

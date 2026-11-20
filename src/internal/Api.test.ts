@@ -247,6 +247,48 @@ describe('jkt', () => {
   })
 })
 
+describe('expired', () => {
+  const token = (claims: unknown) =>
+    [
+      'header',
+      Base64.fromString(JSON.stringify(claims), { pad: false, url: true }),
+      'signature',
+    ].join('.')
+  const now = () => Math.floor(Date.now() / 1_000)
+
+  test.each([
+    {
+      expected: true,
+      name: 'an exp that passed over a minute ago',
+      token: () => token({ exp: now() - 61 }),
+    },
+    {
+      expected: false,
+      name: 'an exp that passed within a minute',
+      token: () => token({ exp: now() - 30 }),
+    },
+    {
+      expected: false,
+      name: 'an exp to come',
+      token: () => token({ exp: now() + 60 }),
+    },
+    { expected: false, name: 'no exp', token: () => token({ sub: 'user_1' }) },
+    {
+      expected: false,
+      name: 'an exp that is no number',
+      token: () => token({ exp: '1' }),
+    },
+    {
+      expected: false,
+      name: 'claims that do not parse',
+      token: () => 'header.%%%.signature',
+    },
+    { expected: false, name: 'no claims', token: () => 'opaque' },
+  ])('returns $expected for $name', (row) => {
+    expect(Api.expired(row.token())).toBe(row.expected)
+  })
+})
+
 describe('user', () => {
   test('throws server_error for an ID token whose claims do not parse, and quotes none of the token', () => {
     const payload = Base64.fromString('sub=user_1&email=user@example.com', {

@@ -503,6 +503,28 @@ export function jkt(token: string) {
 }
 
 /**
+ * Milliseconds past a token's `exp` before `expired` returns `true`. A verifier accepts a token up
+ * to 60 seconds past `exp`, so a device clock that runs fast keeps the token as long.
+ */
+const expirySkew = 60_000
+
+/**
+ * Returns whether the JWT `token` names an `exp` that passed more than `expirySkew` ago. A token
+ * without one that decodes returns `false`, so the caller still sends it, and the issuer or API
+ * decides.
+ */
+export function expired(token: string) {
+  try {
+    const payload = token.split('.')[1] ?? ''
+    if (!segment.test(payload)) return false
+    const { exp } = JSON.parse(Base64.toString(payload)) as { exp?: unknown }
+    return typeof exp === 'number' && exp * 1_000 + expirySkew <= Date.now()
+  } catch {
+    return false
+  }
+}
+
+/**
  * Throws `invalid_dpop_proof` for a DPoP token that the instance's `dpop` key does not bind: the
  * instance holds no key, or another key. Tempo ID and APIs refuse each request with such a token,
  * so the caller sends none.
