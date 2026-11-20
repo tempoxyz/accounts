@@ -3,6 +3,8 @@
  * @module
  */
 import * as Expiry from '../internal/Expiry.js'
+import * as Listeners from '../internal/Listeners.js'
+import * as Lock from '../internal/Lock.js'
 import type * as Store from '../Store.js'
 
 /**
@@ -10,7 +12,10 @@ import type * as Store from '../Store.js'
  * `DurableObject.sessions` uses it for each session, so an app needs this store only for a Durable
  * Object of its own. An entry with an expiry sets the object's alarm to the earliest expiry, and
  * the object's `alarm` handler calls the returned `alarm`, which deletes the expired entries. A
- * read skips an expired entry before the alarm runs.
+ * read skips an expired entry before the alarm runs. A Durable Object is the one instance that holds
+ * its storage, and workerd has no Web Locks, so the stores of one storage share a `lock` and a
+ * `connect` in memory: the instances on them send one refresh, and a sign-out of one empties the
+ * session of the others at once.
  *
  * @example
  * ```ts
@@ -34,6 +39,14 @@ export function create(storage: create.Storage): create.ReturnType {
     if (alarm === null || expiresAt < alarm) await storage.setAlarm(expiresAt)
   }
 
+  // The stores of one storage, such as one for each request, share its lock and its listeners.
+  let shared = coordination.get(storage)
+  if (!shared)
+    coordination.set(
+      storage,
+      (shared = { connect: Listeners.create(), lock: Lock.create() }),
+    )
+
   return {
     async alarm() {
       const expiries = await storage.list<number>({ prefix: expiryPrefix })
@@ -52,6 +65,8 @@ export function create(storage: create.Storage): create.ReturnType {
       // An alarm can fire more than once, so it deletes only expired entries, and sets the next one.
       if (next !== undefined) await storage.setAlarm(next)
     },
+    // The instances in the object hear each other's saved changes through it.
+    connect: shared.connect,
     async getItem(key) {
       const entry = await storage.get<Expiry.Entry<unknown>>(
         `${valuePrefix}${key}`,
@@ -59,6 +74,8 @@ export function create(storage: create.Storage): create.ReturnType {
       if (!entry || Expiry.expired(entry)) return undefined
       return entry.value
     },
+    // The instances in the object order their refreshes and `sid` index writes through it.
+    lock: shared.lock,
     async removeItem(key) {
       await storage.delete([`${valuePrefix}${key}`, `${expiryPrefix}${key}`])
     },
@@ -108,6 +125,15 @@ export declare namespace create {
     alarm: () => Promise<void>
   }
 }
+
+/** The lock and the listeners of each storage, which its stores share. */
+const coordination = new WeakMap<
+  create.Storage,
+  {
+    connect: NonNullable<Store.Store['connect']>
+    lock: NonNullable<Store.Store['lock']>
+  }
+>()
 
 /**
  * The key prefixes of each entry's expiry and value in a Durable Object's storage. Every key of the

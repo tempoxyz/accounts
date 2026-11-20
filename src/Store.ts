@@ -18,7 +18,7 @@ export type Store = {
    * microtask. The store holds no listener of an instance that the app dropped. An instance's
    * session posts each saved change through it where no page's `BroadcastChannel` exists, such as in
    * React Native or Node, so another instance's sign-out empties its session at once.
-   * `Store.memory` sets it. Absent, an instance outside a page reads another's sign-out only from
+   * `Store.memory` and `Store.durableObject` of `accounts/cloudflare` set it. Absent, an instance outside a page reads another's sign-out only from
    * the store.
    */
   connect?:
@@ -49,7 +49,7 @@ export type Store = {
    * so concurrent sign-ins of one `sid` keep each session. Every instance on the store refreshes
    * its session through it, so two instances send one refresh: without Web Locks, such as in React
    * Native, and for a store that is not `local`, such as `Store.redis` that processes share, whose
-   * Web Locks span one process only. `Store.file`, `Store.memory`, `Store.postgres`, `Store.redis`, and the store of `accounts/expo` set it. Absent, each instance
+   * Web Locks span one process only. `Store.file`, `Store.memory`, `Store.postgres`, `Store.redis`, `Store.durableObject` of `accounts/cloudflare`, and the store of `accounts/expo` set it. Absent, each instance
    * orders only its own writes and refreshes.
    */
   lock?:
