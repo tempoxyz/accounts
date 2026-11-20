@@ -41,11 +41,11 @@ const key = 'tempo-id:dpop'
  * the new DPoP key lasts for the page only.
  *
  * With Web Locks, such as in a browser, concurrent calls read and write the entry under one lock,
- * also in two tabs, so a first load in both returns one DPoP key. The lock spans one process only
- * outside a browser. So concurrent first calls of two processes on one store, such as two first
- * runs of a CLI on one `Store.file`, can each create a DPoP key, and only the last write stays. A
- * sign-in of the other process then binds tokens that the next run cannot refresh, and the user
- * signs in again. Without Web Locks, concurrent first calls in one process behave the same way.
+ * also in two tabs, so a first load in both returns one DPoP key. Outside a browser, Web Locks span
+ * one process, so the calls also hold the store's `lock`, which `Store.file` holds across the
+ * processes on the file. So two first runs of a CLI on one `Store.file` return one DPoP key, and
+ * each run refreshes the tokens that the other bound. With a store without `lock`, concurrent first
+ * calls of two processes can each create a DPoP key, and only the last write stays.
  *
  * The `dpop` that `Accounts.create` receives wins over the plugin's.
  *
@@ -96,10 +96,15 @@ export async function dpop(options: dpop.Options = {}) {
       return await exported(store)
     }
     // The lock's name is no entry of the store, so a store that locks each entry never waits for
-    // the lock that its caller holds.
-    if (!locks) return await load()
+    // the lock that its caller holds. The store's `lock` spans the processes on the store, such as
+    // two runs of a CLI on one `Store.file`, whose Web Locks span one process, so they keep one
+    // DPoP key. A refused hold, such as of a read-only folder, reads the store without it.
+    const held = store.lock
+      ? () => store.lock!(`${key}:exclusive`, load).catch(() => load())
+      : load
+    if (!locks) return await held()
     // A page without site storage, such as an opaque origin, refuses the lock before `load` runs.
-    return await locks.request(`${key}:exclusive`, load).catch(() => load())
+    return await locks.request(`${key}:exclusive`, held).catch(() => held())
   })()
 
   return Plugin.from({ config: () => ({ dpop: value }), id: 'dpop' })
