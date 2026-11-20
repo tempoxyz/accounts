@@ -2215,6 +2215,31 @@ describe('session.get', () => {
     `)
   })
 
+  test('returns undefined, and sends no request, for a call with `reauthorize` outside a browser without `redirectUri`', async () => {
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      clientId: 'tempo-example-web',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      store: Store.memory(),
+      url: 'https://id.invalid',
+    })
+
+    // A CLI or a server has no page origin for the headless authorization's redirect URI, so Tempo
+    // ID can only refuse it.
+    const session = await accounts.session.get({ reauthorize: true })
+
+    expect(session).toMatchInlineSnapshot(`undefined`)
+    expect(accounts.session.status.get().status).toMatchInlineSnapshot(
+      `"signedOut"`,
+    )
+    expect(requests).toMatchInlineSnapshot(`[]`)
+  })
+
   test('rejects with server_error and status 0 when the authorization of a call with `reauthorize` receives no response', async () => {
     const requests: string[] = []
     const accounts = Accounts.create({
@@ -2225,6 +2250,7 @@ describe('session.get', () => {
         )
         return globalThis.fetch(input, init)
       },
+      redirectUri: 'https://app.example/',
       store: Store.memory(),
       url: 'https://id.invalid',
     })
