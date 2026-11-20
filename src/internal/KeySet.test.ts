@@ -500,6 +500,32 @@ describe('create', () => {
     `)
   })
 
+  test('fetches once for verifications without a set that arrive together', async () => {
+    await using issuer = await serve()
+    const keys = KeySet.create({ url: issuer.url })
+    const tokens = await Promise.all([1, 2, 3].map(() => first.sign()))
+
+    const verified = Promise.all(tokens.map((token) => jwtVerify(token, keys)))
+    await issuer.received()
+    // Each verification reaches the key function before the first fetch returns.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    issuer.respond(200, { keys: [first.jwk] })
+
+    expect([
+      (await verified).map(({ protectedHeader }) => protectedHeader.kid),
+      issuer.requests.length,
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          "first",
+          "first",
+          "first",
+        ],
+        1,
+      ]
+    `)
+  })
+
   test('ignores a malformed copy of the cache', async () => {
     const cache = Store.memory()
     await cache.setItem(`${url}/oauth2/jwks`, {

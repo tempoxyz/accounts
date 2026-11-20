@@ -220,6 +220,34 @@ export function create(
     if (step === 'refresh') defer(fetchSet().catch(() => {}))
   }
 
+  /**
+   * Returns a wait for a fetch that another verification started within `timeout`, for the time it has
+   * left, which resolves with its set, or `undefined` for one that runs on, such as the fetch of a Worker
+   * request that ended, and throws the key set as unavailable if that fetch failed. Returns
+   * `undefined` at once without one, so the verification that starts a fetch starts it in the same tick.
+   */
+  function join() {
+    const { started } = actor.getSnapshot().context
+    if (!machines.fetching(actor.getSnapshot()) || started === undefined) return
+    const left = started + timeout_ - now()
+    if (left <= 0) return
+    return wait(left)
+  }
+
+  /** Waits at most `left` for the fetch that runs, as `join` describes. */
+  async function wait(left: number) {
+    const snapshot = await waitFor(
+      actor,
+      (state) => !machines.fetching(state),
+      { timeout: left },
+    ).catch(() => undefined)
+    if (!snapshot) return
+    if (snapshot.matches('loaded')) return snapshot.context.entry
+    throw new Error(
+      'Key set unavailable: the last fetch of the key set failed or did not end in time. Retry later.',
+    )
+  }
+
   /** Returns the set to verify with, and whether a background fetch should replace it. */
   async function load() {
     const step = () =>
@@ -227,7 +255,13 @@ export function create(
     if (step() === 'fetch') await read()
     // A copy of the cache can be stale too, so the step follows the set that the read stored.
     const next = step()
-    if (next === 'fetch') return { entry: await fetchSet(), stale: false }
+    if (next === 'fetch') {
+      const joined = join()
+      return {
+        entry: (joined && (await joined)) ?? (await fetchSet()),
+        stale: false,
+      }
+    }
     return {
       entry: actor.getSnapshot().context.entry!,
       stale: next === 'refresh',
