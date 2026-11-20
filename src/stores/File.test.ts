@@ -10,6 +10,7 @@ import * as Os from 'node:os'
 import * as Path from 'node:path'
 import { WebCryptoP256 } from 'ox'
 import { describe, expect, onTestFinished, test } from 'vite-plus/test'
+import * as Accounts from '../Accounts.js'
 import * as Session from '../Session.js'
 import * as File from './File.js'
 
@@ -147,6 +148,97 @@ describe('Store.file', () => {
         "folder": false,
         "replaced": false,
         "value": "value",
+      }
+    `)
+    await Fs.rm(directory, { force: true, recursive: true })
+  })
+
+  test('behavior: a write of the value that an entry holds writes no file, so a second sign-out of a CLI leaves the file as it was', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    const create = () =>
+      Accounts.create({
+        chain: 1337,
+        clientId: 'https://app.example.com',
+        store: File.create(path),
+        url: 'http://127.0.0.1:9',
+      })
+    await create().signOut()
+    // A file system can give a later file the inode of a removed one, so the change time tells a
+    // replaced file too.
+    const before = await Fs.stat(path, { bigint: true })
+
+    // A second run of the CLI's logout finds the user signed out already.
+    await create().signOut()
+    const after = await Fs.stat(path, { bigint: true })
+
+    expect({
+      replaced: after.ino !== before.ino || after.ctimeNs !== before.ctimeNs,
+      signedOut: await File.create(path).getItem(
+        'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]:signed-out',
+      ),
+    }).toMatchInlineSnapshot(`
+      {
+        "replaced": false,
+        "signedOut": true,
+      }
+    `)
+    await Fs.rm(directory, { force: true, recursive: true })
+  })
+
+  test('behavior: a write of the value that an entry holds persists a change that the value receives after the call, before the queued write', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    const store = File.create(path)
+    await store.setItem('key', { amount: 1 })
+    const value = { amount: 1 }
+
+    const write = store.setItem('key', value)
+    value.amount = 2
+    await write
+
+    expect(await File.create(path).getItem('key')).toMatchInlineSnapshot(`
+      {
+        "amount": 2,
+      }
+    `)
+    await Fs.rm(directory, { force: true, recursive: true })
+  })
+
+  test('behavior: a write of another expiry or another value replaces the file', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    const store = File.create(path)
+    const stat = async () => {
+      const { ctimeNs, ino } = await Fs.stat(path, { bigint: true })
+      return `${ino}:${ctimeNs}`
+    }
+    const expiresAt = Date.now() + 60_000
+    await store.setItem('key', { amount: 1n })
+    const files = [await stat()]
+    await store.setItem('key', { amount: 1n })
+    files.push(await stat())
+    await store.setItem('key', { amount: 1n }, { expiresAt })
+    files.push(await stat())
+    await store.setItem('key', { amount: 1n }, { expiresAt })
+    files.push(await stat())
+    await store.setItem('key', { amount: 2n }, { expiresAt })
+    files.push(await stat())
+
+    expect({
+      replaced: files.slice(1).map((file, index) => file !== files[index]),
+      value: await store.getItem('key'),
+    }).toMatchInlineSnapshot(`
+      {
+        "replaced": [
+          false,
+          true,
+          false,
+          true,
+        ],
+        "value": {
+          "amount": 2n,
+        },
       }
     `)
     await Fs.rm(directory, { force: true, recursive: true })
@@ -467,6 +559,32 @@ describe('Store.file', () => {
       ]
     `)
 
+    await Fs.rm(directory, { force: true, recursive: true })
+  })
+
+  test('behavior: a write of the value that an entry holds removes the temporary file of a write that ended before its rename, with the tokens that it held', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    const store = File.create(path)
+    await store.setItem('signed-out', true)
+    // A sign-in that ended between its write and its rename, such as at Ctrl-C, left its file.
+    const stale = `${path}.${crypto.randomUUID()}.tmp`
+    await Fs.writeFile(
+      stale,
+      '{"session":{"value":{"refreshToken":"refresh-token-secret"}}}',
+      { mode: 0o600 },
+    )
+    const past = new Date(Date.now() - 60_000)
+    await Fs.utimes(stale, past, past)
+
+    // A later sign-out writes the signed-out mark that the file holds.
+    await store.setItem('signed-out', true)
+
+    expect((await Fs.readdir(directory)).sort()).toMatchInlineSnapshot(`
+      [
+        "store.json",
+      ]
+    `)
     await Fs.rm(directory, { force: true, recursive: true })
   })
 
