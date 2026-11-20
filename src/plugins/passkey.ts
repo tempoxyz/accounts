@@ -41,6 +41,12 @@ const sharedReadLifetime = 5_000
  * ```
  */
 export function passkey(options: passkey.Options = {}) {
+  // The count of each instance's sign-outs, which a prepared handle compares at its sign-in.
+  const signOuts = new WeakMap<Plugin.Context['config'], number>()
+  const signedOut = (context: Plugin.Context) => {
+    signOuts.set(context.config, (signOuts.get(context.config) ?? 0) + 1)
+  }
+
   return Plugin.from({
     actions: (context) => {
       const { config } = context
@@ -260,8 +266,8 @@ export function passkey(options: passkey.Options = {}) {
          * ceremony without a request, and sets the instance's session as `passkey.signIn` does.
          * Never throws. If Tempo ID refuses the options request, the handle's next `signIn` within 4
          * minutes, on the same chain, throws that refusal without a request. Create a new handle when
-         * `accessKey` changes, or after a `signOut`, since the handle keeps the `select` default of its
-         * creation.
+         * `accessKey` changes. After a `signOut`, here or in another tab, the handle's next `signIn`
+         * requests options of its own, so the browser offers every passkey again.
          *
          * @example
          * ```ts
@@ -297,22 +303,32 @@ export function passkey(options: passkey.Options = {}) {
                   : Promise.resolve(parameters.available),
               signIn: () => Promise.reject(resolved.error),
             }
-          const prepared = PasskeyActions.prepare(config, {
-            accessKey: resolved.accessKey,
-            available: parameters.available,
-            chainId,
-            challenge: parameters.challenge,
-            credentialId: parameters.credentialId,
-            mediation: parameters.mediation,
-            // The read of the mark runs beside the realms read, and only the options request awaits
-            // it, so the handle keeps the chain of the call for its first request.
-            select: select(parameters),
-          })
+          const request = (available: boolean | undefined) =>
+            PasskeyActions.prepare(config, {
+              accessKey: resolved.accessKey,
+              available,
+              chainId,
+              challenge: parameters.challenge,
+              credentialId: parameters.credentialId,
+              mediation: parameters.mediation,
+              // The read of the mark runs beside the realms read, and only the options request awaits
+              // it, so the handle keeps the chain of the call for its first request.
+              select: select(parameters),
+            })
+          let prepared = request(parameters.available)
+          // A sign-out changes the `select` default, so options requested before it can offer only
+          // the previous user's passkeys.
+          let outs = signOuts.get(config) ?? 0
           return {
             available: prepared.available,
             async signIn() {
               // The prepared request names its chain, which a switch since can leave.
               const change = context.session.change({ chainId })
+              if ((signOuts.get(config) ?? 0) !== outs) {
+                outs = signOuts.get(config) ?? 0
+                // The realms read of the handle answered already, so the new options need none.
+                prepared = request(await prepared.available)
+              }
               const result = await prepared.signIn({ getFn }).catch(change.fail)
               return finish(change, result)
             },
@@ -415,6 +431,12 @@ export function passkey(options: passkey.Options = {}) {
     },
     // The instance's `getFn` also runs the ceremonies of a restored session's account.
     config: () => (options.getFn ? { getFn: options.getFn } : {}),
+    hooks: {
+      // Another tab's sign-out runs only this hook.
+      afterSignOut: signedOut,
+      // A sign-out that rejects runs no `afterSignOut`, but it changes the `select` default too.
+      beforeSignOut: signedOut,
+    },
     id: 'passkey',
   })
 }
