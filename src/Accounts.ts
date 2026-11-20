@@ -1311,8 +1311,9 @@ export type Accounts<
        * (`upgrade_required` or `webauthn_required`) returns `undefined`, so the page shows its
        * sign-in. A third-party client ID, such as an origin, also returns `undefined`, with no
        * authorization request, since it signs in only on an approval page. So does an instance
-       * outside a browser without `redirectUri`, such as a CLI's, whose headless authorization has
-       * no redirect URI that Tempo ID accepts: it signs in again with the device grant. A `webauthn_required`
+       * outside a browser without `redirectUri`, such as a CLI's. Tempo ID accepts no redirect URI
+       * for its headless authorization, so it signs in again with the device grant. A
+       * `webauthn_required`
        * from a passkey's ceremony that ran on the page and failed, such as a dismissed prompt with
        * `passkey: true`, throws with the ceremony's error as its `cause`. A function receives every
        * refusal itself, from its call of `authorize`.
