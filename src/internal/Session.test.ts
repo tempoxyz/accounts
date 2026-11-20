@@ -5,6 +5,8 @@
  * @module
  */
 import * as Session from '../Session.js'
+import { Address, Secp256k1 } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
 import { createActor } from 'xstate'
 import { beforeAll, describe, expect, test } from 'vite-plus/test'
 import { getShortestPaths } from 'xstate/graph'
@@ -76,7 +78,10 @@ describe('machines.session', () => {
 
       const disagree = snapshots
         .map((snapshot) => ({
-          held: snapshot.context.session !== undefined,
+          // The instance keeps a session that expired while it held it, but shows none.
+          held:
+            snapshot.context.session !== undefined &&
+            snapshot.context.session !== snapshot.context.expired,
           status: machines.status(snapshot),
         }))
         .filter((entry) => {
@@ -100,7 +105,9 @@ describe('machines.session', () => {
         ),
       )
 
-      expect([...sent].sort()).toEqual(Object.keys(events).sort())
+      expect([...sent].sort()).toEqual(
+        [...Object.keys(events), expiry.type].sort(),
+      )
     })
 
     test('holds the context that its state cannot express consistent, in every state that it reaches', () => {
@@ -748,6 +755,93 @@ describe('machines.session', () => {
         ]
       `)
     })
+  })
+
+  describe('expiry', () => {
+    test("changes to signedOut at the expiry of the session's access keys, keeps the session, and changes to signedIn for the next session", async () => {
+      const actor = createActor(
+        machines.session.provide({ delays: { expiry: 0 } }),
+      ).start()
+      const statuses: string[] = []
+      actor.subscribe((snapshot) => statuses.push(String(snapshot.value)))
+
+      actor.send({ session: renewed, type: 'set' })
+      await expect
+        .poll(() => actor.getSnapshot().value, { timeout: 1_000 })
+        .toBe('signedOut')
+      const held = actor.getSnapshot().context.session
+      actor.send({ session: other, type: 'set' })
+
+      expect(held).toBe(renewed)
+      expect(statuses).toEqual(['signedIn', 'signedOut', 'signedIn'])
+    })
+  })
+
+  describe('expiresAt', () => {
+    /** Returns an access key that expires at `expiry`, in Unix seconds, or never without one. */
+    const accessKey = (expiry?: number) => {
+      const owner = Secp256k1.randomPrivateKey()
+      const authorization = KeyAuthorization.from({
+        address: Address.fromPublicKey(
+          Secp256k1.getPublicKey({ privateKey: Secp256k1.randomPrivateKey() }),
+        ),
+        chainId: 4217n,
+        ...(expiry ? { expiry } : {}),
+        type: 'secp256k1',
+      })
+      const signature = Secp256k1.sign({
+        payload: KeyAuthorization.getSignPayload(authorization),
+        privateKey: owner,
+      })
+      return {
+        account: Address.fromPublicKey(
+          Secp256k1.getPublicKey({ privateKey: owner }),
+        ),
+        chainId: 4217,
+        keyAuthorization: KeyAuthorization.toRpc(
+          KeyAuthorization.from(authorization, { signature }),
+        ),
+      }
+    }
+
+    const cases = [
+      ['an access key', { accessKey: accessKey(100) }, 100_000],
+      [
+        'an access key and a later one on another chain',
+        { accessKey: accessKey(100), accessKeys: [accessKey(200)] },
+        200_000,
+      ],
+      [
+        'an access key and one on another chain without an expiry',
+        { accessKey: accessKey(100), accessKeys: [accessKey()] },
+        Infinity,
+      ],
+      [
+        'an access key on another chain, and no refresh token',
+        { accessKeys: [accessKey(100)], refreshToken: undefined },
+        100_000,
+      ],
+      [
+        'no access key, and an access token that expires later than the access key on another chain',
+        {
+          accessKeys: [accessKey(100)],
+          expiresAt: 300_000,
+          refreshToken: undefined,
+        },
+        300_000,
+      ],
+      ['no access key, and a refresh token', {}, Infinity],
+      ['no access key, and no refresh token', { refreshToken: undefined }, 1],
+    ] as const
+
+    for (const [name, fields, expected] of cases)
+      test(`returns ${expected} for ${name}`, () => {
+        const result = machines.expiresAt(
+          Session.from({ ...expired, ...fields }),
+        )
+
+        expect(result).toBe(expected)
+      })
   })
 
   describe('ending', () => {
@@ -2368,6 +2462,14 @@ describe('machines.session', () => {
   }
 
   /**
+   * The event of the timer of `signedIn`, which XState sends at the expiry of the session's access
+   * keys. The runner sends no such event.
+   */
+  const expiry = {
+    type: 'xstate.after.expiry.session.signedIn',
+  } as unknown as machines.session.Event
+
+  /**
    * The traversal of the machine's graph. The counters of the race guard grow at each change, so a
    * snapshot's key holds only the values that select the status and the session to show, the
    * bounded sign-out values, and whether a change followed the last sign-out, which a join reads.
@@ -2401,12 +2503,14 @@ describe('machines.session', () => {
       ...events['signOut.reject'](snapshot),
       ...events['signOut.remote'](snapshot),
       ...events['signOut.start'](snapshot),
+      ...(snapshot.matches('signedIn') ? [expiry] : []),
     ],
     serializeState: (snapshot: machines.session.Snapshot) => {
       const {
         authorizations,
         checked,
         delegations,
+        expired,
         loaded,
         logouts,
         marked,
@@ -2422,6 +2526,7 @@ describe('machines.session', () => {
         authorizations,
         checked === version,
         delegations,
+        session !== undefined && session === expired,
         loaded,
         logouts.running,
         marked,

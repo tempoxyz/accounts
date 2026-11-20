@@ -438,13 +438,14 @@ describe('viem', () => {
       url: 'http://127.0.0.1:9',
     })
     await accounts.session.get()
+    const statuses: string[] = []
+    accounts.session.status.subscribe((status) => statuses.push(status.status))
     await expect
       .poll(() => AccessKey.expired(accessKey), { timeout: 5_000 })
       .toBe(true)
-    const statuses: string[] = []
-    accounts.session.status.subscribe((status) => statuses.push(status.status))
 
-    // A native app sends at a tap after a day, and renders the status, which no read changed since.
+    // A native app sends at a tap after a day, and renders the status, which changed once at the
+    // expiry, before or after the refusal.
     const error = await accounts.token
       .transferSync({
         amount: 1n,
@@ -514,10 +515,16 @@ describe('viem', () => {
       .poll(() => AccessKey.expired(accessKey), { timeout: 5_000 })
       .toBe(true)
 
-    // The read ended while the access key lived, so only the refusal below can empty the session.
-    expect(accounts.session.status.get().status).toMatchInlineSnapshot(
-      `"signedIn"`,
-    )
+    // The status changes at the expiry, and the store keeps the session, so only the refusal below
+    // can empty it.
+    await expect
+      .poll(() => accounts.session.status.get().status, { timeout: 2_000 })
+      .toBe('signedOut')
+    expect(
+      await store.getItem(
+        'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]',
+      ),
+    ).toMatchObject({ state: { session: { accessToken: 'access-token' } } })
 
     // The transfer names no gas, so it ends at the refusal of its fill and its estimate, before
     // any signature.

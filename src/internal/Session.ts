@@ -16,6 +16,7 @@ import {
 import { RequestError, SupersededError } from '../Accounts.js'
 import * as Session from '../Session.js'
 import type { Store } from '../Store.js'
+import * as AccessKey from './AccessKey.js'
 import * as Api from './Api.js'
 import * as Lock from './Lock.js'
 import * as StoreValue from './StoreValue.js'
@@ -234,7 +235,18 @@ export function create(options: create.Options): create.ReturnType {
                 .catch(() => undefined)
             },
           },
+          delays: {
+            // `signedIn` holds a session, so the fallback never applies.
+            expiry: (args) =>
+              args.context.session
+                ? Math.max(
+                    machines.expiresAt(args.context.session) - Date.now(),
+                    0,
+                  )
+                : Infinity,
+          },
         }),
+        { clock },
       ).start()
     : undefined
 
@@ -2615,6 +2627,49 @@ function order(session: Session.Any) {
   return Session.local(session) ? session.revision : session.expiresAt
 }
 
+/**
+ * The clock of the session's actor, whose timers keep no dropped instance alive, such as a server's
+ * instance for each request. The actor holds each pending timer, which it receives as the timer's
+ * ID, and the platform's timer holds it only weakly. A delay above a timer's limit, about 24.8 days,
+ * waits in steps, and an infinite one schedules nothing. A Node process, such as a CLI's, exits with
+ * a timer pending.
+ */
+const clock = {
+  clearTimeout(timer: clock.Timer | undefined) {
+    clearTimeout(timer?.handle)
+  },
+  setTimeout(callback: () => void, delay: number): clock.Timer {
+    const timer: clock.Timer = { callback, handle: undefined }
+    if (!Number.isFinite(delay)) return timer
+    const at = Date.now() + delay
+    const ref = new WeakRef(timer)
+    // A step can end early, so each one waits for the time left, and the callback never runs early.
+    const step = () => {
+      const timer = ref.deref()
+      if (!timer) return
+      const left = at - Date.now()
+      if (left <= 0) return timer.callback()
+      wait(timer, left)
+    }
+    const wait = (timer: clock.Timer, left: number) => {
+      timer.handle = setTimeout(step, Math.min(left, 2 ** 31 - 1))
+      ;(timer.handle as { unref?: () => void }).unref?.()
+    }
+    wait(timer, delay)
+    return timer
+  },
+}
+
+declare namespace clock {
+  /** A pending timer of {@link clock}. */
+  type Timer = {
+    /** The actor's callback, which runs at the delay's end. */
+    callback: () => void
+    /** The platform's timer of the current step, or `undefined` for an infinite delay. */
+    handle: ReturnType<typeof setTimeout> | undefined
+  }
+}
+
 /** Returns `promise` settled: `undefined` when it resolves, its error when it rejects. */
 function settle(promise: Promise<unknown> | undefined) {
   return (promise ?? Promise.resolve()).then(
@@ -2800,6 +2855,11 @@ export namespace machines {
         version: args.context.version + 1,
       })),
       /**
+       * Marks the session whose access keys expired while the instance held it. The instance keeps
+       * it, so a read empties it and a transaction's retry renews it, as before its expiry.
+       */
+      expire: assign((args) => ({ expired: args.context.session })),
+      /**
        * Sets the session that the store holds. A change that completed first is newer, so it stays.
        * A read after `load`, such as a retry after a failed read, sets only a session whose access
        * key holds, which `load` would keep. `load` checks the first read itself.
@@ -2965,6 +3025,14 @@ export namespace machines {
         },
       })),
     },
+    delays: {
+      /**
+       * The time until the session's access keys expire, in milliseconds, as {@link expiresAt}
+       * decides. `Session.ts` provides it from the clock. Here, the longest delay of a timer stands
+       * in for it, so the machine reads no clock.
+       */
+      expiry: () => 2 ** 31 - 1,
+    },
     guards: {
       /** Whether a callback inside an authorization runs. */
       delegating: (args) => args.context.delegations > 0,
@@ -3004,6 +3072,7 @@ export namespace machines {
       authorizations: 0,
       checked: undefined,
       delegations: 0,
+      expired: undefined,
       loaded: false,
       logouts: { remote: 0, running: 0, started: 0, succeeded: 0, unknown: 0 },
       marked: false,
@@ -3070,7 +3139,10 @@ export namespace machines {
           { target: 'signedOut' },
         ],
       },
-      signedIn: {},
+      // Each change of the session leaves `signedIn` through `settling`, so the timer follows it.
+      signedIn: {
+        after: { expiry: { actions: 'expire', target: 'settling' } },
+      },
       signedOut: {},
     },
   })
@@ -3102,6 +3174,11 @@ export namespace machines {
        * no more, since the authorization waits for the callback.
        */
       delegations: number
+      /**
+       * The session whose access keys expired while the instance held it, which the status shows as
+       * signed out. A load empties it. Another session in `session` leaves it stale.
+       */
+      expired: Session.Any | undefined
       /**
        * Whether the stored session loaded, or a change set the session first. Before that, the stored
        * copy can hold an expired access key, so the status stays `pending`.
@@ -4542,7 +4619,7 @@ export namespace machines {
    *
    * | Status          | When                                                            |
    * | --------------- | --------------------------------------------------------------- |
-   * | `signedIn`      | The session loaded, or a change set it.                         |
+   * | `signedIn`      | The session loaded, or a change set it, and it did not expire.  |
    * | `reauthorizing` | An authorization renews a session whose access key expired.     |
    * | `pending`       | The session has not loaded, or an authorization is in progress. |
    * | `signedOut`     | Otherwise.                                                      |
@@ -4550,10 +4627,32 @@ export namespace machines {
   export function select(
     context: machines.session.Context,
   ): Session.Status<Session.Any>['status'] {
-    if (context.loaded && context.session) return 'signedIn'
+    if (
+      context.loaded &&
+      context.session &&
+      context.session !== context.expired
+    )
+      return 'signedIn'
     if (context.authorizations > 0 && context.renewing) return 'reauthorizing'
     if (!context.loaded || context.authorizations > 0) return 'pending'
     return 'signedOut'
+  }
+
+  /**
+   * Returns the time at which {@link Session.expired} becomes true for `session`, in milliseconds
+   * since the epoch, or `Infinity` for a session that time alone never expires: the latest expiry
+   * of its access keys, where an access key without an expiry never expires.
+   */
+  export function expiresAt(session: Session.Any): number {
+    const times = [
+      ...(session.accessKey ? [session.accessKey] : []),
+      ...(session.accessKeys ?? []),
+    ].map((key) => AccessKey.expiry(key) ?? Infinity)
+    // Without an access key, the access token's expiry counts too, unless a refresh token renews it.
+    if (!session.accessKey && !Session.local(session))
+      times.push(session.refreshToken ? Infinity : session.expiresAt)
+    // A session that holds no expiry, such as a local one without an access key, expired already.
+    return Math.max(0, ...times)
   }
 
   /** Returns the guard of `settling`'s transition to `status`. */

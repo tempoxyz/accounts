@@ -206,15 +206,14 @@ export function same<session extends Any>(
  * Returns whether the session can no longer act: its access key expired, and no access key on another
  * chain lives, or, without an access key, its access token expired and it holds no refresh token. A
  * session without an access key that holds a refresh token never expires here, since its tokens
- * refresh. `accounts.session.get()` already empties a saved session whose access key expired.
+ * refresh. An instance's status changes to `signedOut` once its session expires, and
+ * `accounts.session.get()` empties such a session.
  *
  * @example
  * ```ts
  * import { Session } from 'accounts'
  *
- * const session = await accounts.session.get()
- * // A session can expire while the page stays open.
- * if (session && Session.expired(session)) await accounts.signOut()
+ * const expired = Session.expired(session)
  * ```
  */
 export function expired(session: Any): boolean {
