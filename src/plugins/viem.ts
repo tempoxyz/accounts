@@ -891,7 +891,10 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
               const request = (
                 args.params as readonly unknown[] | undefined
               )?.[0] as { from?: string; keyId?: string } | undefined
-              const session = fixed ?? context.session.get()
+              // An expired session that the instance emptied stays for the next authorization, and
+              // its access key stays refused.
+              const session =
+                fixed ?? context.session.get() ?? context.session.renewing()
               const accessKey = accessKeyOn(session, { chainId })
               const keyId = accessKey?.keyAuthorization.keyId
               // The same signing material can hold an authorization for another account, which

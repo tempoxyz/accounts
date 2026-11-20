@@ -16,6 +16,7 @@ import {
 import { RequestError, SupersededError } from '../Accounts.js'
 import * as Session from '../Session.js'
 import type { Store } from '../Store.js'
+import * as AccessKey from './AccessKey.js'
 import * as Api from './Api.js'
 import * as Lock from './Lock.js'
 import * as StoreValue from './StoreValue.js'
@@ -1398,7 +1399,7 @@ export function create(options: create.Options): create.ReturnType {
   // The authorizations that run now, each settled to `undefined`, which `settled` waits for.
   const authorizations = new Set<Promise<void>>()
 
-  return {
+  const instance: create.ReturnType = {
     actor,
     async authorize(fn) {
       if (!actor) return await fn()
@@ -2233,6 +2234,36 @@ export function create(options: create.Options): create.ReturnType {
         })
     })
   }
+
+  // The session's access key can expire while the instance stays open, such as a page that renders
+  // `useSession`. At its expiry, the instance runs `load`, as `session.get` does, which empties the
+  // session and keeps it for the next authorization, so the status changes with no read of the app's.
+  let expiring: ReturnType<typeof setTimeout> | undefined
+  const watch = (session: Session.Any | undefined) => {
+    clearTimeout(expiring)
+    expiring = undefined
+    const at = session ? machines.expiresAt(session) : undefined
+    if (!session || at === undefined) return
+    // A delay above the timer's limit, about 24.8 days, fires at once, so a long one waits in steps.
+    const delay = Math.min(Math.max(at - Date.now(), 0), 2 ** 31 - 1)
+    expiring = setTimeout(() => {
+      expiring = undefined
+      if (context().session !== session) return
+      if (!Session.expired(session)) return watch(session)
+      void instance.load().catch(() => undefined)
+    }, delay)
+    // A Node process, such as a CLI's, exits with the timer pending.
+    ;(expiring as { unref?: () => void }).unref?.()
+  }
+  let watched = actor?.getSnapshot().context.session
+  watch(watched)
+  actor?.subscribe((snapshot) => {
+    if (snapshot.context.session === watched) return
+    watched = snapshot.context.session
+    watch(watched)
+  })
+
+  return instance
 }
 
 export declare namespace create {
@@ -4554,6 +4585,29 @@ export namespace machines {
     if (context.authorizations > 0 && context.renewing) return 'reauthorizing'
     if (!context.loaded || context.authorizations > 0) return 'pending'
     return 'signedOut'
+  }
+
+  /**
+   * When `session` may expire next, in milliseconds since the epoch, or `undefined` for a session
+   * that expires only after a refresh fails, as {@link Session.expired} decides: the soonest
+   * expiry of an access key, or `expiresAt` without an access key or a refresh token. A session
+   * whose other access keys outlast its access key expires only after them, so its check repeats.
+   */
+  export function expiresAt(session: Session.Any): number | undefined {
+    const keys = [
+      ...(session.accessKey ? [session.accessKey] : []),
+      ...(session.accessKeys ?? []),
+    ]
+    const times = keys
+      .map((key) => AccessKey.expiry(key))
+      .filter((at): at is number => at !== undefined)
+    if (keys.length === 0 && !session.refreshToken && session.expiresAt)
+      times.push(session.expiresAt)
+    if (times.length === 0) return undefined
+    // The soonest expiry still to come, or now for a session whose every expiry passed.
+    const now = Date.now()
+    const next = times.filter((at) => at > now)
+    return next.length > 0 ? Math.min(...next) : now
   }
 
   /** Returns the guard of `settling`'s transition to `status`. */

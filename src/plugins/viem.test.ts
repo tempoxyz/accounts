@@ -376,9 +376,9 @@ describe('viem', () => {
       url: 'http://127.0.0.1:9',
     })
     await accounts.session.get()
-    await expect
-      .poll(() => AccessKey.expired(accessKey), { timeout: 5_000 })
-      .toBe(true)
+    // A device that suspends the app delays the timer of the expiry, so the app sends before it
+    // fires. The loop blocks every timer until the access key expires.
+    while (!AccessKey.expired(accessKey));
 
     // Tempo ID sends a change of an access key, so its request leaves for Tempo ID. The refused
     // transfer below empties the session, so the change runs first.
@@ -438,9 +438,9 @@ describe('viem', () => {
       url: 'http://127.0.0.1:9',
     })
     await accounts.session.get()
-    await expect
-      .poll(() => AccessKey.expired(accessKey), { timeout: 5_000 })
-      .toBe(true)
+    // A device that suspends the app delays the timer of the expiry, so the app sends before it
+    // fires. The loop blocks every timer until the access key expires.
+    while (!AccessKey.expired(accessKey));
     const statuses: string[] = []
     accounts.session.status.subscribe((status) => statuses.push(status.status))
 
@@ -510,9 +510,9 @@ describe('viem', () => {
       url: 'http://127.0.0.1:9',
     })
     await accounts.session.get()
-    await expect
-      .poll(() => AccessKey.expired(accessKey), { timeout: 5_000 })
-      .toBe(true)
+    // A device that suspends the app delays the timer of the expiry, so the app sends before it
+    // fires. The loop blocks every timer until the access key expires.
+    while (!AccessKey.expired(accessKey));
 
     // The read ended while the access key lived, so only the refusal below can empty the session.
     expect(accounts.session.status.get().status).toMatchInlineSnapshot(
