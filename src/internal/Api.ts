@@ -201,6 +201,8 @@ export type ErrorBody = {
   meta?: Readonly<Record<string, number | string>> | undefined
   /** A stable name for the refusal. The issuer's own errors carry none. */
   reason?: RequestError.Reason | undefined
+  /** Whether the refusal followed the user's sign-in, as a backend's `POST /callback` answers. */
+  signed_in?: boolean | undefined
 }
 
 /** Returns a {@link RequestError} for an OAuth error response, or a refusal without a body. */
@@ -214,6 +216,7 @@ export function error(body: Partial<ErrorBody>, options: { status: number }) {
       `Request failed with status ${options.status}.`,
     meta: body.meta,
     reason: body.reason,
+    signedIn: body.signed_in === true,
     status: options.status,
     uri: body.error_uri,
   })

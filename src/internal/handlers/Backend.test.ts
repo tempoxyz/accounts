@@ -13,6 +13,7 @@ import { siwe } from '../../plugins/siwe.js'
 import { viem } from '../../plugins/viem.js'
 import * as Session from '../../Session.js'
 import * as Store from '../../Store.js'
+import * as Api from '../Api.js'
 import * as BackendCookie from '../BackendCookie.js'
 import * as Backend from './Backend.js'
 
@@ -925,8 +926,57 @@ describe('fetch', () => {
         {
           "error": "server_error",
           "error_description": "The code exchange received no response. Check the connection, and sign in again.",
+          "signed_in": true,
         },
       ]
+    `)
+  })
+
+  test("POST /callback marks a refusal after the code exchange as signed in, so the page's `Accounts.RequestError` has `signedIn`, and a denial has none", async () => {
+    const accounts = instance()
+
+    async function refusal(query: string) {
+      const login = await accounts.handler.fetch(
+        new Request(`${origin}/accounts/auth/login`, {
+          headers: { origin },
+          method: 'POST',
+        }),
+      )
+      const { url } = (await login.json()) as { url: string }
+      const state = new URL(url).searchParams.get('state')
+      const response = await accounts.handler.fetch(
+        new Request(`${origin}/accounts/auth/callback`, {
+          body: JSON.stringify({
+            url: `${origin}/accounts/auth/callback?${query}&state=${state}`,
+          }),
+          headers: { cookie: cookies(login), origin },
+          method: 'POST',
+        }),
+      )
+      // The dialog's page reads the response with the same parser.
+      const error = await Api.json(response).catch((error: unknown) => error)
+      if (!(error instanceof Accounts.RequestError)) throw error
+      return {
+        code: error.code,
+        signedIn: error.signedIn,
+        status: error.status,
+      }
+    }
+
+    // Nothing listens at the URL, so the code exchange after the user's sign-in receives no response.
+    expect(await refusal('code=code')).toMatchInlineSnapshot(`
+      {
+        "code": "server_error",
+        "signedIn": true,
+        "status": 503,
+      }
+    `)
+    expect(await refusal('error=access_denied')).toMatchInlineSnapshot(`
+      {
+        "code": "access_denied",
+        "signedIn": false,
+        "status": 400,
+      }
     `)
   })
 

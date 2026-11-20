@@ -343,7 +343,8 @@ export function create(options: create.Options): Handler.Handler {
    * sign-in that this browser's cookie names, so another site's callback signs no one in. A refusal
    * answers with its OAuth error body and its status, or 503 for an exchange without a response, so
    * the page's `Accounts.RequestError` keeps its `reason` and description. The body holds the
-   * refusal's `error`, such as `access_denied`, `error_description`, `field`, and `reason`. The
+   * refusal's `error`, such as `access_denied`, `error_description`, `field`, `reason`, and
+   * `signed_in` for a refusal after the user signed in, such as a refused code exchange. The
    * route deletes the cookies of the sign-in, also for a refused callback, such as a denial or a
    * forged `state`.
    */
@@ -1228,6 +1229,8 @@ function refused(refusal: RequestError, options: { headers: Headers }) {
       field: refusal.field,
       meta: refusal.meta,
       reason: refusal.reason,
+      // The page's `Accounts.RequestError` keeps `signedIn`, such as for a refused code exchange.
+      signed_in: refusal.signedIn || undefined,
     } satisfies ErrorBody,
     { headers: options.headers, status: callbackStatus(refusal) },
   )
