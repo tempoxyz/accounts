@@ -132,7 +132,7 @@ export async function signIn<
       await Authentication.sign(
         // ox reads `getFn` beside request options at runtime, which its types admit only beside a challenge.
         getFn ? ({ ...deserialized, getFn } as never) : deserialized,
-      ),
+      ).catch(Headless.closed),
     )
   })()
   // The account and the registration options ride with the sign-in, so the page sends no request

@@ -321,7 +321,7 @@ export async function register<
   const passkey = await Registration.create(
     // ox reads `createFn` beside creation options at runtime, which its types admit only beside flat options.
     createFn ? ({ ...deserialized, createFn } as never) : deserialized,
-  ).catch(closed)
+  ).catch(Headless.closed)
   const credential = Credential.serialize(passkey)
 
   const created = {
@@ -377,7 +377,7 @@ export async function register<
         await Authentication.sign(
           // ox reads `getFn` beside request options at runtime, which its types admit only beside a challenge.
           getFn ? ({ ...proof, getFn } as never) : proof,
-        ).catch(closed),
+        ).catch(Headless.closed),
       )
     } catch (error) {
       forget(created)
@@ -887,25 +887,8 @@ async function sign(prepared: Prepared, options: prepare.SignInOptions) {
     await Authentication.sign(
       // ox reads `getFn` beside request options at runtime, which its types admit only beside a challenge.
       getFn ? ({ ...prepared.options, getFn } as never) : prepared.options,
-    ).catch(closed),
+    ).catch(Headless.closed),
   )
-}
-
-/**
- * Throws an `AbortError` for a ceremony that the user closed, as for a closed dialog, else the
- * ceremony's error. The browser rejects a closed or timed-out prompt with a `NotAllowedError`, which
- * ox wraps. The `AbortError` holds ox's error as its `cause`. It is an `Error`, since Hermes has no
- * `DOMException`.
- */
-function closed(error: unknown): never {
-  const name = (error as { cause?: { name?: unknown } } | undefined)?.cause
-    ?.name
-  if (name === 'NotAllowedError' || name === 'AbortError')
-    throw Object.assign(new Error('The user closed the passkey prompt.'), {
-      cause: error,
-      name: 'AbortError',
-    })
-  throw error
 }
 
 /** Sends the assertion, and returns the authorization, or the email step of a passkey without one. */

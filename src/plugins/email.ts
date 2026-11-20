@@ -199,8 +199,10 @@ export function email(options: email.Options = {}) {
          *   receives no response, such as offline. Before the code verifies, `signedIn` is `false`
          *   and the session does not change. The request may have spent the code, so if Tempo ID
          *   refuses it with `invalid_code`, request a new code.
-         * @throws {Authentication.SignFailedError} From `ox/webauthn`, when the ceremony of the
-         *   passkey that `link` names fails. The code stays valid.
+         * @throws {Error} Named `AbortError`, when the user closes the prompt of the passkey that
+         *   `link` names, or lets it time out. The code stays valid.
+         * @throws {Authentication.SignFailedError} From `ox/webauthn`, when that ceremony fails
+         *   otherwise. The code stays valid.
          * @throws {Accounts.SupersededError} When another sign-in or a sign-out completed while
          *   this sign-in was pending.
          * @throws {TypeError} On a page, when the instance's `store` has `json`, such as
