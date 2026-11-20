@@ -671,10 +671,22 @@ export function dialog<const options extends dialog.Options = {}>(
         const redirectUri = backendRedirectUri(config)
         DialogActions.preload(config, redirectUri ? { redirectUri } : {})
       }
+      // Each end of the session shows a sign-in: a sign-out here or in another tab, a refused
+      // token, an expired access key that no authorization renews, or an end during an
+      // authorization. A renewal, at `reauthorizing`, is a request of the page, so it loads no
+      // frame. A held frame stays, so a repeated status loads nothing.
+      const follow = () => {
+        instance.session.status.subscribe((status) => {
+          if (status.status === 'signedOut') load()
+        })
+      }
 
       // A browser without IntersectionObserver v2 frames the sign-in only for an app whose loaded
       // frame reports Tempo ID's trust, so every page loads the frame there, also with a session.
-      if (!visibility()) load()
+      if (!visibility()) {
+        load()
+        follow()
+      }
       // With `backend`, the backend holds the session and the instance none, so the backend's
       // session route tells whether the page shows a sign-in. A signed-in page loads no frame, and
       // a failed read loads it. The instance's status follows no sign-in of the backend, so the
@@ -704,26 +716,29 @@ export function dialog<const options extends dialog.Options = {}>(
       // A page that restores a session shows no sign-in, so it loads no frame. A failed read loads
       // it, since the page then shows a sign-in. The preload is an optimization, so the instance
       // waits for no read.
-      else
+      else {
+        // The first load's `signedOut` ends no session: the page's authorization at mount can still
+        // restore one, so the read below decides. Only the ends after the first load load the frame.
+        const loading = instance.session.status.subscribe((status) => {
+          if (status.status === 'pending') return
+          loading()
+          follow()
+        })
         void context.session.reload().then(async (session) => {
           if (session && !Session.expired(session)) return
-          // An authorization of the browser's Tempo ID session, such as the one of `react` at
-          // mount, restores a session without one, and renews an expired one without a sign-in,
-          // so the frame waits for an authorization that runs.
+          // An authorization of the browser's Tempo ID session, such as the one of `react` or of a
+          // `session.get` with `reauthorize` at mount, restores a session without one, and renews
+          // an expired one without a sign-in, so the frame waits for an authorization that runs. The
+          // page starts it as it renders, after this read, so the frame waits for the page first.
+          await rendered()
           await context.session.settled()
           // Without an authorization, the instance can keep the expired session, which shows a
           // sign-in.
           const current = context.session.get()
           if (!current || Session.expired(current)) load()
         }, load)
+      }
 
-      // Each end of the session shows a sign-in: a sign-out here or in another tab, a refused
-      // token, or an expired access key that no authorization renews. A renewal, at
-      // `reauthorizing`, is a request of the page, so it loads no frame. A held frame stays, so a
-      // repeated status loads nothing.
-      instance.session.status.subscribe((status) => {
-        if (status.status === 'signedOut') load()
-      })
       return {}
     },
     hooks: {
@@ -1155,6 +1170,22 @@ function framed(config: Plugin.Context['config']) {
     !Popup.http({ page: window.location.href, url: config.url }) &&
     !pushes(config)
   )
+}
+
+/**
+ * Resolves once the page loaded and its main thread is idle, so the authorizations that the page
+ * starts as it renders, such as a restore at mount, already run.
+ */
+async function rendered() {
+  if (document.readyState !== 'complete')
+    await new Promise((resolve) =>
+      window.addEventListener('load', resolve, { once: true }),
+    )
+  await new Promise<void>((resolve) => {
+    if (typeof requestIdleCallback === 'function')
+      requestIdleCallback(() => resolve(), { timeout: 1_000 })
+    else setTimeout(resolve, 0)
+  })
 }
 
 /**
