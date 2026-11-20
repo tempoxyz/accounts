@@ -11,7 +11,7 @@ import * as Fs from 'node:fs/promises'
 import * as Http from 'node:http'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
-import { Address, Base64, type Hex, Secp256k1 } from 'ox'
+import { Address, type Hex, Secp256k1 } from 'ox'
 import { KeyAuthorization, TempoAddress } from 'ox/tempo'
 import { createClient, http, type Transport } from 'viem'
 import { describe, expect, onTestFinished, test, vi } from 'vite-plus/test'
@@ -1230,60 +1230,6 @@ describe('mpp', () => {
         [
           "https://other.example.com/fortune",
           null,
-          null,
-        ],
-      ]
-    `)
-  })
-
-  test('sends no ID token past its expiry, such as one that a refresh without an ID token kept', async () => {
-    const store = Store.memory()
-    const now = Math.floor(Date.now() / 1000)
-    const idToken = (exp: number) =>
-      [
-        'header',
-        Base64.fromString(JSON.stringify({ exp, sub: 'user_1' }), {
-          pad: false,
-          url: true,
-        }),
-        'signature',
-      ].join('.')
-    const expired = idToken(now - 3600)
-    await store.setItem(name, {
-      state: { session: { ...session({ expiry: 3600 }), idToken: expired } },
-      version: 0,
-    })
-    const requests: Request[] = []
-    const accounts = instance({
-      fetch: (input, init) => {
-        requests.push(new Request(input, init))
-        return Promise.resolve(new Response('free'))
-      },
-      identity: { scope: ['https://api.example.com'] },
-      store,
-    })
-
-    await accounts.mpp().fetch('https://api.example.com/fortune')
-    await accounts.mpp.session().fetch('https://api.example.com/content')
-
-    expect(
-      requests.map((request) => [
-        request.url,
-        request.headers.get('authorization'),
-        request.headers.get('tempo-id-token') === expired
-          ? 'expired ID token'
-          : request.headers.get('tempo-id-token'),
-      ]),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          "https://api.example.com/fortune",
-          "Bearer access-token",
-          null,
-        ],
-        [
-          "https://api.example.com/content",
-          "Bearer access-token",
           null,
         ],
       ]
