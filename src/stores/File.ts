@@ -173,7 +173,8 @@ export function create(path?: string): Store.Store {
    * Applies `fn` to the entries after every earlier write, and writes the file. The read and the
    * write hold the file's lock, so a write of another process, such as a second run of a CLI, never
    * lands between them and is never lost. A write that `options.skip` finds without effect on the
-   * entries before the lock takes no lock, writes no file, and returns `undefined`. Returns the
+   * entries before the lock takes no lock, writes no file, and returns `undefined`. It still removes
+   * the temporary files older than the stale lock, which can hold tokens. Returns the
    * result of `fn`, or `undefined` if another process took the lock over before the rename.
    */
   function update<value>(
@@ -183,7 +184,12 @@ export function create(path?: string): Store.Store {
     const next = pending
       .catch(() => undefined)
       .then(async () => {
-        if (options.skip?.(await read())) return undefined
+        if (options.skip?.(await read())) {
+          // A temporary file of a process that ended before its rename can hold a new refresh
+          // token, so a skipped write, such as a second sign-out, removes it as a write does.
+          await sweep(resolve())
+          return undefined
+        }
         const { Fs, Path } = node()
         const target = resolve()
         await Fs.mkdir(Path.dirname(target), { mode: 0o700, recursive: true })

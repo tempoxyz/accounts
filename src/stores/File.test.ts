@@ -562,6 +562,32 @@ describe('Store.file', () => {
     await Fs.rm(directory, { force: true, recursive: true })
   })
 
+  test('behavior: a write of the value that an entry holds removes the temporary file of a write that ended before its rename, with the tokens that it held', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    const store = File.create(path)
+    await store.setItem('signed-out', true)
+    // A sign-in that ended between its write and its rename, such as at Ctrl-C, left its file.
+    const stale = `${path}.${crypto.randomUUID()}.tmp`
+    await Fs.writeFile(
+      stale,
+      '{"session":{"value":{"refreshToken":"refresh-token-secret"}}}',
+      { mode: 0o600 },
+    )
+    const past = new Date(Date.now() - 60_000)
+    await Fs.utimes(stale, past, past)
+
+    // A later sign-out writes the signed-out mark that the file holds.
+    await store.setItem('signed-out', true)
+
+    expect((await Fs.readdir(directory)).sort()).toMatchInlineSnapshot(`
+      [
+        "store.json",
+      ]
+    `)
+    await Fs.rm(directory, { force: true, recursive: true })
+  })
+
   test('behavior: a write keeps a temporary file younger than the stale lock, which another process can still rename', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const path = Path.join(directory, 'store.json')
