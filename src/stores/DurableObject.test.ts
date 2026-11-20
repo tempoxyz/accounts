@@ -8,8 +8,9 @@ import { convertV4MiniflareOptions, Miniflare } from 'miniflare'
 import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 
 /**
- * Runs `contents` in the `fetch` of a Durable Object, with `store`, a `Store.durableObject` of the
- * object's storage, and returns the JSON that it returns.
+ * Runs `contents` in the `fetch` of a Durable Object, with `store`, the object's
+ * `Store.durableObject`. Returns the JSON that it returns, and `read`, which returns the JSON of
+ * the object's `this.read()`.
  */
 async function run(contents: readonly string[]) {
   const output = await Esbuild.build({
@@ -26,8 +27,10 @@ async function run(contents: readonly string[]) {
         "import * as Session from '../Session.ts'",
         "import * as DurableObjectStore from './DurableObject.ts'",
         'export class STORE extends DurableObject {',
-        '  async fetch() {',
-        '    const store = DurableObjectStore.create(this.ctx.storage)',
+        '  store = DurableObjectStore.create(this.ctx.storage)',
+        '  async fetch(request) {',
+        "    if (new URL(request.url).pathname === '/read') return Response.json(this.read())",
+        '    const store = this.store',
         ...contents,
         '  }',
         '}',
@@ -51,12 +54,16 @@ async function run(contents: readonly string[]) {
   )
   onTestFinished(() => miniflare.dispose())
   const response = await miniflare.dispatchFetch('http://localhost/')
-  return (await response.json()) as unknown
+  const read = async () =>
+    (await (
+      await miniflare.dispatchFetch('http://localhost/read')
+    ).json()) as unknown
+  return { read, result: (await response.json()) as unknown }
 }
 
 describe('Store.durableObject', () => {
   test('behavior: sends one refresh for two instances in one object, whose runtime has no Web Locks', async () => {
-    const result = await run([
+    const { result } = await run([
       'const requests = []',
       'const create = () => Accounts.create({',
       '  chain: 1337,',
@@ -94,7 +101,7 @@ describe('Store.durableObject', () => {
   }, 30_000)
 
   test('behavior: a sign-out of one instance in the object empties the session of another at once', async () => {
-    const result = await run([
+    const { read } = await run([
       'const requests = []',
       'const create = () => Accounts.create({',
       '  chain: 1337,',
@@ -113,11 +120,12 @@ describe('Store.durableObject', () => {
       'const [first, second] = [create(), create()]',
       'await Promise.all([first.session.get(), second.session.get()])',
       'await first.signOut()',
-      'await new Promise((resolve) => setTimeout(resolve, 50))',
-      'return Response.json({ first: first.session.status.get().status, requests, second: second.session.status.get().status })',
+      'this.read = () => ({ first: first.session.status.get().status, requests, second: second.session.status.get().status })',
+      'return Response.json(null)',
     ])
 
-    expect(result).toMatchInlineSnapshot(`
+    await expect.poll(read).toMatchObject({ second: 'signedOut' })
+    expect(await read()).toMatchInlineSnapshot(`
       {
         "first": "signedOut",
         "requests": [
