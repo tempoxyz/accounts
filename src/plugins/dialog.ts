@@ -706,9 +706,11 @@ export function dialog<const options extends dialog.Options = {}>(
       else
         void context.session.reload().then(async (session) => {
           if (session && !Session.expired(session)) return
-          // An authorization of the browser's Tempo ID session, such as the one of `react` at
-          // mount, restores a session without one, and renews an expired one without a sign-in,
-          // so the frame waits for an authorization that runs.
+          // An authorization of the browser's Tempo ID session, such as the one of `react` or of a
+          // `session.get` with `reauthorize` at mount, restores a session without one, and renews
+          // an expired one without a sign-in, so the frame waits for an authorization that runs. The
+          // page starts it as it renders, after this read, so the frame waits for the page first.
+          await rendered()
           await context.session.settled()
           // Without an authorization, the instance can keep the expired session, which shows a
           // sign-in.
@@ -719,9 +721,15 @@ export function dialog<const options extends dialog.Options = {}>(
       // Each end of the session shows a sign-in: a sign-out here or in another tab, a refused
       // token, or an expired access key that no authorization renews. A renewal, at
       // `reauthorizing`, is a request of the page, so it loads no frame. A held frame stays, so a
-      // repeated status loads nothing.
-      instance.session.status.subscribe((status) => {
-        if (status.status === 'signedOut') load()
+      // repeated status loads nothing. The first read of a store without a session ends none: the
+      // page's authorization at mount can still restore one, so the read above decides.
+      instance.session.status.subscribe((status, previous) => {
+        if (status.status !== 'signedOut') return
+        if (
+          previous.status === 'signedIn' ||
+          previous.status === 'reauthorizing'
+        )
+          load()
       })
       return {}
     },
@@ -1154,6 +1162,22 @@ function framed(config: Plugin.Context['config']) {
     !Popup.http({ page: window.location.href, url: config.url }) &&
     !pushes(config)
   )
+}
+
+/**
+ * Resolves once the page loaded and its main thread is idle, so the authorizations that the page
+ * starts as it renders, such as a restore at mount, already run.
+ */
+async function rendered() {
+  if (document.readyState !== 'complete')
+    await new Promise((resolve) =>
+      window.addEventListener('load', resolve, { once: true }),
+    )
+  await new Promise<void>((resolve) => {
+    if (typeof requestIdleCallback === 'function')
+      requestIdleCallback(() => resolve(), { timeout: 1_000 })
+    else setTimeout(resolve, 0)
+  })
 }
 
 /**
