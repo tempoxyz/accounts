@@ -3,7 +3,6 @@
  * @module
  */
 import * as Expiry from '../internal/Expiry.js'
-import * as Listeners from '../internal/Listeners.js'
 import * as Lock from '../internal/Lock.js'
 import type * as Store from '../Store.js'
 
@@ -39,6 +38,28 @@ export function create(storage: create.Storage): create.ReturnType {
     if (alarm === null || expiresAt < alarm) await storage.setAlarm(expiresAt)
   }
 
+  // The listeners of each key. A `WeakRef` holds no instance that the app dropped, such as one
+  // that the object creates for each request.
+  const listeners = new Map<string, Set<WeakRef<(message: unknown) => void>>>()
+
+  /** Delivers each message posted at a key to the other listeners of that key. */
+  function connect(key: string, listener: (message: unknown) => void) {
+    const set =
+      listeners.get(key) ?? new Set<WeakRef<(message: unknown) => void>>()
+    listeners.set(key, set)
+    // Each connection and each post drops the references of collected listeners.
+    for (const ref of set) if (!ref.deref()) set.delete(ref)
+    set.add(new WeakRef(listener))
+    // The function holds `listener`, so the instance that holds the function keeps its listener.
+    return (message: unknown) => {
+      for (const ref of set) {
+        const peer = ref.deref()
+        if (!peer) set.delete(ref)
+        else if (peer !== listener) queueMicrotask(() => peer(message))
+      }
+    }
+  }
+
   return {
     async alarm() {
       const expiries = await storage.list<number>({ prefix: expiryPrefix })
@@ -57,8 +78,10 @@ export function create(storage: create.Storage): create.ReturnType {
       // An alarm can fire more than once, so it deletes only expired entries, and sets the next one.
       if (next !== undefined) await storage.setAlarm(next)
     },
-    // The instances in the object hear each other's saved changes through it.
-    connect: Listeners.create(),
+    // The instances in the object hear each other's saved changes through it. A Worker with a
+    // compatibility date before 2025-05-05 has no `WeakRef`, so its instances read sign-outs from
+    // the store instead.
+    ...(typeof WeakRef === 'function' ? { connect } : {}),
     async getItem(key) {
       const entry = await storage.get<Expiry.Entry<unknown>>(
         `${valuePrefix}${key}`,

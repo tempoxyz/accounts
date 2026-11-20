@@ -12,13 +12,15 @@ import { describe, expect, onTestFinished, test } from 'vite-plus/test'
  * `Store.durableObject`. Returns the JSON that it returns, and `read`, which returns the JSON of
  * the object's `this.read()`.
  */
-async function run(contents: readonly string[]) {
+async function run(contents: readonly string[], options: run.Options = {}) {
+  const { compatibilityDate = '2026-01-01' } = options
+
   const output = await Esbuild.build({
     bundle: true,
+    conditions: ['workerd', 'worker', 'browser'],
     external: ['cloudflare:workers'],
     format: 'esm',
     logLevel: 'silent',
-    conditions: ['workerd', 'worker', 'browser'],
     platform: 'browser',
     stdin: {
       contents: [
@@ -45,7 +47,7 @@ async function run(contents: readonly string[]) {
   })
   const miniflare = new Miniflare(
     convertV4MiniflareOptions({
-      compatibilityDate: '2026-01-01',
+      compatibilityDate,
       compatibilityFlags: ['nodejs_compat'],
       durableObjects: { STORE: { className: 'STORE', useSQLite: true } },
       modules: true,
@@ -61,7 +63,42 @@ async function run(contents: readonly string[]) {
   return { read, result: (await response.json()) as unknown }
 }
 
+declare namespace run {
+  type Options = {
+    /** The compatibility date of the Worker. Defaults to `2026-01-01`. */
+    compatibilityDate?: string | undefined
+  }
+}
+
 describe('Store.durableObject', () => {
+  test('behavior: restores a session in a Worker without `WeakRef`', async () => {
+    const { result } = await run(
+      [
+        'const accounts = Accounts.create({',
+        '  chain: 1337,',
+        "  clientId: 'https://app.example.com',",
+        '  store,',
+        "  url: 'http://127.0.0.1:9',",
+        '})',
+        'await store.setItem(\'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]\', {',
+        "  state: { session: Session.from({ accessToken: 'access-token', expiresAt: Date.now() + 3600000, refreshToken: 'refresh-token', user: { email: 'user@example.com', id: 'user_1' } }) },",
+        '  version: 0,',
+        '})',
+        'const session = await accounts.session.get()',
+        'return Response.json({ status: accounts.session.status.get().status, user: session?.user.id, weakRef: typeof WeakRef })',
+      ],
+      { compatibilityDate: '2025-01-01' },
+    )
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "status": "signedIn",
+        "user": "user_1",
+        "weakRef": "undefined",
+      }
+    `)
+  }, 30_000)
+
   test('behavior: sends one refresh for two instances in one object, whose runtime has no Web Locks', async () => {
     const { result } = await run([
       'const requests = []',
