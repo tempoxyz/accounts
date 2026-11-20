@@ -3,6 +3,7 @@
  * @module
  */
 import * as Expiry from '../internal/Expiry.js'
+import * as Lock from '../internal/Lock.js'
 import type * as Store from '../Store.js'
 
 /**
@@ -10,7 +11,10 @@ import type * as Store from '../Store.js'
  * `DurableObject.sessions` uses it for each session, so an app needs this store only for a Durable
  * Object of its own. An entry with an expiry sets the object's alarm to the earliest expiry, and
  * the object's `alarm` handler calls the returned `alarm`, which deletes the expired entries. A
- * read skips an expired entry before the alarm runs.
+ * read skips an expired entry before the alarm runs. Workerd has no Web Locks, so the store holds a
+ * `lock` and a `connect` in memory: the instances on one store send one refresh, and a sign-out of
+ * one empties the session of the others at once. Create one store for each object, such as in a
+ * field of its class.
  *
  * @example
  * ```ts
@@ -34,6 +38,28 @@ export function create(storage: create.Storage): create.ReturnType {
     if (alarm === null || expiresAt < alarm) await storage.setAlarm(expiresAt)
   }
 
+  // The listeners of each key. A `WeakRef` holds no instance that the app dropped, such as one
+  // that the object creates for each request.
+  const listeners = new Map<string, Set<WeakRef<(message: unknown) => void>>>()
+
+  /** Delivers each message posted at a key to the other listeners of that key. */
+  function connect(key: string, listener: (message: unknown) => void) {
+    const set =
+      listeners.get(key) ?? new Set<WeakRef<(message: unknown) => void>>()
+    listeners.set(key, set)
+    // Each connection and each post drops the references of collected listeners.
+    for (const ref of set) if (!ref.deref()) set.delete(ref)
+    set.add(new WeakRef(listener))
+    // The function holds `listener`, so the instance that holds the function keeps its listener.
+    return (message: unknown) => {
+      for (const ref of set) {
+        const peer = ref.deref()
+        if (!peer) set.delete(ref)
+        else if (peer !== listener) queueMicrotask(() => peer(message))
+      }
+    }
+  }
+
   return {
     async alarm() {
       const expiries = await storage.list<number>({ prefix: expiryPrefix })
@@ -52,6 +78,10 @@ export function create(storage: create.Storage): create.ReturnType {
       // An alarm can fire more than once, so it deletes only expired entries, and sets the next one.
       if (next !== undefined) await storage.setAlarm(next)
     },
+    // The instances in the object hear each other's saved changes through it. A Worker with a
+    // compatibility date before 2025-05-05 has no `WeakRef`, so its instances read sign-outs from
+    // the store instead.
+    ...(typeof WeakRef === 'function' ? { connect } : {}),
     async getItem(key) {
       const entry = await storage.get<Expiry.Entry<unknown>>(
         `${valuePrefix}${key}`,
@@ -59,6 +89,8 @@ export function create(storage: create.Storage): create.ReturnType {
       if (!entry || Expiry.expired(entry)) return undefined
       return entry.value
     },
+    // The instances in the object order their refreshes and `sid` index writes through it.
+    lock: Lock.create(),
     async removeItem(key) {
       await storage.delete([`${valuePrefix}${key}`, `${expiryPrefix}${key}`])
     },
