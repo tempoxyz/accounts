@@ -10,7 +10,15 @@ import {
   type JSONWebKeySet,
   type JWTVerifyGetKey,
 } from 'jose'
-import { assign, createActor, type SnapshotFrom, setup } from 'xstate'
+import {
+  assign,
+  createActor,
+  fromPromise,
+  type ActorRefFrom,
+  type SnapshotFrom,
+  setup,
+  waitFor,
+} from 'xstate'
 import type { Config } from '../Accounts.js'
 import type * as Store from '../Store.js'
 
@@ -78,16 +86,19 @@ export type Status = 'expired' | 'fresh' | 'stale'
  * removed stops verifying within `maxAge`. A token that names a `kid` that the set lacks, such as
  * after a rotation, first checks a set that another fetch stored meanwhile, and then waits for a
  * fetch, at most once each 30 seconds after the last fetch started and ended. Within those 30
- * seconds, it throws the key set as unavailable while a fetch runs or after one failed. Each verification that waits for a fetch
- * starts its own, since a Worker cancels the subrequests of a request when it ends, and a shared
- * fetch could then never settle. `machines.keySet` holds the lifecycle, and {@link decide} and
- * {@link rotate} choose each step.
+ * seconds, it waits for a fetch that runs, at most `timeout`, and checks the set that the fetch
+ * returned. Each verification that waits for the set to expire starts its own fetch, and a wait for
+ * the fetch of another verification ends within `timeout`, since a Worker cancels the subrequests
+ * of a request when it ends, and a shared fetch could then never settle. `machines.keySet` holds
+ * the lifecycle, `machines.fetch` runs each fetch and ends it at `timeout`, and {@link decide}
+ * and {@link rotate} choose each step.
  *
  * @throws {errors.JWKSNoMatchingKey} If no signing key of the set matches the token, also after a
  * fetch.
- * @throws {Error} If the fetch fails, answers with a status other than 2xx or a redirect, returns no
- * key set, or ends after `timeout`, as an `AbortError`, or if a fetch runs or failed within the
- * cooldown of a token that names an unknown `kid`.
+ * @throws {Error} If the fetch fails, answers with a status other than 2xx or a redirect, or returns
+ * no key set, as a `TimeoutError` if it ends after `timeout`, or within the cooldown of a token that
+ * names an unknown `kid`, if the last fetch failed, or the fetch that runs does not return a set
+ * within `timeout`.
  *
  * @example
  * ```ts
@@ -111,6 +122,31 @@ export function create(
   const { cache, defer = detach } = auth.keySet ?? {}
   const url = new URL('/oauth2/jwks', auth.url).href
   const actor = createActor(machines.keySet).start()
+  // Each fetch runs in its own actor, which aborts its request at `timeout`.
+  const fetcher = machines.fetch.provide({
+    actors: {
+      request: fromPromise<Entry>(async ({ signal }) => {
+        const response = await (auth.fetch ?? fetch)(url, {
+          headers: { accept: 'application/json' },
+          // A redirect could lead to another origin's key set, so the issuer's own answer counts.
+          redirect: 'manual',
+          signal,
+        })
+        // A redirect answers with a 3xx status, or an opaque one with status 0.
+        if (!response.ok)
+          throw new Error(
+            `Key set unavailable: the issuer answered with status ${response.status}. Retry later.`,
+          )
+        const entry = parse({ fetchedAt: now(), jwks: await response.json() })
+        if (!entry)
+          throw new Error(
+            'Invalid key set: the issuer returned no `keys` array. Retry later.',
+          )
+        return entry
+      }),
+    },
+    delays: { timeout: timeout_ },
+  })
   // The key function of each set, which jose builds once for it.
   const functions = new WeakMap<Entry, JWTVerifyGetKey>()
 
@@ -139,27 +175,13 @@ export function create(
 
   async function fetchSet() {
     actor.send({ now: now(), type: 'fetch.start' })
-    // React Native's `AbortSignal` has no `timeout`, so a timer aborts the controller. The timer
-    // covers the body too.
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeout_)
+    // The machine ends the fetch at `timeout`, also during the body, so the wait ends.
+    const snapshot = await waitFor(
+      createActor(fetcher).start(),
+      (state) => state.status === 'done',
+    )
     try {
-      const response = await (auth.fetch ?? fetch)(url, {
-        headers: { accept: 'application/json' },
-        // A redirect could lead to another origin's key set, so the issuer's own answer counts.
-        redirect: 'manual',
-        signal: controller.signal,
-      })
-      // A redirect answers with a 3xx status, or an opaque one with status 0.
-      if (!response.ok)
-        throw new Error(
-          `Key set unavailable: the issuer answered with status ${response.status}. Retry later.`,
-        )
-      const entry = parse({ fetchedAt: now(), jwks: await response.json() })
-      if (!entry)
-        throw new Error(
-          'Invalid key set: the issuer returned no `keys` array. Retry later.',
-        )
+      const entry = machines.entry(snapshot)
       actor.send({ entry, now: now(), type: 'fetch.end' })
       if (cache)
         defer(
@@ -172,9 +194,21 @@ export function create(
     } catch (error) {
       actor.send({ now: now(), type: 'fetch.fail' })
       throw error
-    } finally {
-      clearTimeout(timer)
     }
+  }
+
+  /**
+   * Waits for the fetch that runs to end, at most `timeout`, and returns the set that it returned.
+   * Returns `undefined` if it failed or runs on, such as the fetch of a Worker request that ended.
+   */
+  async function settle() {
+    const snapshot = await waitFor(
+      actor,
+      (state) => !machines.fetching(state),
+      { timeout: timeout_ },
+    ).catch(() => undefined)
+    if (!snapshot?.matches('loaded')) return undefined
+    return snapshot.context.entry
   }
 
   /**
@@ -222,8 +256,11 @@ export function create(
       if (next === 'fetch') return await keysOf(await fetchSet())(header, token)
       if (stale) refresh()
       if (next === 'refuse') throw error
+      // A token of a new `kid` that arrives during the fetch checks the set that the fetch returns.
+      const settled = next === 'wait' ? await settle() : undefined
+      if (settled) return await keysOf(settled)(header, token)
       throw new Error(
-        'Key set unavailable: a fetch of the key set runs or failed. Retry later.',
+        'Key set unavailable: the last fetch of the key set failed or did not end in time. Retry later.',
         { cause: error },
       )
     }
@@ -285,12 +322,13 @@ export declare namespace decide {
 }
 
 /**
- * Returns the step for a token that names a `kid` that the set of `snapshot` lacks, at `now`: wait
- * to `fetch` a set, `refuse` the token, or throw the key set as `unavailable`. A fetch follows at
- * most once each cooldown after the last fetch started and after the last fetch ended, so tokens of
- * unknown `kid`s start at most one fetch each cooldown. Within it, the token is refused once the
- * last fetch returned a set, and otherwise throws the key set as unavailable, since a fetch in
- * progress or one that failed leaves the issuer's current set unknown.
+ * Returns the step for a token that names a `kid` that the set of `snapshot` lacks, at `now`: start
+ * a `fetch` of a set and wait for it, `wait` for the fetch that runs, `refuse` the token, or throw
+ * the key set as `unavailable`. A fetch follows at most once each cooldown after the last fetch
+ * started and after the last fetch ended, so tokens of unknown `kid`s start at most one fetch each
+ * cooldown. Within it, the token is refused once the last fetch returned a set, waits while a fetch
+ * runs, and otherwise throws the key set as unavailable, since a fetch that failed leaves the
+ * issuer's current set unknown.
  *
  * @example
  * ```ts
@@ -307,12 +345,13 @@ export declare namespace decide {
 export function rotate(
   snapshot: machines.keySet.Snapshot,
   options: rotate.Options,
-): 'fetch' | 'refuse' | 'unavailable' {
+): 'fetch' | 'refuse' | 'unavailable' | 'wait' {
   const { ended, started } = snapshot.context
   const { now } = options
   if (!cooling({ at: started, now }) && !cooling({ at: ended, now }))
     return 'fetch'
   if (snapshot.matches('loaded')) return 'refuse'
+  if (machines.fetching(snapshot)) return 'wait'
   return 'unavailable'
 }
 
@@ -377,7 +416,17 @@ export namespace machines {
    * runs, and `unavailable` after it failed, and with a set, `loaded` after the last fetch returned
    * it, `refreshing` while a fetch runs, and `failing` after the last fetch failed. A set from a
    * fetch or the cache replaces only an older one. The context keeps when the last fetch started
-   * and ended, which {@link decide} and {@link rotate} compare with the cooldown.
+   * and ended, which {@link decide} and {@link rotate} compare with the cooldown. `pending` and
+   * `refreshing` hold the `fetching` tag, which {@link fetching} reads.
+   *
+   * | State         | Meaning                                                  |
+   * | ------------- | -------------------------------------------------------- |
+   * | `empty`       | No set, and no fetch ran.                                |
+   * | `pending`     | No set, and a fetch runs.                                |
+   * | `unavailable` | No set, and the last fetch failed.                       |
+   * | `loaded`      | A set, which the last fetch that ended returned.         |
+   * | `refreshing`  | A set, and a fetch runs.                                 |
+   * | `failing`     | A set, and the last fetch that ended failed.             |
    */
   export const keySet = setup({
     actions: {
@@ -434,12 +483,14 @@ export namespace machines {
           'fetch.fail': { actions: 'end', target: 'unavailable' },
           'fetch.start': { actions: 'start' },
         },
+        tags: ['fetching'],
       },
       refreshing: {
         on: {
           'fetch.fail': { actions: 'end', target: 'failing' },
           'fetch.start': { actions: 'start' },
         },
+        tags: ['fetching'],
       },
       unavailable: {
         on: {
@@ -468,6 +519,117 @@ export namespace machines {
       | { now: number; type: 'fetch.start' }
 
     type Snapshot = SnapshotFrom<typeof keySet>
+  }
+
+  /** Returns whether a fetch runs in `snapshot`, which a token of an unknown `kid` waits for. */
+  export function fetching(snapshot: keySet.Snapshot) {
+    return snapshot.hasTag('fetching')
+  }
+
+  /**
+   * One fetch of the key set: `fetching` while its request runs, then `fetched` with the set that
+   * the request returned, `failed` with its error, or `timedOut` at `timeout`, which stops the
+   * request and aborts it through its signal. Every end is final, so the actor stops with it.
+   *
+   * | State      | Meaning                                         |
+   * | ---------- | ----------------------------------------------- |
+   * | `fetching` | The request runs.                               |
+   * | `fetched`  | The request returned a set.                     |
+   * | `failed`   | The request failed.                             |
+   * | `timedOut` | The request ran for `timeout`, and was aborted. |
+   */
+  export const fetch = setup({
+    actions: {
+      /** Holds the error of the failed request. */
+      fail: assign((_args, params: { error: unknown }) => ({
+        error: params.error,
+      })),
+      /** Holds the set that the request returned. */
+      hold: assign((_args, params: { entry: Entry }) => ({
+        entry: params.entry,
+      })),
+    },
+    actors: {
+      /**
+       * Fetches the key set, and aborts the request at the abort of its signal. `create` provides
+       * it.
+       */
+      request: fromPromise<Entry>(() =>
+        Promise.reject(
+          new Error(
+            'Missing `request`: the fetch of the key set has no request. Provide one.',
+          ),
+        ),
+      ),
+    },
+    delays: {
+      /** How long the request may run, in milliseconds. `create` provides its `timeout`. */
+      timeout,
+    },
+    // The machine receives only the events of its request and its timer, so it types no others.
+    types: { context: {} as fetch.Context },
+  }).createMachine({
+    context: { entry: undefined, error: undefined },
+    id: 'fetch',
+    initial: 'fetching',
+    states: {
+      failed: { type: 'final' },
+      fetched: { type: 'final' },
+      fetching: {
+        // Leaving `fetching` stops the request, which aborts it, so the timer covers the body too.
+        after: { timeout: 'timedOut' },
+        invoke: {
+          id: 'request',
+          onDone: {
+            actions: {
+              params: (args) => ({ entry: args.event.output }),
+              type: 'hold',
+            },
+            target: 'fetched',
+          },
+          onError: {
+            actions: {
+              params: (args) => ({ error: args.event.error }),
+              type: 'fail',
+            },
+            target: 'failed',
+          },
+          src: 'request',
+        },
+      },
+      timedOut: { type: 'final' },
+    },
+  })
+
+  export declare namespace fetch {
+    type Context = {
+      /** The set that the request returned. Absent until it returns one. */
+      entry: Entry | undefined
+      /** The error of the failed request. Absent until it fails. */
+      error: unknown
+    }
+
+    type Actor = ActorRefFrom<typeof fetch>
+
+    type Snapshot = SnapshotFrom<typeof fetch>
+  }
+
+  /**
+   * Returns the set of a fetch that ended.
+   * @throws {Error} The request's error for a failed fetch, or a `TimeoutError` for one that ran for
+   * `timeout`.
+   */
+  export function entry(snapshot: fetch.Snapshot) {
+    if (snapshot.matches('fetched') && snapshot.context.entry)
+      return snapshot.context.entry
+    if (snapshot.matches('failed')) throw snapshot.context.error
+    // React Native has no `DOMException`, so the error is an `Error` with the name.
+    throw Object.assign(
+      new Error(
+        'Key set unavailable: the fetch of the key set did not end within `timeout`. Retry later.',
+      ),
+      { name: 'TimeoutError' },
+    )
   }
 }
 

@@ -1,13 +1,17 @@
 /**
- * Runs the key set's machine on its own, with no I/O: the states that its events reach, and the
+ * Runs the key set's machines on their own, with no I/O: the states that their events reach, and the
  * steps that `decide` and `rotate` choose from them. The tests of `create` verify tokens that the
  * test signs from a copy in `Store.memory`, against an issuer address that refuses each connection,
- * so a verification that needs no fetch succeeds only without one.
+ * so a verification that needs no fetch succeeds only without one, or against a local issuer that
+ * answers each fetch when the test releases it.
  * @module
  */
+import { once } from 'node:events'
+import * as Http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { exportJWK, generateKeyPair, type JWK, jwtVerify, SignJWT } from 'jose'
 import { describe, expect, test } from 'vite-plus/test'
-import { createActor } from 'xstate'
+import { createActor, fromPromise, waitFor } from 'xstate'
 import { getShortestPaths } from 'xstate/graph'
 import * as Store from '../Store.js'
 import * as KeySet from './KeySet.js'
@@ -36,7 +40,8 @@ describe('machines.keySet', () => {
     })
 
     // A state without a set holds no entry, and a state with one holds it. A state after a fetch
-    // ended or failed knows when, and a state of a fetch in progress knows when it started.
+    // ended or failed knows when, and only a state of a fetch in progress is `fetching` and knows
+    // when it started.
     for (const { state } of paths) {
       const { ended, entry, started } = state.context
       const value = state.value as string
@@ -45,8 +50,10 @@ describe('machines.keySet', () => {
       )
       if (['failing', 'unavailable'].includes(value))
         expect(ended).toBeTypeOf('number')
-      if (['pending', 'refreshing'].includes(value))
-        expect(started).toBeTypeOf('number')
+      expect(KeySet.machines.fetching(state)).toBe(
+        ['pending', 'refreshing'].includes(value),
+      )
+      if (KeySet.machines.fetching(state)) expect(started).toBeTypeOf('number')
     }
 
     expect([...new Set(paths.map((path) => path.state.value))].sort())
@@ -88,6 +95,125 @@ describe('machines.keySet', () => {
       ]
     `)
   })
+})
+
+describe('machines.fetch', () => {
+  /** The outcomes of the request and the timer, which the runner's actor and `after` send. */
+  const outcomes = {
+    'xstate.after.timeout.fetch.fetching': {
+      type: 'xstate.after.timeout.fetch.fetching',
+    },
+    'xstate.done.actor.request': {
+      output: entry(0),
+      type: 'xstate.done.actor.request',
+    },
+    'xstate.error.actor.request': {
+      error: new Error('request'),
+      type: 'xstate.error.actor.request',
+    },
+  } as const
+
+  test('reaches every state along its shortest paths, and ends each fetch in a final state', () => {
+    const paths = getShortestPaths(KeySet.machines.fetch, {
+      // The traversal runs no request or timer, so it offers their outcomes while the fetch runs.
+      events: (state) =>
+        state.matches('fetching') ? Object.values(outcomes) : [],
+    })
+
+    // Each outcome is handled, and only `fetched` holds a set, and only `failed` an error.
+    const fetching = paths.find((path) => path.state.matches('fetching'))!
+    expect(
+      Object.values(outcomes).every((event) => fetching.state.can(event)),
+    ).toBe(true)
+    expect(
+      paths.map(({ state }) => [
+        String(state.value),
+        state.status,
+        state.context.entry !== undefined,
+        state.context.error !== undefined,
+      ]),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          "fetching",
+          "active",
+          false,
+          false,
+        ],
+        [
+          "timedOut",
+          "done",
+          false,
+          false,
+        ],
+        [
+          "fetched",
+          "done",
+          true,
+          false,
+        ],
+        [
+          "failed",
+          "done",
+          false,
+          true,
+        ],
+      ]
+    `)
+  })
+
+  test('returns the set of the request', async () => {
+    const actor = start(() => Promise.resolve(entry(1)))
+
+    const snapshot = await waitFor(actor, (state) => state.status === 'done')
+
+    expect(KeySet.machines.entry(snapshot).fetchedAt).toMatchInlineSnapshot(`1`)
+  })
+
+  test('throws the error of a failed request', async () => {
+    const actor = start(() => Promise.reject(new Error('request')))
+
+    const snapshot = await waitFor(actor, (state) => state.status === 'done')
+
+    expect(() =>
+      KeySet.machines.entry(snapshot),
+    ).toThrowErrorMatchingInlineSnapshot(`[Error: request]`)
+  })
+
+  test('aborts a request that never settles at `timeout`, and throws a `TimeoutError`', async () => {
+    const signals: AbortSignal[] = []
+    const actor = start(({ signal }) => {
+      signals.push(signal)
+      return new Promise<never>(() => {})
+    })
+
+    const snapshot = await waitFor(actor, (state) => state.status === 'done')
+
+    expect([snapshot.value, signals.map((signal) => signal.aborted)])
+      .toMatchInlineSnapshot(`
+      [
+        "timedOut",
+        [
+          true,
+        ],
+      ]
+    `)
+    expect(() => KeySet.machines.entry(snapshot)).toThrow(
+      expect.objectContaining({ name: 'TimeoutError' }),
+    )
+  })
+
+  /** Starts a fetch whose request is `request`, with a `timeout` of 10 milliseconds. */
+  function start(
+    request: (args: { signal: AbortSignal }) => Promise<KeySet.Entry>,
+  ) {
+    return createActor(
+      KeySet.machines.fetch.provide({
+        actors: { request: fromPromise(request) },
+        delays: { timeout: 10 },
+      }),
+    ).start()
+  }
 })
 
 describe('decide', () => {
@@ -200,7 +326,7 @@ describe('rotate', () => {
     ]).toMatchInlineSnapshot(`
       [
         "fetch",
-        "unavailable",
+        "wait",
         "refuse",
       ]
     `)
@@ -285,8 +411,93 @@ describe('create', () => {
     await expect(
       keys.verify(await second.sign()),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: Key set unavailable: a fetch of the key set runs or failed. Retry later.]`,
+      `[Error: Key set unavailable: the last fetch of the key set failed or did not end in time. Retry later.]`,
     )
+  })
+
+  test('verifies a burst of tokens of a new `kid` with the one fetch of a rotation', async () => {
+    await using issuer = await serve()
+    const keys = await setup(Date.now(), { url: issuer.url })
+    await keys.verify(await first.sign())
+    const tokens = await Promise.all([1, 2, 3, 4].map(() => second.sign()))
+
+    // The first token fetches, and the others arrive while its fetch runs.
+    const verified = Promise.all(tokens.map((token) => keys.verify(token)))
+    await issuer.received()
+    issuer.respond(200, { keys: [first.jwk, second.jwk] })
+
+    expect([
+      (await verified).map(({ protectedHeader }) => protectedHeader.kid),
+      issuer.requests.length,
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          "second",
+          "second",
+          "second",
+          "second",
+        ],
+        1,
+      ]
+    `)
+  })
+
+  test('throws the key set as unavailable for tokens of a new `kid` that wait for a fetch that never settles, at `timeout`', async () => {
+    await using issuer = await serve()
+    const keys = await setup(Date.now(), { timeout: 100, url: issuer.url })
+    await keys.verify(await first.sign())
+    const tokens = await Promise.all([1, 2, 3].map(() => second.sign()))
+
+    // The issuer never answers, so the fetch ends at `timeout`, which aborts its request.
+    const results = await Promise.allSettled(
+      tokens.map((token) => keys.verify(token)),
+    )
+    await issuer.aborted()
+
+    expect([
+      results.map((result) =>
+        result.status === 'rejected' ? String(result.reason) : result.status,
+      ),
+      issuer.requests.length,
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          "TimeoutError: Key set unavailable: the fetch of the key set did not end within \`timeout\`. Retry later.",
+          "Error: Key set unavailable: the last fetch of the key set failed or did not end in time. Retry later.",
+          "Error: Key set unavailable: the last fetch of the key set failed or did not end in time. Retry later.",
+        ],
+        1,
+      ]
+    `)
+  })
+
+  test('throws the key set as unavailable for tokens of a new `kid` that wait for a fetch that fails', async () => {
+    await using issuer = await serve()
+    const keys = await setup(Date.now(), { url: issuer.url })
+    await keys.verify(await first.sign())
+    const tokens = await Promise.all([1, 2, 3].map(() => second.sign()))
+
+    const results = Promise.allSettled(
+      tokens.map((token) => keys.verify(token)),
+    )
+    await issuer.received()
+    issuer.respond(503, {})
+
+    expect([
+      (await results).map((result) =>
+        result.status === 'rejected' ? String(result.reason) : result.status,
+      ),
+      issuer.requests.length,
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          "Error: Key set unavailable: the issuer answered with status 503. Retry later.",
+          "Error: Key set unavailable: the last fetch of the key set failed or did not end in time. Retry later.",
+          "Error: Key set unavailable: the last fetch of the key set failed or did not end in time. Retry later.",
+        ],
+        1,
+      ]
+    `)
   })
 
   test('ignores a malformed copy of the cache', async () => {
@@ -347,19 +558,68 @@ async function key(kid: string) {
 
 /**
  * Returns a key function whose cache holds the first key in a set that a fetch returned at
- * `fetchedAt`, and the background work that it defers.
+ * `fetchedAt`, and the background work that it defers. The issuer is at `url`, which defaults to an
+ * address that refuses each connection.
  */
-async function setup(fetchedAt: number) {
+async function setup(
+  fetchedAt: number,
+  options: { timeout?: number; url?: string } = {},
+) {
+  const { timeout, url: issuer = url } = options
   const cache = Store.memory()
-  await cache.setItem(`${url}/oauth2/jwks`, entry(fetchedAt))
+  await cache.setItem(`${issuer}/oauth2/jwks`, entry(fetchedAt))
   const deferred: Promise<unknown>[] = []
-  const keys = KeySet.create({
-    keySet: { cache, defer: (promise) => void deferred.push(promise) },
-    url,
-  })
+  const keys = KeySet.create(
+    {
+      keySet: { cache, defer: (promise) => void deferred.push(promise) },
+      url: issuer,
+    },
+    { timeout },
+  )
   return {
     deferred,
     /** Verifies `token` with the key function. */
     verify: (token: string) => jwtVerify(token, keys),
+  }
+}
+
+/**
+ * Starts a local issuer that holds each request until `respond`, and returns its URL, its requests,
+ * and waits for a request to arrive or to be aborted. Disposing it closes the server.
+ */
+async function serve() {
+  const requests: Http.IncomingMessage[] = []
+  const held: Http.ServerResponse[] = []
+  const server = Http.createServer((request, response) => {
+    requests.push(request)
+    held.push(response)
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const { port } = server.address() as AddressInfo
+  return {
+    /** Waits for the client to abort the first held request. */
+    aborted: async () => {
+      const [response] = held
+      if (response && !response.destroyed) await once(response, 'close')
+    },
+    /** Waits for the first request to arrive. */
+    received: async () => {
+      if (requests.length === 0) await once(server, 'request')
+    },
+    requests,
+    /** Answers each held request with `status` and the JSON of `body`. */
+    respond: (status: number, body: unknown) => {
+      for (const response of held.splice(0))
+        response
+          .writeHead(status, { 'content-type': 'application/json' })
+          .end(JSON.stringify(body))
+    },
+    url: `http://127.0.0.1:${port}`,
+    async [Symbol.asyncDispose]() {
+      server.closeAllConnections()
+      server.close()
+      await once(server, 'close')
+    },
   }
 }
