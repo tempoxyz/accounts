@@ -163,7 +163,9 @@ describe('dpop', () => {
     const directory = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-dpop-'))
     const file = Path.join(directory, 'store.json')
     // Each process runs Node with its global `navigator`, whose Web Locks span only that process.
-    // Both start once both run, and each read of the file waits 200 milliseconds, as a slow disk can.
+    // The first read of each process marks the folder, and then waits for the mark of the other
+    // process, for at most 5 seconds. Concurrent loads thus both read before either writes, and a
+    // load under the lock reads only after the other process writes its DPoP key.
     const output = await Esbuild.build({
       bundle: true,
       format: 'esm',
@@ -178,19 +180,21 @@ describe('dpop', () => {
           "import { dpop } from './dpop.ts'",
           `const file = ${JSON.stringify(file)}`,
           'const store = Store.file(file)',
-          'const slow = { ...store, async getItem(key) {',
+          'let marked = false',
+          'const overlapping = { ...store, async getItem(key) {',
           '  const value = await store.getItem(key)',
-          '  await new Promise((resolve) => setTimeout(resolve, 200))',
+          '  if (marked) return value',
+          '  marked = true',
+          "  await Fs.writeFile(Path.join(Path.dirname(file), 'reading-' + crypto.randomUUID()), '')",
+          '  const deadline = Date.now() + 5_000',
+          '  while (Date.now() < deadline) {',
+          "    const reading = (await Fs.readdir(Path.dirname(file))).filter((name) => name.startsWith('reading-'))",
+          '    if (reading.length === 2) break',
+          '    await new Promise((resolve) => setTimeout(resolve, 10))',
+          '  }',
           '  return value',
           '} }',
-          "await Fs.writeFile(Path.join(Path.dirname(file), 'ready-' + crypto.randomUUID()), '')",
-          'for (let attempt = 0; ; attempt++) {',
-          "  const ready = (await Fs.readdir(Path.dirname(file))).filter((name) => name.startsWith('ready-'))",
-          '  if (ready.length === 2) break',
-          "  if (attempt > 1_000) throw new Error('The other process never started.')",
-          '  await new Promise((resolve) => setTimeout(resolve, 10))',
-          '}',
-          'const plugin = await dpop({ store: slow })',
+          'const plugin = await dpop({ store: overlapping })',
           'console.log(Dpop.thumbprint(plugin.config().dpop))',
         ].join('\n'),
         loader: 'ts',
@@ -240,6 +244,18 @@ describe('dpop', () => {
       Fs.rmSync(directory, { force: true, recursive: true })
     }
   }, 60_000)
+
+  test("resolves with a store whose `lock` holds Web Locks, apart from the plugin's own Web Lock", async () => {
+    const memory = Store.memory()
+    const store = Store.from({
+      ...memory,
+      lock: (key, fn) => navigator.locks.request(key, fn),
+    })
+
+    const plugin = await dpop({ store })
+
+    expect(Dpop.thumbprint(keyOf(plugin)).length).toMatchInlineSnapshot(`43`)
+  })
 
   test('creates a new DPoP key at each call without a store outside a browser', async () => {
     const plugins = await Promise.all([dpop(), dpop()])

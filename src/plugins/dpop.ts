@@ -98,9 +98,11 @@ export async function dpop(options: dpop.Options = {}) {
     // The lock's name is no entry of the store, so a store that locks each entry never waits for
     // the lock that its caller holds. The store's `lock` spans the processes on the store, such as
     // two runs of a CLI on one `Store.file`, whose Web Locks span one process, so they keep one
-    // DPoP key. A refused hold, such as of a read-only folder, reads the store without it.
+    // DPoP key. Its name differs from the Web Lock's, so a store that locks with Web Locks never
+    // waits for the lock that its caller holds. A refused hold, such as of a read-only folder, reads
+    // the store without it.
     const held = store.lock
-      ? () => store.lock!(`${key}:exclusive`, load).catch(() => load())
+      ? () => store.lock!(`${key}:store`, load).catch(() => load())
       : load
     if (!locks) return await held()
     // A page without site storage, such as an opaque origin, refuses the lock before `load` runs.
