@@ -525,6 +525,62 @@ describe('create', () => {
     `)
   })
 
+  test('fetches again for each verification without a set that joined a fetch that fails', async () => {
+    await using issuer = await serve()
+    const keys = KeySet.create({ url: issuer.url })
+    const tokens = await Promise.all([1, 2, 3].map(() => first.sign()))
+
+    const results = Promise.allSettled(
+      tokens.map((token) => jwtVerify(token, keys)),
+    )
+    await issuer.received()
+    issuer.respond(503, {})
+    await expect.poll(() => issuer.requests.length).toBe(3)
+    issuer.respond(200, { keys: [first.jwk] })
+
+    expect([
+      (await results).map((result) =>
+        result.status === 'rejected' ? String(result.reason) : result.status,
+      ),
+      issuer.requests.length,
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          "Error: Key set unavailable: the issuer answered with status 503. Retry later.",
+          "fulfilled",
+          "fulfilled",
+        ],
+        3,
+      ]
+    `)
+  })
+
+  test('throws the key set as unavailable for verifications without a set that joined a fetch that exceeds `timeout`', async () => {
+    await using issuer = await serve()
+    const keys = KeySet.create({ url: issuer.url }, { timeout: 200 })
+    const tokens = await Promise.all([1, 2, 3].map(() => first.sign()))
+
+    const results = await Promise.allSettled(
+      tokens.map((token) => jwtVerify(token, keys)),
+    )
+
+    expect([
+      results.map((result) =>
+        result.status === 'rejected' ? String(result.reason) : result.status,
+      ),
+      issuer.requests.length,
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          "TimeoutError: Key set unavailable: the fetch of the key set did not end within \`timeout\`. Retry later.",
+          "Error: Key set unavailable: the last fetch of the key set did not end in time. Retry later.",
+          "Error: Key set unavailable: the last fetch of the key set did not end in time. Retry later.",
+        ],
+        1,
+      ]
+    `)
+  })
+
   test('ignores a malformed copy of the cache', async () => {
     const cache = Store.memory()
     await cache.setItem(`${url}/oauth2/jwks`, {

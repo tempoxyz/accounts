@@ -35,6 +35,12 @@ export const maxAge = 10 * 60 * 1000
 export const timeout = 5_000
 
 /**
+ * The time that a verification waits for a fetch that another one started past that fetch's
+ * `timeout`, in milliseconds, so it observes the end of that fetch.
+ */
+const grace = 1_000
+
+/**
  * A store that keeps the key set beyond one instance, such as for each process or Worker isolate
  * that starts. Any `Store` of the package is one, such as `Store.redis`. The key of the entry is
  * the URL of the key set, and its value is an {@link Entry}.
@@ -221,10 +227,10 @@ export function create(
   }
 
   /**
-   * Returns a wait for a fetch that another verification started within `timeout`, for the time it has
-   * left, which resolves with its set, or `undefined` for one that runs on, such as the fetch of a Worker
-   * request that ended, and throws the key set as unavailable if that fetch failed. Returns
-   * `undefined` at once without one, so the verification that starts a fetch starts it in the same tick.
+   * Returns a wait for a fetch that another verification started within `timeout`, or `undefined` at
+   * once without one, so the verification that starts a fetch starts it in the same tick. The wait
+   * resolves with the set of that fetch, or `undefined` if it failed before `timeout` or runs on past it,
+   * such as the fetch of a Worker request that ended, so the verification starts its own fetch.
    */
   function join() {
     const { started } = actor.getSnapshot().context
@@ -234,17 +240,23 @@ export function create(
     return wait(left)
   }
 
-  /** Waits at most `left` for the fetch that runs, as `join` describes. */
+  /**
+   * Waits for the fetch that runs, as `join` describes. Throws the key set as unavailable if that
+   * fetch ended at its `timeout`, since a fetch of its own waits for the same issuer again.
+   */
   async function wait(left: number) {
     const snapshot = await waitFor(
       actor,
       (state) => !machines.fetching(state),
-      { timeout: left },
+      // The fetch ends at its `timeout` first, so the wait observes that end.
+      { timeout: left + grace },
     ).catch(() => undefined)
     if (!snapshot) return
     if (snapshot.matches('loaded')) return snapshot.context.entry
+    const { ended = 0, started = 0 } = snapshot.context
+    if (ended - started < timeout_) return
     throw new Error(
-      'Key set unavailable: the last fetch of the key set failed or did not end in time. Retry later.',
+      'Key set unavailable: the last fetch of the key set did not end in time. Retry later.',
     )
   }
 
