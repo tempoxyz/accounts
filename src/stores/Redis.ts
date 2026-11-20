@@ -12,8 +12,8 @@ import type * as Store from '../Store.js'
  * is, such as `tempo-id:session:<id>`. `takeItem` reads and deletes with one `GETDEL`, so replicas
  * that share the database take each value once. `lock` holds the key `<key>:lock` with a lease of
  * 30 seconds, set to a token of the hold with `SET` and `NX`, renews the lease each 10 seconds
- * while the hold runs, and releases it with an `EVAL` that deletes only that token. A crashed
- * holder's lock expires within 30 seconds. `update` reads with `GET` and writes with an `EVAL` that sets the key
+ * while the hold runs, for at most 120 seconds, and releases it with an `EVAL` that deletes only
+ * that token. A crashed holder's lock expires within 30 seconds, and a hung holder's at 120 seconds. `update` reads with `GET` and writes with an `EVAL` that sets the key
  * only if it still holds the value read and no `lock` holds the key, and reads again otherwise. On
  * Redis Cluster, where the key and its lock occupy two hash slots, `update` writes under `lock`. So the `backend` plugin's
  * replicas write the logout index of each `sid` in a read and a write, without the lock, and a
@@ -91,9 +91,13 @@ export function create(client: create.Client): Store.Store {
       await new Promise((resolve) => setTimeout(resolve, 10))
     // A hold that runs longer than the lease, such as a slow refresh, renews it each third of the
     // lease, so no other replica takes the lock and sends the same refresh token. A crashed holder
-    // renews nothing, so its lock expires within `lease`.
+    // renews nothing, so its lock expires within `lease`. No renewal extends the lease past
+    // `holdLimit`, so a hold that never settles loses the lock at `holdLimit`.
+    const deadline = Date.now() + holdLimit
     const renewal = setInterval(() => {
-      void send(['EVAL', renew, '1', name, token, String(lease)]).catch(
+      const left = Math.min(lease, deadline - Date.now())
+      if (left <= 0) return clearInterval(renewal)
+      void send(['EVAL', renew, '1', name, token, String(left)]).catch(
         () => undefined,
       )
     }, lease / 3)
@@ -234,6 +238,12 @@ export function create(client: create.Client): Store.Store {
  * holder renews it each third of the lease while its `fn` runs.
  */
 const lease = 30_000
+
+/**
+ * Milliseconds after the start of a hold past which no renewal extends its lease, so a hold whose
+ * `fn` never settles frees the lock for other replicas.
+ */
+const holdLimit = 120_000
 
 /**
  * Writes `ARGV[3]` to the key `KEYS[1]`, with the expiry `ARGV[4]` if any, or deletes it for an empty
