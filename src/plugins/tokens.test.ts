@@ -261,6 +261,28 @@ describe('tokens', () => {
     `)
   })
 
+  test("fetches the issuer's key set once for an instance's access tokens and ID tokens", async () => {
+    const keys = await issuer()
+    const fetched: string[] = []
+    const accounts = instance({
+      fetch: ((input: RequestInfo | URL, init?: RequestInit) => {
+        fetched.push(String(input))
+        return keys.fetch(input, init)
+      }) as typeof globalThis.fetch,
+    })
+
+    await accounts.tokens.verifyAccessToken(
+      request({ authorization: `Bearer ${await keys.sign()}` }),
+    )
+    await accounts.tokens.verifyIdToken({ idToken: await keys.signIdToken() })
+
+    expect(fetched).toMatchInlineSnapshot(`
+      [
+        "https://id.test/oauth2/jwks",
+      ]
+    `)
+  })
+
   test("verifyChallenge throws `Challenge.InvalidError` for a malformed proof before any request of the instance's viem plugin", async () => {
     const keys = await issuer()
     const methods: string[] = []

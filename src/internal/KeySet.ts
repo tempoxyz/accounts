@@ -34,6 +34,9 @@ export const maxAge = 10 * 60 * 1000
 /** The default `timeout`, 5 seconds, in milliseconds. */
 export const timeout = 5_000
 
+/** The key functions of each configuration, by `maxAge` and `timeout`, which its verifiers share. */
+const shared = new WeakMap<object, Map<string, JWTVerifyGetKey>>()
+
 /**
  * A store that keeps the key set beyond one instance, such as for each process or Worker isolate
  * that starts. Any `Store` of the package is one, such as `Store.redis`. The key of the entry is
@@ -77,7 +80,9 @@ export type Status = 'expired' | 'fresh' | 'stale'
 
 /**
  * Returns the key function of jose's `jwtVerify` over the key set at `/oauth2/jwks` of `auth.url`.
- * Each verifier of `AccessToken`, `LogoutToken`, and `IdToken` holds one for its lifetime.
+ * Each verifier of `AccessToken`, `LogoutToken`, and `IdToken` holds one for its lifetime. The calls with
+ * the same `auth` object, `maxAge`, and `timeout`, and without `now`, return the same function, so the
+ * verifiers of one instance share its set and its fetches.
  *
  * The function verifies with the set in memory, or else the copy of `auth.keySet.cache`, or else
  * waits for a fetch. A set younger than half of `maxAge` verifies as it is. An older one verifies
@@ -119,6 +124,18 @@ export function create(
     now = Date.now,
     timeout: timeout_ = timeout,
   } = options
+  // The verifiers of one configuration, such as the access token and ID token verifiers of the
+  // `tokens` plugin, share its set, so the instance fetches it once. A clock of its own keeps its own set.
+  if (options.now === undefined) {
+    const sets = shared.get(auth) ?? new Map<string, JWTVerifyGetKey>()
+    shared.set(auth, sets)
+    const id = `${maxAge_}:${timeout_}`
+    const existing = sets.get(id)
+    if (existing) return existing
+    const keys = create(auth, { maxAge: maxAge_, now, timeout: timeout_ })
+    sets.set(id, keys)
+    return keys
+  }
   const { cache, defer = detach } = auth.keySet ?? {}
   const url = new URL('/oauth2/jwks', auth.url).href
   const actor = createActor(machines.keySet).start()

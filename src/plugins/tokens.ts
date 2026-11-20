@@ -55,7 +55,7 @@ export function tokens(options: tokens.Options = {}) {
   return Plugin.from({
     extend(instance: Accounts.Accounts, context: Plugin.Context) {
       const { config } = context
-      // Each verifier caches the issuer's key set, so the instance holds one of each.
+      // The verifiers share the configuration's key set, so the instance holds one of each.
       const accessTokens = AccessToken.create(config, verifierOptions)
       // An ID token names the app itself, so `'any'` accepts only the instance's own.
       const idTokens = IdToken.create(config, {
