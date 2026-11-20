@@ -107,7 +107,7 @@ export function backend(options: backend.Options) {
         Object.defineProperty(config, BackendOperations.store, {
           value: store,
         })
-      // Each verifier caches the issuer's key set, so the instance holds one of each.
+      // The verifiers share the configuration's key set, so the instance holds one of each.
       const logoutTokens = LogoutToken.create(config, options.logoutToken)
       const { url, ...verifierOptions } =
         typeof options.accessToken === 'object' ? options.accessToken : {}
