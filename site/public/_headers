@@ -2,3 +2,22 @@
 # deployment: the Worker's workers.dev URL, and the preview URL of each version.
 https://:version.:subdomain.workers.dev/*
   X-Robots-Tag: noindex
+
+# The Cloudflare Deploy Broker uploads a file whose extension its builder does not map with no media
+# type, and Cloudflare then serves it with no Content-Type. These rules set the types that Wrangler
+# sends. A rule matches the path of the request, before a rewrite of `_redirects`, and a header that
+# two rules set holds both values, so each path matches at most one rule.
+/:page.md
+  Content-Type: text/markdown; charset=utf-8
+
+/docs/:group/:page.md
+  Content-Type: text/markdown; charset=utf-8
+
+/docs/:group/:topic/:page.md
+  Content-Type: text/markdown; charset=utf-8
+
+/assets/md/*
+  Content-Type: text/markdown; charset=utf-8
+
+/site.webmanifest
+  Content-Type: application/manifest+json

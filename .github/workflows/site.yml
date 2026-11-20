@@ -1,7 +1,8 @@
-# Deploys the documentation site of `site/` to Cloudflare. A push to main deploys the
-# Worker to its domain, and a pull request uploads a version with the preview alias `pr-<number>`.
-# The build job runs the repository's code without secrets. The deploy job checks out no code, and
-# alone holds the Cloudflare token.
+# Deploys the documentation site of `site/` to the production Cloudflare account. A push to main
+# deploys the Worker through the Cloudflare Deploy Broker, and no job of the push holds a Cloudflare
+# token. A pull request's build job runs the repository's code without secrets, and uploads the
+# Worker bundle and the files of the site. After it succeeds, `site-preview.yml` runs main's code to
+# upload them as a version with the preview alias `pr-<number>`.
 name: Site
 on:
   pull_request:
@@ -10,15 +11,38 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# The broker completes the work of a cancelled job, so a run on main is never cancelled. A newer
+# pending run still replaces an older pending one.
 concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
 jobs:
+  # The trusted build workflow of the broker builds the site, bundles the Worker of `src/server/`, and
+  # attests the Worker, `wrangler.json`, and the files of `dist/public`, without a Cloudflare token.
+  # The broker's `accounts` policy admits only this workflow on main.
+  attest:
+    name: Attest
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # The called workflow grants its job these permissions: it signs the attestations with an OIDC
+    # token, writes them and the artifact, and reads the repository.
+    permissions:
+      actions: write
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+    uses: tempoxyz/gh-actions/.github/workflows/cloudflare-deploy-broker-build.yml@1a535d662a51f211d750307541069cb849535414 # 2026-11-19T07-33-38Z-1a535d66
+    with:
+      artifact-name: accounts-site
+      build-command: pnpm build
+      install-directory: .
+      working-directory: site
+      wrangler-config: wrangler.json
+
   build:
     name: Build
-    outputs:
-      wrangler: ${{ steps.wrangler.outputs.version }}
+    if: github.event_name == 'pull_request'
     # The secure-runner action authenticates with an OIDC token.
     permissions:
       contents: read
@@ -36,7 +60,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository]
@@ -44,23 +68,13 @@ jobs:
       - name: Build site
         run: pnpm --dir site build
 
-      # The deploy job checks out no code and installs no dependency, so this job bundles the Worker
-      # of `src/server/`. The uploaded `wrangler.json` names the bundle.
+      # `site-preview.yml` checks out only main, and installs no dependency of this pull request, so
+      # this job bundles the Worker of `src/server/`. The preview uploads the bundle as it is.
       - name: Bundle Worker
         working-directory: site
-        run: |
-          pnpm exec wrangler deploy --dry-run --outdir dist/worker
-          jq '.main = "./dist/worker/Worker.js" | .no_bundle = true' wrangler.json > dist/wrangler.json
-          mv dist/wrangler.json wrangler.json
+        run: pnpm exec wrangler deploy --dry-run --outdir dist/worker
 
-      # The deploy job installs the Wrangler version of the catalog, so the catalog stays its one
-      # source.
-      - name: Read Wrangler version
-        id: wrangler
-        run: echo "version=$(node -p "require('./site/node_modules/wrangler/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      # `wrangler.json` names `dist/public` as the assets of the Worker, and `dist/worker` as its
-      # script.
+      # `site-preview.yml` reads the files at `public/` and the bundle at `worker/` of the artifact.
       - name: Upload site
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -69,114 +83,41 @@ jobs:
           path: |
             site/dist/public/
             site/dist/worker/
-            site/wrangler.json
           retention-days: 1
 
-  # A pull request from a fork or from Dependabot receives no secrets, so it only builds.
+  # The broker uploads the attested version, promotes it, and checks Cloudflare's readback. The
+  # Worker keeps its secrets and its KV namespace.
   deploy:
     name: Deploy
-    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
-    needs: build
-    # The secure-runner action authenticates with an OIDC token. The last step writes the pull
-    # request's comment.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: attest
+    # The secure-runner action and the broker authenticate with an OIDC token.
     permissions:
+      contents: read
       id-token: write
-      pull-requests: write
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Secure runner
         uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
 
-      - name: Set up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-
-      - name: Download site
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: site
-          path: site
-
-      # The Wrangler action installs Wrangler with npm, without the lockfile, and the runner blocks
-      # each version of the last few days. The cutoff resolves each dependency as of a week ago, so
-      # the catalog's Wrangler version must be older than that.
-      - name: Set install cutoff
-        run: echo "NPM_CONFIG_BEFORE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-
-      # A pull request only uploads a version, so its build never serves the Worker's domain. Its
-      # `versions upload` rejects a Worker that does not exist, until a push to main deploys one.
       - name: Deploy site
         id: deploy
-        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+        uses: tempoxyz/gh-actions/actions/cloudflare-deploy-broker@1a535d662a51f211d750307541069cb849535414 # 2026-11-19T07-33-38Z-1a535d66
         with:
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: ${{ github.event_name == 'pull_request' && format('versions upload --preview-alias pr-{0}', github.event.pull_request.number) || 'deploy' }}
-          workingDirectory: site
-          wranglerVersion: ${{ needs.build.outputs.wrangler }}
+          archive-digest: ${{ needs.attest.outputs.archive-digest }}
+          artifact-id: ${{ needs.attest.outputs.artifact-id }}
+          deployment-id: accounts-site
+          module-digest: ${{ needs.attest.outputs.module-digest }}
 
-      # A deployment's URL is the domain of the Worker's route. A pull request's URL is its preview
-      # alias, or the URL of its version if Wrangler prints no alias.
-      - name: Resolve URL
-        id: url
-        env:
-          NUMBER: ${{ github.event.pull_request.number }}
-          OUTPUT: ${{ steps.deploy.outputs.command-output }}
-          VERSION_URL: ${{ steps.deploy.outputs.deployment-url }}
-        run: |
-          # Without a route, a deployment's URL is the Worker's workers.dev URL.
-          pattern="$(jq --raw-output '.routes[0].pattern // empty' site/wrangler.json)"
-          url="${pattern:+https://$pattern}"
-          url="${url:-$(grep --only-matching --extended-regexp "https://[^ ]+\.workers\.dev" <<< "$OUTPUT" | head -n 1 || true)}"
-          if [ -n "$NUMBER" ]; then
-            url="$(grep --only-matching --extended-regexp "https://pr-$NUMBER-[^ ]+\.workers\.dev" <<< "$OUTPUT" | head -n 1 || true)"
-            url="${url:-$VERSION_URL}"
-          fi
-          if [ -z "$url" ]; then
-            echo "::error::Wrangler printed no URL of the uploaded version."
-            exit 1
-          fi
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-
-      # A new domain or alias takes some seconds to resolve.
+      # The verification URL is `accounts.tempo.xyz`, which Vercel proxies to the Worker's workers.dev
+      # URL. The check thus reaches the new version through the domain.
       - name: Check deployment
         env:
-          URL: ${{ steps.url.outputs.url }}
+          URL: ${{ steps.deploy.outputs.verification-url }}
         run: |
           curl --fail --output /dev/null --retry 10 --retry-all-errors --retry-delay 6 --show-error --silent "$URL/"
           printf 'The site runs at [%s](%s).\n' "$URL" "$URL" >> "$GITHUB_STEP_SUMMARY"
-
-      # One comment per pull request, which each run updates.
-      - name: Write comment
-        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          NUMBER: ${{ github.event.pull_request.number }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          STATUS: ${{ job.status }}
-          URL: ${{ steps.url.outputs.url }}
-        run: |
-          body="$RUNNER_TEMP/comment.md"
-          {
-            echo '<!-- accounts-site -->'
-            echo '## Site preview'
-            echo
-            if [ "$STATUS" = success ]; then
-              echo "[$URL]($URL) runs the site at \`${HEAD_SHA:0:7}\`."
-            else
-              echo "The preview of \`${HEAD_SHA:0:7}\` failed. [The run]($RUN_URL) holds the error."
-            fi
-          } > "$body"
-          id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- accounts-site -->"))) | .id' | head -n 1)"
-          if [ -n "$id" ]; then
-            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" > /dev/null
-          else
-            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -F "body=@$body" > /dev/null
-          fi
 
 permissions: {}

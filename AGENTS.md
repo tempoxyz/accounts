@@ -363,7 +363,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - `src/stores/` holds each store that `Store` exports, such as `Store.memory`. `Store.ts` holds only the `Store` type and `Store.from`.
 - `src/internal/handlers/` holds each route handler, such as `Relay.ts`, the relay route. `src/internal/Handler.ts` holds the `Handler` type that each returns.
 - `docs/development/` holds the development notes of the repository.
-- `site/` is the documentation site of `accounts.tempo.xyz`, a Vocs project. Its pages are in `site/src/pages/`, its demos in `site/src/demos/`, the routes of its demos in `site/src/server/`, its components in `site/src/components/`, and the icons of its sidebar in `site/icons/`. `.github/workflows/site.yml` deploys it to `accounts.tempo.xyz`, and each pull request to a preview URL.
+- `site/` is the documentation site of `accounts.tempo.xyz`, a Vocs project. Its pages are in `site/src/pages/`, its demos in `site/src/demos/`, the routes of its demos in `site/src/server/`, its components in `site/src/components/`, and the icons of its sidebar in `site/icons/`. `.github/workflows/site.yml` deploys it to `accounts.tempo.xyz` through the Cloudflare Deploy Broker, and builds each pull request, which `.github/workflows/site-preview.yml` uploads to a preview URL.
 - `examples/` holds one small app per platform (`backend`, `cli`, `mobile`, `wagmi`, `web`). Each names a published range, so a copy installs as it is. CI type-checks them.
 - `test/` holds the end-to-end suite: the specs in `test/e2e/`, the test apps in `test/apps/`, and one module per local service. `test/waterfall/` holds the waterfall.
 
