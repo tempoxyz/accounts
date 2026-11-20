@@ -321,6 +321,49 @@ describe('Store.redis', () => {
     expect(lock).toMatchInlineSnapshot(`"other"`)
   }, 120_000)
 
+  test('behavior: a hold that runs past the lease keeps the lock', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    const store = Redis.create({
+      sendCommand: (args) => client.call(...(args as [string, ...string[]])),
+    })
+
+    // A hold such as a slow refresh, whose token request outlasts a third of the lease. Without a
+    // renewal, the lease only shortens, and another replica takes the lock once it expires.
+    const renewed = await store.lock!('key', async () => {
+      // The least time to live read so far. A renewal reads more than it.
+      let least = Number.POSITIVE_INFINITY
+      await expect
+        .poll(
+          async () => {
+            const ttl = await client.pttl('key:lock')
+            const longer = ttl > least
+            least = Math.min(least, ttl)
+            return longer
+          },
+          { interval: 500, timeout: 15_000 },
+        )
+        .toBe(true)
+      return true
+    })
+    const lock = await client.get('key:lock')
+    client.disconnect()
+    await container.stop()
+
+    expect({ lock, renewed }).toMatchInlineSnapshot(`
+      {
+        "lock": null,
+        "renewed": true,
+      }
+    `)
+  }, 120_000)
+
   test('behavior: sends one refresh for two processes on one Redis, whose Web Locks span one process', async () => {
     const container = await new GenericContainer('redis:7.4-alpine')
       .withExposedPorts(6379)

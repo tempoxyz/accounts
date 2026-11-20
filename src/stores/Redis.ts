@@ -10,9 +10,10 @@ import type * as Store from '../Store.js'
  * with an expiry expires in Redis at `expiresAt`, through `SET` with `PXAT`, which takes whole
  * milliseconds, so a fraction rounds up. The store sends `GET`, `SET`, and `DEL` with each key as it
  * is, such as `tempo-id:session:<id>`. `takeItem` reads and deletes with one `GETDEL`, so replicas
- * that share the database take each value once. `lock` holds the key `<key>:lock` for at most 30
- * seconds, set to a token of the hold with `SET` and `NX`, and releases it with an `EVAL` that
- * deletes only that token. `update` reads with `GET` and writes with an `EVAL` that sets the key
+ * that share the database take each value once. `lock` holds the key `<key>:lock` with a lease of
+ * 30 seconds, set to a token of the hold with `SET` and `NX`, renews the lease each 10 seconds
+ * while the hold runs, and releases it with an `EVAL` that deletes only that token. A crashed
+ * holder's lock expires within 30 seconds. `update` reads with `GET` and writes with an `EVAL` that sets the key
  * only if it still holds the value read and no `lock` holds the key, and reads again otherwise. On
  * Redis Cluster, where the key and its lock occupy two hash slots, `update` writes under `lock`. So the `backend` plugin's
  * replicas write the logout index of each `sid` in a read and a write, without the lock, and a
@@ -88,9 +89,18 @@ export function create(client: create.Client): Store.Store {
       (await send(['SET', name, token, 'NX', 'PX', String(lease)])) !== 'OK'
     )
       await new Promise((resolve) => setTimeout(resolve, 10))
+    // A hold that runs longer than the lease, such as a slow refresh, renews it each third of the
+    // lease, so no other replica takes the lock and sends the same refresh token. A crashed holder
+    // renews nothing, so its lock expires within `lease`.
+    const renewal = setInterval(() => {
+      void send(['EVAL', renew, '1', name, token, String(lease)]).catch(
+        () => undefined,
+      )
+    }, lease / 3)
     try {
       return await fn()
     } finally {
+      clearInterval(renewal)
       // A failed release leaves the lease, which expires within `lease`.
       await send(['EVAL', release, '1', name, token]).catch(() => undefined)
     }
@@ -220,8 +230,8 @@ export function create(client: create.Client): Store.Store {
 }
 
 /**
- * Milliseconds that a `lock` holds, so the lock of a crashed holder expires. An `fn` that runs
- * longer loses the lock to the next replica.
+ * Milliseconds that a `lock` holds without a renewal, so the lock of a crashed holder expires. A
+ * holder renews it each third of the lease while its `fn` runs.
  */
 const lease = 30_000
 
@@ -242,6 +252,10 @@ const swap = [
   "else redis.call('SET', KEYS[1], ARGV[3], 'PXAT', ARGV[4]) end",
   "return redis.status_reply('OK')",
 ].join(' ')
+
+/** Extends the lease of the lock to `ARGV[2]` only if it still holds the token of the hold. */
+const renew =
+  "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('PEXPIRE', KEYS[1], ARGV[2]) end return 0"
 
 /** Deletes the lock only if it still holds the token of the hold that releases it. */
 const release =
