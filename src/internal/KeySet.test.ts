@@ -35,6 +35,20 @@ describe('machines.keySet', () => {
       ],
     })
 
+    // A state without a set holds no entry, and a state with one holds it. A state after a fetch
+    // ended or failed knows when, and a state of a fetch in progress knows when it started.
+    for (const { state } of paths) {
+      const { ended, entry, started } = state.context
+      const value = state.value as string
+      expect(entry === undefined).toBe(
+        ['empty', 'pending', 'unavailable'].includes(value),
+      )
+      if (['failing', 'unavailable'].includes(value))
+        expect(ended).toBeTypeOf('number')
+      if (['pending', 'refreshing'].includes(value))
+        expect(started).toBeTypeOf('number')
+    }
+
     expect([...new Set(paths.map((path) => path.state.value))].sort())
       .toMatchInlineSnapshot(`
         [
@@ -273,6 +287,20 @@ describe('create', () => {
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: Key set unavailable: a fetch of the key set runs or failed. Retry later.]`,
     )
+  })
+
+  test('ignores a malformed copy of the cache', async () => {
+    const cache = Store.memory()
+    await cache.setItem(`${url}/oauth2/jwks`, {
+      fetchedAt: Date.now(),
+      jwks: { keys: [null] },
+    })
+    const keys = KeySet.create({ keySet: { cache }, url })
+
+    // The copy is ignored, so the verification fetches, which fails at the issuer address.
+    await expect(
+      jwtVerify(await first.sign(), keys),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[TypeError: fetch failed]`)
   })
 
   test('throws for a set that the issuer does not return', async () => {

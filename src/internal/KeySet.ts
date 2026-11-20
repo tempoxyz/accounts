@@ -490,5 +490,11 @@ function parse(value: unknown): Entry | undefined {
     return undefined
   if (typeof jwks !== 'object' || jwks === null) return undefined
   if (!Array.isArray((jwks as { keys?: unknown }).keys)) return undefined
+  // jose refuses a malformed set, such as one whose keys are not objects, so none is adopted or cached.
+  try {
+    createLocalJWKSet(jwks as JSONWebKeySet)
+  } catch {
+    return undefined
+  }
   return { fetchedAt, jwks: jwks as JSONWebKeySet }
 }
