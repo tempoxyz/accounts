@@ -506,9 +506,8 @@ describe('create', () => {
     const tokens = await Promise.all([1, 2, 3].map(() => first.sign()))
 
     const verified = Promise.all(tokens.map((token) => jwtVerify(token, keys)))
+    // Each verification reaches the key function in the tick that starts it, before the first request.
     await issuer.received()
-    // Each verification reaches the key function before the first fetch returns.
-    await new Promise((resolve) => setTimeout(resolve, 50))
     issuer.respond(200, { keys: [first.jwk] })
 
     expect([
