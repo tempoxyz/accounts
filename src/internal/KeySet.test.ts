@@ -500,6 +500,90 @@ describe('create', () => {
     `)
   })
 
+  test('fetches once for verifications without a set that arrive together', async () => {
+    await using issuer = await serve()
+    const keys = KeySet.create({ url: issuer.url })
+    const tokens = await Promise.all([1, 2, 3].map(() => first.sign()))
+
+    const verified = Promise.all(tokens.map((token) => jwtVerify(token, keys)))
+    // Each verification reaches the key function in the tick that starts it, before the first request.
+    await issuer.received()
+    issuer.respond(200, { keys: [first.jwk] })
+
+    expect([
+      (await verified).map(({ protectedHeader }) => protectedHeader.kid),
+      issuer.requests.length,
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          "first",
+          "first",
+          "first",
+        ],
+        1,
+      ]
+    `)
+  })
+
+  test('fetches again for each verification without a set that joined a fetch that fails', async () => {
+    await using issuer = await serve()
+    const keys = KeySet.create({ url: issuer.url })
+    const tokens = await Promise.all([1, 2, 3].map(() => first.sign()))
+
+    const results = Promise.allSettled(
+      tokens.map((token) => jwtVerify(token, keys)),
+    )
+    await issuer.received()
+    issuer.respond(503, {})
+    await expect.poll(() => issuer.requests.length).toBe(3)
+    issuer.respond(200, { keys: [first.jwk] })
+
+    expect([
+      (await results).map((result) =>
+        result.status === 'rejected' ? String(result.reason) : result.status,
+      ),
+      issuer.requests.length,
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          "Error: Key set unavailable: the issuer answered with status 503. Retry later.",
+          "fulfilled",
+          "fulfilled",
+        ],
+        3,
+      ]
+    `)
+  })
+
+  test('fetches again for each verification without a set that joined a fetch that exceeds `timeout`', async () => {
+    await using issuer = await serve()
+    const keys = KeySet.create({ url: issuer.url }, { timeout: 200 })
+    const tokens = await Promise.all([1, 2, 3].map(() => first.sign()))
+
+    const results = Promise.allSettled(
+      tokens.map((token) => jwtVerify(token, keys)),
+    )
+    await issuer.aborted()
+    await expect.poll(() => issuer.requests.length).toBe(3)
+    issuer.respond(200, { keys: [first.jwk] })
+
+    expect([
+      (await results).map((result) =>
+        result.status === 'rejected' ? String(result.reason) : result.status,
+      ),
+      issuer.requests.length,
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          "TimeoutError: Key set unavailable: the fetch of the key set did not end within \`timeout\`. Retry later.",
+          "fulfilled",
+          "fulfilled",
+        ],
+        3,
+      ]
+    `)
+  })
+
   test('ignores a malformed copy of the cache', async () => {
     const cache = Store.memory()
     await cache.setItem(`${url}/oauth2/jwks`, {

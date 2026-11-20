@@ -95,9 +95,10 @@ export type Status = 'expired' | 'fresh' | 'stale'
  * after a rotation, first checks a set that another fetch stored meanwhile, and then waits for a
  * fetch, at most once each 30 seconds after the last fetch started and ended. Within those 30
  * seconds, it waits for a fetch that runs, at most `timeout`, and checks the set that the fetch
- * returned. Each verification that waits for the set to expire starts its own fetch, and a wait for
- * the fetch of another verification ends within `timeout`, since a Worker cancels the subrequests
- * of a request when it ends, and a shared fetch could then never settle. `machines.keySet` holds
+ * returned. A verification that waits for a new set joins a fetch that another one started within
+ * `timeout`, and starts its own fetch if that fetch fails or returns no set within `timeout`. A wait
+ * for the fetch of another verification ends within `timeout`, since a Worker cancels the
+ * subrequests of a request when it ends, and a shared fetch could then never settle. `machines.keySet` holds
  * the lifecycle, `machines.fetch` runs each fetch and ends it at `timeout`, and {@link decide}
  * and {@link rotate} choose each step.
  *
@@ -244,6 +245,32 @@ export function create(
     if (step === 'refresh') defer(fetchSet().catch(() => {}))
   }
 
+  /**
+   * Returns a wait for a fetch that another verification started within `timeout`, or `undefined` at
+   * once without one, so the verification that starts a fetch starts it in the same tick. The wait
+   * resolves with the set of that fetch, or `undefined` if that fetch fails, ends at its `timeout`,
+   * or runs on, such as the fetch of a Worker request that ended. The verification then starts its
+   * own fetch, so one failed fetch does not fail each verification that joined it.
+   */
+  function join() {
+    const { started } = actor.getSnapshot().context
+    if (!machines.fetching(actor.getSnapshot()) || started === undefined) return
+    const left = started + timeout_ - now()
+    if (left <= 0) return
+    return wait(left)
+  }
+
+  /** Waits at most `left` for the fetch that runs, as `join` describes. */
+  async function wait(left: number) {
+    const snapshot = await waitFor(
+      actor,
+      (state) => !machines.fetching(state),
+      { timeout: left },
+    ).catch(() => undefined)
+    if (!snapshot?.matches('loaded')) return undefined
+    return snapshot.context.entry
+  }
+
   /** Returns the set to verify with, and whether a background fetch should replace it. */
   async function load() {
     const step = () =>
@@ -251,7 +278,13 @@ export function create(
     if (step() === 'fetch') await read()
     // A copy of the cache can be stale too, so the step follows the set that the read stored.
     const next = step()
-    if (next === 'fetch') return { entry: await fetchSet(), stale: false }
+    if (next === 'fetch') {
+      const joined = join()
+      return {
+        entry: (joined && (await joined)) ?? (await fetchSet()),
+        stale: false,
+      }
+    }
     return {
       entry: actor.getSnapshot().context.entry!,
       stale: next === 'refresh',
