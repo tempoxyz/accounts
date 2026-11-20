@@ -367,6 +367,26 @@ test.describe('custom', () => {
         await expect.poll(() => allowed).toEqual(['all', 'all'])
         await capture('signed in through the prepared sign-in')
       })
+
+      await test.step('offers every passkey at a sign-in prepared before the sign-out', async () => {
+        await expect(page.locator('#status')).toHaveText('signedIn')
+        await Playwright.run(page, { name: 'Prepare a passkey sign-in' })
+        await expect.poll(() => allowed).toEqual(['all', 'all', '1'])
+        await Playwright.run(page, { name: 'Sign out' })
+        await expect(page.locator('#status')).toHaveText('signedOut')
+        const session = await Playwright.run(page, {
+          name: 'Sign in with the prepared passkey',
+        })
+
+        expect(session).toMatchObject({
+          state: 'fulfilled',
+          value: { email, key: { account: passkey.passkeyAccount } },
+        })
+        await expect.poll(() => allowed).toEqual(['all', 'all', '1', 'all'])
+        await capture(
+          'signed in through a sign-in prepared before the sign-out',
+        )
+      })
     })
 
     test('rejects a passkey sign-in that the authenticator refuses, then signs in once it verifies the user', async ({

@@ -7,7 +7,7 @@ import * as PasskeyActions from '../actions/passkey.js'
 import type * as Api from '../internal/Api.js'
 import * as SignIn from '../internal/SignIn.js'
 import * as Plugin from '../Plugin.js'
-import type * as Session from '../Session.js'
+import * as Session from '../Session.js'
 
 /**
  * How long concurrent calls of `passkey.available` share one read, in milliseconds. A call after it
@@ -257,11 +257,13 @@ export function passkey(options: passkey.Options = {}) {
         /**
          * Prepares a passkey sign-in ahead of the user's gesture, such as when the form shows, as
          * `Actions.passkey.prepare` does, and returns its handle. The handle's `signIn` starts the
-         * ceremony without a request, and sets the instance's session as `passkey.signIn` does.
-         * Never throws. If Tempo ID refuses the options request, the handle's next `signIn` within 4
-         * minutes, on the same chain, throws that refusal without a request. Create a new handle when
-         * `accessKey` changes, or after a `signOut`, since the handle keeps the `select` default of its
-         * creation.
+         * ceremony without a request, except as below, and sets the instance's session as
+         * `passkey.signIn` does. Never throws. If Tempo ID refuses the options request, the handle's
+         * next `signIn` within 4 minutes, on the same chain, throws that refusal without a request.
+         * Create a new handle when `accessKey` changes. If the signed-in user changes since the
+         * options request, such as after a `signOut` here or in another tab, the handle's next
+         * `signIn` requests options of its own before the ceremony. Prepare a new handle after a
+         * `signOut` to keep that request out of the gesture.
          *
          * @example
          * ```ts
@@ -297,22 +299,39 @@ export function passkey(options: passkey.Options = {}) {
                   : Promise.resolve(parameters.available),
               signIn: () => Promise.reject(resolved.error),
             }
-          const prepared = PasskeyActions.prepare(config, {
-            accessKey: resolved.accessKey,
-            available: parameters.available,
-            chainId,
-            challenge: parameters.challenge,
-            credentialId: parameters.credentialId,
-            mediation: parameters.mediation,
-            // The read of the mark runs beside the realms read, and only the options request awaits
-            // it, so the handle keeps the chain of the call for its first request.
-            select: select(parameters),
-          })
+          // The options of a signed-in user name only that user's passkeys. The handle compares the
+          // user in memory, so a sign-in with no change since reads nothing. `select: true` and
+          // `credentialId` name the passkeys alone.
+          const fixed =
+            parameters.select === true || parameters.credentialId !== undefined
+          const subject = () => {
+            const session = context.session.get()
+            return session ? Session.subject(session) : undefined
+          }
+          const request = (available: boolean | undefined) =>
+            PasskeyActions.prepare(config, {
+              accessKey: resolved.accessKey,
+              available,
+              chainId,
+              challenge: parameters.challenge,
+              credentialId: parameters.credentialId,
+              mediation: parameters.mediation,
+              // The read of the mark runs beside the realms read, and only the options request awaits
+              // it, so the handle keeps the chain of the call for its first request.
+              select: select(parameters),
+            })
+          let requested = subject()
+          let prepared = request(parameters.available)
           return {
             available: prepared.available,
             async signIn() {
               // The prepared request names its chain, which a switch since can leave.
               const change = context.session.change({ chainId })
+              if (!fixed && subject() !== requested) {
+                requested = subject()
+                // The realms read of the handle answered already, so the new options need none.
+                prepared = request(await prepared.available)
+              }
               const result = await prepared.signIn({ getFn }).catch(change.fail)
               return finish(change, result)
             },
