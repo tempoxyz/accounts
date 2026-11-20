@@ -1112,8 +1112,8 @@ async function login(auth: Config, options: { basePath: string }) {
 /**
  * Sends the callback URL to the backend's `POST /callback`, which redeems the code and sets the
  * session cookie. Returns the session that the page reads. Throws `Accounts.RequestError` for a
- * refusal, such as a callback of another sign-in, and with status 0 and `signedIn` without a
- * response.
+ * refusal, such as a callback of another sign-in, with `signedIn` when the backend's code exchange
+ * failed after the user signed in, and with status 0 and `signedIn` without a response.
  */
 async function complete(auth: Config, options: { basePath: string; url: URL }) {
   // The user signed in on Tempo ID, so a callback without a response, or without its body, has

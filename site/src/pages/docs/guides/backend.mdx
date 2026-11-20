@@ -295,7 +295,7 @@ export default app
 
 :::
 
-If the user closes the dialog, the call rejects with an `AbortError`. If the backend does not answer, such as offline, it rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>, with the code `server_error` and status 0, and with `signedIn` once the user signed in on Tempo ID.
+If the user closes the dialog, the call rejects with an `AbortError`. If the backend does not answer, such as offline, it rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink>, with the code `server_error` and status 0, and with `signedIn` once the user signed in on Tempo ID. A refusal of the backend's code exchange, such as an expired code or Tempo ID without an answer, keeps its code and status, and also has `signedIn`. A denial has none.
 
 ### Restore the session on load
 
