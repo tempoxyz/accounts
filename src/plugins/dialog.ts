@@ -547,7 +547,8 @@ export function dialog<const options extends dialog.Options = {}>(
          *   - With `backend`, with the `error` that `POST {backend}/auth/login` or
          *     `POST {backend}/auth/callback` returns, and its HTTP status, such as
          *     `invalid_request` for a sign-in that expired. With `method: 'siwe'`, for a refusal of
-         *     either SIWE route.
+         *     either SIWE route. If the backend's code exchange fails, such as for an expired code,
+         *     the error has `signedIn`, since the user signed in on Tempo ID before it.
          *   - With `backend`, with `server_error` and status 0, when `POST {backend}/auth/login`,
          *     `POST {backend}/auth/callback`, or with `method: 'siwe'` either SIWE route, receives
          *     no response, such as offline. The callback's error has `signedIn`, since the user
