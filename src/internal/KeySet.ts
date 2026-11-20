@@ -34,8 +34,11 @@ export const maxAge = 10 * 60 * 1000
 /** The default `timeout`, 5 seconds, in milliseconds. */
 export const timeout = 5_000
 
-/** The key functions of each configuration, by `maxAge` and `timeout`, which its verifiers share. */
-const shared = new WeakMap<object, Map<string, JWTVerifyGetKey>>()
+/**
+ * The key of the property of an instance's configuration that holds its key functions, by
+ * `maxAge` and `timeout`, which the instance's verifiers share. The instance owns them.
+ */
+const sets = Symbol('keySet.sets')
 
 /**
  * A store that keeps the key set beyond one instance, such as for each process or Worker isolate
@@ -127,13 +130,17 @@ export function create(
   // The verifiers of one configuration, such as the access token and ID token verifiers of the
   // `tokens` plugin, share its set, so the instance fetches it once. A clock of its own keeps its own set.
   if (options.now === undefined) {
-    const sets = shared.get(auth) ?? new Map<string, JWTVerifyGetKey>()
-    shared.set(auth, sets)
+    const owner = auth as { [sets]?: Map<string, JWTVerifyGetKey> }
+    if (!owner[sets] && Object.isExtensible(auth))
+      Object.defineProperty(auth, sets, { value: new Map() })
+    const registry = owner[sets]
+    if (!registry)
+      return create(auth, { maxAge: maxAge_, now, timeout: timeout_ })
     const id = `${maxAge_}:${timeout_}`
-    const existing = sets.get(id)
+    const existing = registry.get(id)
     if (existing) return existing
     const keys = create(auth, { maxAge: maxAge_, now, timeout: timeout_ })
-    sets.set(id, keys)
+    registry.set(id, keys)
     return keys
   }
   const { cache, defer = detach } = auth.keySet ?? {}
