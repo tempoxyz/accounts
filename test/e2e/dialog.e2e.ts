@@ -388,6 +388,36 @@ test.describe('dialog', () => {
     expect(loads).toHaveLength(1)
   })
 
+  test('loads no frame at a page load that restores the session after the store’s first read', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    await Web.enter_dialog(page, { capture, code, email, fund: false })
+
+    await test.step('signs in to another app at its first page load, with no frame', async () => {
+      // The store of the other app holds no session, so its first read finds none, but the page's
+      // authorization after that read signs the user in.
+      const requests: string[] = []
+      page.on('request', (request) => {
+        const { origin, pathname } = new URL(request.url())
+        if (origin === TempoId.url && !pathname.startsWith('/assets/'))
+          requests.push(`${request.method()} ${pathname}`)
+      })
+      await page.goto(
+        `${Apps.web.url}/restore/?clientId=${Apps.web.clientIdShortLived}`,
+      )
+
+      await expect(page.locator('#status')).toHaveText('signedIn')
+      // A frame that loads after the restore would still count, so the page settles first.
+      await page.waitForLoadState('networkidle')
+      expect(requests).toEqual(['GET /v1/auth/session', 'POST /v1/authorize'])
+      await expect(Playwright.frame(page)).toHaveCount(0)
+      await capture('signed in')
+    })
+  })
+
   test('closes a pending sign-in when another tab signs out', async ({
     capture,
     code,
