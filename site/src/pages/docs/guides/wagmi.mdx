@@ -7,7 +7,7 @@ import { SourceLink } from '../../../components/SourceLink.tsx'
 
 ## Overview
 
-The <SourceLink name="wagmi" path="src/wagmi/index.ts">`wagmi`</SourceLink> plugin of <SourceLink name="wagmi" path="src/wagmi/index.ts">`accounts/wagmi`</SourceLink> adds a [wagmi](https://wagmi.sh) config whose one connector is the instance, a wallet that Tempo ID backs. A sign-in connects wagmi, a sign-out disconnects it, and wagmi's hooks sign with the session's [access key](/docs/guides/access-keys), with no prompt. The page's origin is its client ID, so the app needs no registration.
+The <SourceLink name="wagmi" path="src/wagmi/index.ts">`wagmi`</SourceLink> plugin of <SourceLink name="wagmi" path="src/wagmi/index.ts">`accounts/wagmi`</SourceLink> adds a [wagmi](https://wagmi.sh) config whose one connector is the instance, a wallet that Tempo ID backs. A sign-in connects wagmi, a sign-out or the expiry of the session's access key disconnects it, and wagmi's hooks sign with the session's [access key](/docs/guides/access-keys), with no prompt. The page's origin is its client ID, so the app needs no registration.
 
 The demo connects, sends 1 OUSD on Tempo testnet with a `wagmi/tempo` hook, and disconnects.
 
