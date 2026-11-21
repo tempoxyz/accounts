@@ -1198,6 +1198,87 @@ describe('tempoId', () => {
       }
     `)
   }, 10_000)
+
+  /**
+   * Returns a wagmi config whose session's access key expires in 2 seconds, and the events of wagmi,
+   * the session's status, and the provider after the expiry.
+   */
+  async function expiring(options: { owner: `0x${string}` }) {
+    const store = await sessionStore({ expiresIn: 2, owner: options.owner })
+    const config = createConfig({
+      chains: [tempo],
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          store,
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
+    })
+    await reconnect(config)
+    const connector = config.connectors[0]!
+    const instance = await connector.getInstance()
+    const provider = (await connector.getProvider()) as {
+      on: (
+        event: 'accountsChanged' | 'disconnect',
+        listener: () => void,
+      ) => void
+    }
+    await expect
+      .poll(() => instance.session.status.get().status, { timeout: 5_000 })
+      .toBe('signedOut')
+    const events: string[] = []
+    config.subscribe(
+      (state) => state.status,
+      (status) => events.push(`wagmi:${status}`),
+    )
+    provider.on('accountsChanged', () =>
+      events.push('provider:accountsChanged'),
+    )
+    provider.on('disconnect', () => events.push('provider:disconnect'))
+    return { config, connector, events, instance, store }
+  }
+
+  test("connects again when the same account's valid session replaces the expired one", async () => {
+    const owner = Secp256k1.randomPrivateKey()
+    const { config, connector, events, store } = await expiring({ owner })
+    const key =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]'
+
+    // Another tab saves a valid session of the same account, which a read adopts.
+    await store.setItem(key, await (await sessionStore({ owner })).getItem(key))
+    const accounts = await connector.getAccounts()
+
+    await expect.poll(() => getConnection(config).status).toBe('connected')
+    expect({ accounts: accounts.length, events }).toMatchInlineSnapshot(`
+      {
+        "accounts": 1,
+        "events": [
+          "provider:accountsChanged",
+          "wagmi:connected",
+        ],
+      }
+    `)
+  }, 10_000)
+
+  test('disconnects once when a renewal after the expiry fails', async () => {
+    const { events, instance } = await expiring({
+      owner: Secp256k1.randomPrivateKey(),
+    })
+
+    const error = await instance.authorize().then(
+      () => undefined,
+      (error: Error) => error.name,
+    )
+
+    expect({ error, events }).toMatchInlineSnapshot(`
+      {
+        "error": "Accounts.RequestError",
+        "events": [],
+      }
+    `)
+  }, 10_000)
 })
 
 describe('wagmi', () => {
@@ -1545,11 +1626,18 @@ describe('machines.disconnect', () => {
  * `accessToken` as its access token.
  */
 async function sessionStore(
-  options: { accessToken?: string; expiresIn?: number } = {},
+  options: {
+    accessToken?: string
+    expiresIn?: number
+    owner?: `0x${string}` | undefined
+  } = {},
 ) {
-  const { accessToken = 'access-token', expiresIn = 3600 } = options
+  const {
+    accessToken = 'access-token',
+    expiresIn = 3600,
+    owner = Secp256k1.randomPrivateKey(),
+  } = options
   const store = Store.memory()
-  const owner = Secp256k1.randomPrivateKey()
   const privateKey = Secp256k1.randomPrivateKey()
   const authorization = KeyAuthorization.from({
     address: Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey })),

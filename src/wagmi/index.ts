@@ -940,9 +940,11 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           return
         const snapshot = disconnects.getSnapshot()
         // The expiry ended wagmi's connection already, so the read that empties the session ends
-        // nothing again.
-        if (!session && machines.expired(snapshot))
+        // nothing again, and a new session of the same account connects wagmi again.
+        const ended = machines.expired(snapshot)
+        if (!session && ended)
           return disconnects.send({ type: 'session.change' })
+        const shown = ended ? undefined : addressOf(previous)
         // `disconnect` ends wagmi's connection once its sign-out settles. The provider's listeners
         // receive the end of the session at once.
         if (!session && machines.signingOut(snapshot)) return onSignOut()
@@ -954,13 +956,13 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           // A session without an access key or an account, such as a dialog's sign-in without an
           // access key, has no address until its account is read. The account's commit notifies
           // this subscriber again.
-          if (addressOf(previous)) onDisconnect()
+          if (shown) onDisconnect()
           else if (stale) endConnection()
           // A failed read leaves wagmi disconnected, and `connect` reads the account again.
           void withAccount(session).catch(() => undefined)
           return
         }
-        if (next === addressOf(previous)) {
+        if (next === shown) {
           // A named chain's account can change alone, such as at a retry on its chain.
           if (session) emitNamed()
           return
@@ -985,8 +987,12 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           status.status !== 'reauthorizing' &&
           status.status !== 'signedIn' &&
           addressOf(previous.session)
-        )
+        ) {
+          // The expiry ended wagmi's connection already, so a failed renewal ends nothing again.
+          if (machines.expired(disconnects.getSnapshot()))
+            return disconnects.send({ type: 'session.change' })
           onDisconnect()
+        }
       })
       return instance
     }
@@ -1803,8 +1809,8 @@ export namespace machines {
    * sign-out settles. A sign-out that rejects without a session leaves wagmi connected in `held`, so
    * wagmi's next `disconnect` revokes the refresh token. The next sign-out or sign-in of the instance
    * ends `held`. At the expiry of a connected session's access keys, `expired` ends wagmi's
-   * connection once, and the instance's next change of the session, such as the read that empties
-   * the expired session, ends `expired`.
+   * connection once. The instance's next change of the session ends `expired`: the read that empties
+   * the expired session, a failed renewal, or a new session, which connects wagmi again.
    *
    * | State        | wagmi's connection                                            | Tag     |
    * | ------------ | ------------------------------------------------------------- | ------- |
