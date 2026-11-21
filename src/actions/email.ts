@@ -31,7 +31,8 @@ function firstParty(auth: Config) {
         return 'Email sign-in refused: the client ID names a third-party app, which signs in only on an approval page. Sign in with `device.signIn`.'
       // A page without `clientId` uses its origin as the client ID, so the fault is often the
       // missing registration ID, not the flow.
-      if (URL.parse(auth.clientId)?.origin === auth.clientId)
+      // A regular expression, since some runtimes, such as React Native, have no `URL.parse`.
+      if (/^https?:\/\/[^/?#]+$/.test(auth.clientId))
         return "Email sign-in refused: the client ID is an origin, which names a third-party app. Pass `clientId`, the ID of the app's first-party registration, or sign in with `dialog.signIn` or `redirect.signIn`."
       return 'Email sign-in refused: the client ID names a third-party app, which signs in only on an approval page. Sign in with `dialog.signIn` or `redirect.signIn`.'
     })(),
