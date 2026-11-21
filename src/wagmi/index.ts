@@ -975,9 +975,14 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       // the status to `pending` until the authorization returns.
       instance.session.status.subscribe((status, previous) => {
         // At its access keys' expiry, the instance keeps the session until a read empties it, and
-        // the status signs out at once, so wagmi's connection ends with the status.
+        // the status signs out at once, so wagmi's connection ends with the status. An
+        // authorization in progress keeps wagmi connected until it returns.
         const snapshot = instance!.session.actor?.getSnapshot()
-        if (snapshot && InternalSession.machines.expired(snapshot))
+        if (
+          status.status === 'signedOut' &&
+          snapshot &&
+          InternalSession.machines.expired(snapshot)
+        )
           disconnects.send({
             connected: addressOf(snapshot.context.session) !== undefined,
             type: 'session.expire',

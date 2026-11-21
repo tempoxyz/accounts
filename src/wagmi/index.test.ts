@@ -31,6 +31,7 @@ import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
 import { email } from '../plugins/email.js'
 import * as Dpop from '../internal/Dpop.js'
+import * as InternalSession from '../internal/Session.js'
 import * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
@@ -1257,6 +1258,77 @@ describe('tempoId', () => {
         "events": [
           "provider:accountsChanged",
           "wagmi:connected",
+        ],
+      }
+    `)
+  }, 10_000)
+
+  test('keeps wagmi connected while an authorization runs across the expiry, and disconnects once when it fails', async () => {
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    // A first-party app authorizes headlessly, so its authorization waits for the request.
+    const store = await sessionStore({ expiresIn: 2 })
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",4217]',
+      await store.getItem(
+        'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]',
+      ),
+    )
+    const config = createConfig({
+      chains: [tempo],
+      connectors: [
+        tempoId({
+          clientId: 'client_1',
+          fetch: (async () => {
+            await gate
+            throw new TypeError('fetch failed')
+          }) as typeof globalThis.fetch,
+          store,
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
+    })
+    await reconnect(config)
+    const connector = config.connectors[0]!
+    const instance = await connector.getInstance()
+    const provider = (await connector.getProvider()) as {
+      on: (event: 'disconnect', listener: () => void) => void
+    }
+    const events: string[] = []
+    provider.on('disconnect', () => events.push('provider:disconnect'))
+
+    const authorization = instance.authorize().then(
+      () => undefined,
+      (error: Error) => error.name,
+    )
+    await expect
+      .poll(
+        () =>
+          InternalSession.machines.expired(
+            instance.session.actor!.getSnapshot(),
+          ),
+        { timeout: 5_000 },
+      )
+      .toBe(true)
+    const during = getConnection(config).status
+    release()
+    const error = await authorization
+
+    expect({
+      after: getConnection(config).status,
+      during,
+      error,
+      events,
+    }).toMatchInlineSnapshot(`
+      {
+        "after": "disconnected",
+        "during": "connected",
+        "error": "Accounts.RequestError",
+        "events": [
+          "provider:disconnect",
         ],
       }
     `)
