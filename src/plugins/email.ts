@@ -31,7 +31,8 @@ const unlistedTtl = 10 * 60_000
  * import { Accounts } from 'accounts'
  * import { email } from 'accounts/plugins'
  *
- * const accounts = Accounts.create({ plugins: [email()] })
+ * // A first-party app's registration ID. A page origin names a third-party app.
+ * const accounts = Accounts.create({ clientId: 'example-app', plugins: [email()] })
  *
  * await accounts.email.sendCode({ email: 'user@example.com' })
  * const session = await accounts.email.signIn({

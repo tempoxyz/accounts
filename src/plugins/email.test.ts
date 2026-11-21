@@ -233,7 +233,7 @@ describe('email', () => {
     }) satisfies typeof fetch
     const accounts = Accounts.create({
       chain: 42431,
-      clientId: 'https://app.example.com',
+      clientId: 'https://app.example.com/client.json',
       fetch: record,
       plugins: [email()],
       store: Store.memory(),
@@ -276,6 +276,24 @@ describe('email', () => {
         "paths": [],
       }
     `)
+  })
+
+  test('sendCode refuses the page origin, the client ID of a page without `clientId`, with a message that names `clientId`', async () => {
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'http://localhost:5173',
+      plugins: [email()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const error = await accounts.email
+      .sendCode({ email: 'user@example.com' })
+      .catch((error: Accounts.RequestError) => error.message)
+
+    expect(error).toMatchInlineSnapshot(
+      `"Email sign-in refused: the client ID is an origin, which names a third-party app. Pass \`clientId\`, the ID of the app's first-party registration, or sign in with \`dialog.signIn\` or \`redirect.signIn\`."`,
+    )
   })
 
   test('signIn throws RequestError, not TypeError, for a code that is no string, such as from an untyped request body', async () => {
