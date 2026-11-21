@@ -380,6 +380,28 @@ describe('tempoId', () => {
     )
   })
 
+  test('refuses a connection outside a page with `store` and the default dialog before it signs in', async () => {
+    const config = createConfig({
+      chains,
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          store: Store.memory(),
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports,
+    })
+
+    const error = await connect(config, {
+      connector: config.connectors[0]!,
+    }).catch((error: Error) => error)
+
+    expect(error).toMatchInlineSnapshot(
+      `[wagmi.SignInRequiredError: The connector has no sign-in plugin that signs in here without input: \`email\` and \`backend\` take input, and \`dialog\` needs a page. Pass \`signIn\` to \`connect\`, or add the \`passkey\`, \`redirect\`, or \`device\` plugin.]`,
+    )
+  })
+
   test('throws for a `chainId` that names no chain of the config', () => {
     const error = (() => {
       try {
