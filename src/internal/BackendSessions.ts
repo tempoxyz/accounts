@@ -396,7 +396,9 @@ export function create(
     if (!stored || ending.has(id)) return undefined
     if (usable(stored)) return view(stored, id)
     // A session without a refresh token never refreshes, so it takes no refresh lock: it serves
-    // until its access token expires, as `refresh` serves it, and otherwise ends with a deletion.
+    // until its access token expires, as `refresh` serves it, and otherwise `refresh` ends it
+    // without the lock. `refresh` reads it again first, so a session that a save or a callback
+    // wrote after this read stays.
     const renewable = stored.method !== 'siwe' && Boolean(stored.refreshToken)
     if (
       !renewable &&
@@ -407,13 +409,12 @@ export function create(
       return view(stored, id)
 
     // The map entry is set before the refresh's first await, so every later read shares it, and a
-    // save or a callback waits for it, also for the deletion of a session that cannot refresh.
+    // save or a callback that starts later waits for it.
     const refreshing =
       refreshes.get(id) ??
-      (renewable
-        ? exclusive(id)
-        : store.removeItem(sessionKey(id)).then(() => undefined)
-      ).finally(() => refreshes.delete(id))
+      (renewable ? exclusive(id) : refresh(id)).finally(() =>
+        refreshes.delete(id),
+      )
     refreshes.set(id, refreshing)
     const next = await refreshing
     return next && view(next, id)
