@@ -41,7 +41,7 @@ const key = 'tempo-id:dpop'
  * the new DPoP key lasts for the page only.
  *
  * Concurrent calls read and write the entry under one lock, so a first load in each returns one
- * DPoP key: the store's `lock` when it sets one, which spans the processes of `Store.file`, such as
+ * DPoP key: the `lock` of a store with `private`, which spans the processes of `Store.file`, such as
  * two first runs of a CLI, and otherwise Web Locks, which span the tabs of a browser and one
  * process outside it. Without either, concurrent first calls can each create a DPoP key, and only
  * the last write stays. A sign-in of the other call then binds tokens that the next run cannot
@@ -96,10 +96,10 @@ export async function dpop(options: dpop.Options = {}) {
       return await exported(store)
     }
     // The lock's name is no entry of the store, so a store that locks each entry never waits for
-    // the lock that its caller holds. The store's `lock` spans its processes, such as the lock file
-    // of `Store.file`, so two first runs of a CLI keep one DPoP key. A refused lock reads the store
-    // without it.
-    if (store.lock)
+    // the lock that its caller holds. The `lock` of a `private` store spans its processes, such as
+    // the lock file of `Store.file`, so two first runs of a CLI keep one DPoP key. A shared store
+    // keeps no DPoP key, so its lock only adds rounds. A refused lock reads the store without it.
+    if (store.private && store.lock)
       return await store.lock(`${key}:exclusive`, load).catch(() => load())
     if (!locks) return await load()
     // A page without site storage, such as an opaque origin, refuses the lock before `load` runs.

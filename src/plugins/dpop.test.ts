@@ -163,8 +163,7 @@ describe('dpop', () => {
     const directory = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-dpop-'))
     const path = Path.join(directory, 'store.json')
     // Each process runs Node with its global `navigator`, whose Web Locks span only that process.
-    // Both call the factory once both started, and print the thumbprint of the DPoP key. The wait
-    // ends after 10 seconds.
+    // Each reports that it started over IPC, and calls the factory once the test releases both.
     const output = await Esbuild.build({
       bundle: true,
       format: 'esm',
@@ -172,49 +171,54 @@ describe('dpop', () => {
       platform: 'node',
       stdin: {
         contents: [
-          "import * as Fs from 'node:fs/promises'",
-          "import * as Path from 'node:path'",
           "import * as Dpop from '../internal/Dpop.ts'",
           "import * as Store from '../Store.ts'",
           "import { dpop } from './dpop.ts'",
           `const path = ${JSON.stringify(path)}`,
-          "await Fs.writeFile(Path.join(Path.dirname(path), 'ready-' + crypto.randomUUID()), '')",
-          'for (let attempt = 0; ; attempt++) {',
-          "  const ready = (await Fs.readdir(Path.dirname(path))).filter((name) => name.startsWith('ready-'))",
-          '  if (ready.length === 2) break',
-          "  if (attempt > 1_000) throw new Error('The other process never started.')",
-          '  await new Promise((resolve) => setTimeout(resolve, 10))',
-          '}',
+          "const released = new Promise((resolve) => process.once('message', resolve))",
+          "process.send('ready')",
+          'await released',
           'const plugin = await dpop({ store: Store.file(path) })',
           'console.log(Dpop.thumbprint(plugin.config().dpop))',
+          'process.disconnect()',
         ].join('\n'),
         loader: 'ts',
         resolveDir: import.meta.dirname,
       },
       write: false,
     })
-    const run = () =>
-      new Promise<string>((resolve, reject) => {
-        const child = ChildProcess.spawn(process.execPath, [
-          '--input-type=module',
-        ])
-        let stderr = ''
-        let stdout = ''
-        child.stderr.on('data', (chunk: Buffer) => {
-          stderr += chunk.toString()
-        })
-        child.stdout.on('data', (chunk: Buffer) => {
-          stdout += chunk.toString()
-        })
-        child.on('close', (code) => {
-          if (code === 0) resolve(stdout.trim())
-          else reject(new Error(stderr))
-        })
-        child.stdin.end(output.outputFiles[0]!.text)
-      })
+    const children = [0, 1].map(() =>
+      ChildProcess.spawn(process.execPath, ['--input-type=module'], {
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      }),
+    )
+    let ready = 0
+    const results = children.map(
+      (child) =>
+        new Promise<string>((resolve, reject) => {
+          let stderr = ''
+          let stdout = ''
+          child.on('message', () => {
+            ready++
+          })
+          child.stderr!.on('data', (chunk: Buffer) => {
+            stderr += chunk.toString()
+          })
+          child.stdout!.on('data', (chunk: Buffer) => {
+            stdout += chunk.toString()
+          })
+          child.on('close', (code) => {
+            if (code === 0) resolve(stdout.trim())
+            else reject(new Error(stderr))
+          })
+          child.stdin!.end(output.outputFiles[0]!.text)
+        }),
+    )
 
     try {
-      const thumbprints = await Promise.all([run(), run()])
+      await expect.poll(() => ready, { timeout: 10_000 }).toBe(2)
+      for (const child of children) child.send('start')
+      const thumbprints = await Promise.all(results)
       // The next run reads the DPoP key that the file keeps, which binds the sessions of both.
       const next = Dpop.thumbprint(
         keyOf(await dpop({ store: Store.file(path) })),
