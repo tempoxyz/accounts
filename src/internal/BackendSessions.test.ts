@@ -5,6 +5,7 @@
  */
 import { describe, expect, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
+import * as Session from '../Session.js'
 import * as Store from '../Store.js'
 import * as BackendSessions from './BackendSessions.js'
 
@@ -299,6 +300,48 @@ describe('BackendSessions.create', () => {
         "a",
         "b",
       ]
+    `)
+  })
+
+  test('keeps a session that a save stores while the read of an ended session without a refresh token deletes it', async () => {
+    const memory = Store.memory()
+    // The store answers each deletion after the save below starts.
+    const store: Store.Store = {
+      ...memory,
+      async removeItem(key) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        await memory.removeItem(key)
+      },
+    }
+    const sessions = replica(store)
+    const user = { email: 'user@example.com', id: 'user_1' }
+    const { id } = await sessions.save({
+      session: Session.from({
+        accessToken: 'access-token',
+        expiresAt: Date.now() - 1000,
+        user,
+      }),
+    })
+
+    const read = sessions.get({ id })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    await sessions.save({
+      id,
+      session: Session.from({
+        accessToken: 'access-token-2',
+        expiresAt: Date.now() + 3_600_000,
+        user,
+      }),
+    })
+
+    expect({
+      read: await read,
+      stored: Boolean(await sessions.get({ id })),
+    }).toMatchInlineSnapshot(`
+      {
+        "read": undefined,
+        "stored": true,
+      }
     `)
   })
 })

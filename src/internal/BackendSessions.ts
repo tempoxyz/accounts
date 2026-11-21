@@ -396,20 +396,24 @@ export function create(
     if (!stored || ending.has(id)) return undefined
     if (usable(stored)) return view(stored, id)
     // A session without a refresh token never refreshes, so it takes no refresh lock: it serves
-    // until its access token expires, as `refresh` serves it, and otherwise ends.
-    if (stored.method === 'siwe' || !stored.refreshToken) {
-      const ended =
-        stored.method === 'siwe' ||
-        stored.expiresAt <= Date.now() ||
-        (stored.accessKey && AccessKey.expired(stored.accessKey))
-      if (!ended) return view(stored, id)
-      await store.removeItem(sessionKey(id))
-      return undefined
-    }
+    // until its access token expires, as `refresh` serves it, and otherwise ends with a deletion.
+    const renewable = stored.method !== 'siwe' && Boolean(stored.refreshToken)
+    if (
+      !renewable &&
+      stored.method !== 'siwe' &&
+      stored.expiresAt > Date.now() &&
+      !(stored.accessKey && AccessKey.expired(stored.accessKey))
+    )
+      return view(stored, id)
 
-    // The map entry is set before the refresh's first await, so every later read shares it.
+    // The map entry is set before the refresh's first await, so every later read shares it, and a
+    // save or a callback waits for it, also for the deletion of a session that cannot refresh.
     const refreshing =
-      refreshes.get(id) ?? exclusive(id).finally(() => refreshes.delete(id))
+      refreshes.get(id) ??
+      (renewable
+        ? exclusive(id)
+        : store.removeItem(sessionKey(id)).then(() => undefined)
+      ).finally(() => refreshes.delete(id))
     refreshes.set(id, refreshing)
     const next = await refreshing
     return next && view(next, id)
