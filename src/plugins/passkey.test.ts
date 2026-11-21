@@ -192,6 +192,62 @@ describe('passkey', () => {
     expect(paths).toMatchInlineSnapshot(`[]`)
   })
 
+  test('register throws InvalidStateError, without a request, when the authenticator already holds one of the excluded passkeys', async () => {
+    const paths: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (input) => {
+        paths.push(
+          new URL(input instanceof Request ? input.url : input).pathname,
+        )
+        return Promise.reject(new TypeError('Failed to fetch'))
+      },
+      plugins: [passkey()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const error = await accounts.passkey
+      .register({
+        // The browser rejects a creation that matches `excludeCredentials` with this error.
+        createFn: () =>
+          Promise.reject(
+            Object.assign(
+              new Error('The authenticator holds an excluded credential.'),
+              {
+                name: 'InvalidStateError',
+              },
+            ),
+          ),
+        registration: {
+          expiresAt: Date.now() + 60_000,
+          options: {
+            publicKey: {
+              challenge: '0x00',
+              excludeCredentials: [{ id: 'AAAA', type: 'public-key' }],
+              pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
+              rp: { id: 'app.example.com', name: 'App' },
+              user: { displayName: 'user', id: 'AAAA', name: 'user' },
+            },
+          },
+        },
+      })
+      .catch((error: unknown) => error)
+
+    expect({
+      message: (error as Error).message,
+      name: (error as Error).name,
+      paths,
+    }).toMatchInlineSnapshot(`
+      {
+        "message": "The authenticator already holds a passkey of the user. Sign in with that passkey, or register on another authenticator.",
+        "name": "InvalidStateError",
+        "paths": [],
+      }
+    `)
+  })
+
   test('register throws session_required, and sends no request, after the instance signs out, also in a new instance on the same store', async () => {
     const paths: string[] = []
     const store = Store.memory()

@@ -188,6 +188,9 @@ export function passkey(options: passkey.Options = {}) {
          *   ID can hold the passkey, so the authenticator keeps it.
          * @throws {Error} Named `AbortError`, when the user closes the passkey prompt, or
          *   lets it time out. The session does not change.
+         * @throws {Error} Named `InvalidStateError`, when the authenticator already holds one of
+         *   the user's passkeys, before any request after the options. Offer a sign-in with that
+         *   passkey. The session does not change.
          * @throws {TypeError} On a page, when the instance's `store` has `json`, such as
          *   `Store.redis`, and the call generates an access key. The call throws before any
          *   request.

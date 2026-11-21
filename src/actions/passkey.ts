@@ -321,7 +321,7 @@ export async function register<
   const passkey = await Registration.create(
     // ox reads `createFn` beside creation options at runtime, which its types admit only beside flat options.
     createFn ? ({ ...deserialized, createFn } as never) : deserialized,
-  ).catch(Headless.closed)
+  ).catch(excluded)
   const credential = Credential.serialize(passkey)
 
   const created = {
@@ -778,6 +778,26 @@ function forget(options: { credentialId: string; rpId: string }) {
       rpId: options.rpId,
     })
     .catch(() => {})
+}
+
+/**
+ * Throws an \`InvalidStateError\` for a creation that the authenticator refused because it holds one
+ * of the user's passkeys, which the options exclude, else what {@link Headless.closed} throws. The
+ * browser rejects such a creation with an \`InvalidStateError\`, which ox wraps. The error holds ox's
+ * error as its \`cause\`. It is an \`Error\`, since Hermes has no \`DOMException\`.
+ */
+function excluded(error: unknown): never {
+  if (
+    (error as { cause?: { name?: unknown } } | undefined)?.cause?.name ===
+    'InvalidStateError'
+  )
+    throw Object.assign(
+      new Error(
+        'The authenticator already holds a passkey of the user. Sign in with that passkey, or register on another authenticator.',
+      ),
+      { cause: error, name: 'InvalidStateError' },
+    )
+  return Headless.closed(error)
 }
 
 /** The error message of a registration request without a response, before Tempo ID stores the passkey. */
