@@ -72,12 +72,13 @@ describe('dpop', () => {
   })
 
   test('keeps no private key in a shared store, and resolves with a DPoP key for the process when the store refuses the read or the write', async () => {
-    // Postgres refuses a CryptoKey, and a closed client refuses each query. One database serves
-    // both cases, since each start of PGlite takes seconds in CI.
-    const database = new PGlite()
     const store = Store.postgres({
-      query: (text: string, values: readonly unknown[]) =>
-        database.query(text, [...values]),
+      query: () => Promise.reject(new Error('The store sends no query.')),
+    })
+    // A store whose reads reject, such as a closed IndexedDB.
+    const closed = Store.from({
+      ...Store.memory(),
+      getItem: () => Promise.reject(new Error('The store is closed.')),
     })
     // A folder that only its owner reads refuses each write of the file store in it, also of the JWK.
     const directory = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-dpop-'))
@@ -86,15 +87,14 @@ describe('dpop', () => {
 
     const first = await dpop({ store })
     const second = await dpop({ store })
-    const rows = (await database.query('select key from tempo_id_store')).rows
-    await database.close()
-    const refusedRead = await dpop({ store })
+    const refusedRead = await dpop({ store: closed })
     const refusedWrite = await dpop({ store: readOnly }).finally(() => {
       Fs.chmodSync(directory, 0o700)
       Fs.rmSync(directory, { force: true, recursive: true })
     })
 
-    // A database row would hold the private key beside the refresh token that it binds.
+    // A database row would hold the private key beside the refresh token that it binds, so the
+    // store holds none, and each call creates its own.
     expect(Dpop.thumbprint(keyOf(second))).not.toBe(
       Dpop.thumbprint(keyOf(first)),
     )
@@ -103,7 +103,24 @@ describe('dpop', () => {
         (plugin) => Dpop.thumbprint(keyOf(plugin)).length,
       ),
     ).toEqual([43, 43])
-    expect(rows).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('sends no query to a shared store, such as Store.postgres, which can hold no DPoP key', async () => {
+    const database = new PGlite()
+    // Each query records its first word, such as `select`.
+    const queries: string[] = []
+    const store = Store.postgres({
+      query(text: string, values: readonly unknown[]) {
+        queries.push(text.split(' ')[0]!)
+        return database.query(text, [...values])
+      },
+    })
+
+    const plugin = await dpop({ store })
+    await database.close()
+
+    expect(Dpop.thumbprint(keyOf(plugin)).length).toBe(43)
+    expect(queries).toMatchInlineSnapshot(`[]`)
   })
 
   test('returns the DPoP key of an earlier run from Store.file, which keeps it as a JWK, and imports it as non-extractable', async () => {

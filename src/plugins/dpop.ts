@@ -31,8 +31,8 @@ const key = 'tempo-id:dpop'
  * `private`, such as `Store.file`, refuses a `CryptoKey`, and keeps the private key as a JWK instead, as
  * it keeps the session's refresh token and access keys. Each later call imports it as
  * non-extractable, so the next run of a CLI refreshes its session. A shared store, such as
- * `Store.postgres` or `Store.redis`, rejects the write and keeps no private key, so each call creates a
- * new DPoP key. In a browser, the factory keeps no private key in a form that a script can read.
+ * `Store.postgres` or `Store.redis`, keeps no private key, so each call creates a new DPoP key and
+ * sends the store no query. In a browser, the factory keeps no private key in a form that a script can read.
  *
  * The factory never rejects for its store or its lock, so an app that awaits it at load still loads.
  * A page that refuses the lock, such as one without site storage, reads the store without it. If the
@@ -68,7 +68,9 @@ export async function dpop(options: dpop.Options = {}) {
     ?.locks
 
   const value = await (async () => {
-    if (!store) return await Dpop.create()
+    // A shared JSON store, such as `Store.postgres`, keeps no `CryptoKey` and no private JWK, so it
+    // holds no DPoP key, and the factory sends it no query.
+    if (!store || (store.json && !store.private)) return await Dpop.create()
     const load = async () => {
       // A refused read, such as of a closed IndexedDB, keeps the stored DPoP key, so the factory
       // writes no new one over it.
