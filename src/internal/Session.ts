@@ -700,8 +700,9 @@ export function create(options: create.Options): create.ReturnType {
     // which the store keeps until the end of the refusal takes the lock after it.
     if (machines.refusing({ context: context(), stored })) return undefined
     // Before a load, the session that the first read of the store set shows no status, so another
-    // context's save is a sign-in here, as where the instance holds no session.
-    const held = context().loaded ? current : undefined
+    // context's save of a session is a sign-in here, as where the instance holds none. An empty
+    // store still replaces that read copy, as on a loaded instance.
+    const held = context().loaded || !stored ? current : undefined
     // After a failed write, the store can hold this instance's earlier copy, such as the session
     // that a sign-out here failed to empty, so only the same user's later tokens replace it.
     // Without a session, the kept expired session stands for it, so the same user's later session
@@ -714,7 +715,7 @@ export function create(options: create.Options): create.ReturnType {
     })
     if (!adopted) return undefined
     if (stored && Session.expired(stored)) return undefined
-    const signIn = machines.switches({ current: held, stored })
+    const signIn = machines.switches({ current, stored })
     // The hooks receive the session that the instance holds, with its own chain's access key.
     const session = machines.arranged({
       chainId: loaded ? chainId() : undefined,
