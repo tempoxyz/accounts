@@ -1340,9 +1340,10 @@ function viewTempoId(stored: StoredTempoId, id: string): BackendSession {
 
 /**
  * Throws for a value that is no session ID, as {@link sessionIdPattern} holds one, so `save` and
- * `start` store nothing under it.
+ * `start` store nothing under it. The `backend` plugin also checks before it calls any `sessions`,
+ * so an adapter that reaches its sessions over a network sends no request for such a value.
  */
-function checkId(id: string) {
+export function checkId(id: string) {
   if (sessionIdPattern.test(id)) return
   // The message quotes no ID, since a session ID is as secret as a session.
   throw new RequestError({
