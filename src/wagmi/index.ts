@@ -870,6 +870,8 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
 
     // The account that each named chain's provider last reported.
     const reported = new WeakMap<object, Address.Address | undefined>()
+    // The sessions whose connection ended at their access keys' expiry.
+    const expired = new WeakSet<Session.Any>()
 
     /**
      * Emits `accountsChanged` to each named chain's provider whose own chain's account changed. A
@@ -936,6 +938,8 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           instance!.session.status.get().status === 'reauthorizing'
         )
           return
+        // The status ended the connection of an expired session at its expiry.
+        if (!session && previous && expired.has(previous)) return
         const snapshot = disconnects.getSnapshot()
         // `disconnect` ends wagmi's connection once its sign-out settles. The provider's listeners
         // receive the end of the session at once.
@@ -966,6 +970,19 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       // authorization that finds no Tempo ID session, or a sign-out during the renewal, which moves
       // the status to `pending` until the authorization returns.
       instance.session.status.subscribe((status, previous) => {
+        // At its access keys' expiry, the instance keeps the session until a read empties it, and
+        // the status signs out at once, so wagmi's connection ends with the status.
+        const held = context!.session.get()
+        if (
+          previous.status === 'signedIn' &&
+          status.status === 'signedOut' &&
+          held &&
+          held === previous.session &&
+          addressOf(held)
+        ) {
+          expired.add(held)
+          return onDisconnect()
+        }
         if (
           previous.status === 'reauthorizing' &&
           status.status !== 'reauthorizing' &&

@@ -1142,6 +1142,60 @@ describe('tempoId', () => {
 
     expect(error).toMatchInlineSnapshot(`"Accounts.SignedOutError"`)
   })
+
+  test("disconnects at the access key's expiry, as the session's status signs out, and once", async () => {
+    const config = createConfig({
+      chains: [tempo],
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          store: await sessionStore({ expiresIn: 2 }),
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
+    })
+    await reconnect(config)
+    const connector = config.connectors[0]!
+    const instance = await connector.getInstance()
+    const provider = (await connector.getProvider()) as {
+      on: (event: 'disconnect', listener: () => void) => void
+    }
+    const events: string[] = []
+    config.subscribe(
+      (state) => state.status,
+      (status) => events.push(`wagmi:${status}`),
+    )
+    instance.session.status.subscribe((status) =>
+      events.push(`session:${status.status}`),
+    )
+    provider.on('disconnect', () => events.push('provider:disconnect'))
+
+    await new Promise((resolve) => setTimeout(resolve, 2_500))
+    const expired = getConnection(config).status
+    // A later read empties the expired session, and ends nothing again.
+    events.push('read')
+    const accounts = await connector.getAccounts()
+
+    expect({
+      accounts,
+      events,
+      expired,
+      status: getConnection(config).status,
+    }).toMatchInlineSnapshot(`
+      {
+        "accounts": [],
+        "events": [
+          "wagmi:disconnected",
+          "provider:disconnect",
+          "session:signedOut",
+          "read",
+        ],
+        "expired": "disconnected",
+        "status": "disconnected",
+      }
+    `)
+  }, 10_000)
 })
 
 describe('wagmi', () => {
@@ -1455,15 +1509,17 @@ describe('machines.disconnect', () => {
  * Returns a store that holds a session of `user_1` with an access key on Tempo mainnet, and
  * `accessToken` as its access token.
  */
-async function sessionStore(options: { accessToken?: string } = {}) {
-  const { accessToken = 'access-token' } = options
+async function sessionStore(
+  options: { accessToken?: string; expiresIn?: number } = {},
+) {
+  const { accessToken = 'access-token', expiresIn = 3600 } = options
   const store = Store.memory()
   const owner = Secp256k1.randomPrivateKey()
   const privateKey = Secp256k1.randomPrivateKey()
   const authorization = KeyAuthorization.from({
     address: Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey })),
     chainId: BigInt(tempo.id),
-    expiry: Math.floor(Date.now() / 1000) + 3600,
+    expiry: Math.floor(Date.now() / 1000) + expiresIn,
     type: 'secp256k1',
   })
   const signature = Secp256k1.sign({
