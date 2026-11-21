@@ -72,14 +72,14 @@ describe('dpop', () => {
   })
 
   test('keeps no private key in a shared store, and resolves with a DPoP key for the process when the store refuses the read or the write', async () => {
+    const database = new PGlite()
     const store = Store.postgres({
-      query: () => Promise.reject(new Error('The store sends no query.')),
+      query: (text: string, values: readonly unknown[]) =>
+        database.query(text, [...values]),
     })
-    // A store whose reads reject, such as a closed IndexedDB.
-    const closed = Store.from({
-      ...Store.memory(),
-      getItem: () => Promise.reject(new Error('The store is closed.')),
-    })
+    // The file store of a folder rejects each read, as a closed IndexedDB does.
+    const folder = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-dpop-'))
+    const unreadable = Store.file(folder)
     // A folder that only its owner reads refuses each write of the file store in it, also of the JWK.
     const directory = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-dpop-'))
     Fs.chmodSync(directory, 0o500)
@@ -87,7 +87,10 @@ describe('dpop', () => {
 
     const first = await dpop({ store })
     const second = await dpop({ store })
-    const refusedRead = await dpop({ store: closed })
+    await database.close()
+    const refusedRead = await dpop({ store: unreadable }).finally(() =>
+      Fs.rmSync(folder, { force: true, recursive: true }),
+    )
     const refusedWrite = await dpop({ store: readOnly }).finally(() => {
       Fs.chmodSync(directory, 0o700)
       Fs.rmSync(directory, { force: true, recursive: true })
