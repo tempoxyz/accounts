@@ -26,7 +26,7 @@ import { sendTransaction, signTransaction } from 'viem/actions'
 import { Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vite-plus/test'
-import { getNextSnapshot, initialTransition } from 'xstate'
+import { createActor, getNextSnapshot, initialTransition } from 'xstate'
 import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
 import { email } from '../plugins/email.js'
@@ -1171,7 +1171,9 @@ describe('tempoId', () => {
     )
     provider.on('disconnect', () => events.push('provider:disconnect'))
 
-    await new Promise((resolve) => setTimeout(resolve, 2_500))
+    await expect
+      .poll(() => instance.session.status.get().status, { timeout: 5_000 })
+      .toBe('signedOut')
     const expired = getConnection(config).status
     // A later read empties the expired session, and ends nothing again.
     events.push('read')
@@ -1432,6 +1434,33 @@ describe('machines.disconnect', () => {
     expect(retried.value).toMatchInlineSnapshot(`"idle"`)
   })
 
+  test("ends a connected session once at its access keys' expiry, until a change of the session", () => {
+    const ended: string[] = []
+    const actor = createActor(
+      machines.disconnect.provide({
+        actions: { end: () => ended.push('end') },
+      }),
+    ).start()
+
+    actor.send({ connected: true, type: 'session.expire' })
+    actor.send({ connected: true, type: 'session.expire' })
+    const expired = actor.getSnapshot()
+    actor.send({ type: 'session.change' })
+    const changed = actor.getSnapshot()
+    actor.send({ connected: false, type: 'session.expire' })
+
+    expect(expired.value).toMatchInlineSnapshot(`"expired"`)
+    expect(machines.expired(expired)).toMatchInlineSnapshot(`true`)
+    expect(machines.stale(expired)).toMatchInlineSnapshot(`false`)
+    expect(changed.value).toMatchInlineSnapshot(`"idle"`)
+    expect(actor.getSnapshot().value).toMatchInlineSnapshot(`"idle"`)
+    expect(ended).toMatchInlineSnapshot(`
+      [
+        "end",
+      ]
+    `)
+  })
+
   test('reaches every state along its shortest paths, handles every event type, and counts sign-outs only while it signs out', () => {
     const snapshots = getShortestPaths(machines.disconnect, traversal).map(
       (path) => path.state,
@@ -1449,6 +1478,7 @@ describe('machines.disconnect', () => {
 
     expect([...reached].sort()).toMatchInlineSnapshot(`
       [
+        "expired",
         "held",
         "idle",
         "signingOut",
@@ -1484,6 +1514,10 @@ describe('machines.disconnect', () => {
     ) => readonly machines.disconnect.Event[]
   } = {
     'session.change': () => [{ type: 'session.change' }],
+    'session.expire': () => [
+      { connected: false, type: 'session.expire' },
+      { connected: true, type: 'session.expire' },
+    ],
     'signOut.fail': (snapshot) =>
       snapshot.context.runs > 0 ? [{ type: 'signOut.fail' }] : [],
     'signOut.finish': (snapshot) =>
@@ -1496,6 +1530,7 @@ describe('machines.disconnect', () => {
   const traversal = {
     events: (snapshot: machines.disconnect.Snapshot) => [
       ...events['session.change'](snapshot),
+      ...events['session.expire'](snapshot),
       ...events['signOut.fail'](snapshot),
       ...events['signOut.finish'](snapshot),
       ...events['signOut.start'](snapshot),

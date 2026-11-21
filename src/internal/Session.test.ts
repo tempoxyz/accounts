@@ -1030,6 +1030,34 @@ describe('machines.session', () => {
       })
   })
 
+  describe('expired', () => {
+    const cases = [
+      ['without a session', undefined, false, false],
+      ['while the session holds', renewed, false, false],
+      ["after the session's expiry", renewed, true, true],
+      ['after a set empties the expired session', undefined, true, false],
+    ] as const
+
+    for (const [name, session, expire, expected] of cases)
+      test(`returns ${expected} ${name}`, async () => {
+        const actor = createActor(
+          machines.session.provide({
+            delays: { expiry: expire ? 0 : 2 ** 31 - 1 },
+          }),
+        ).start()
+        actor.send({ session: renewed, type: 'set' })
+        if (expire)
+          await expect
+            .poll(() => actor.getSnapshot().matches('signedOut'))
+            .toBe(true)
+        if (!session || !expire) actor.send({ session, type: 'set' })
+
+        const result = machines.expired(actor.getSnapshot())
+
+        expect(result).toBe(expected)
+      })
+  })
+
   describe('loaded', () => {
     const cases = [
       ['before the first load', [], false],

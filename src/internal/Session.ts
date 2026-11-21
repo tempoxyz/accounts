@@ -4335,6 +4335,17 @@ export namespace machines {
   }
 
   /**
+   * Returns whether the instance holds a session whose access keys expired while it held it, which
+   * the status shows as signed out until a read empties it.
+   */
+  export function expired(snapshot: machines.session.Snapshot): boolean {
+    return (
+      snapshot.context.session !== undefined &&
+      snapshot.context.session === snapshot.context.expired
+    )
+  }
+
+  /**
    * Returns the status of `snapshot`, and the session to show: the expired session while
    * `reauthorizing`, the session while `signedIn`, and none otherwise.
    */

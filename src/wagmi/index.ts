@@ -799,7 +799,9 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
     // ends only once the sign-out settles, so a failed revocation leaves wagmi connected, and wagmi's
     // next `disconnect` calls the connector again, whose sign-out then revokes the refresh token. The
     // next sign-out or sign-in of the instance itself ends that connection too.
-    const disconnects = createActor(machines.disconnect).start()
+    const disconnects = createActor(
+      machines.disconnect.provide({ actions: { end: () => onDisconnect() } }),
+    ).start()
     // The `connect` calls with `chainId` that switched the chain, so a failed one selects the
     // earlier chain again.
     const connects = createActor(machines.connect).start()
@@ -870,8 +872,6 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
 
     // The account that each named chain's provider last reported.
     const reported = new WeakMap<object, Address.Address | undefined>()
-    // The sessions whose connection ended at their access keys' expiry.
-    const expired = new WeakSet<Session.Any>()
 
     /**
      * Emits `accountsChanged` to each named chain's provider whose own chain's account changed. A
@@ -938,9 +938,11 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           instance!.session.status.get().status === 'reauthorizing'
         )
           return
-        // The status ended the connection of an expired session at its expiry.
-        if (!session && previous && expired.has(previous)) return
         const snapshot = disconnects.getSnapshot()
+        // The expiry ended wagmi's connection already, so the read that empties the session ends
+        // nothing again.
+        if (!session && machines.expired(snapshot))
+          return disconnects.send({ type: 'session.change' })
         // `disconnect` ends wagmi's connection once its sign-out settles. The provider's listeners
         // receive the end of the session at once.
         if (!session && machines.signingOut(snapshot)) return onSignOut()
@@ -972,17 +974,12 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       instance.session.status.subscribe((status, previous) => {
         // At its access keys' expiry, the instance keeps the session until a read empties it, and
         // the status signs out at once, so wagmi's connection ends with the status.
-        const held = context!.session.get()
-        if (
-          previous.status === 'signedIn' &&
-          status.status === 'signedOut' &&
-          held &&
-          held === previous.session &&
-          addressOf(held)
-        ) {
-          expired.add(held)
-          return onDisconnect()
-        }
+        const snapshot = instance!.session.actor?.getSnapshot()
+        if (snapshot && InternalSession.machines.expired(snapshot))
+          disconnects.send({
+            connected: addressOf(snapshot.context.session) !== undefined,
+            type: 'session.expire',
+          })
         if (
           previous.status === 'reauthorizing' &&
           status.status !== 'reauthorizing' &&
@@ -1805,22 +1802,32 @@ export namespace machines {
    * at an empty session only outside `signingOut`. In `signingOut`, `disconnect` ends it once its
    * sign-out settles. A sign-out that rejects without a session leaves wagmi connected in `held`, so
    * wagmi's next `disconnect` revokes the refresh token. The next sign-out or sign-in of the instance
-   * ends `held`.
+   * ends `held`. At the expiry of a connected session's access keys, `expired` ends wagmi's
+   * connection once, and the instance's next change of the session, such as the read that empties
+   * the expired session, ends `expired`.
    *
-   * | State        | wagmi's connection                                          | Tag     |
-   * | ------------ | ----------------------------------------------------------- | ------- |
-   * | `idle`       | Follows the instance's session                              |         |
-   * | `signingOut` | Holds the account of the session that the sign-out ended    | `stale` |
+   * | State        | wagmi's connection                                            | Tag     |
+   * | ------------ | ------------------------------------------------------------- | ------- |
+   * | `idle`       | Follows the instance's session                                |         |
+   * | `signingOut` | Holds the account of the session that the sign-out ended      | `stale` |
    * | `held`       | Holds the account of the session that a failed sign-out ended | `stale` |
+   * | `expired`    | Ended at the expiry of the session's access keys              |         |
    */
   export const disconnect = setup({
     actions: {
+      /** Ends wagmi's connection and the providers' sessions. The connector provides it. */
+      end: () => {},
       /** Counts a sign-out that settled. */
       finish: assign((args) => ({ runs: args.context.runs - 1 })),
       /** Counts a sign-out that started. */
       start: assign((args) => ({ runs: args.context.runs + 1 })),
     },
     guards: {
+      /** Whether wagmi holds the account of the session that expired. */
+      connected: (args) => {
+        assertEvent(args.event, 'session.expire')
+        return args.event.connected
+      },
       /** Whether the sign-out that settles is the last one in progress. */
       last: (args) => args.context.runs === 1,
     },
@@ -1833,6 +1840,13 @@ export namespace machines {
     id: 'disconnect',
     initial: 'idle',
     states: {
+      expired: {
+        entry: 'end',
+        on: {
+          'session.change': { target: 'idle' },
+          'signOut.start': { actions: 'start', target: 'signingOut' },
+        },
+      },
       held: {
         on: {
           'session.change': { target: 'idle' },
@@ -1841,7 +1855,10 @@ export namespace machines {
         tags: ['stale'],
       },
       idle: {
-        on: { 'signOut.start': { actions: 'start', target: 'signingOut' } },
+        on: {
+          'session.expire': { guard: 'connected', target: 'expired' },
+          'signOut.start': { actions: 'start', target: 'signingOut' },
+        },
       },
       signingOut: {
         on: {
@@ -1870,8 +1887,17 @@ export namespace machines {
     /** An event of a connector. */
     type Event =
       | {
-          /** The instance's session changed to a new session, or a sign-out of the instance completed. */
+          /**
+           * The instance's session changed to a new session, a sign-out of the instance completed,
+           * or a read emptied the expired session.
+           */
           type: 'session.change'
+        }
+      | {
+          /** Whether wagmi holds the account of the session. */
+          connected: boolean
+          /** The session's access keys expired while the instance held it. */
+          type: 'session.expire'
         }
       | {
           /** The sign-out of a `disconnect` call rejected, and the instance holds no session. */
@@ -1891,6 +1917,11 @@ export namespace machines {
 
     /** A snapshot of the machine. */
     type Snapshot = SnapshotFrom<typeof disconnect>
+  }
+
+  /** Returns whether wagmi's connection ended at the expiry of the session's access keys. */
+  export function expired(snapshot: disconnect.Snapshot) {
+    return snapshot.matches('expired')
   }
 
   /** Returns whether a failed sign-out of `disconnect` left wagmi connected without a session. */
