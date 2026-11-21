@@ -90,6 +90,73 @@ describe('Store.redis', () => {
       ]
     `)
   }, 120_000)
+  test('behavior: refreshes under the lock a session that a save replaces with one that can refresh while a read of the ended session is in flight', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    const commands: string[] = []
+    const store = Redis.create({
+      sendCommand: (args) => {
+        commands.push(args[0]!)
+        return client.call(...(args as [string, ...string[]]))
+      },
+    })
+    const accounts = Accounts.create({
+      clientId: 'https://app.example.com',
+      url: 'http://127.0.0.1:9',
+    })
+    const sessions = BackendSessions.create(accounts.config, {
+      shared: true,
+      store,
+    })
+    const user = { email: 'user@example.com', id: 'user_1' }
+    // The access token ended, and no refresh token renews it.
+    const { id } = await sessions.save({
+      session: Session.from({
+        accessToken: 'access-token',
+        expiresAt: Date.now() - 1000,
+        user,
+      }),
+    })
+    commands.length = 0
+
+    // Redis answers the read with the ended session, and then runs the save's write of a session
+    // whose access token also ended, but which a refresh token renews.
+    await Promise.allSettled([
+      sessions.get({ id }),
+      sessions.save({
+        id,
+        session: Session.from({
+          accessToken: 'access-token-2',
+          expiresAt: Date.now() - 1000,
+          refreshToken: 'refresh-token-2',
+          user,
+        }),
+      }),
+    ])
+    client.disconnect()
+    await container.stop()
+
+    // The refresh of the replacement takes the lock (`SET` with `NX`) and releases it (`EVAL`).
+    expect(commands).toMatchInlineSnapshot(`
+      [
+        "GET",
+        "SET",
+        "GET",
+        "SET",
+        "GET",
+        "GET",
+        "DEL",
+        "EVAL",
+      ]
+    `)
+  }, 120_000)
+
   test('behavior: keeps a session that a save writes while a read of the ended session is in flight', async () => {
     const container = await new GenericContainer('redis:7.4-alpine')
       .withExposedPorts(6379)
