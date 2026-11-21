@@ -133,12 +133,21 @@ jobs:
           fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
-      # A new alias takes some seconds to resolve.
+      # A new alias takes some seconds to resolve. Cloudflare Access admits this runner, which is off
+      # the tailnet, to the alias only with the service token of tempoxyz/cloudflare
+      # `stacks/apps/accounts`. Only the alias receives the token, never a version URL.
       - name: Check deployment
         env:
+          NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          SITE_PREVIEW_ACCESS_CLIENT_ID: ${{ secrets.SITE_PREVIEW_ACCESS_CLIENT_ID }}
+          SITE_PREVIEW_ACCESS_CLIENT_SECRET: ${{ secrets.SITE_PREVIEW_ACCESS_CLIENT_SECRET }}
           URL: ${{ steps.url.outputs.url }}
         run: |
-          curl --fail --output /dev/null --retry 10 --retry-all-errors --retry-delay 6 --show-error --silent "$URL/"
+          access=()
+          if [ "$URL" = "https://pr-$NUMBER-accounts-site.porto.workers.dev" ]; then
+            access=(-H "CF-Access-Client-Id: $SITE_PREVIEW_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $SITE_PREVIEW_ACCESS_CLIENT_SECRET")
+          fi
+          curl "${access[@]}" --fail --output /dev/null --retry 10 --retry-all-errors --retry-delay 6 --show-error --silent "$URL/"
           printf 'The site runs at [%s](%s).\n' "$URL" "$URL" >> "$GITHUB_STEP_SUMMARY"
 
       # One comment per pull request, which each run updates.
