@@ -16,6 +16,8 @@ import {
   signTypedData,
 } from '@wagmi/core'
 import * as Fs from 'node:fs/promises'
+import * as Http from 'node:http'
+import type * as Net from 'node:net'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
 import { Address, Base64, Secp256k1 } from 'ox'
@@ -1264,31 +1266,22 @@ describe('tempoId', () => {
   }, 10_000)
 
   test('keeps wagmi connected while an authorization runs across the expiry, and disconnects once when it fails', async () => {
-    let release = () => {}
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
+    // A server that holds each request open until the test drops its connection.
+    const held: Net.Socket[] = []
+    const server = Http.createServer((request) => held.push(request.socket))
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const url = `http://127.0.0.1:${(server.address() as Net.AddressInfo).port}`
     // A first-party app authorizes headlessly, so its authorization waits for the request.
     const store = await sessionStore({ expiresIn: 2 })
     await store.setItem(
-      'tempo-id:session:["http://127.0.0.1:9","client_1",4217]',
+      `tempo-id:session:["${url}","client_1",4217]`,
       await store.getItem(
         'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]',
       ),
     )
     const config = createConfig({
       chains: [tempo],
-      connectors: [
-        tempoId({
-          clientId: 'client_1',
-          fetch: (async () => {
-            await gate
-            throw new TypeError('fetch failed')
-          }) as typeof globalThis.fetch,
-          store,
-          url: 'http://127.0.0.1:9',
-        }),
-      ],
+      connectors: [tempoId({ clientId: 'client_1', store, url })],
       transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
     })
     await reconnect(config)
@@ -1314,8 +1307,9 @@ describe('tempoId', () => {
       )
       .toBe(true)
     const during = getConnection(config).status
-    release()
+    for (const socket of held) socket.destroy()
     const error = await authorization
+    server.close()
 
     expect({
       after: getConnection(config).status,
