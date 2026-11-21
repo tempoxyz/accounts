@@ -6,6 +6,7 @@
  */
 import { PGlite } from '@electric-sql/pglite'
 import * as Esbuild from 'esbuild'
+import * as ChildProcess from 'node:child_process'
 import { EmbeddedJWK, jwtVerify } from 'jose'
 import * as Fs from 'node:fs'
 import * as Os from 'node:os'
@@ -157,6 +158,79 @@ describe('dpop', () => {
     )
     expect(second).toBe(first)
   })
+
+  test('returns one DPoP key for concurrent first runs of two processes on one Store.file, such as two first runs of a CLI', async () => {
+    const directory = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-dpop-'))
+    const path = Path.join(directory, 'store.json')
+    // Each process runs Node with its global `navigator`, whose Web Locks span only that process.
+    // Both call the factory once both started, and print the thumbprint of the DPoP key. The wait
+    // ends after 10 seconds.
+    const output = await Esbuild.build({
+      bundle: true,
+      format: 'esm',
+      logLevel: 'silent',
+      platform: 'node',
+      stdin: {
+        contents: [
+          "import * as Fs from 'node:fs/promises'",
+          "import * as Path from 'node:path'",
+          "import * as Dpop from '../internal/Dpop.ts'",
+          "import * as Store from '../Store.ts'",
+          "import { dpop } from './dpop.ts'",
+          `const path = ${JSON.stringify(path)}`,
+          "await Fs.writeFile(Path.join(Path.dirname(path), 'ready-' + crypto.randomUUID()), '')",
+          'for (let attempt = 0; ; attempt++) {',
+          "  const ready = (await Fs.readdir(Path.dirname(path))).filter((name) => name.startsWith('ready-'))",
+          '  if (ready.length === 2) break',
+          "  if (attempt > 1_000) throw new Error('The other process never started.')",
+          '  await new Promise((resolve) => setTimeout(resolve, 10))',
+          '}',
+          'const plugin = await dpop({ store: Store.file(path) })',
+          'console.log(Dpop.thumbprint(plugin.config().dpop))',
+        ].join('\n'),
+        loader: 'ts',
+        resolveDir: import.meta.dirname,
+      },
+      write: false,
+    })
+    const run = () =>
+      new Promise<string>((resolve, reject) => {
+        const child = ChildProcess.spawn(process.execPath, [
+          '--input-type=module',
+        ])
+        let stderr = ''
+        let stdout = ''
+        child.stderr.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString()
+        })
+        child.stdout.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString()
+        })
+        child.on('close', (code) => {
+          if (code === 0) resolve(stdout.trim())
+          else reject(new Error(stderr))
+        })
+        child.stdin.end(output.outputFiles[0]!.text)
+      })
+
+    try {
+      const thumbprints = await Promise.all([run(), run()])
+      // The next run reads the DPoP key that the file keeps, which binds the sessions of both.
+      const next = Dpop.thumbprint(
+        keyOf(await dpop({ store: Store.file(path) })),
+      )
+
+      expect({
+        same: thumbprints.every((thumbprint) => thumbprint === next),
+      }).toMatchInlineSnapshot(`
+        {
+          "same": true,
+        }
+      `)
+    } finally {
+      Fs.rmSync(directory, { force: true, recursive: true })
+    }
+  }, 20_000)
 
   test('creates a new DPoP key at each call without a store outside a browser', async () => {
     const plugins = await Promise.all([dpop(), dpop()])

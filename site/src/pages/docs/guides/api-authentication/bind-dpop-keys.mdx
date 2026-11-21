@@ -217,7 +217,7 @@ export const accounts = Accounts.create({
 ```
 
 :::warning
-In a browser, the store must keep a `CryptoKey` as it is, as IndexedDB and <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> do. Outside a browser, <SourceLink name="create" path="src/stores/File.ts">`Store.file`</SourceLink> keeps the private key as a JWK, beside the refresh token, so the next run of a CLI refreshes its session. A shared store, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>, keeps no private key, so a session that another process's DPoP key binds never refreshes there.
+In a browser, the store must keep a `CryptoKey` as it is, as IndexedDB and <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> do. Outside a browser, <SourceLink name="create" path="src/stores/File.ts">`Store.file`</SourceLink> keeps the private key as a JWK, beside the refresh token, so the next run of a CLI refreshes its session. Two first runs on one file at once keep one DPoP key, since `dpop` creates it under the file's lock. A shared store, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink> or <SourceLink name="create" path="src/stores/Redis.ts">`Store.redis`</SourceLink>, keeps no private key, so a session that another process's DPoP key binds never refreshes there.
 :::
 
 Outside a browser, the wagmi connector's `reconnect` skips such a session, and its `connect` signs in again.
