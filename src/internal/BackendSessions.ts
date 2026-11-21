@@ -395,6 +395,17 @@ export function create(
     }
     if (!stored || ending.has(id)) return undefined
     if (usable(stored)) return view(stored, id)
+    // A session without a refresh token never refreshes, so it takes no refresh lock: it serves
+    // until its access token expires, as `refresh` serves it, and otherwise ends.
+    if (stored.method === 'siwe' || !stored.refreshToken) {
+      const ended =
+        stored.method === 'siwe' ||
+        stored.expiresAt <= Date.now() ||
+        (stored.accessKey && AccessKey.expired(stored.accessKey))
+      if (!ended) return view(stored, id)
+      await store.removeItem(sessionKey(id))
+      return undefined
+    }
 
     // The map entry is set before the refresh's first await, so every later read shares it.
     const refreshing =

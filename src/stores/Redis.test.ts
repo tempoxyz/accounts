@@ -90,6 +90,57 @@ describe('Store.redis', () => {
       ]
     `)
   }, 120_000)
+  test('behavior: ends a session that cannot refresh in one read and one deletion, without the refresh lock', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    const commands: string[] = []
+    const store = Redis.create({
+      sendCommand: (args) => {
+        commands.push(args[0]!)
+        return client.call(...(args as [string, ...string[]]))
+      },
+    })
+    const accounts = Accounts.create({
+      clientId: 'https://app.example.com',
+      url: 'http://127.0.0.1:9',
+    })
+    const sessions = BackendSessions.create(accounts.config, {
+      shared: true,
+      store,
+    })
+    // The access token ended, and no refresh token renews it.
+    const { id } = await sessions.save({
+      session: Session.from({
+        accessToken: 'access-token',
+        expiresAt: Date.now() - 1000,
+        user: { email: 'user@example.com', id: 'user_1' },
+      }),
+    })
+    commands.length = 0
+
+    const session = await sessions.get({ id })
+    const stored = await client.exists(`tempo-id:session:${id}`)
+    client.disconnect()
+    await container.stop()
+
+    expect({ commands, session, stored }).toMatchInlineSnapshot(`
+      {
+        "commands": [
+          "GET",
+          "DEL",
+        ],
+        "session": undefined,
+        "stored": 0,
+      }
+    `)
+  }, 120_000)
+
   test('behavior: closes each session of a `sid` that two replicas on one Redis link at the same time', async () => {
     const container = await new GenericContainer('redis:7.4-alpine')
       .withExposedPorts(6379)
