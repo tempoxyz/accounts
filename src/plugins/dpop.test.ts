@@ -6,8 +6,8 @@
  */
 import { PGlite } from '@electric-sql/pglite'
 import * as Esbuild from 'esbuild'
-import * as ChildProcess from 'node:child_process'
 import { EmbeddedJWK, jwtVerify } from 'jose'
+import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
