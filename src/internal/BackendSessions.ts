@@ -1342,6 +1342,13 @@ function viewTempoId(stored: StoredTempoId, id: string): BackendSession {
  * Throws for a value that is no session ID, as {@link sessionIdPattern} holds one, so `save` and
  * `start` store nothing under it. The `backend` plugin also checks before it calls any `sessions`,
  * so an adapter that reaches its sessions over a network sends no request for such a value.
+ * @throws {Accounts.RequestError} With `invalid_request` and the `field` `id`, for a value that is
+ *   not 1 to 128 characters of `A-Z`, `a-z`, `0-9`, `-`, and `_`.
+ *
+ * @example
+ * ```ts
+ * BackendSessions.checkId(id)
+ * ```
  */
 export function checkId(id: string) {
   if (sessionIdPattern.test(id)) return
