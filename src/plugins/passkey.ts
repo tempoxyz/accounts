@@ -127,7 +127,9 @@ export function passkey(options: passkey.Options = {}) {
          *
          * After a `signOut` without `everywhere`, or one with it that rejects or whose logout has
          * no answer yet, such as after a reload during it, and before the next sign-in, the call throws `session_required` before any request or prompt, also in a new
-         * instance on the same store. Such a sign-out can keep the browser's Tempo ID session, so the
+         * instance on the same store, and in one that holds the session from before the sign-out,
+         * such as a replica on the same `Store.postgres` table. The call reads the store for the
+         * sign-out once. Such a sign-out can keep the browser's Tempo ID session, so the
          * passkey would join the account of the user who signed out. A sign-in in another instance
          * on the same store, such as another tab, is the next sign-in. The call reads the stored
          * session, and sets it as the instance's session. While a sign-out runs in the instance,
@@ -209,8 +211,10 @@ export function passkey(options: passkey.Options = {}) {
         ): Promise<passkey.register.ReturnType<parameters>> {
           // A sign-out without `everywhere` keeps the browser's Tempo ID session, which would
           // receive the passkey, so the user who signed out would hold it. A sign-in in another
-          // instance on the same store clears the mark, as `signedOut` reads it.
-          if (!context.session.get() && (await context.session.signedOut()))
+          // instance on the same store clears the mark, as `signedOut` reads it. An instance that
+          // holds a session reads the mark too, since another process on the store, such as a
+          // replica on one `Store.postgres` table, posts it no message of its sign-out.
+          if (await context.session.signedOut())
             throw new Accounts.RequestError({
               code: 'login_required',
               message:
