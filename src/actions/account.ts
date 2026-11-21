@@ -72,9 +72,13 @@ export class PageRequiredError extends Error {
   constructor(options: PageRequiredError.Options = {}) {
     // The payment page has no redirect, so its message names what sends a payment outside a page.
     super(
-      options.payment
-        ? "No browser window: the payment page opens only from a page. Outside a page, only the session's access key sends a payment, within its limits and before its expiry, so a payment above them needs a sign-in for an access key that holds it."
-        : 'No browser window: the approval page opens in a frame or a popup only from a page. Open it through a redirect instead.',
+      (() => {
+        if (!options.payment)
+          return 'No browser window: the approval page opens in a frame or a popup only from a page. Open it through a redirect instead.'
+        if (options.sender === false)
+          return "No browser window, and no plugin sends payments: the payment page opens only from a page. Outside a page, add a plugin that sends a payment with the session's access key."
+        return "No browser window: the payment page opens only from a page. Outside a page, only the session's access key sends a payment, within its limits and before its expiry, so a payment above them needs a sign-in for an access key that holds it."
+      })(),
       options.cause === undefined ? undefined : { cause: options.cause },
     )
   }
@@ -92,6 +96,12 @@ export declare namespace PageRequiredError {
      * for an access key that holds the payment. Defaults to `false`.
      */
     payment?: boolean | undefined
+    /**
+     * Whether a plugin of the instance sends a payment with the session's access key. Without one,
+     * the message of the payment page names that plugin as the fix, since no sign-in sends the
+     * payment. Defaults to `true`.
+     */
+    sender?: boolean | undefined
   }
 }
 
