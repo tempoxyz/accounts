@@ -834,10 +834,13 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           return current
         // Without a session, the instance drops the sign-in's tokens, which stay live at Tempo ID.
         if (!instance.session.actor) throw new StoreRequiredError()
-        // Outside a page, such as in Node with a shared store, the dialog has no page to show.
+        // Outside a page, such as in Node or React Native, the dialog has no page to show, so the
+        // first other plugin that signs in without input signs in.
         const fallback =
-          defaultSignIn === 'dialog' && typeof window === 'undefined'
-            ? undefined
+          typeof document === 'undefined'
+            ? Object.keys(instance).find(
+                (key) => key !== 'dialog' && defaultSignInIds.has(key),
+              )
             : defaultSignIn
         if (!signIn && !fallback) throw new SignInRequiredError()
         if (signIn)

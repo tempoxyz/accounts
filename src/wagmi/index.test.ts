@@ -29,6 +29,8 @@ import { describe, expect, test } from 'vite-plus/test'
 import { getNextSnapshot, initialTransition } from 'xstate'
 import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
+import { device } from '../plugins/device.js'
+import { dialog } from '../plugins/dialog.js'
 import { email } from '../plugins/email.js'
 import * as Dpop from '../internal/Dpop.js'
 import * as Plugin from '../Plugin.js'
@@ -399,6 +401,29 @@ describe('tempoId', () => {
 
     expect(error).toMatchInlineSnapshot(
       `[wagmi.SignInRequiredError: The connector has no sign-in plugin that signs in here without input: \`email\` and \`backend\` take input, and \`dialog\` needs a page. Pass \`signIn\` to \`connect\`, or add the \`passkey\`, \`redirect\`, or \`device\` plugin.]`,
+    )
+  })
+
+  test('signs in outside a page with the first plugin after `dialog` that takes no input', async () => {
+    const config = createConfig({
+      chains,
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          plugins: [dialog(), device({ onCode() {} })],
+          store: Store.memory(),
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports,
+    })
+
+    const error = await connect(config, {
+      connector: config.connectors[0]!,
+    }).catch((error: Error) => error)
+
+    expect(error).toMatchInlineSnapshot(
+      `[Accounts.RequestError: The code request received no response. Check the connection, and request a new code.]`,
     )
   })
 
