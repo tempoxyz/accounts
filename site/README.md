@@ -41,6 +41,8 @@ A pull request's `build` job builds the site and bundles the Worker without secr
 
 A preview of the broker binds no secret and no KV namespace, and the demos' routes read both, so a preview uploads a version with Wrangler. The token comes from [Cloudflare STS](https://github.com/tempoxyz/cloudflare-sts), under the `preview-upload` policy of this repository, which admits only `site-preview.yml` on `main`. It holds Workers Scripts Write on the production account, serves only the runner's IP address, and lasts at most the job's 10 minutes. That permission reaches every Worker of the account, so the job never runs the code of a pull request. The version inherits the Worker's secrets and binds its KV namespace, so the code of a pull request runs at its preview URL with both.
 
+Cloudflare Access fronts each preview alias, `pr-<number>-accounts-site.porto.workers.dev`, as tempoxyz/cloudflare `stacks/apps/accounts` configures. It admits only Tailscale App Connector egress and the service token of the `SITE_PREVIEW_ACCESS_CLIENT_ID` and `SITE_PREVIEW_ACCESS_CLIENT_SECRET` secrets. The runner of `site-preview.yml` is off the tailnet, so its check sends the token in the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers, to the alias only. The site at `accounts.tempo.xyz` and its workers.dev URL stay public.
+
 Only `main` deploys the Worker. No command deploys it from a checkout.
 
 `wrangler.json` names `dist/public` as the assets of the Worker, and `src/server/Worker.ts` as its script. The preview names the files of the pull request in place of both.
