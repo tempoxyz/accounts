@@ -337,7 +337,7 @@ export declare namespace createUrl {
  * authorization, it revokes the response's refresh token before it throws. An exchange without a
  * response, such as offline, throws `server_error` with status 0 and `signedIn`. A fault before the
  * request, such as in the client assertion or the DPoP proof, throws `server_error` with status 0,
- * `signedIn`, the fault's message, and the fault as its `cause`.
+ * `signedIn`, and the fault as its `cause`. Its message names the client assertion and the DPoP key.
  *
  * @example
  * ```ts
@@ -533,7 +533,7 @@ async function redeem(auth: Config, options: redeem.Options) {
   // A code with this redirect's `state` shows that the user signed in on Tempo ID's pages, so the
   // browser holds that user's Tempo ID session. A failed exchange then ends the app's earlier session.
   // Only a fetch that rejects is an exchange without a response. A fault before it, such as in the
-  // client assertion or the DPoP proof, keeps its own message and is its `cause`.
+  // client assertion or the DPoP proof, is the `cause` of its own error.
   const config = Api.answered(auth, {
     message:
       'The code exchange received no response. Check the connection, and sign in again.',
@@ -565,10 +565,10 @@ async function redeem(auth: Config, options: redeem.Options) {
     throw new RequestError({
       cause: error,
       code: 'server_error',
+      // The message can reach the browser, as a backend's refusal, so the fault's own text, which can
+      // name a signing service or an access key, stays in `cause`.
       message:
-        error instanceof Error
-          ? error.message
-          : 'The code exchange failed before its request. Check the client assertion and the DPoP key, and sign in again.',
+        'The code exchange failed before its request. Check the client assertion and the DPoP key, and sign in again.',
       signedIn: true,
       status: 0,
     })

@@ -173,7 +173,7 @@ describe('handleCallback', () => {
       }
     `)
   })
-  test('keeps the message of a client assertion that fails before the code exchange, as a refusal after the sign-in', async () => {
+  test('reports a client assertion that fails before the code exchange as its cause, not as an exchange without a response', async () => {
     // Nothing listens at the URL, so only the client assertion's fault ends the exchange.
     const auth = from({
       clientAssertion: () =>
@@ -205,7 +205,7 @@ describe('handleCallback', () => {
       {
         "cause": "Error: The signer refused the client assertion.",
         "code": "server_error",
-        "message": "The signer refused the client assertion.",
+        "message": "The code exchange failed before its request. Check the client assertion and the DPoP key, and sign in again.",
         "signedIn": true,
         "status": 0,
       }
