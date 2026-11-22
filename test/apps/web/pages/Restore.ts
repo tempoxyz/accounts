@@ -3,7 +3,8 @@
  * signs in through the dialog. After the store's first read, the page restores its session with
  * `session.get` and a function `reauthorize`, which authorizes the browser's Tempo ID session through
  * `authorize`, as an app whose query starts the restore after its first render does. The page shows
- * the instance's status in `#status`.
+ * the instance's status in `#status`. With `restore=0`, the page only follows the status, as a
+ * router guard does, and calls no `session.get`.
  * @module
  */
 import { Accounts } from 'accounts'
@@ -25,6 +26,8 @@ export async function start() {
   }
   show()
   accounts.session.status.subscribe(show)
+
+  if (App.query.get('restore') === '0') return
 
   // The store's first read ends before the restore starts, so the page shows `signedOut` first.
   await accounts.session.get()

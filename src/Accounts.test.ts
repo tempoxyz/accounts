@@ -2647,6 +2647,56 @@ describe('session.status', () => {
       state: { session: { accessToken: 'access-token' } },
     })
   })
+  test("follows another instance's sign-in on the same store before a read of its own, such as another tab's, as it follows that instance's sign-out", async () => {
+    const store = Store.memory()
+    const create = () =>
+      Accounts.create({
+        chain: 1337,
+        clientId: 'client_1',
+        plugins: [
+          Plugin.from({
+            actions: (context) => ({
+              commit: (session: Session.Any) =>
+                context.session.change().commit(session),
+            }),
+            id: 'test',
+          }),
+        ],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const tab = create()
+    // The instance only follows the status, as a router guard does, and calls no `session.get`.
+    const other = create()
+    const statuses: string[] = []
+    other.session.status.subscribe((status, previous) =>
+      statuses.push(
+        `${previous.status} > ${status.status} ${status.session?.user.email}`,
+      ),
+    )
+
+    await tab.test.commit(
+      Session.from({
+        accessToken: 'access-token',
+        expiresAt: Date.now() + 3_600_000,
+        user: { email: 'user@example.com', id: 'user_1' },
+      }),
+    )
+    await expect
+      .poll(() => other.session.status.get().status, { timeout: 2_000 })
+      .toBe('signedIn')
+    await tab.signOut()
+    await expect
+      .poll(() => other.session.status.get().status, { timeout: 2_000 })
+      .toBe('signedOut')
+
+    expect(statuses).toMatchInlineSnapshot(`
+      [
+        "pending > signedIn user@example.com",
+        "signedIn > signedOut undefined",
+      ]
+    `)
+  })
 })
 
 describe('session.refresh', () => {

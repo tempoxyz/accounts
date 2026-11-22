@@ -699,13 +699,17 @@ export function create(options: create.Options): create.ReturnType {
     // A message that waited for the lock before a refusal reads the session that the refusal ended,
     // which the store keeps until the end of the refusal takes the lock after it.
     if (machines.refusing({ context: context(), stored })) return undefined
+    // Before a load, the session that the first read of the store set shows no status, so another
+    // context's save of a session is a sign-in here, as where the instance holds none. An empty
+    // store still replaces that read copy, as on a loaded instance.
+    const held = context().loaded || !stored ? current : undefined
     // After a failed write, the store can hold this instance's earlier copy, such as the session
     // that a sign-out here failed to empty, so only the same user's later tokens replace it.
     // Without a session, the kept expired session stands for it, so the same user's later session
     // replaces it, as in a read of the store for it.
     const failed = writes.failed()
     const adopted = machines.replaces({
-      current: current ?? (failed ? context().renewing : undefined),
+      current: held ?? (failed ? context().renewing : undefined),
       failed,
       stored,
     })
@@ -715,22 +719,23 @@ export function create(options: create.Options): create.ReturnType {
     // The hooks receive the session that the instance holds, with its own chain's access key.
     const session = machines.arranged({
       chainId: loaded ? chainId() : undefined,
-      current,
+      current: held,
       stored,
     })
     const since = obtained
     actor.send({
       renewing: machines.renews({
-        current,
-        expired: !!current && Session.expired(current),
+        current: held,
+        expired: !!held && Session.expired(held),
         stored,
       }),
       session,
       signIn,
       type: 'adopt',
     })
+    // A session that the first read set came from the store too, so its drop revokes it as before.
     revokeDropped(current, since)
-    return machines.signsIn({ current, session })
+    return machines.signsIn({ current: held, session })
       ? async () => onSignIn?.(session!)
       : undefined
   }

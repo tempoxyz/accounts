@@ -293,6 +293,38 @@ test.describe('session', () => {
     })
   })
 
+  test('shows a sign-in and a sign-out of one tab in another tab that only follows the status, with no `session.get`', async ({
+    capture,
+    code,
+    context,
+    email,
+    page,
+  }) => {
+    const tab = await context.newPage()
+    await Promise.all([
+      page.goto(passive),
+      tab.goto(`${Apps.web.url}/restore/?restore=0`),
+    ])
+    await expect(page.locator('#status')).toHaveText('signedOut')
+    await expect(tab.locator('#status')).toHaveText('pending')
+
+    await test.step('signs the second tab in at the first tab’s sign-in', async () => {
+      await enter(page, { code, email })
+
+      await expect(tab.locator('#status')).toHaveText('signedIn')
+      await capture('second tab signed in', tab)
+    })
+
+    await test.step('signs the second tab out at the first tab’s sign-out', async () => {
+      expect((await Playwright.run(page, { name: 'Sign out' })).state).toBe(
+        'fulfilled',
+      )
+
+      await expect(tab.locator('#status')).toHaveText('signedOut')
+      await capture('second tab signed out', tab)
+    })
+  })
+
   test('ends the browser’s Tempo ID session with `everywhere`, and the session of another app with it', async ({
     capture,
     code,
