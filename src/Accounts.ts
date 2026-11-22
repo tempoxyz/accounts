@@ -2628,14 +2628,27 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   }
 
   /**
+   * Returns whether `held` signed in with a Tempo Account: always on an instance without
+   * `account: false`, else for a session that holds an account or an access key.
+   */
+  function withAccount(held: Session.Any) {
+    return (
+      config.account !== false ||
+      !!held.account ||
+      !!held.accessKey ||
+      !!held.accessKeys?.length
+    )
+  }
+
+  /**
    * Reads the account of a session that a switch left without an access key or an account on the
    * instance's chain, and sets it there, beside the sign-in. A failed read leaves the first
    * signature to read it.
    */
   function readMoved(moved: Session.Any) {
-    // A third-party app reads no account, as `switchChain` describes. An instance with
-    // `account: false` reads none either, so a page's read creates none.
-    if (ClientId.thirdParty(config.clientId) || config.account === false) return
+    // A third-party app reads no account, as `switchChain` describes. A session that signed in
+    // without a Tempo Account reads none either, so a page's read creates none.
+    if (ClientId.thirdParty(config.clientId) || !withAccount(moved)) return
     const chainId = chain.get()
     void (async () => {
       const account = await Core.getAccount(context, {
@@ -2686,8 +2699,8 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
           !Session.local(held) &&
           !InternalSession.toChain(held, { chainId }).accessKey &&
           !ClientId.thirdParty(config.clientId) &&
-          // An instance with `account: false` holds no account to read.
-          config.account !== false
+          // A session that signed in without a Tempo Account holds none to read.
+          withAccount(held)
             ? await Core.getAccount(context, {
                 accessToken: await accessToken(),
                 chainId,
