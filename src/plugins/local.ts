@@ -245,9 +245,8 @@ export function local(options: local.Options = {}) {
       function requested(parameters: local.signIn.Parameters) {
         const permissions =
           parameters.accessKey ??
-          (context.provision === 'accessKey'
-            ? (context.accessKey() ?? context.defaultAccessKey())
-            : undefined)
+          context.accessKey() ??
+          context.defaultAccessKey()
         if (!permissions) throw new AccessKeyDisabledError()
         return permissions
       }

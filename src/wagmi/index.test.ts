@@ -64,6 +64,22 @@ describe('tempoId', () => {
     expect(instance.config.chainId).toMatchInlineSnapshot(`4217`)
   })
 
+  test('passes `provision: "wallet"` to the instance, and refuses `provision: "user"` in the type, since a connection needs an address', async () => {
+    const config = createConfig({
+      chains,
+      connectors: [
+        tempoId({ clientId: 'client_test', provision: 'wallet' }),
+        // @ts-expect-error A connection needs the address of a Tempo Account.
+        tempoId({ clientId: 'client_test', provision: 'user' }),
+      ],
+      transports,
+    })
+
+    const instance = await config.connectors[0]!.getInstance()
+
+    expect(instance.config.provision).toMatchInlineSnapshot(`"wallet"`)
+  })
+
   test('switchChain selects another chain of the config, and refuses one outside it', async () => {
     const config = createConfig({
       chains,

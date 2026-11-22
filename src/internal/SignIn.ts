@@ -67,6 +67,7 @@ export function accessKey(
   }
   const resolved = (() => {
     const given = (() => {
+      if (value === false) return undefined
       if (typeof value === 'function') return value()
       if (value) return value
       const configured = context.accessKey()
@@ -76,7 +77,8 @@ export function accessKey(
       if (options.challenge) return undefined
       if (context.config.store?.json && typeof indexedDB !== 'undefined')
         return undefined
-      return context.defaultAccessKey()
+      // A call's own `provision: 'accessKey'` requests the default access key on any instance.
+      return AccessKey.defaultPermissions()
     })()
     if (!given || given.expiry !== undefined) return given
     return { ...given, expiry: AccessKey.defaultExpiry }

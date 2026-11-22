@@ -2047,8 +2047,10 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
 
   const context: Plugin.Context = {
     accessKey,
-    defaultAccessKey: () => (accessKey_option ? undefined : defaultAccessKey()),
-    provision,
+    defaultAccessKey: () =>
+      provision === 'accessKey' && accessKey_option === undefined
+        ? AccessKey_internal.defaultPermissions()
+        : undefined,
     chain: {
       configured: chain.configured,
       get: chain.get,
@@ -2063,6 +2065,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       return undefined
     },
     config,
+    provision,
     session: {
       authorize: session.authorize,
       change: session.change,
@@ -3007,17 +3010,6 @@ export type SessionGet<plugins extends readonly Plugin.Plugin[]> =
     ((
       parameters?: Core.getSession.Parameters,
     ) => Promise<Session.Of<plugins> | undefined>)
-
-/**
- * Returns the access key of each sign-in of an instance without `accessKey`. A function, since a
- * module that imports `AccessKey` first evaluates this module before `AccessKey`'s constants.
- */
-function defaultAccessKey(): Permissions {
-  return {
-    expiry: AccessKey_internal.defaultExpiry,
-    limits: [{ limit: '5', token: 'ousd' }],
-  }
-}
 
 /** Where Tempo ID runs unless `create` receives a `url`. */
 const defaultUrl = 'https://id.tempo.xyz'

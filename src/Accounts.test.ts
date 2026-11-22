@@ -578,16 +578,16 @@ describe('create', () => {
     )
   })
 
-  test('resolves `provision` to `accessKey` by default, and to `wallet` for the deprecated `accessKey: false`, and passes it to plugins', () => {
+  test('resolves `provision` to `accessKey` by default, and to `wallet` for the deprecated `accessKey: false`, and passes it to plugins with the default access key only under `accessKey` without permissions', () => {
     const provision = (options: Accounts.create.Options) => {
-      let seen: Accounts.Provision | undefined
+      let seen: unknown[] = []
       const accounts = Accounts.create({
         ...options,
         clientId: 'client_acme',
         plugins: [
           Plugin.from({
             actions: (context) => {
-              seen = context.provision
+              seen = [context.provision, context.defaultAccessKey()]
               return {}
             },
             id: 'probe',
@@ -595,7 +595,7 @@ describe('create', () => {
         ],
         store: false,
       })
-      return [accounts.config.provision, seen]
+      return [accounts.config.provision, ...seen]
     }
 
     expect([
@@ -609,22 +609,35 @@ describe('create', () => {
         [
           "accessKey",
           "accessKey",
+          {
+            "expiry": "1d",
+            "limits": [
+              {
+                "limit": "5",
+                "token": "ousd",
+              },
+            ],
+          },
         ],
         [
           "wallet",
           "wallet",
+          undefined,
         ],
         [
           "accessKey",
           "accessKey",
+          undefined,
         ],
         [
           "user",
           "user",
+          undefined,
         ],
         [
           "wallet",
           "wallet",
+          undefined,
         ],
       ]
     `)
