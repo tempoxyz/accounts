@@ -2,7 +2,7 @@
  * A payment that `accounts.pay` requests: its shape for a plugin that sends it, and its memo.
  * @module
  */
-import { Hex } from 'ox'
+import { Address, Hex } from 'ox'
 import { RequestError } from '../Accounts.js'
 import type * as Session from '../Session.js'
 
@@ -99,6 +99,32 @@ export function memo(value: string): `0x${string}` {
     field: 'memo',
     message:
       'Invalid `memo`: it holds no byte, or more than 32 bytes. Pass text or hex of 1 to 32 bytes.',
+    status: 0,
+  })
+}
+
+/**
+ * Returns `value`, the recipient of a payment, if it is an address of 20 bytes: in lowercase, or
+ * with the checksum of EIP-55 in mixed case.
+ *
+ * @example
+ * ```ts
+ * const to = Payment.to('0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326')
+ * ```
+ *
+ * @throws {RequestError} `invalid_request` with the reason `invalid_field` and the field `to`,
+ * for any other value, such as `0x123`, a name, or a mixed-case address with a wrong checksum.
+ */
+export function to(value: string): `0x${string}` {
+  if (typeof value === 'string' && Address.validate(value))
+    return value as `0x${string}`
+
+  throw new RequestError({
+    code: 'invalid_request',
+    field: 'to',
+    message:
+      'Invalid `to`: it is no address of 20 bytes, or its checksum is wrong. Pass the address in lowercase, or with its checksum.',
+    reason: 'invalid_field',
     status: 0,
   })
 }

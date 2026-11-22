@@ -423,8 +423,9 @@ export declare namespace get {
  * its handle to the popup, so a popup's call stays pending until `signal` aborts.
  *
  * @throws {RequestError} `invalid_request` with the reason `invalid_field` and the field `amount`
- * for an `amount` that is not a decimal above 0 with at most 6 decimal places, before any page
- * opens. `invalid_request` for a `memo` over 32 bytes, before any page opens, for a `challenge`
+ * for an `amount` that is not a decimal above 0 with at most 6 decimal places, and with the field
+ * `to` for a `to` that is no address, before any page opens. `invalid_request` for a `memo` over
+ * 32 bytes, before any page opens, for a `challenge`
  * that is no Sign-In with Ethereum message for the redirect URI's origin and the payment's chain
  * without resources, and for a return without a transaction hash, an account, or the challenge's
  * signature. `access_denied` when the user rejects the payment.
@@ -455,6 +456,7 @@ export async function pay<const options extends pay.Options>(
 ): Promise<pay.ReturnType<options>> {
   const { account, attempt, challenge, note, to, token } = options
   const amount = Payment.amount(options.amount)
+  Payment.to(to)
   // Text goes on the chain as its UTF-8 bytes, and hex as its own bytes.
   const memo =
     options.memo === undefined ? undefined : Payment.memo(options.memo)
