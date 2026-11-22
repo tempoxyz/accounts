@@ -334,7 +334,9 @@ export declare namespace createUrl {
  * Checks the callback's `state`, and redeems its code for the authorization. Throws a
  * `RequestError` for a URL that is not a valid absolute URL, a forged `state`, a callback without a `code`,
  * or a refused code. If it refuses the token response of a redeemed code, such as one without a key
- * authorization, it revokes the response's refresh token before it throws.
+ * authorization, it revokes the response's refresh token before it throws. An exchange without a
+ * response, such as offline, throws `server_error` with status 0 and `signedIn`. A fault before the
+ * request, such as in the client assertion or the DPoP proof, throws its own error.
  *
  * @example
  * ```ts
@@ -529,7 +531,13 @@ async function redeem(auth: Config, options: redeem.Options) {
 
   // A code with this redirect's `state` shows that the user signed in on Tempo ID's pages, so the
   // browser holds that user's Tempo ID session. A failed exchange then ends the app's earlier session.
-  return await Api.token(auth, {
+  // Only a fetch that rejects is an exchange without a response. A fault before it, such as in the
+  // client assertion or the DPoP proof, keeps its own error.
+  const config = Api.answered(auth, {
+    message:
+      'The code exchange received no response. Check the connection, and sign in again.',
+  })
+  return await Api.token(config, {
     code,
     code_verifier: verifier,
     grant_type: 'authorization_code',
@@ -551,14 +559,7 @@ async function redeem(auth: Config, options: redeem.Options) {
         status: error.status,
       })
     if (error instanceof RequestError) throw signedIn(error)
-    throw new RequestError({
-      cause: error,
-      code: 'server_error',
-      message:
-        'The code exchange received no response. Check the connection, and sign in again.',
-      signedIn: true,
-      status: 0,
-    })
+    throw error
   })
 }
 
