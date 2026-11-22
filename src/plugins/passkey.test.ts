@@ -103,6 +103,41 @@ describe('passkey', () => {
     `)
   })
 
+  test('available and prepare share one GET /v1/realms for concurrent calls, such as the button and the prepared sign-in of one sign-in form', async () => {
+    const paths: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (input, init) => {
+        paths.push(
+          new URL(input instanceof Request ? input.url : input).pathname,
+        )
+        return fetch(input, init)
+      },
+      plugins: [passkey()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const prepared = accounts.passkey.prepare({ accessKey: false })
+    const available = await Promise.all([
+      accounts.passkey.available(),
+      prepared.available,
+    ])
+
+    expect(available).toMatchInlineSnapshot(`
+      [
+        false,
+        false,
+      ]
+    `)
+    expect(paths).toMatchInlineSnapshot(`
+      [
+        "/v1/realms",
+      ]
+    `)
+  })
+
   test('prepare with available sends no GET /v1/realms, and with true requests the options at once', async () => {
     const paths: string[] = []
     const accounts = Accounts.create({

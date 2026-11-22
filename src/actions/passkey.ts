@@ -88,10 +88,12 @@ export function prepare<
   auth: Config,
   options: prepare.Options<accessKey> = {},
 ): prepare.ReturnType<ChainId<accessKey>, HasAccessKey<accessKey>> {
+  // A read in progress, such as of `passkey.available`, answers in its place, so the handle sends no
+  // read of its own.
   const ready =
     options.available === undefined
       ? available(auth).catch(() => false)
-      : Promise.resolve(options.available)
+      : Promise.resolve(options.available).catch(() => false)
   // Requests options only where passkeys sign in, so no request fails on a page without them. A
   // refusal repeats for the same options, so the handle keeps it for the next sign-in, as long as
   // it keeps options.
@@ -170,9 +172,11 @@ export declare namespace prepare {
     /**
      * Whether a passkey sign-in runs on this page, if the app knows it, such as a first-party app
      * on its own origin. The handle then sends no `GET /v1/realms`, and with `true` requests the
-     * options at once. Absent, the handle reads it as {@link available} does.
+     * options at once. A promise of it, such as of a read of {@link available} in progress, takes
+     * the place of the handle's own read, and a rejection reads as `false`. Absent, the handle
+     * reads it as {@link available} does.
      */
-    available?: boolean | undefined
+    available?: boolean | Promise<boolean> | undefined
     /**
      * The chain whose view of the account the sign-in returns, such as a configurable account's
      * address, unless the access key names its own chain. A chain that Tempo ID does not list holds
