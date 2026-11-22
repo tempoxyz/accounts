@@ -1306,7 +1306,7 @@ describe('pay', () => {
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
 
-  test('throws AccessKeyRequiredError for a fixed session whose access key on the chain expired, and sends no request', async () => {
+  test('throws AccessKeyRequiredError for a fixed session whose access key on the chain expired, with a message that names no missing access key request, and sends no request', async () => {
     const owner = Account.fromSecp256k1(
       '0x0123456789012345678901234567890123456789012345678901234567890123',
     )
@@ -1359,6 +1359,9 @@ describe('pay', () => {
 
     expect(error?.name).toMatchInlineSnapshot(
       `"Accounts.AccessKeyRequiredError"`,
+    )
+    expect(error?.message).toMatchInlineSnapshot(
+      `"The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain."`,
     )
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
