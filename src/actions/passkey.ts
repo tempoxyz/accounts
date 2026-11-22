@@ -321,7 +321,11 @@ export async function register<
   const passkey = await Registration.create(
     // ox reads `createFn` beside creation options at runtime, which its types admit only beside flat options.
     createFn ? ({ ...deserialized, createFn } as never) : deserialized,
-  ).catch(Headless.closed)
+  ).catch((error: unknown) =>
+    excluded(error, {
+      excludes: (deserialized.publicKey?.excludeCredentials?.length ?? 0) > 0,
+    }),
+  )
   const credential = Credential.serialize(passkey)
 
   const created = {
@@ -778,6 +782,43 @@ function forget(options: { credentialId: string; rpId: string }) {
       rpId: options.rpId,
     })
     .catch(() => {})
+}
+
+/**
+ * Throws an `InvalidStateError` for a creation that the authenticator refused because it holds one
+ * of the user's passkeys, else what {@link Headless.closed} throws. The browser rejects such a
+ * creation with an `InvalidStateError`, which ox wraps. The error holds ox's error as its `cause`.
+ * It is an `Error`, since Hermes has no `DOMException`.
+ */
+function excluded(error: unknown, options: excluded.Options): never {
+  const cause = (error as excluded.Wrapped | undefined)?.cause
+
+  // Chromium also rejects a creation with an `InvalidStateError` while another ceremony is pending.
+  if (
+    options.excludes &&
+    cause?.name === 'InvalidStateError' &&
+    !/pending/i.test(cause.message ?? '')
+  )
+    throw Object.assign(
+      new Error(
+        'The authenticator already holds a passkey of the user. Sign in with that passkey, or register on another authenticator.',
+      ),
+      { cause: error, name: 'InvalidStateError' },
+    )
+  return Headless.closed(error)
+}
+
+declare namespace excluded {
+  type Options = {
+    /** Whether the creation options exclude at least one passkey. */
+    excludes: boolean
+  }
+
+  /** The error of a failed ceremony, which holds the browser's rejection. */
+  type Wrapped = {
+    /** The browser's rejection. */
+    cause?: { message?: string | undefined; name?: unknown } | undefined
+  }
 }
 
 /** The error message of a registration request without a response, before Tempo ID stores the passkey. */
