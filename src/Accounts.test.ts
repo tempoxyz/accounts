@@ -5018,4 +5018,66 @@ describe('Plugin.Context.session.reload', () => {
       }
     `)
   })
+
+  test("adopts another context's sign-out, and reads none of the revocation entries", async () => {
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const memory = Store.memory()
+    const calls: string[] = []
+    const store = Store.from({
+      ...memory,
+      getItem: (key) => {
+        calls.push(`getItem ${key.slice(name.length)}`)
+        return memory.getItem(key)
+      },
+      lock: (key, fn) => {
+        calls.push(`lock ${key.slice(name.length)}`)
+        return memory.lock!(key, fn)
+      },
+    })
+    const contexts: Plugin.Context[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      plugins: [
+        Plugin.from({
+          id: 'record',
+          setup(context) {
+            contexts.push(context)
+          },
+        }),
+      ],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+    const [context] = contexts
+
+    // Another process's sign-out empties the store, and revoked the stored refresh token.
+    await memory.setItem(name, { state: {}, version: 0 })
+    calls.length = 0
+    const reloaded = await context!.session.reload()
+    // A later hold of the lock runs after any hold that the reload queued.
+    await context!.session.exclusive(() => Promise.resolve())
+
+    expect({ calls, reloaded }).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "getItem ",
+        ],
+        "reloaded": undefined,
+      }
+    `)
+  })
 })
