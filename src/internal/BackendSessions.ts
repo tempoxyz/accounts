@@ -1288,7 +1288,8 @@ function fresh(stored: StoredTempoId) {
 
 /**
  * Returns whether the session serves without a refresh: a SIWE session before its expiry, or a
- * session whose access token is fresh and whose access key holds.
+ * session whose access key holds and whose access token is fresh. A session without a refresh token
+ * never refreshes, so it serves until its access token expires, without the store's `lock`.
  */
 /** Returns whether `stored` holds a refresh token that renews it. */
 function renewable(stored: Stored) {
@@ -1309,9 +1310,9 @@ function serves(stored: Stored) {
 
 function usable(stored: Stored) {
   if (stored.method === 'siwe') return stored.expiresAt > Date.now()
-  return (
-    fresh(stored) && !(stored.accessKey && AccessKey.expired(stored.accessKey))
-  )
+  if (stored.accessKey && AccessKey.expired(stored.accessKey)) return false
+  if (!stored.refreshToken) return stored.expiresAt > Date.now()
+  return fresh(stored)
 }
 
 /**
