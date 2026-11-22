@@ -19,6 +19,47 @@ const owner = Account.fromSecp256k1(
   '0x0123456789012345678901234567890123456789012345678901234567890123',
 )
 
+describe('authorize', () => {
+  test('sends the authorization with no check of the Tempo ID session, for an instance that holds a session', async () => {
+    const memory = Store.memory()
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
+      fetch: (input, init) => {
+        const url = new URL(String(input))
+        if (url.pathname.startsWith('/v1/'))
+          requests.push(`${init?.method ?? 'GET'} ${url.pathname}`)
+        return globalThis.fetch(input, init)
+      },
+      redirectUri: 'https://app.example/',
+      store: memory,
+      url: 'https://id.invalid',
+    })
+    await memory.setItem(
+      'tempo-id:session:["https://id.invalid","tempo-example-web",42431]',
+      {
+        state: {
+          session: await expired({
+            accessToken: 'a',
+            expiresIn: 3_600_000,
+            valid: true,
+          }),
+        },
+        version: 0,
+      },
+    )
+
+    await accounts.authorize({ accessKey: false }).catch(() => undefined)
+
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        "POST /v1/authorize",
+      ]
+    `)
+  })
+})
+
 describe('getSession', () => {
   test('shows no authorization for a call with `reauthorize` after a sign-out without `everywhere`', async () => {
     const accounts = Accounts.create({
