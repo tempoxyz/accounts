@@ -60,7 +60,7 @@ describe('resolve', () => {
 
     const resolved = Release.resolve({ base, cwd, latest: '0.21.1', sha })
 
-    expect(resolved?.version).toMatchInlineSnapshot(`"1.20261118190300.0"`)
+    expect(resolved?.version).toMatchInlineSnapshot(`"1.0.20261118190300"`)
     expect(resolved?.notes).toMatchInlineSnapshot(`
       "### Features
 
@@ -69,19 +69,51 @@ describe('resolve', () => {
     `)
   })
 
-  test('keeps the breaking number for a feature or fix', () => {
+  test('keeps the minor number for a fix', () => {
     const { commit, cwd } = repository()
     const base = commit('feat: add Tab (#1)')
     commit('fix: pad Tab (#2)')
     const sha = commit('Revert "feat: add Tab" (#3)')
 
     expect(
-      Release.resolve({ base, cwd, latest: '1.20261118190100.0-abcdef12', sha })
+      Release.resolve({ base, cwd, latest: '1.3.20261118190100', sha })
         ?.version,
-    ).toMatchInlineSnapshot(`"1.20261118190300.0"`)
+    ).toMatchInlineSnapshot(`"1.3.20261118190300"`)
   })
 
-  test('raises the breaking number for a breaking title or body', () => {
+  test('raises the minor number for a feature', () => {
+    const { commit, cwd } = repository()
+    const base = commit('feat: add Tab (#1)')
+    commit('fix: pad Tab (#2)')
+    const sha = commit('feat(web): add Tabs (#3)')
+
+    expect(
+      Release.resolve({ base, cwd, latest: '1.3.20261118190100', sha })
+        ?.version,
+    ).toMatchInlineSnapshot(`"1.4.20261118190300"`)
+  })
+
+  test('starts at 1.0 after the versions of the scheme before', () => {
+    const { commit, cwd } = repository()
+    const base = commit('feat: add Tab (#1)')
+    const sha = commit('feat: add Tabs (#2)')
+    const breaking = commit('feat!: rename Tab (#3)')
+
+    expect(
+      Release.resolve({ base, cwd, latest: '2.20261118190100.0', sha })
+        ?.version,
+    ).toMatchInlineSnapshot(`"1.0.20261118190200"`)
+    expect(
+      Release.resolve({
+        base,
+        cwd,
+        latest: '2.20261118190100.0',
+        sha: breaking,
+      })?.version,
+    ).toMatchInlineSnapshot(`"1.0.20261118190300"`)
+  })
+
+  test('raises the breaking number and resets the minor number for a breaking title or body', () => {
     const { commit, cwd } = repository()
     const first = commit('feat: add Tab (#1)')
     const title = commit('feat(web)!: rename Tab (#2)')
@@ -91,18 +123,18 @@ describe('resolve', () => {
       Release.resolve({
         base: first,
         cwd,
-        latest: '1.20261118190100.0-abcdef12',
+        latest: '1.4.20261118190100',
         sha: title,
       })?.version,
-    ).toMatchInlineSnapshot(`"2.20261118190200.0"`)
+    ).toMatchInlineSnapshot(`"2.0.20261118190200"`)
     expect(
       Release.resolve({
         base: title,
         cwd,
-        latest: '2.20261118190200.0-abcdef12',
+        latest: '2.0.20261118190200',
         sha: body,
       })?.version,
-    ).toMatchInlineSnapshot(`"3.20261118190300.0"`)
+    ).toMatchInlineSnapshot(`"3.0.20261118190300"`)
   })
 
   test('reads a breaking title past its dogfood prefix', () => {
@@ -111,9 +143,9 @@ describe('resolve', () => {
     const sha = commit('dogfood: feat(dialog)!: rename Tab (#2)')
 
     expect(
-      Release.resolve({ base, cwd, latest: '1.20261118190100.0-abcdef12', sha })
+      Release.resolve({ base, cwd, latest: '1.0.20261118190100', sha })
         ?.version,
-    ).toMatchInlineSnapshot(`"2.20261118190200.0"`)
+    ).toMatchInlineSnapshot(`"2.0.20261118190200"`)
   })
 
   test('reads a commit body that holds separators', () => {
@@ -158,7 +190,7 @@ describe('resolve', () => {
     expect(
       Release.resolve({ base, cwd, force: true, latest: '0.21.1', sha })
         ?.version,
-    ).toMatchInlineSnapshot(`"1.20261118190200.0"`)
+    ).toMatchInlineSnapshot(`"1.0.20261118190200"`)
   })
 
   test('lists only its own commit without a base', () => {
@@ -173,28 +205,38 @@ describe('resolve', () => {
       `)
   })
 
-  test('keeps the breaking number for a breaking title without a base', () => {
+  test('keeps the breaking and minor numbers for a breaking title without a base', () => {
     const { commit, cwd } = repository()
     const sha = commit('feat!: replace the package (#984)')
 
     const resolved = Release.resolve({
       cwd,
-      latest: '1.20261118190000.0-abcdef12',
+      latest: '1.4.20261118190000',
       sha,
     })
 
-    expect(resolved?.version.split('.')[0]).toMatchInlineSnapshot(`"1"`)
+    expect(resolved?.version).toMatchInlineSnapshot(`"1.4.20261118190100"`)
   })
 
-  test('raises the last number for a release in the same second as the latest', () => {
+  test('raises the time for a release in the same second as the latest', () => {
     const { commit, cwd } = repository()
     const base = commit('feat: add Tab (#1)')
     const sha = commit('fix: pad Tab (#2)')
+    const breaking = commit('feat!: rename Tab (#3)')
 
     expect(
-      Release.resolve({ base, cwd, latest: '1.20261118190200.0', sha })
+      Release.resolve({ base, cwd, latest: '1.1.20261118190200', sha })
         ?.version,
-    ).toMatchInlineSnapshot(`"1.20261118190200.1"`)
+    ).toMatchInlineSnapshot(`"1.1.20261118190201"`)
+    // A raised breaking number sorts above the latest at any time.
+    expect(
+      Release.resolve({
+        base,
+        cwd,
+        latest: '1.1.20261118190500',
+        sha: breaking,
+      })?.version,
+    ).toMatchInlineSnapshot(`"2.0.20261118190300"`)
   })
 
   test('refuses a pull request prerelease as the latest version', () => {
@@ -262,10 +304,14 @@ describe('previous', () => {
       '1.20261118190100.0-aaaa1111': '2026-11-18T19:02:00.000Z',
       '1.20261118190200.0': '2026-11-18T19:03:00.000Z',
       '1.20261118190200.1': '2026-11-18T19:04:00.000Z',
+      '1.1.20261118190500': '2026-11-18T19:06:00.000Z',
       // A patch of the 0.x line, published later, never counts.
       '0.21.2': '2026-11-18T19:03:30.000Z',
     }
 
+    expect(
+      Release.previous(times, { latest: '1.1.20261118190500' }),
+    ).toMatchInlineSnapshot(`"1.20261118190200.1"`)
     expect(
       Release.previous(times, { latest: '1.20261118190200.1' }),
     ).toMatchInlineSnapshot(`"1.20261118190200.0"`)
