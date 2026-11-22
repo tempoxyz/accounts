@@ -1143,7 +1143,9 @@ export type Accounts<
      * neither the store nor Tempo ID. Outside a page, a payment that the access key does not send,
      * such as one above its limits, throws `Actions.account.PageRequiredError` once the access key's
      * attempt ends. A payment above what is left of a limit, which only the node knows, throws it
-     * with the node's refusal as its `cause`. A session without a live access key on the payment's chain, such as one whose access key
+     * with the node's refusal as its `cause`. On an instance without a plugin that sends a payment,
+     * such as `viem`, it throws at once outside a page, with a message that names the missing plugin.
+     * A session without a live access key on the payment's chain, such as one whose access key
      * expired, throws {@link AccessKeyRequiredError} before any request, also with `account`. An `account` other than
      * that access key's account throws {@link RequestError} with the reason `invalid_field` and the
      * field `account`. With `challenge`, the call ignores `session`.
@@ -2434,6 +2436,16 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         }
         return undefined
       }
+      // Outside a page, only a plugin sends the payment, so an instance without one names that fix
+      // rather than a sign-in, which would send nothing either.
+      if (
+        typeof document === 'undefined' &&
+        !plugins.some((plugin) => plugin.hooks?.pay)
+      )
+        throw new AccountActions.PageRequiredError({
+          payment: true,
+          sender: false,
+        })
       // The payment page loads in a hidden dialog while a plugin sends, and shows only if none sent.
       return await AccountActions.pay(config, { ...payment, attempt: send(0) })
     },
