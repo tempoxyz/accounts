@@ -4,7 +4,7 @@
  * @module
  */
 import { KeyAuthorization } from 'ox/tempo'
-import { type Provision, RequestError } from '../Accounts.js'
+import { RequestError } from '../Accounts.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
@@ -43,33 +43,28 @@ export type External = Permissions & {
 }
 
 /**
- * Returns the access key of a sign-in, or `undefined` for a sign-in without an access key. Only a
- * sign-in under the `accessKey` {@link provision} has one. An access key without `expiry` expires
- * `AccessKey.defaultExpiry` after the sign-in. The default access key of an instance without
- * `accessKey` applies only to a sign-in without a challenge, on a store that can keep it. Throws a
- * `TypeError` for an access key beside a `provision` other than `accessKey`, and on a page whose
- * instance's `store` has `json`, for an access key that the sign-in generates, before any request.
+ * Returns the access key of a sign-in, or `undefined` for a sign-in without an access key, such as
+ * one without a Tempo Account. An access key without `expiry` expires `AccessKey.defaultExpiry`
+ * after the sign-in. The default access key of an instance without `accessKey` applies only to a
+ * sign-in without a challenge, on a store that can keep it. Throws a `TypeError` for an access key
+ * beside `account: false`, and on a page whose instance's `store` has `json`, for an access key
+ * that the sign-in generates, before any request.
  */
 export function accessKey(
   context: Plugin.Context,
   value: AccessKeyOption_external,
   options: accessKey.Options = {},
 ): Permissions | External | undefined {
-  if (
-    provision(context, { accessKey: value, provision: options.provision }) !==
-    'accessKey'
-  ) {
-    if (value)
-      throw new TypeError(
-        `Conflicting options: \`accessKey\` describes an access key, which \`provision: "${options.provision}"\` creates none of. Remove \`accessKey\`, or remove \`provision\`.`,
-      )
-    return undefined
-  }
+  if (options.account === false && value)
+    throw new TypeError(
+      'Conflicting options: `accessKey` describes an access key for a Tempo Account, which `account: false` creates none of. Remove `accessKey`, or remove `account`.',
+    )
   const resolved = (() => {
     const given = (() => {
       if (value === false) return undefined
       if (typeof value === 'function') return value()
       if (value) return value
+      if (options.account === false) return undefined
       const configured = context.accessKey()
       if (configured) return configured
       // With the default access key, the challenge's signature would sign the key authorization,
@@ -77,8 +72,7 @@ export function accessKey(
       if (options.challenge) return undefined
       if (context.config.store?.json && typeof indexedDB !== 'undefined')
         return undefined
-      // A call's own `provision: 'accessKey'` requests the default access key on any instance.
-      return AccessKey.defaultPermissions()
+      return context.defaultAccessKey()
     })()
     if (!given || given.expiry !== undefined) return given
     return { ...given, expiry: AccessKey.defaultExpiry }
@@ -102,58 +96,55 @@ export function accessKey(
 
 export declare namespace accessKey {
   type Options = {
+    /** The sign-in's own `account`. `false` requests no access key. */
+    account?: boolean | undefined
     /** Whether the sign-in carries a challenge. Defaults to `false`. */
     challenge?: boolean | undefined
-    /** The sign-in's own `provision`. Absent, {@link provision} decides. */
-    provision?: Provision | undefined
   }
 }
 
 /**
- * Returns what a sign-in creates: its own `provision`, else `accessKey` for a sign-in that names an
- * access key, else `wallet` for one with `accessKey: false` on an instance that provisions more,
- * else the instance's `provision`.
+ * Returns whether a sign-in returns the user's Tempo Account: its own `account`, else `true` for a
+ * sign-in that names an access key, else the instance's `account`.
  */
-export function provision(
-  context: Pick<Plugin.Context, 'provision'>,
-  options: provision.Options,
-): Provision {
-  if (options.provision) return options.provision
-  if (options.accessKey === false)
-    return context.provision === 'user' ? 'user' : 'wallet'
-  if (options.accessKey) return 'accessKey'
-  return context.provision
+export function withAccount(
+  context: Pick<Plugin.Context, 'config'>,
+  options: withAccount.Options,
+): boolean {
+  if (options.account !== undefined) return options.account
+  if (options.accessKey) return true
+  return context.config.account !== false
 }
 
-export declare namespace provision {
+export declare namespace withAccount {
   type Options = {
     /** The sign-in's own `accessKey`. */
     accessKey?: AccessKeyOption_external
-    /** The sign-in's own `provision`. */
-    provision?: Provision | undefined
+    /** The sign-in's own `account`. */
+    account?: boolean | undefined
   }
 }
 
 /**
- * The `accessKey` and `provision` of a sign-in. An access key applies only beside the `accessKey`
- * provision, so the type refuses one beside `user` or `wallet`.
+ * The `accessKey` and `account` of a sign-in. An access key acts for a Tempo Account, so the type
+ * refuses one beside `account: false`.
  */
-export type Provisioned<accessKey> =
+export type AccountOption<accessKey> =
   | {
       accessKey?: accessKey
       /**
-       * What the sign-in creates, in place of the instance's `provision`. Absent, a sign-in that
-       * names an access key provisions `accessKey`.
+       * Whether the sign-in returns the user's Tempo Account. Defaults to `true` for a sign-in that
+       * names an access key, else to the instance's `account`.
        */
-      provision?: 'accessKey' | undefined
+      account?: true | undefined
     }
   | {
       accessKey?: false | undefined
       /**
-       * What the sign-in creates, in place of the instance's `provision`: `user` creates no Tempo
-       * Account and no access key, and `wallet` creates no access key.
+       * Signs the user in without a Tempo Account and without an access key, in place of the
+       * instance's `account`.
        */
-      provision: 'user' | 'wallet'
+      account: false
     }
 
 /** Returns the session of a sign-in's result: its tokens, its user, its access key, and its account. */

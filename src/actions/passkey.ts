@@ -166,8 +166,7 @@ export declare namespace prepare {
     /**
      * `false` leaves out `account`, so Tempo ID reads no Tempo Accounts. `true` returns the user's
      * Tempo Account in the realms of the app, as `Actions.account.get` does, on the chain of the
-     * access key, so no read follows it. Defaults to `false` under the `user` provision of `auth`,
-     * else `true`.
+     * access key, so no read follows it. Defaults to the `account` of `auth`, else `true`.
      */
     account?: boolean | undefined
     /**
@@ -957,7 +956,7 @@ async function verify(auth: Config, options: verify.Options) {
       headers: await Headless.redemption(auth),
       json: {
         assertion,
-        ...((prepared.request.account ?? auth.provision !== 'user') === false
+        ...((prepared.request.account ?? auth.account) === false
           ? { tempo: false }
           : chain !== undefined
             ? { account: { chain } }

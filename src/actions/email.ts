@@ -179,7 +179,7 @@ export async function signIn<
           code,
           email,
           ...(options.registration ? { registration: true } : {}),
-          ...((options.account ?? auth.provision !== 'user') === false
+          ...((options.account ?? auth.account) === false
             ? { tempo: false }
             : withChain && chain !== undefined
               ? { account: { chain } }
@@ -332,8 +332,8 @@ export declare namespace signIn {
     /**
      * `false` leaves out `account` and `accounts`, so Tempo ID reads no Tempo Accounts. `true`
      * returns the user's Tempo Account in the realms of the app, as `Actions.account.get` does, on
-     * the chain of the access key. A user without one receives one. Defaults to `false` under the
-     * `user` provision of `auth`, else `true`.
+     * the chain of the access key. A user without one receives one. Defaults to the `account` of
+     * `auth`, else `true`.
      */
     account?: boolean | undefined
     /**

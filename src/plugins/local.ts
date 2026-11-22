@@ -71,16 +71,15 @@ export class StoreRequiredError extends Error {
 }
 
 /**
- * Thrown by a sign-in that names no access key, of an instance whose `provision` is `user` or
- * `wallet`, such as with the deprecated `accessKey: false`. The owner key signs only access keys, so
- * a local session without one could not send.
+ * Thrown by a sign-in of an instance with `accessKey: false` or `account: false`. The owner key
+ * signs only access keys, so a local session without one could not send.
  */
 export class AccessKeyDisabledError extends Error {
   override readonly name = 'Plugins.local.AccessKeyDisabledError'
 
   constructor() {
     super(
-      'The instance requests no access key (`provision: "user"` or `"wallet"`), and a local session sends only with one. Pass `accessKey` to the sign-in, or create the instance with `provision: "accessKey"`.',
+      'The instance requests no access key (`accessKey: false` or `account: false`), and a local session sends only with one. Pass `accessKey` to the sign-in, or drop the option.',
     )
   }
 }

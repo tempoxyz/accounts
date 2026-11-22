@@ -217,16 +217,19 @@ async function run(
 
   // The response lists the access key's account on the access key's chain. The session holds the
   // account on the instance's chain, so an access key on another chain leaves it out. Without an
-  // access key, the session reads the account that Tempo ID selects.
-  const account =
-    'accessKey' in result
-      ? result.accessKey.chainId === config.chainId
+  // access key, the session reads the account that Tempo ID selects, unless the instance signs
+  // users in without one.
+  const account = await (async () => {
+    if ('accessKey' in result)
+      return result.accessKey.chainId === config.chainId
         ? result.account
         : undefined
-      : await SignIn.account(config, {
-          getFn: (parameters.getFn ?? config.getFn) as never,
-          userId: result.user.id,
-        }).catch(change.fail)
+    if (config.account === false) return undefined
+    return await SignIn.account(config, {
+      getFn: (parameters.getFn ?? config.getFn) as never,
+      userId: result.user.id,
+    }).catch(change.fail)
+  })()
   // A renewal that Tempo ID grants with the derived expiry keeps the requested lifetime. The time
   // left at the response is shorter by the request's latency, which repeated renewals add up.
   const session = (() => {

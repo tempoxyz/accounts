@@ -11,19 +11,10 @@ import {
 import type { OneOf } from 'viem'
 import { Account, Secp256k1 } from 'viem/tempo'
 import { RequestError } from '../Accounts.js'
-import type { Permissions, WithAccount } from '../Permissions.js'
+import type { WithAccount } from '../Permissions.js'
 
 /** The expiry of a sign-in's access key that names none. */
 export const defaultExpiry = '1d' as const
-
-/**
- * Returns the access key of a sign-in under the `accessKey` provision whose instance and call name
- * none: up to 5 OUSD for a day. A function, since a module that imports `AccessKey` first evaluates
- * the module that imports it before `defaultExpiry`.
- */
-export function defaultPermissions(): Permissions {
-  return { expiry: defaultExpiry, limits: [{ limit: '5', token: 'ousd' }] }
-}
 
 /**
  * An app's access key, as the session holds it. A browser access key is a non-extractable WebCrypto

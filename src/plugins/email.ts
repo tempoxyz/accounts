@@ -104,9 +104,10 @@ export function email(options: email.Options = {}) {
          * ceremony. If that ceremony fails, the session still holds the passkey's account and its
          * access key, and the call throws the failure.
          *
-         * Under the `user` provision, of the instance or of the call, the sign-in reads no Tempo
-         * Account, and the session holds none. Tempo ID then creates no Tempo Account on the page's
-         * sign-in. A backend's sign-in creates one, unless the app's first account is `none`.
+         * With `account: false`, of the instance or of the call, the sign-in requests no access key
+         * and reads no Tempo Account, and the session holds none. Tempo ID then creates no Tempo
+         * Account on the page's sign-in. A backend's sign-in creates one, unless the app's first
+         * account is `none`.
          *
          * A refusal of Tempo ID after the sign-in has `signedIn: true`, and empties the session. On a
          * page, a response that the call refuses after the sign-in, such as one without the
@@ -235,15 +236,11 @@ export function email(options: email.Options = {}) {
           await loading
           const { challenge, code, link, userIp } = parameters
           const accessKey = SignIn.accessKey(context, parameters.accessKey, {
+            account: parameters.account,
             challenge: challenge !== undefined,
-            provision: parameters.provision,
           })
-          // Under `user`, the sign-in reads no Tempo Account, so Tempo ID creates none on the read.
-          const user =
-            SignIn.provision(context, {
-              accessKey: parameters.accessKey,
-              provision: parameters.provision,
-            }) === 'user'
+          // Without a Tempo Account, the sign-in reads none, so Tempo ID creates none on the read.
+          const account = SignIn.withAccount(context, parameters)
           const getFn = options.getFn ?? config.getFn
           const { createFn } = options
 
@@ -266,7 +263,7 @@ export function email(options: email.Options = {}) {
             const skipped = (unlisted.get(chain) ?? 0) > Date.now()
             const request = {
               accessKey,
-              account: !user,
+              account,
               chainId: config.chainId,
               ...(skipped ? { chainListed: false as const } : {}),
               challenge,
@@ -294,7 +291,12 @@ export function email(options: email.Options = {}) {
           // session without the account, since the user is signed in.
           const userId = result.user.id
           const fallback = await (async () => {
-            if (backend || user || 'account' in result || 'accessKey' in result)
+            if (
+              backend ||
+              !account ||
+              'account' in result ||
+              'accessKey' in result
+            )
               return undefined
             return await SignIn.account(config, { getFn, userId }).catch(
               () => undefined,
@@ -395,11 +397,10 @@ export declare namespace email {
     }
 
     /** The parameters of both modes. */
-    type Shared = SignIn.Provisioned<SignIn.AccessKeyOption_external> & {
+    type Shared = SignIn.AccountOption<SignIn.AccessKeyOption_external> & {
       /**
        * The access key to request: what it may do, a function that returns it, or `false` for a
-       * sign-in without an access key. Defaults to the instance's `accessKey`, under the `accessKey`
-       * provision.
+       * sign-in without an access key. Defaults to the instance's `accessKey`.
        *
        * With `publicKey`, the sign-in authorizes another app's access key, whose private key that
        * app holds, such as the access key of an app whose dialog a wallet shows. The session then

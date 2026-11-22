@@ -2,11 +2,7 @@
  * The plugin of sign-in with the device grant (RFC 8628), such as for a CLI.
  * @module
  */
-import {
-  type Config,
-  AccessKeyRequiredError,
-  SupersededError,
-} from '../Accounts.js'
+import { type Config, SupersededError } from '../Accounts.js'
 import * as DeviceActions from '../actions/device.js'
 import type * as Funding from '../internal/Funding.js'
 import * as SignIn from '../internal/SignIn.js'
@@ -99,17 +95,11 @@ export function device(options: device.Options = {}) {
         // The request names the instance's chain, so the stored selection loads first. A failed read
         // keeps the chain.
         await context.chain.load().catch(() => undefined)
+        // A grant without an access key or a challenge only signs the user in.
         const accessKey = SignIn.accessKey(context, parameters.accessKey, {
+          account: parameters.account,
           challenge: parameters.challenge !== undefined,
-          provision: parameters.provision,
         })
-        // Under `user` or `wallet`, a grant without an access key or a challenge only signs in.
-        if (
-          !accessKey &&
-          parameters.challenge === undefined &&
-          SignIn.provision(context, parameters) === 'accessKey'
-        )
-          throw new AccessKeyRequiredError()
 
         // An abort rejects the code request and `onCode` at once. The wait lets a poll in flight
         // finish, so an approval that it carries reaches the caller, which revokes its tokens. React
@@ -246,7 +236,6 @@ export function device(options: device.Options = {}) {
          * retry, which keeps it only for the same user and Tempo Account. It takes the parameters of
          * `device.signIn`, and `signal`, which stops the polls. An aborted call shows no code.
          *
-         * @throws {Accounts.AccessKeyRequiredError} As `device.signIn` throws it.
          * @throws {Accounts.RequestError} As `device.signIn` throws it.
          * @throws {Plugins.device.OnCodeRequiredError} Without the plugin's `onCode`.
          *
@@ -261,10 +250,10 @@ export function device(options: device.Options = {}) {
         /**
          * Starts the device grant, and passes its code to `onCode`. It then polls until the user
          * approves the code, sets the instance's session, and returns it. The session holds no Tempo
-         * Account. Under the `accessKey` provision, the grant requests an access key, unless it
-         * carries `challenge`, which the account then signs as the session's `challengeSignature`.
-         * Under `user` or `wallet`, the grant requests no access key, and without `challenge` only
-         * signs the user in. Tempo ID creates a Tempo Account for a user without one, unless the
+         * Account. The grant requests the access key of the call or the instance, unless it carries
+         * `challenge`, which the account then signs as the session's `challengeSignature`. A grant
+         * without an access key or a challenge, such as with `accessKey: false` or `account: false`,
+         * only signs the user in. Tempo ID creates a Tempo Account for a user without one, unless the
          * app's first account is `none`.
          *
          * If a poll fails with a network error, a rate limit, or a server error, the wait doubles
@@ -275,9 +264,6 @@ export function device(options: device.Options = {}) {
          * further poll, changes no session, and rejects with the signal's reason. A poll in flight
          * finishes, and an approval that it carries signs in.
          *
-         * @throws {Accounts.AccessKeyRequiredError} Before any request, under the `accessKey`
-         *   provision, when neither the call nor the instance names an access key, and the call
-         *   passes no `challenge`, such as for an instance `accessKey` function that returns none.
          * @throws {Accounts.RequestError} When Tempo ID refuses the code request, with one of these
          *   `reason` values, which [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md)
          *   describes:
@@ -534,12 +520,11 @@ export declare namespace device {
   }
 
   namespace signIn {
-    type Parameters = SignIn.Provisioned<SignIn.AccessKeyOption> & {
+    type Parameters = SignIn.AccountOption<SignIn.AccessKeyOption> & {
       /**
        * The access key to request: what it may do, a function that returns it, or `false` for a
-       * sign-in without an access key, as `provision: 'wallet'` does. Defaults to the instance's
-       * `accessKey`, under the `accessKey` provision. With `challenge`, the account signs the
-       * challenge alone.
+       * sign-in without an access key. Defaults to the instance's `accessKey`. With `challenge`,
+       * `false` requests none, and the account signs the challenge alone.
        */
       accessKey?: SignIn.AccessKeyOption
       /**

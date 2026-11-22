@@ -482,7 +482,7 @@ export const accounts = Accounts.create({
 
 ### Sign in without a wallet
 
-<SourceLink name="Config.provision" path="src/Accounts.ts">`provision`</SourceLink> sets what a sign-in creates. With `'user'`, the device grant requests no access key, and the session holds only the user and the tokens. Tempo ID creates no Tempo Account for an app whose [first account](https://github.com/tempoxyz/id/blob/main/docs/realms.md#apps-without-a-first-account) is `none`. With `'wallet'`, the user receives a Tempo Account, and no access key.
+With <SourceLink name="Config.account" path="src/Accounts.ts">`account: false`</SourceLink>, the device grant requests no access key, and the session holds only the user and the tokens. Tempo ID creates no Tempo Account for an app whose [first account](https://github.com/tempoxyz/id/blob/main/docs/realms.md#apps-without-a-first-account) is `none`. With `accessKey: false`, the user receives a Tempo Account, and no access key.
 
 :::code-group
 
@@ -498,6 +498,7 @@ import { Accounts } from 'accounts'
 import { device } from 'accounts/plugins'
 
 export const accounts = Accounts.create({
+  account: false, // [!code hl]
   chain: 'testnet',
   clientId: 'cli:acme-example',
   plugins: [
@@ -508,7 +509,6 @@ export const accounts = Accounts.create({
         ),
     }),
   ],
-  provision: 'user', // [!code hl]
 })
 ```
 

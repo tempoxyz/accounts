@@ -18,12 +18,12 @@ import {
 
 /**
  * The demo's instance. The page's origin is its client ID, so the site needs no registration. The
- * instance sets `provision: 'wallet'`, since the demo signs no transaction.
+ * sign-in passes `accessKey: false`, since the demo signs no transaction.
  */
 export const accounts = Accounts.create({
+  accessKey: false,
   chain: 'testnet',
   plugins: [react()],
-  provision: 'wallet',
 })
 
 /** An action of the demo: the sign-in, or a call with or without the access token. */

@@ -50,8 +50,6 @@ import type * as TempoAccount from './internal/TempoAccount.js'
  * the sign-in requested no access key, its access key expired, or its access key acts on another
  * chain. Thrown in these cases:
  *
- * - `device.signIn` under the `accessKey` provision, when neither the call nor the instance names
- *   an access key, and the call carries no challenge.
  * - A transaction from the account of a `viem` client whose session holds no access key, outside a
  *   page, or with `retry.accessKey` off for a session with an access key on another chain.
  * - `accounts.viem({ session })` for a session without an access key.
@@ -489,6 +487,14 @@ export class SupersededError extends Error {
  * it with its defaults, and an instance holds it as `accounts.config`.
  */
 export type Config = {
+  /**
+   * `false` signs users in without a Tempo Account: each sign-in requests no access key, and the
+   * actions of `Actions` read no Tempo Account, as with their own `account: false`. A page's or a
+   * device's sign-in then creates none. A backend's sign-in creates one, unless the app's
+   * [first account](https://github.com/tempoxyz/id/blob/main/docs/realms.md#apps-without-a-first-account)
+   * is `none`. Absent, each sign-in returns the user's Tempo Account.
+   */
+  account?: false | undefined
   /** The chain of the app's access keys, unless a sign-in's `accessKey` names another. */
   chainId: number
   /**
@@ -556,19 +562,6 @@ export type Config = {
    */
   par?: boolean | undefined
   /**
-   * What a sign-in creates for the user. Each value includes the one before it:
-   *
-   * - `user`: the Tempo ID user alone, with no Tempo Account and no access key.
-   * - `wallet`: also the user's Tempo Account, with no access key.
-   * - `accessKey`: also an access key for the app.
-   *
-   * Defaults to `accessKey`. Under `user`, the actions of `Actions` read no Tempo Account, as
-   * with `account: false`. Tempo ID still creates a Tempo Account for an app whose
-   * [first account](https://github.com/tempoxyz/id/blob/main/docs/realms.md#apps-without-a-first-account)
-   * is not `none`, on a sign-in that its pages or a backend complete.
-   */
-  provision?: Provision | undefined
-  /**
    * Where Tempo ID redirects back to, such as a mobile app's custom scheme. Register it with the
    * app first. Defaults to the page's origin in a browser. Outside a browser, a redirect sign-in
    * without it throws {@link RedirectUriRequiredError}.
@@ -621,12 +614,6 @@ export type Config = {
    */
   url: string
 }
-
-/**
- * What a sign-in creates for the user: `user`, the user alone, `wallet`, also a Tempo Account, or
- * `accessKey`, also an access key. See `Config.provision`.
- */
-export type Provision = 'accessKey' | 'user' | 'wallet'
 
 /**
  * A Tempo ID instance: its configuration, its session, and the namespace of each plugin. Each
@@ -1728,11 +1715,11 @@ export declare namespace from {
  * instead.
  *
  * Without `accessKey`, each sign-in without a challenge requests an access key that may transfer up
- * to 5 OUSD, and expires a day after the sign-in. `provision: 'wallet'` or `provision: 'user'`
- * requests none.
+ * to 5 OUSD, and expires a day after the sign-in. `accessKey: false` requests none. `account: false`
+ * signs users in without a Tempo Account and without an access key.
  *
- * @throws {TypeError} For `accessKey` permissions beside a `provision` other than `accessKey`, or
- *   for `accessKey: false` beside `provision`.
+ * @throws {TypeError} For `accessKey` beside `account: false`.
+ *
  * @throws {ClientIdRequiredError} Outside a browser without `clientId`, where no page's origin can
  *   serve as one.
  * @throws {ChainNameInvalidError} For a `chain` that is neither `mainnet`, `testnet`, nor a chain
@@ -1788,18 +1775,11 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     ...named.map((plugin) => plugin.config?.()),
     given,
   ) as from.Options
-  // Permissions describe an access key, which only the `accessKey` provision creates.
-  // `accessKey: false` is the deprecated form of `provision: 'wallet'`.
-  if (
-    merged.provision !== undefined &&
-    accessKey_option !== undefined &&
-    (merged.provision !== 'accessKey' || accessKey_option === false)
-  )
+  // An access key acts for a Tempo Account, which an instance with `account: false` holds none of.
+  if (merged.account === false && accessKey_option !== undefined)
     throw new TypeError(
-      `Conflicting options: \`accessKey\` describes an access key, which only \`provision: "accessKey"\` creates, and \`accessKey: false\` is the deprecated form of \`provision: "wallet"\`. Remove \`accessKey\`, or set \`provision\` to "accessKey" beside permissions.`,
+      'Conflicting options: `accessKey` describes an access key for a Tempo Account, which `account: false` creates none of. Remove `accessKey`, or remove `account`.',
     )
-  merged.provision ??= accessKey_option === false ? 'wallet' : 'accessKey'
-  const provision = merged.provision
   // A `cli:` client ID names a program of one user, so its instance without a store keeps its
   // session in the file that the user's CLIs share. Every reader of `config.store` then reads it.
   // `false` refuses the file, and a plugin's store with it, for an instance of many users.
@@ -2048,8 +2028,8 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   const context: Plugin.Context = {
     accessKey,
     defaultAccessKey: () =>
-      provision === 'accessKey' && accessKey_option === undefined
-        ? AccessKey_internal.defaultPermissions()
+      accessKey_option === undefined && merged.account !== false
+        ? defaultAccessKey()
         : undefined,
     chain: {
       configured: chain.configured,
@@ -2065,7 +2045,6 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       return undefined
     },
     config,
-    provision,
     session: {
       authorize: session.authorize,
       change: session.change,
@@ -2248,7 +2227,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     authorize: (parameters?: Core.authorize.Parameters) =>
       Core.authorize(context, {
         ...parameters,
-        renew: provision === 'accessKey' && accessKey_option === undefined,
+        renew: accessKey_option === undefined && merged.account !== false,
       }),
     chain: { get: chain.get, subscribe: chain.subscribe },
     config,
@@ -2550,7 +2529,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
               InternalSession.machines.declined(session.actor.getSnapshot()),
             delegate: session.delegate,
             reauthorize,
-            renew: provision === 'accessKey' && accessKey_option === undefined,
+            renew: accessKey_option === undefined && merged.account !== false,
             async restore() {
               // A restore, such as a redirect's callback, completes on the selected chain, so the
               // stored selection loads first. A failed read runs no hook, so a later read restores.
@@ -2833,8 +2812,8 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
 export declare namespace create {
   type Options<
     plugins extends readonly Plugin.Option[] = readonly Plugin.Option[],
-  > = Omit<from.Options, 'par' | 'provision' | 'store'> &
-    Provisioning & {
+  > = Omit<from.Options, 'account' | 'par' | 'store'> &
+    Account & {
       /**
        * The IDs of the chains that `switchChain` may select, and that a stored selection may restore.
        * Defaults to Tempo's built-in chains: mainnet, testnet, devnet, and a local node. The
@@ -2916,44 +2895,34 @@ export declare namespace create {
     }
 
   /**
-   * What a sign-in creates, as `Config.provision` describes, and what the access key of each
-   * sign-in that names none may do. `accessKey` permissions apply only beside the `accessKey`
-   * provision, else the type refuses them and `create` throws a `TypeError`.
+   * What each sign-in returns beside the user: a Tempo Account, and an access key for it. An
+   * instance with `account: false` takes no `accessKey`, else the type refuses it and `create`
+   * throws a `TypeError`.
    */
-  type Provisioning =
+  type Account =
     | {
         /**
-         * The access key of each sign-in that names none: what it may do, or a function that the
-         * instance calls at each sign-in to return it. A duration expiry, such as `'7d'`, counts
-         * from the sign-in. Without an expiry, the access key expires a day after the sign-in, as
-         * one of a sign-in's own `accessKey` does. Defaults to an access key that may transfer up
-         * to 5 OUSD, and expires a day after the sign-in. The default applies to no sign-in with a
-         * challenge, whose signature stays an EIP-191 signature, and to no page whose `store` has
-         * `json`, which cannot keep the access key. `false`, which is deprecated, stands for
-         * `provision: 'wallet'`.
+         * The access key of each sign-in that names none: what it may do, a function that the
+         * instance calls at each sign-in to return it, or `false` for no access key. A duration
+         * expiry, such as `'7d'`, counts from the sign-in. Without an expiry, the access key
+         * expires a day after the sign-in, as one of a sign-in's own `accessKey` does. Defaults to
+         * an access key that may transfer up to 5 OUSD, and expires a day after the sign-in. The
+         * default applies to no sign-in with a challenge, whose signature stays an EIP-191
+         * signature, and to no page whose `store` has `json`, which cannot keep the access key.
          */
         accessKey?:
           | Permissions
           | false
           | (() => Permissions | undefined)
           | undefined
-        /** Defaults to `accessKey`, or to `wallet` with `accessKey: false`. */
-        provision?: undefined
+        /** Absent, each sign-in returns the user's Tempo Account. See `Config.account`. */
+        account?: undefined
       }
     | {
-        /** As without `provision`, but never `false`. */
-        accessKey?: Permissions | (() => Permissions | undefined) | undefined
-        /** Each sign-in also creates an access key. See `Config.provision`. */
-        provision: 'accessKey'
-      }
-    | {
-        /** Never an option, since the provision creates no access key. */
+        /** Never an option, since the instance's sign-ins hold no Tempo Account. */
         accessKey?: undefined
-        /**
-         * `user` creates no Tempo Account and no access key, and `wallet` creates no access key.
-         * See `Config.provision`.
-         */
-        provision: 'user' | 'wallet'
+        /** Signs users in without a Tempo Account and without an access key. See `Config.account`. */
+        account: false
       }
 }
 
@@ -3010,6 +2979,17 @@ export type SessionGet<plugins extends readonly Plugin.Plugin[]> =
     ((
       parameters?: Core.getSession.Parameters,
     ) => Promise<Session.Of<plugins> | undefined>)
+
+/**
+ * Returns the access key of each sign-in of an instance without `accessKey`. A function, since a
+ * module that imports `AccessKey` first evaluates this module before `AccessKey`'s constants.
+ */
+function defaultAccessKey(): Permissions {
+  return {
+    expiry: AccessKey_internal.defaultExpiry,
+    limits: [{ limit: '5', token: 'ousd' }],
+  }
+}
 
 /** Where Tempo ID runs unless `create` receives a `url`. */
 const defaultUrl = 'https://id.tempo.xyz'

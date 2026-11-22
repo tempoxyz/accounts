@@ -294,9 +294,9 @@ import { mpp } from 'accounts/mpp'
 
 // The backend holds the session, so the page's instance requests no access key.
 export const accounts = Accounts.create({
+  accessKey: false,
   chain: 'testnet',
   plugins: [mpp({ maxAmount: '10' })],
-  provision: 'wallet',
 })
 ```
 

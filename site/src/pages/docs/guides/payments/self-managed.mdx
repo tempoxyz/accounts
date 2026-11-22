@@ -311,9 +311,9 @@ import { react } from 'accounts/react'
 
 // No access key and no `viem` plugin, so the payment page sends each payment.
 export const accounts = Accounts.create({
+  accessKey: false,
   chain: 'testnet',
   plugins: [react()],
-  provision: 'wallet',
 })
 ```
 
