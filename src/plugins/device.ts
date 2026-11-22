@@ -116,10 +116,10 @@ export function device(options: device.Options = {}) {
         if (signal?.aborted) throw reason()
         // The call removes its listener once it settles, so a signal that many calls share, such as
         // a CLI's Ctrl+C, keeps none of them.
-        let abort: (() => void) | undefined
+        let abort_signal: (() => void) | undefined
         const aborted = new Promise<never>((_, reject) => {
-          abort = () => reject(reason())
-          signal?.addEventListener('abort', abort, { once: true })
+          abort_signal = () => reject(reason())
+          signal?.addEventListener('abort', abort_signal, { once: true })
         })
         aborted.catch(() => undefined)
         /** Settles with `promise`, or rejects at once when `signal` aborts. */
@@ -147,7 +147,7 @@ export function device(options: device.Options = {}) {
           )
           return await grant.wait({ signal })
         } finally {
-          if (abort) signal?.removeEventListener('abort', abort)
+          if (abort_signal) signal?.removeEventListener('abort', abort_signal)
         }
       }
 
