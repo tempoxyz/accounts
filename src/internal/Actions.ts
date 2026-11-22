@@ -74,13 +74,22 @@ export async function authorize<
   const [session, generated] = await Promise.all([
     (async () => {
       if (options.check === false) return { user: true }
-      return Api.json<{ user: unknown }>(
-        await answered.fetch!(new URL('/v1/auth/session', auth.url), {
-          credentials: 'include',
-          // A redirect would send the session cookie's request to another origin.
-          redirect: 'manual',
-        }),
-      )
+      // React Native's `AbortSignal` has no `timeout`, so a timer aborts the controller. The timer
+      // covers the response's body too. A check that it aborts throws as one without a response.
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), Api.sessionTimeout)
+      try {
+        return await Api.json<{ user: unknown }>(
+          await answered.fetch!(new URL('/v1/auth/session', auth.url), {
+            credentials: 'include',
+            // A redirect would send the session cookie's request to another origin.
+            redirect: 'manual',
+            signal: controller.signal,
+          }),
+        )
+      } finally {
+        clearTimeout(timer)
+      }
     })(),
     accessKey
       ? AccessKey.resolve(accessKey).then(

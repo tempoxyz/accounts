@@ -802,8 +802,8 @@ export type Accounts<
      * @throws {RequestError} With `invalid_field`, `rate_limited`, `upstream_unavailable`, or
      *   `unexpected`, when a field is missing or malformed, or a retry later may succeed.
      * @throws {RequestError} With `server_error` and status 0, when the check of the browser's
-     *   Tempo ID session or the authorization receives no response, such as offline. The session
-     *   stays as it was. Authorize again.
+     *   Tempo ID session or the authorization receives no response, such as offline, or the check
+     *   receives none within 10 seconds. The session stays as it was. Authorize again.
      *
      * @example
      * ```ts

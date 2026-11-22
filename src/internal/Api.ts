@@ -306,6 +306,12 @@ export const logoutTimeout = 10_000
 export const revokeTimeout = 10_000
 
 /**
+ * Milliseconds that an authorization's check of the browser's Tempo ID session waits for its
+ * response, so a stalled check settles, and a page that restores its session leaves `pending`.
+ */
+export const sessionTimeout = 10_000
+
+/**
  * Revokes a refresh token at `/oauth2/revoke` (RFC 7009), with the app's client authentication. A
  * revocation without a response, such as offline, throws `Accounts.RequestError` with status 0. One
  * still without a response after {@link revokeTimeout} resolves, since it can have reached Tempo ID.
