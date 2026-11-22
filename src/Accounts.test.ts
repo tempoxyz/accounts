@@ -1290,7 +1290,7 @@ describe('pay', () => {
       `"Accounts.AccessKeyRequiredError"`,
     )
     expect(error?.message).toMatchInlineSnapshot(
-      `"The client's account holds no live access key on the chain, so it signs messages and typed data only. Sign in with an access key on the chain to send transactions."`,
+      `"The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain."`,
     )
     expect(requests).toMatchInlineSnapshot(`[]`)
   })

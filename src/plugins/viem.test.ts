@@ -803,7 +803,7 @@ describe('viem', () => {
       .catch((error: unknown) => error)
 
     expect(error).toMatchInlineSnapshot(
-      `[Accounts.AccessKeyRequiredError: The client's account holds no live access key on the chain, so it signs messages and typed data only. Sign in with an access key on the chain to send transactions.]`,
+      `[Accounts.AccessKeyRequiredError: The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain.]`,
     )
   })
 
@@ -903,7 +903,7 @@ describe('viem', () => {
       .toBe(true)
 
     expect(await sign()).toMatchInlineSnapshot(
-      `[Accounts.AccessKeyRequiredError: The client's account holds no live access key on the chain, so it signs messages and typed data only. Sign in with an access key on the chain to send transactions.]`,
+      `[Accounts.AccessKeyRequiredError: The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain.]`,
     )
   })
   test("drops the registration mark of the access key that a sign-out ends, which a store that keeps expired entries, such as `expo`'s, would keep for good", async () => {
