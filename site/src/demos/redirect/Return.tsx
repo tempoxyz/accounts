@@ -17,7 +17,11 @@ const script = `(() => {
     const path = sessionStorage.getItem(${JSON.stringify(storageKey)})
     if (!path || !new URLSearchParams(location.search).has('state')) return
     sessionStorage.removeItem(${JSON.stringify(storageKey)})
-    if (/^\\/(?![\\/\\\\])/.test(path)) location.replace(path + location.search)
+    // The URL parser drops a tab or line break, so a slash, a tab, and /host names another host:
+    // only a path that resolves on this origin forwards.
+    const target = new URL(path + location.search, location.href)
+    if (/^\\/(?![\\/\\\\])/.test(path) && target.origin === location.origin)
+      location.replace(target.href)
   } catch {}
 })()`
 

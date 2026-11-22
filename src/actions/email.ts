@@ -248,8 +248,15 @@ export async function signIn<
     )
     const { authorization } = registered
     // The registration's tokens become the session, so they must be the code's user's.
-    if (authorization.user.id !== body.user.id)
-      Api.signedIn(Headless.sessionChanged())
+    // A mismatch revokes the registration's refresh token, which no session holds, as
+    // `Headless.complete` does.
+    await Headless.revoking(auth, {
+      body: { tokens: authorization as never },
+      fn: () => {
+        if (authorization.user.id !== body.user.id)
+          Api.signedIn(Headless.sessionChanged())
+      },
+    })
     return {
       ...authorization,
       // The registration received the generated access key by its account alone, so the access key

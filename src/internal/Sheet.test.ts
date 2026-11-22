@@ -1,7 +1,8 @@
 /**
  * Runs the dialog's machine through the lifecycle of a deferred request, whose challenge arrives
  * after its `show`: a challenge that arrives after the frame loads or before, a fallback before the
- * challenge, and a replacement while the challenge loads.
+ * challenge, and a replacement while the challenge loads. Decides which popup a loaded page opens at
+ * once.
  * @module
  */
 import { createActor, fromCallback } from 'xstate'
@@ -217,5 +218,99 @@ describe('machines.sheet', () => {
       ['post', 'q-b', undefined],
       ['post', undefined, 'q-b&challenge=m'],
     ])
+  })
+})
+
+describe('machines.automatic', () => {
+  test.each([
+    {
+      activated: false,
+      cover: 'free',
+      covered: false,
+      expected: true,
+      method: true,
+      name: "a method's popup of a page without a cover",
+    },
+    {
+      activated: false,
+      cover: 'held',
+      covered: true,
+      expected: false,
+      method: true,
+      name: "a method's popup of a covered page, before `uncover`",
+    },
+    {
+      activated: false,
+      cover: 'listening',
+      covered: true,
+      expected: false,
+      method: true,
+      name: "a method's popup of a covered page that listens for `uncover`",
+    },
+    {
+      activated: false,
+      cover: 'free',
+      covered: true,
+      expected: true,
+      method: true,
+      name: "a method's popup of a covered page, after `uncover`",
+    },
+    {
+      activated: false,
+      cover: 'held',
+      covered: false,
+      expected: true,
+      method: true,
+      name: "a method's popup of a deferred page, before its challenge",
+    },
+    {
+      activated: false,
+      cover: 'listening',
+      covered: false,
+      expected: true,
+      method: true,
+      name: "a method's popup of a deferred page that listens for its challenge",
+    },
+    {
+      activated: true,
+      cover: 'free',
+      covered: false,
+      expected: true,
+      method: false,
+      name: 'a popup without a method, under a gesture',
+    },
+    {
+      activated: false,
+      cover: 'free',
+      covered: false,
+      expected: false,
+      method: false,
+      name: 'a popup without a method, without a gesture',
+    },
+    {
+      activated: true,
+      cover: 'held',
+      covered: false,
+      expected: false,
+      method: false,
+      name: 'a popup without a method of a deferred page, under a gesture',
+    },
+    {
+      activated: true,
+      cover: 'listening',
+      covered: true,
+      expected: false,
+      method: false,
+      name: 'a popup without a method of a covered page, under a gesture',
+    },
+  ] as const)('returns $expected for $name', (row) => {
+    const automatic = machines.automatic({
+      activated: row.activated,
+      cover: row.cover,
+      covered: row.covered,
+      method: row.method,
+    })
+
+    expect(automatic).toBe(row.expected)
   })
 })

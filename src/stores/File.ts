@@ -2,7 +2,6 @@
  * A store in one JSON file of the user's, such as a CLI's session, as `Store.file` returns it.
  * @module
  */
-import { Json } from 'ox'
 import * as Expiry from '../internal/Expiry.js'
 import * as Node from '../internal/Node.js'
 import * as StoreValue from '../internal/StoreValue.js'
@@ -147,7 +146,7 @@ export function create(path?: string): Store.Store {
 
     const entries = (() => {
       try {
-        return Json.parse(text) as unknown
+        return StoreValue.decode(text)
       } catch {
         return undefined
       }

@@ -200,6 +200,7 @@ const wrapperLimit = 2
  *   B-->>P: { session }, Set-Cookie: __Host-tempo-id.sid
  * ```
  * @throws {Error} When `plugins` lacks the `backend` plugin, at `Accounts.create`.
+ * @throws {Error} When `accessTokens.clientIds` is `'any'`.
  *
  * @example
  * ```ts
@@ -300,6 +301,12 @@ function page(options: siwe.PageOptions) {
 /** Returns the backend's side of the plugin: `accounts.siwe` and its routes of `accounts.handler`. */
 function server(options: siwe.Options) {
   const { lifetime = 24 * 60 * 60 * 1000, statement } = options
+  // Another app's token names that app's access keys, so it proves no sign-in to this app, as
+  // `Challenge.verify` requires.
+  if (options.accessTokens?.clientIds === 'any')
+    throw new Error(
+      "Invalid `accessTokens.clientIds`: `'any'` accepts every app's token, which proves no sign-in for this app. Name the app's own client IDs.",
+    )
   const origins =
     options.origin === undefined
       ? undefined
@@ -747,7 +754,8 @@ export declare namespace siwe {
      * The options of `AccessToken.create` for the access tokens that prove a sign-in with an access
      * key, which signs a key authorization in place of the message, such as `clientIds` for
      * several apps, or `issuer` for a `url` that reaches Tempo ID at an internal address. Defaults
-     * to the instance's client ID and URL.
+     * to the instance's client ID and URL. `clientIds: 'any'` throws, since another app's token
+     * proves no sign-in for this app.
      */
     accessTokens?: AccessTokenModule.create.Options | undefined
     /**

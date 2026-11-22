@@ -529,7 +529,24 @@ export function create(
         // A refresh in progress can delete the session that it read, such as one whose access key
         // expired, so the callback's session waits for it. A later refresh reads this session.
         await refreshes.get(id)?.catch(() => undefined)
-        await store.setItem(sessionKey(id), stored, lifetime(stored))
+        // The function wraps a store's synchronous throw in the promise, so it revokes too.
+        await Promise.resolve()
+          .then(() => store.setItem(sessionKey(id), stored, lifetime(stored)))
+          .catch(async (error: unknown) => {
+            // The callback sets no cookie for a failed write, so no request reads the session, and
+            // its refresh token is revoked. A write that rejects can still have landed, so the
+            // session is removed first, and the store keeps no session with a revoked token. A
+            // failed removal still revokes: a stored session whose refresh token is revoked only
+            // fails its next refresh, while a live refresh token that no cookie names stays
+            // redeemable. A failed removal or revocation leaves the write's error.
+            await Promise.resolve()
+              .then(() => store.removeItem(sessionKey(id)))
+              .catch(() => undefined)
+            const { refreshToken } = stored
+            if (refreshToken)
+              await Api.revoke(auth, { refreshToken }).catch(() => undefined)
+            throw error
+          })
         return viewTempoId(stored, id)
       })().finally(() => {
         if (completing.get(id) === completed) completing.delete(id)
