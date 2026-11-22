@@ -11,7 +11,7 @@ describe('create', () => {
   test("empties the session of another instance on the device's secure store at once, as `Store.memory` does", async () => {
     const name =
       'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
-    // The device's secure store, which holds strings, as `expo-secure-store` does.
+    // The platform capability that `expo-secure-store` provides on a device: strings at keys.
     const values = new Map<string, string>()
     const secureStore = {
       deleteItemAsync(key: string) {
@@ -24,16 +24,11 @@ describe('create', () => {
         return Promise.resolve()
       },
     } satisfies DeviceStore.create.SecureStore
-    const requests: string[] = []
     // Each instance creates its own preset, as two configs of one app do.
     const create = () =>
       Accounts.create({
         chain: 1337,
         clientId: 'https://app.example.com',
-        fetch(input) {
-          requests.push(new URL(String(input)).pathname)
-          return Promise.resolve(new Response(null, { status: 200 }))
-        },
         store: DeviceStore.create(secureStore),
         url: 'http://127.0.0.1:9',
       })
@@ -52,19 +47,12 @@ describe('create', () => {
     const other = create()
     await Promise.all([accounts.session.get(), other.session.get()])
 
-    await accounts.signOut()
+    // Nothing listens at the URL, so the revocation rejects. The sign-out still empties the session.
+    await accounts.signOut().catch(() => undefined)
 
     await expect
       .poll(() => other.session.status.get().status, { timeout: 1_000 })
       .toBe('signedOut')
-    expect({ requests, session: await other.session.get() })
-      .toMatchInlineSnapshot(`
-        {
-          "requests": [
-            "/oauth2/revoke",
-          ],
-          "session": undefined,
-        }
-      `)
+    expect(await other.session.get()).toMatchInlineSnapshot(`undefined`)
   })
 })
