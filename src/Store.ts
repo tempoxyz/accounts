@@ -89,7 +89,8 @@ export type Store = {
    * again and runs `fn` again, so `fn` must have no side effects. A `value` of `undefined`
    * deletes the entry. The `backend` plugin writes the logout index of each `sid` with it, so
    * concurrent sign-ins of one `sid` on different processes keep each session, in the round trips
-   * of a read and a write. `Store.postgres` and `Store.redis` set it.
+   * of a read and a write. The `redirect` plugin removes its sign-out flag with it, so a newer flag
+   * of another instance stays. `Store.postgres` and `Store.redis` set it.
    */
   update?:
     | (<result>(

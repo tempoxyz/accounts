@@ -387,14 +387,27 @@ export function redirect(options: redirect.Options = {}) {
           signingOut.delete(context.config)
           if (!signedOut) return session
           await (async () => {
-            const current = await store?.getItem(signedOutKey(context.config))
+            const key = signedOutKey(context.config)
+            // A store with `update`, such as `Store.postgres`, removes the flag only while it holds the
+            // read value, so a newer flag of a sign-out of any instance on the store stays.
+            if (store?.update) {
+              await store.update(key, (current) => ({
+                result: undefined,
+                value:
+                  current != null && (current === stored || current === own)
+                    ? undefined
+                    : current,
+              }))
+              return
+            }
+            const current = await store?.getItem(key)
             if (current == null) return
             if (current !== stored && current !== own) return
-            // A sign-out of this instance during the read writes a newer flag, which stays. The store
-            // has no atomic removal, so another instance's sign-out at this moment can still lose its
-            // flag.
+            // A sign-out of this instance during the read writes a newer flag, which stays. Without
+            // `update`, the store has no atomic removal, so another instance's sign-out at this moment
+            // can still lose its flag.
             if ((signOuts.get(context.config) ?? 0) !== started) return
-            await store?.removeItem(signedOutKey(context.config))
+            await store?.removeItem(key)
           })().catch(() => undefined)
           return session
         },
