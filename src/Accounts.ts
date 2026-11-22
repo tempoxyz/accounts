@@ -46,8 +46,9 @@ import type { Store } from './Store.js'
 import type * as TempoAccount from './internal/TempoAccount.js'
 
 /**
- * The client's account signs messages and typed data only, since its sign-in requested no access key, so
- * it sends no transaction. Thrown when a sign-in without an access key cannot serve the call:
+ * The client's account holds no live access key on the chain, so it signs messages and typed data
+ * only, and sends no transaction. The sign-in requested no access key, its access key expired, or
+ * its access key acts on another chain. Thrown when the call needs an access key:
  *
  * - `device.signIn` without `accessKey`, since the device grant always requests an access key.
  * - A transaction from the account of a `viem` client whose session holds no access key, outside a
@@ -60,7 +61,7 @@ export class AccessKeyRequiredError extends Error {
 
   constructor() {
     super(
-      "The client's account signs messages and typed data only, since its sign-in requested no access key. Sign in with an access key to send transactions.",
+      "The client's account holds no live access key on the chain, so it signs messages and typed data only. Sign in with an access key on the chain to send transactions.",
     )
   }
 }
