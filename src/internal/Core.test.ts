@@ -121,6 +121,229 @@ describe('getSession', () => {
     `)
   })
 
+  test('sends no authorization, and returns the stored session, for an instance with `resource`', async () => {
+    const memory = Store.memory()
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      resource: 'https://api.example/mcp',
+      store: memory,
+      url: 'https://id.invalid',
+    })
+    await memory.setItem(
+      'tempo-id:session:["https://id.invalid","tempo-example-web",42431]',
+      {
+        state: {
+          session: await expired({
+            accessToken: 'a',
+            expiresIn: 3_600_000,
+            valid: true,
+          }),
+        },
+        version: 0,
+      },
+    )
+
+    const authorized = await accounts.authorize()
+
+    expect({
+      accessToken: authorized?.accessToken,
+      requests,
+      status: accounts.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "accessToken": "a",
+        "requests": [],
+        "status": "signedIn",
+      }
+    `)
+  })
+
+  test('refuses, sends no authorization, and settles the status, for an instance with `resource` and no stored session', async () => {
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      resource: ['https://api.example/mcp'],
+      store: Store.memory(),
+      url: 'https://id.invalid',
+    })
+
+    const error = await accounts.authorize().catch((error: unknown) => error)
+
+    expect({
+      code: (error as Accounts.RequestError).code,
+      field: (error as Accounts.RequestError).field,
+      requests,
+      status: accounts.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "code": "interaction_required",
+        "field": "resource",
+        "requests": [],
+        "status": "signedOut",
+      }
+    `)
+  })
+
+  test('returns no session, and sends no authorization, for `session.get` with `reauthorize` on an instance with `resource` and no stored session', async () => {
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      resource: ['https://api.example/mcp'],
+      store: Store.memory(),
+      url: 'https://id.invalid',
+    })
+
+    const session = await accounts.session.get({ reauthorize: true })
+
+    expect({
+      requests,
+      session,
+      status: accounts.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [],
+        "session": undefined,
+        "status": "signedOut",
+      }
+    `)
+  })
+
+  test.each([
+    { challenge: 'nonce-b' },
+    { accessKey: false as const },
+    { account: '0x000000000000000000000000000000000000dEaD' as const },
+    { passkey: true },
+  ])(
+    'refuses %o, sends no authorization, and keeps the stored session, for an instance with `resource`',
+    async (parameters) => {
+      const memory = Store.memory()
+      const requests: string[] = []
+      const accounts = Accounts.create({
+        chain: 42431,
+        clientId: 'tempo-example-web',
+        fetch: (input, init) => {
+          requests.push(
+            `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+          )
+          return globalThis.fetch(input, init)
+        },
+        resource: 'https://api.example/mcp',
+        store: memory,
+        url: 'https://id.invalid',
+      })
+      await memory.setItem(
+        'tempo-id:session:["https://id.invalid","tempo-example-web",42431]',
+        {
+          state: {
+            session: {
+              ...(await expired({
+                accessToken: 'a',
+                expiresIn: 3_600_000,
+                valid: true,
+              })),
+              challengeSignature: '0x01',
+            },
+          },
+          version: 0,
+        },
+      )
+
+      const error = await accounts
+        .authorize(parameters)
+        .catch((error: unknown) => error)
+      const session = await accounts.session.get()
+
+      expect({
+        accessToken: session?.accessToken,
+        challengeSignature: session?.challengeSignature,
+        code: (error as Accounts.RequestError).code,
+        message: (error as Accounts.RequestError).message,
+        requests,
+        status: accounts.session.status.get().status,
+      }).toMatchInlineSnapshot(`
+        {
+          "accessToken": "a",
+          "challengeSignature": "0x01",
+          "code": "interaction_required",
+          "message": "Authorization refused: an instance with \`resource\` authorizes only through a sign-in on a page. Sign in with a redirect or the dialog.",
+          "requests": [],
+          "status": "signedIn",
+        }
+      `)
+    },
+  )
+
+  test("returns the stored session for an instance with `resource` and a call that names the session's own account", async () => {
+    const memory = Store.memory()
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
+      resource: 'https://api.example/mcp',
+      store: memory,
+      url: 'https://id.invalid',
+    })
+    await memory.setItem(
+      'tempo-id:session:["https://id.invalid","tempo-example-web",42431]',
+      {
+        state: {
+          session: await expired({
+            accessToken: 'a',
+            expiresIn: 3_600_000,
+            valid: true,
+          }),
+        },
+        version: 0,
+      },
+    )
+
+    const authorized = await accounts.authorize({ account: owner.address })
+
+    expect(authorized?.accessToken).toMatchInlineSnapshot(`"a"`)
+  })
+
+  test("sends the authorization for an instance with an empty `resource`, which names Tempo ID's origin", async () => {
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      resource: [],
+      store: Store.memory(),
+      url: 'https://id.invalid',
+    })
+
+    await accounts.authorize().catch(() => undefined)
+
+    expect(requests.length > 0).toMatchInlineSnapshot(`true`)
+  })
+
   test("refuses the renewal of the app's own expired access key with no request, in place of a new access key", async () => {
     const memory = Store.memory()
     const requests: string[] = []

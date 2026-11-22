@@ -63,6 +63,7 @@ export async function authorizeUrl(
     chainId: auth.chainId,
     ...(options.challenge !== undefined ? { challenge: true as const } : {}),
     clientId: auth.clientId,
+    issuer: new URL(auth.url).origin,
     redirectUri,
     // `Bytes.random` needs only `crypto.getRandomValues`, which React Native polyfills.
     state: Base64.fromBytes(Bytes.random(16), base64url),

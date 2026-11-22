@@ -117,17 +117,23 @@ export async function authorize<
   }
   const body = await Api.json<Api.Headless>(response)
   const [first] = body.tempo ?? []
+  // A refused response's refresh token is revoked, since no session holds it.
+  const authorization = await Headless.revoking(auth, {
+    body,
+    fn: () =>
+      resolved
+        ? Api.authorization(body, {
+            ...resolved,
+            challenged: options.challenge !== undefined,
+            sentAt,
+          })
+        : Api.withoutAccessKey(body, {
+            challenged: options.challenge !== undefined,
+            sentAt,
+          }),
+  })
   const result: Headless.Result & { account?: TempoAccount.TempoAccount } = {
-    ...(resolved
-      ? Api.authorization(body, {
-          ...resolved,
-          challenged: options.challenge !== undefined,
-          sentAt,
-        })
-      : Api.withoutAccessKey(body, {
-          challenged: options.challenge !== undefined,
-          sentAt,
-        })),
+    ...authorization,
     // The response lists the access key's account first, so the app reads no `GET /v1/account`.
     // An account that the client cannot rebuild stays absent, so the session holds the access key alone.
     ...(resolved && first

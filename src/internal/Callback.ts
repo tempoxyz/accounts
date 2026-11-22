@@ -108,7 +108,8 @@ function target(url: string) {
   if (!match) return undefined
 
   const scheme = match[1]!.toLowerCase()
-  const port = webPorts[scheme]
+  // Only the own keys name a web scheme, so a scheme such as `constructor` reads as a custom one.
+  const port = Object.hasOwn(webPorts, scheme) ? webPorts[scheme] : undefined
   // A WHATWG `URL` reads any run of slashes or backslashes after a web scheme as the start of the
   // authority.
   const rest = port ? match[2]!.replace(/^[/\\]*/, '//') : match[2]!
@@ -151,7 +152,15 @@ function canonicalAuthority(
     // `café.example` and `xn--caf-dma.example`. So has an IPv6 host of any scheme.
     if (options.port || text.startsWith('['))
       try {
-        return new URL(`http://${text}/`).hostname.toLowerCase()
+        const hostname = new URL(`http://${text}/`).hostname.toLowerCase()
+        // React Native's own `URL` cuts an IPv6 host at its first colon, such as `[2001` of
+        // `[2001:db8::1]`, so a host that loses its brackets stays as written.
+        if (
+          text.startsWith('[') &&
+          !(hostname.startsWith('[') && hostname.endsWith(']'))
+        )
+          return text.toLowerCase()
+        return hostname
       } catch {
         return options.port ? text.toLowerCase() : text
       }

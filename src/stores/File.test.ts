@@ -69,6 +69,63 @@ describe('Store.file', () => {
     `)
   })
 
+  test('behavior: a stored string that ends with the bigint suffix or its escape reads back as written, beside a bigint, and fails no other key', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    const store = File.create(path)
+    await store.setItem('siwe', {
+      resources: [
+        'x#__bigint',
+        'x#__string',
+        'x#__string#__bigint',
+        '1#__bigint',
+      ],
+      statement: 'Sign in#__bigint',
+    })
+    await store.setItem('amount', 1n)
+
+    // A file of an earlier version holds each string verbatim, also one that ends with the suffix
+    // or its escape.
+    const earlier = Path.join(directory, 'earlier.json')
+    await Fs.writeFile(
+      earlier,
+      JSON.stringify({
+        amount: { value: '2#__bigint' },
+        other: { value: 'x#__bigint' },
+        statement: { value: 'Sign in#__string' },
+      }),
+    )
+
+    expect({
+      amount: await store.getItem('amount'),
+      earlier: {
+        amount: await File.create(earlier).getItem('amount'),
+        other: await File.create(earlier).getItem('other'),
+        statement: await File.create(earlier).getItem('statement'),
+      },
+      siwe: await store.getItem('siwe'),
+    }).toMatchInlineSnapshot(`
+      {
+        "amount": 1n,
+        "earlier": {
+          "amount": 2n,
+          "other": "x#__bigint",
+          "statement": "Sign in#__string",
+        },
+        "siwe": {
+          "resources": [
+            "x#__bigint",
+            "x#__string",
+            "x#__string#__bigint",
+            "1#__bigint",
+          ],
+          "statement": "Sign in#__bigint",
+        },
+      }
+    `)
+    await Fs.rm(directory, { force: true, recursive: true })
+  })
+
   test('behavior: a write to a damaged file rejects with the path and the fix, and quotes none of its tokens', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const path = Path.join(directory, 'session.json')
