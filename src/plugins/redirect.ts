@@ -388,13 +388,17 @@ export function redirect(options: redirect.Options = {}) {
           if (!signedOut) return session
           await (async () => {
             const key = signedOutKey(context.config)
-            // A store with `update`, such as `Store.postgres`, removes the flag only while it holds the
-            // read value, so a newer flag of a sign-out of any instance on the store stays.
+            // A store whose `update` is one conditional write, such as `Store.postgres`, removes the flag
+            // only while it holds the read value, so another instance's newer flag stays. A sign-out of
+            // this instance since the read keeps its flag on any store, also where `update` reads and
+            // writes in two calls, such as `Store.redis` on a cluster.
             if (store?.update) {
               await store.update(key, (current) => ({
                 result: undefined,
                 value:
-                  current != null && (current === stored || current === own)
+                  current != null &&
+                  (current === stored || current === own) &&
+                  (signOuts.get(context.config) ?? 0) === started
                     ? undefined
                     : current,
               }))
