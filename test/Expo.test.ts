@@ -144,4 +144,46 @@ describe('expo', () => {
       }
     `)
   }, 20_000)
+  test("throws the first invalid_grant of a refresh on the preset's secure store, with one request", async () => {
+    // Only the app's process reads its secure store, and the preset's lock serializes its refreshes,
+    // so Tempo ID's refusal, such as after a revocation on another device, is final.
+    const output = await run(
+      [
+        "import * as Accounts from './Accounts.ts'",
+        "import * as Session from './Session.ts'",
+        "import { expo } from './plugins/expo.ts'",
+        'const requests = []',
+        'const accounts = Accounts.create({',
+        '  chain: 1337,',
+        "  clientId: 'client_1',",
+        '  async fetch(input, init) {',
+        "    const token = new URLSearchParams(String(init?.body)).get('refresh_token')",
+        '    requests.push(new URL(String(input)).pathname + " " + token)',
+        "    return Response.json({ error: 'invalid_grant', error_description: 'The refresh token is revoked.' }, { status: 400 })",
+        '  },',
+        "  plugins: [expo({ redirectUri: 'com.example.app:/callback' })],",
+        "  url: 'http://127.0.0.1:9',",
+        '})',
+        'await accounts.config.store.setItem(\'tempo-id:session:["http://127.0.0.1:9","client_1",1337]\', {',
+        "  state: { session: Session.from({ accessToken: 'access-token', expiresAt: Date.now() + 3600000, refreshToken: 'refresh-token', user: { email: 'user@example.com', id: 'user_1' } }) },",
+        '  version: 0,',
+        '})',
+        'await accounts.session.get()',
+        'const started = Date.now()',
+        'const error = await accounts.session.refresh().then(() => undefined, (error) => error)',
+        'console.log(JSON.stringify({ code: error?.code, fast: Date.now() - started < 500, requests, session: await accounts.session.get() ?? null }))',
+      ].join('\n'),
+    )
+
+    expect(output).toMatchInlineSnapshot(`
+      {
+        "code": "invalid_grant",
+        "fast": true,
+        "requests": [
+          "/oauth2/token refresh-token",
+        ],
+        "session": null,
+      }
+    `)
+  }, 20_000)
 })

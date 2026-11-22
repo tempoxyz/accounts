@@ -1358,7 +1358,7 @@ export type Accounts<
        *     earlier. Sign in again. This code carries no `reason`. In a browser, the lock
        *     serializes the refreshes of the store across every tab, so the first refusal throws.
        *     So does a lock in a process on a store of that process alone, such as `Store.memory`,
-       *     also without Web Locks, as in React Native.
+       *     also without Web Locks, as in React Native, and the secure store of `accounts/expo`.
        *     Elsewhere, the lock spans one process only. Another process on the store, such as a
        *     second run of a CLI on one `Store.file`, can rotate the same refresh token at once.
        *     Tempo ID then refuses the token until that rotation returns. After the first

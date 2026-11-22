@@ -81,6 +81,9 @@ export function expo(options: expo.Options) {
       const text = await SecureStore.getItemAsync(encode(key))
       return text === null ? undefined : StoreValue.parse(text)
     },
+    // Only the app's process reads its secure store, and `lock` serializes its refreshes, so Tempo
+    // ID's refusal of a refresh token is final, and the refresh sends no second request.
+    local: true,
     lock,
     removeItem: (key) => SecureStore.deleteItemAsync(encode(key)),
     setItem: (key, value) =>
