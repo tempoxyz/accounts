@@ -347,10 +347,9 @@ export function backend(options: backend.Options) {
           // A local session holds no tokens for the backend to keep. Its account signs in through
           // `siwe` instead.
           if (Session_.local(parameters.session)) throw new LocalSessionError()
-          const saved = await sessions.save({
-            id: parameters.id ?? newId(),
-            session: parameters.session,
-          })
+          const id = parameters.id ?? newId()
+          BackendSessions.checkId(id)
+          const saved = await sessions.save({ id, session: parameters.session })
           if (saved.sid)
             await link({
               expiresAt: BackendSessions.expiresAt(parameters.session),
@@ -387,6 +386,12 @@ export function backend(options: backend.Options) {
           parameters: backend.start.Parameters = {},
         ): Promise<{ id: string; url: string }> {
           const accessKey = SignIn.accessKey(context, parameters.accessKey)
+          const id = parameters.id ?? newId()
+          try {
+            BackendSessions.checkId(id)
+          } catch (error) {
+            return Promise.reject(error)
+          }
           // A Durable Object builds a configuration of its own, without the instance's chain and
           // redirect URI, so the request names both.
           return sessions.start({
@@ -396,7 +401,7 @@ export function backend(options: backend.Options) {
             },
             display: parameters.display,
             funding: parameters.funding,
-            id: parameters.id ?? newId(),
+            id,
             loginHint: parameters.loginHint,
             par: parameters.par,
             prompt: parameters.prompt,
