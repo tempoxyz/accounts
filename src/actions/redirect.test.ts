@@ -173,7 +173,7 @@ describe('handleCallback', () => {
       }
     `)
   })
-  test('keeps the error of a client assertion that fails before the code exchange, which is no request without a response', async () => {
+  test('keeps the message of a client assertion that fails before the code exchange, as a refusal after the sign-in', async () => {
     // Nothing listens at the URL, so only the client assertion's fault ends the exchange.
     const auth = from({
       clientAssertion: () =>
@@ -191,9 +191,25 @@ describe('handleCallback', () => {
       (error: unknown) => error,
     )
 
-    expect(String(error)).toMatchInlineSnapshot(
-      `"Error: The signer refused the client assertion."`,
-    )
+    expect(
+      error instanceof RequestError
+        ? {
+            cause: String(error.cause),
+            code: error.code,
+            message: error.message,
+            signedIn: error.signedIn,
+            status: error.status,
+          }
+        : String(error),
+    ).toMatchInlineSnapshot(`
+      {
+        "cause": "Error: The signer refused the client assertion.",
+        "code": "server_error",
+        "message": "The signer refused the client assertion.",
+        "signedIn": true,
+        "status": 0,
+      }
+    `)
   })
 
   test('throws RequestError with status 0 and `signedIn` when the code exchange receives no response', async () => {
