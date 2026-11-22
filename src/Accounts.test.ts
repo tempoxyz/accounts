@@ -22,7 +22,7 @@ import {
   test,
 } from 'vite-plus/test'
 import { Account } from 'viem/tempo'
-import { Bytes, Hash, Json, Secp256k1 } from 'ox'
+import { Address, Bytes, Hash, Json, Secp256k1 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import * as Accounts from './Accounts.js'
 import * as DefaultAccounts from './internal/DefaultAccounts.js'
@@ -666,6 +666,77 @@ describe('create', () => {
 })
 
 describe('pay', () => {
+  test("rejects a payment within the access key's limit outside a page, on an instance without a plugin that sends it, with a PageRequiredError that names the missing plugin rather than a sign-in", async () => {
+    const store = Store.memory()
+    const owner = Secp256k1.randomPrivateKey()
+    const privateKey = Secp256k1.randomPrivateKey()
+    const authorization = KeyAuthorization.from({
+      address: Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey })),
+      chainId: 4217n,
+      expiry: Math.floor(Date.now() / 1000) + 86_400,
+      limits: [
+        {
+          limit: 100_000_000n,
+          token: '0x20c0000000000000000000000000000000000000',
+        },
+      ],
+      type: 'secp256k1',
+    })
+    const signature = Secp256k1.sign({
+      payload: KeyAuthorization.getSignPayload(authorization),
+      privateKey: owner,
+    })
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",4217]',
+      {
+        state: {
+          session: Session.from({
+            accessKey: {
+              account: Address.fromPublicKey(
+                Secp256k1.getPublicKey({ privateKey: owner }),
+              ),
+              chainId: 4217,
+              keyAuthorization: KeyAuthorization.toRpc(
+                KeyAuthorization.from(authorization, { signature }),
+              ),
+              privateKey,
+            },
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    // A native app's instance, with a session and its access key but no `viem` plugin.
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'client_1',
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+
+    const error = await accounts
+      .pay({
+        amount: '1',
+        to: '0x0000000000000000000000000000000000000001',
+        token: '0x20c0000000000000000000000000000000000000',
+      })
+      .then(
+        () => undefined,
+        (error: Error) => error,
+      )
+
+    expect({ message: error?.message, name: error?.name })
+      .toMatchInlineSnapshot(`
+        {
+          "message": "No browser window, and no plugin sends payments: the payment page opens only from a page. Outside a page, add a plugin that sends a payment with the session's access key.",
+          "name": "Actions.account.PageRequiredError",
+        }
+      `)
+  })
   test('rejects an amount of 100,000 digits and a letter, or a long fraction, in linear time', async () => {
     const accounts = Accounts.create({
       chain: 1337,
@@ -1235,7 +1306,7 @@ describe('pay', () => {
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
 
-  test('throws AccessKeyRequiredError for a fixed session whose access key on the chain expired, and sends no request', async () => {
+  test('throws AccessKeyRequiredError for a fixed session whose access key on the chain expired, with a message that names no missing access key request, and sends no request', async () => {
     const owner = Account.fromSecp256k1(
       '0x0123456789012345678901234567890123456789012345678901234567890123',
     )
@@ -1288,6 +1359,9 @@ describe('pay', () => {
 
     expect(error?.name).toMatchInlineSnapshot(
       `"Accounts.AccessKeyRequiredError"`,
+    )
+    expect(error?.message).toMatchInlineSnapshot(
+      `"The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain."`,
     )
     expect(requests).toMatchInlineSnapshot(`[]`)
   })

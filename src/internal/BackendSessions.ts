@@ -277,6 +277,20 @@ export function create(
   }
 
   /**
+   * Ends the session `id` that a read found ended and unable to refresh, without the refresh lock.
+   * It reads the session again first, so a session that a save or a callback wrote after that read
+   * stays, and one of them that can refresh refreshes under the lock.
+   */
+  async function expire(id: string) {
+    const stored = await read(id)
+    if (!stored) return stored
+    if (renewable(stored)) return usable(stored) ? stored : exclusive(id)
+    if (serves(stored)) return stored
+    await store.removeItem(sessionKey(id))
+    return undefined
+  }
+
+  /**
    * Refreshes the session's access token unless it is still valid. It reads the session again, since
    * a read before this refresh started can hold a refresh token that an earlier refresh rotated.
    */
@@ -395,10 +409,17 @@ export function create(
     }
     if (!stored || ending.has(id)) return undefined
     if (usable(stored)) return view(stored, id)
+    // A session without a refresh token never refreshes, so it takes no refresh lock: it serves
+    // until its access token expires, as `refresh` serves it, and otherwise `expire` ends it.
+    if (!renewable(stored) && serves(stored)) return view(stored, id)
 
-    // The map entry is set before the refresh's first await, so every later read shares it.
+    // The map entry is set before the refresh's first await, so every later read shares it, and a
+    // save or a callback that starts later waits for it.
     const refreshing =
-      refreshes.get(id) ?? exclusive(id).finally(() => refreshes.delete(id))
+      refreshes.get(id) ??
+      (renewable(stored) ? exclusive(id) : expire(id)).finally(() =>
+        refreshes.delete(id),
+      )
     refreshes.set(id, refreshing)
     const next = await refreshing
     return next && view(next, id)
@@ -1175,16 +1196,26 @@ function siwe(
 
 /**
  * Returns the stored form of a session or a redirect's authorization. A session that `get` returned
- * leaves its `id` and `method`, which the read derives.
+ * leaves its `id` and `method`, which the read derives. The result of `email.signIn` leaves its
+ * `accounts`, whose accounts sign, so a store that clones each value refuses them.
  */
 function toStored(
   session: Session.TempoIdSession & {
+    accounts?: unknown
     id?: unknown
     method?: unknown
     signer?: unknown
   },
 ): StoredTempoId {
-  const { account, id: _, idToken, method: __, signer: ___, ...rest } = session
+  const {
+    account,
+    accounts: _,
+    id: __,
+    idToken,
+    method: ___,
+    signer: ____,
+    ...rest
+  } = session
   const sid = sessionId(idToken)
   return {
     ...rest,
@@ -1260,6 +1291,23 @@ function fresh(stored: StoredTempoId) {
  * session whose access key holds and whose access token is fresh. A session without a refresh token
  * never refreshes, so it serves until its access token expires, without the store's `lock`.
  */
+/** Returns whether `stored` holds a refresh token that renews it. */
+function renewable(stored: Stored) {
+  return stored.method !== 'siwe' && Boolean(stored.refreshToken)
+}
+
+/**
+ * Returns whether `stored`, which cannot refresh, still serves: its access token and access key
+ * have not expired. A SIWE session serves until its expiry.
+ */
+function serves(stored: Stored) {
+  if (stored.method === 'siwe') return stored.expiresAt > Date.now()
+  return (
+    stored.expiresAt > Date.now() &&
+    !(stored.accessKey && AccessKey.expired(stored.accessKey))
+  )
+}
+
 function usable(stored: Stored) {
   if (stored.method === 'siwe') return stored.expiresAt > Date.now()
   if (stored.accessKey && AccessKey.expired(stored.accessKey)) return false
@@ -1341,9 +1389,17 @@ function viewTempoId(stored: StoredTempoId, id: string): BackendSession {
 
 /**
  * Throws for a value that is no session ID, as {@link sessionIdPattern} holds one, so `save` and
- * `start` store nothing under it.
+ * `start` store nothing under it. The `backend` plugin also checks before it calls any `sessions`,
+ * so an adapter that reaches its sessions over a network sends no request for such a value.
+ * @throws {Accounts.RequestError} With `invalid_request` and the `field` `id`, for a value that is
+ *   not 1 to 128 characters of `A-Z`, `a-z`, `0-9`, `-`, and `_`.
+ *
+ * @example
+ * ```ts
+ * BackendSessions.checkId(id)
+ * ```
  */
-function checkId(id: string) {
+export function checkId(id: string) {
   if (sessionIdPattern.test(id)) return
   // The message quotes no ID, since a session ID is as secret as a session.
   throw new RequestError({

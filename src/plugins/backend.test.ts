@@ -11,6 +11,7 @@ import { describe, expect, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
 import * as BackendSessions from '../internal/BackendSessions.js'
 import * as Dpop from '../internal/Dpop.js'
+import * as TempoAccount from '../internal/TempoAccount.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
 import { backend } from './backend.js'
@@ -75,6 +76,36 @@ describe('backend', () => {
       [
         "getItem session",
       ]
+    `)
+  })
+
+  test("stores the session of an email sign-in, whose `accounts` hold the user's Tempo Accounts, without them", async () => {
+    const store = Store.memory()
+    const accounts = instance({ store })
+    const signedIn = session({ expiry: 60 })
+    const account = TempoAccount.deserialize({
+      address: signedIn.accessKey!.account,
+      keys: [],
+      owner: 'secp256k1',
+      realm: { id: 'default', name: 'Tempo' },
+    })
+
+    // `email.signIn` returns the session with every Tempo Account of the user, each of which signs.
+    const result = { ...signedIn, account, accounts: [account] }
+
+    const { id } = await accounts.backend.save({ session: result })
+    const restored = await accounts.backend.get({ id })
+
+    expect({
+      account:
+        restored?.method === 'tempo-id' &&
+        restored.account?.address === account.address,
+      accounts: 'accounts' in (restored ?? {}),
+    }).toMatchInlineSnapshot(`
+      {
+        "account": true,
+        "accounts": false,
+      }
     `)
   })
 

@@ -2,7 +2,7 @@
  * Tests the headers of a request that sends an access token, as `Actions.fetch` and `backend.fetch`
  * build them, the requests to Tempo ID that carry a secret, and the read of a challenge signature
  * from Tempo ID's response, and the refusal of a token response without an access token or a
- * lifetime.
+ * lifetime, or of a key authorization that does not parse.
  * @module
  */
 import { decodeJwt } from 'jose'
@@ -53,6 +53,50 @@ describe('requestHeaders', () => {
       {
         "authorization": "Bearer access-token",
         "content-type": "application/json",
+      }
+    `)
+  })
+})
+
+describe('authorization', () => {
+  test('throws server_error with status 200 for a key authorization that does not parse, and quotes none of it', () => {
+    // A signature type that no parser here knows, such as a newer one.
+    const body = {
+      account: '0x000000000000000000000000000000000000dEaD',
+      key_authorization: {
+        chainId: '0xa5bf',
+        expiry: null,
+        keyId: '0x000000000000000000000000000000000000bEEF',
+        keyType: 'secp256k1',
+        signature: { type: 'future' },
+      },
+      tokens: {
+        access_token: 'access-token',
+        expires_in: 3600,
+        refresh_token: 'refresh-token',
+      },
+    } as unknown as Parameters<typeof Api.authorization>[0]
+
+    const error = (() => {
+      try {
+        return Api.authorization(body, { material: {} })
+      } catch (error) {
+        return error
+      }
+    })()
+
+    expect(error).toMatchInlineSnapshot(
+      `[Accounts.RequestError: Invalid key authorization: the response holds a key authorization that does not parse, such as of a newer signature type. Update the package, then sign in again.]`,
+    )
+    expect({
+      cause: (error as Error).cause,
+      code: (error as RequestError).code,
+      status: (error as RequestError).status,
+    }).toMatchInlineSnapshot(`
+      {
+        "cause": undefined,
+        "code": "server_error",
+        "status": 200,
       }
     `)
   })

@@ -16,7 +16,8 @@ import type { User } from './User.js'
 
 /**
  * Builds an authorization from Tempo ID's response and the sign-in's access key: generated material, or
- * the app's `accessKey`. Throws `server_error` for a response without the key authorization.
+ * the app's `accessKey`. Throws `server_error` with status 200 for a response without the key
+ * authorization, or with one that does not parse.
  */
 export function authorization<chainId extends number = number>(
   body: Omit<Headless, 'type'>,
@@ -38,11 +39,24 @@ export function authorization<chainId extends number = number>(
         'Missing key authorization in the response to a request with an access key. Sign in again.',
       status: 200,
     })
-  const accessKey = AccessKey.from<chainId>({
-    ...material,
-    account: body.account,
-    keyAuthorization: body.key_authorization,
-  })
+  // A key authorization that does not parse, such as one of a newer signature type, is a fault of
+  // the response. The parser's error quotes the key authorization, so the refusal has no `cause`.
+  const accessKey = (() => {
+    try {
+      return AccessKey.from<chainId>({
+        ...material,
+        account: body.account,
+        keyAuthorization: body.key_authorization,
+      })
+    } catch {
+      throw new RequestError({
+        code: 'server_error',
+        message:
+          'Invalid key authorization: the response holds a key authorization that does not parse, such as of a newer signature type. Update the package, then sign in again.',
+        status: 200,
+      })
+    }
+  })()
   const tokens_ =
     'accessToken' in body.tokens ? body.tokens : tokens(body.tokens, { sentAt })
   return {
@@ -251,8 +265,8 @@ export function post(
 
 /**
  * Returns `auth` with a `fetch` that throws {@link RequestError} with status 0 and `message`
- * when the request receives no response, such as offline. The original error is its `cause`. A sign-in
- * uses it only before the user signs in, so a later failure keeps the `signedIn` error of {@link signedIn}.
+ * when the request receives no response, such as offline. The original error is its `cause`. A caller
+ * after the user signs in, such as the code exchange, marks the error `signedIn` itself.
  */
 export function answered(
   auth: Accounts.Config,

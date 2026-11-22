@@ -341,7 +341,7 @@ test.describe('third-party app', () => {
         value: {
           code: 'invalid_request',
           message:
-            'Email sign-in refused: the client ID names a third-party app, which signs in only on an approval page. Sign in with `dialog.signIn` or `redirect.signIn`.',
+            "Email sign-in refused: the client ID is an origin, which names a third-party app. Pass `clientId`, the ID of the app's first-party registration, or sign in with `dialog.signIn` or `redirect.signIn`.",
           name: 'Accounts.RequestError',
           reason: 'rejected',
           status: 400,
