@@ -755,8 +755,9 @@ export type Accounts<
      * in again with its access key.
      *
      * While it runs, `session.status` is `pending`, or `reauthorizing` with the expired session
-     * that it renews. A renewal sends the authorization with no check of the browser's Tempo ID
-     * session before it, since the user most likely holds that session. `session.get` with
+     * that it renews. If the instance holds a session, or the call renews one, the user most likely
+     * holds the browser's Tempo ID session. The call then sends the authorization with no check
+     * before it. `session.get` with
      * `reauthorize` restores the saved session and renews it in one call.
      *
      * @throws {RequestError} When Tempo ID refuses the authorization, with one of these `reason`
