@@ -205,7 +205,7 @@ The session ends with its [access key](/docs/guides/access-keys). After the acce
 
 ### Sign the user out
 
-<SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink> empties the session, deletes it from the secure store, and revokes its refresh token. Every other instance in the app on an `expo` preset empties its session at once.
+<SourceLink name="signOut" path="src/Accounts.ts">`signOut`</SourceLink> empties the session, deletes it from the secure store, and revokes its refresh token. Every other instance on the same `expo` preset empties its session at once.
 
 :::code-group
 

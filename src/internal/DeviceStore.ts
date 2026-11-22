@@ -18,17 +18,11 @@ import * as StoreValue from './StoreValue.js'
 const lock = Lock.create()
 
 /**
- * The `connect` of every preset's store. React Native has no page's `BroadcastChannel`, so the
- * instances on the device's secure store hear the saved changes of each other through it, and one
- * instance's sign-out empties the session of the others at once, as `Store.memory` does.
- */
-const connect = Broadcast.create()
-
-/**
  * Returns a store on the device's secure store, with its keys encoded to the characters that it
  * accepts, and each value as ox's `Json`, which keeps a `bigint`. Every store that this function
- * returns shares the device's secure store, so its `lock` serializes their session refreshes, and its
- * `connect` carries a sign-out of one instance to the others at once.
+ * returns shares the device's secure store, so its `lock` serializes their session refreshes. Its
+ * `connect` carries a sign-out of one instance to the other instances on the same store at once, as
+ * `Store.memory` does, since React Native has no page's `BroadcastChannel`.
  *
  * @throws {Store.InvalidValueError} From a read, for a stored value that holds no valid JSON.
  *
@@ -56,7 +50,7 @@ export function create(secureStore: create.SecureStore): Store.Store {
   return Store.from({
     // An engine without `WeakRef`, such as JavaScriptCore on Android, holds no listener, so its
     // instances read sign-outs from the store instead.
-    ...(typeof WeakRef === 'function' ? { connect } : {}),
+    ...(typeof WeakRef === 'function' ? { connect: Broadcast.create() } : {}),
     async getItem(key) {
       const text = await secureStore.getItemAsync(encode(key))
       return text === null ? undefined : StoreValue.parse(text)

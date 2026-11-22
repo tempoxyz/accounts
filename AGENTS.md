@@ -75,7 +75,7 @@
 - The root entry exports only `AccessToken`, `Accounts`, `Challenge`, `LogoutToken`, `Permissions`, `Plugin`, `Session`, and `Store`, which sit at the top of `src/`. Every other module goes in `src/internal/`, and `accounts/internal` exports those that apps can use.
 - The root entry's `Accounts` is `src/internal/DefaultAccounts.ts`: `src/Accounts.ts` with a `create` that adds the `dialog`, `funding`, and `mpp` plugins. `accounts/lite` exports `src/Accounts.ts` itself. `src/Accounts.ts` never imports a default plugin, so the bundle of `accounts/lite` holds none.
 - Prefer stateless functions. Create an instance only for dependencies or lifecycle state, through `Module.create(options)` returning a plain object.
-- `Accounts.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons, except a lock or a `connect` on a resource of the whole device that no instance owns, such as the `expo` preset's lock and `connect` on the device's secure store.
+- `Accounts.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons, except a lock on a resource of the whole device that no instance owns, such as the `expo` preset's lock on the device's secure store.
 - Inject platform capabilities (fetch, storage, clock, `open`) through options. Keep them out of pure modules.
 - Type dependencies by the smallest capability used.
 - Factory operations close over state. Never depend on `this`.

@@ -8,7 +8,7 @@ import * as Session from '../Session.js'
 import * as DeviceStore from './DeviceStore.js'
 
 describe('create', () => {
-  test("empties the session of another instance on the device's secure store at once, as `Store.memory` does", async () => {
+  test('empties the session of another instance on the same store at once, as `Store.memory` does', async () => {
     const name =
       'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
     // The platform capability that `expo-secure-store` provides on a device: strings at keys.
@@ -24,15 +24,15 @@ describe('create', () => {
         return Promise.resolve()
       },
     } satisfies DeviceStore.create.SecureStore
-    // Each instance creates its own preset, as two configs of one app do.
+    const store = DeviceStore.create(secureStore)
     const create = () =>
       Accounts.create({
         chain: 1337,
         clientId: 'https://app.example.com',
-        store: DeviceStore.create(secureStore),
+        store,
         url: 'http://127.0.0.1:9',
       })
-    await DeviceStore.create(secureStore).setItem(name, {
+    await store.setItem(name, {
       state: {
         session: Session.from({
           accessToken: 'access-token',
