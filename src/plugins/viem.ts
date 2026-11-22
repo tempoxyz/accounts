@@ -2519,7 +2519,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * balance after the retry, a spent limit, an access key that the chain does not hold, or a
        * call outside the access key's scopes. Outside a page, such a refusal rejects with
        * `Actions.account.PageRequiredError`, whose cause is the refusal, except a low balance, which
-       * rejects as it is.
+       * rejects as it is. A transfer that the chain reverts since its fee spent the rest of the
+       * limit counts as a spent limit, once one read of the limit confirms it.
        * Any other failure rejects, since the node may have taken the transaction.
        */
       async function send(
@@ -2567,7 +2568,18 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           const resolvable =
             retry.classify(error) !== undefined ||
             retry.errorName(error) === 'CallNotAllowed'
-          if (!resolvable) throw error
+          // The chain takes a transfer whose fee spends the rest of its limit, and reverts it. Only
+          // a reverted receipt reads the limit that is left, which tells a spent limit from another
+          // revert.
+          const limited =
+            !resolvable &&
+            (await reverted_limit(error, {
+              chainId,
+              client,
+              session: session ?? context.session.get(),
+              transfer,
+            }))
+          if (!resolvable && !limited) throw error
           if (page) return undefined
           // Outside a page, only the node's refusal of the access key, its limit, or its scopes takes
           // the error of a payment above the access key's known limits, since a sign-in for another
@@ -2575,10 +2587,11 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           const name = retry.errorName(error)
           const kind = retry.classify(error)?.kind
           const signIn =
-            name !== undefined &&
-            (name === 'CallNotAllowed' ||
-              kind === 'accessKey' ||
-              kind === 'limit')
+            limited ||
+            (name !== undefined &&
+              (name === 'CallNotAllowed' ||
+                kind === 'accessKey' ||
+                kind === 'limit'))
           if (!signIn) throw error
           throw new AccountActions.PageRequiredError({
             cause: error,
@@ -3664,6 +3677,52 @@ function accessKeyOn(
   return [session?.accessKey, ...(session?.accessKeys ?? [])].find(
     (entry) => entry && Number(entry.chainId) === options.chainId,
   )
+}
+
+/**
+ * Returns whether `error` is the revert of a transfer of `options.transfer` that the limit left to
+ * the access key of `options.session` no longer holds, such as after its own fee spent the rest. It
+ * reads the limit in one round, only for a reverted receipt. A failed read returns `false`, so
+ * the error stands.
+ */
+async function reverted_limit(error: unknown, options: reverted_limit.Options) {
+  const { chainId, client, session, transfer } = options
+  const seen = new Set<unknown>()
+  let current = error
+  // Several copies of Viem can load, so the error's name identifies it.
+  while (
+    current instanceof Error &&
+    !seen.has(current) &&
+    current.name !== 'TransactionReceiptRevertedError'
+  ) {
+    seen.add(current)
+    current = current.cause
+  }
+  if (!(current instanceof Error) || seen.has(current)) return false
+
+  const accessKey = accessKeyOn(session, { chainId })
+  if (!accessKey?.keyAuthorization.limits) return false
+  const read = await Actions.accessKey
+    .getRemainingLimit(client, {
+      accessKey: accessKey.keyAuthorization.keyId,
+      account: accessKey.account,
+      token: transfer.token,
+    })
+    .catch(() => undefined)
+  return read !== undefined && read.remaining < transfer.amount
+}
+
+declare namespace reverted_limit {
+  type Options = {
+    /** The chain of the transfer. */
+    chainId: number
+    /** The client that sent the transfer, which reads the limit. */
+    client: Client
+    /** The session whose access key sent the transfer. */
+    session: Pick<Session.Any, 'accessKey' | 'accessKeys'> | undefined
+    /** The transfer, in base units, as `Token.payable` returns it. */
+    transfer: Token.payable.ReturnType
+  }
 }
 
 /** The state machines that this module runs. */
