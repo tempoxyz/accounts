@@ -47,6 +47,37 @@ describe('backend', () => {
     ).toMatchInlineSnapshot(`false`)
   })
 
+  test('serves a session without a refresh token in the last 30 seconds of its access token, without the refresh lock', async () => {
+    const memory = Store.memory()
+    const calls: string[] = []
+    const store = Store.from({
+      getItem: (key) => {
+        calls.push(`getItem ${key.split(':')[1]}`)
+        return memory.getItem(key)
+      },
+      lock: (key, fn) => {
+        calls.push(`lock ${key.split(':')[1]}`)
+        return memory.lock!(key, fn)
+      },
+      removeItem: (key) => memory.removeItem(key),
+      setItem: (key, value, options) => memory.setItem(key, value, options),
+    })
+    const accounts = instance({ store })
+    const { id } = await accounts.backend.save({
+      session: session({ expiresAt: Date.now() + 10_000, expiry: 60 }),
+    })
+    calls.length = 0
+
+    const restored = await accounts.backend.get({ id })
+
+    expect(restored?.id === id).toMatchInlineSnapshot(`true`)
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        "getItem session",
+      ]
+    `)
+  })
+
   test('returns the access keys of a session that an earlier release stored as `key` and `keys`', async () => {
     const store = Store.memory()
     const accounts = instance({ store })
