@@ -272,10 +272,12 @@ export function passkey(options: passkey.Options = {}) {
          * ceremony without a request, except as below, and sets the instance's session as
          * `passkey.signIn` does. Never throws. If Tempo ID refuses the options request, the handle's
          * next `signIn` within 4 minutes, on the same chain, throws that refusal without a request.
-         * Create a new handle when `accessKey` changes. If the signed-in user changes since the
-         * options request, such as after a `signOut` here or in another tab, the handle's next
-         * `signIn` requests options of its own before the ceremony. Prepare a new handle after a
-         * `signOut` to keep that request out of the gesture.
+         * Create a new handle when `accessKey` changes. If the signed-in user changes, or a
+         * `signOut` completes here or in another tab, after the options request, the handle's next
+         * `signIn` requests options of its own before the ceremony. Their `select` defaults as
+         * `passkey.signIn` defaults it, so after a `signOut` without `everywhere` they offer
+         * every passkey. Prepare a new handle after a `signOut` to keep that request out of the
+         * gesture.
          *
          * @example
          * ```ts
@@ -310,8 +312,9 @@ export function passkey(options: passkey.Options = {}) {
               ),
               signIn: () => Promise.reject(resolved.error),
             }
-          // The options of a signed-in user name only that user's passkeys. The handle compares the
-          // user in memory, so a sign-in with no change since reads nothing. `select: true` and
+          // The options of a signed-in user name only that user's passkeys, and a sign-out without
+          // `everywhere` makes `select` offer every passkey. The handle compares the user and the
+          // sign-outs in memory, so a sign-in with no change since reads nothing. `select: true` and
           // `credentialId` name the passkeys alone.
           const fixed =
             parameters.select === true || parameters.credentialId !== undefined
@@ -319,33 +322,42 @@ export function passkey(options: passkey.Options = {}) {
             const session = context.session.get()
             return session ? Session.subject(session) : undefined
           }
-          const request = (available: boolean | Promise<boolean>) =>
-            PasskeyActions.prepare(config, {
-              accessKey: resolved.accessKey,
-              available,
-              chainId,
-              challenge: parameters.challenge,
-              credentialId: parameters.credentialId,
-              mediation: parameters.mediation,
-              // The read of the mark runs beside the realms read, and only the options request awaits
-              // it, so the handle keeps the chain of the call for its first request.
-              select: select(parameters),
-            })
-          let requested = subject()
+          const request = (available: boolean | Promise<boolean>) => {
+            const requested = subject()
+            // The change commits nothing. It reports a sign-out since the request, here or in
+            // another tab, also one between a sign-in and now, whose user before and after is none.
+            const { overtaken } = context.session.change()
+            return {
+              handle: PasskeyActions.prepare(config, {
+                accessKey: resolved.accessKey,
+                available,
+                chainId,
+                challenge: parameters.challenge,
+                credentialId: parameters.credentialId,
+                mediation: parameters.mediation,
+                // The read of the mark runs beside the realms read, and only the options request
+                // awaits it, so the handle keeps the chain of the call for its first request.
+                select: select(parameters),
+              }),
+              // The handle's own later requests, such as after its options expire, keep this
+              // request's `select`, so a change since then needs a new handle.
+              stale: () => subject() !== requested || overtaken(),
+            }
+          }
           // Without `available`, the handle shares the read of `available` that runs, such as the
           // sign-in form's read for its passkey button.
           let prepared = request(parameters.available ?? read())
           return {
-            available: prepared.available,
+            available: prepared.handle.available,
             async signIn() {
               // The prepared request names its chain, which a switch since can leave.
               const change = context.session.change({ chainId })
-              if (!fixed && subject() !== requested) {
-                requested = subject()
+              if (!fixed && prepared.stale())
                 // The realms read of the handle answered already, so the new options need none.
-                prepared = request(await prepared.available)
-              }
-              const result = await prepared.signIn({ getFn }).catch(change.fail)
+                prepared = request(await prepared.handle.available)
+              const result = await prepared.handle
+                .signIn({ getFn })
+                .catch(change.fail)
               return finish(change, result)
             },
           }
