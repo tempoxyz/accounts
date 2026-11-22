@@ -6,6 +6,7 @@
 import { PGlite } from '@electric-sql/pglite'
 import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs'
+import * as Http from 'node:http'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
 import { P256, PublicKey } from 'ox'
@@ -265,6 +266,81 @@ describe('device', () => {
     expect(String(error)).toMatchInlineSnapshot(
       `"Accounts.RequestError: The code request received no response. Check the connection, and request a new code."`,
     )
+  })
+
+  test('signIn throws server_error with status 200, and keeps the user signed out in the file, for an approval whose key authorization does not parse', async () => {
+    // Tempo ID approves at the first poll, with a key authorization whose signature type no parser
+    // here knows, such as a newer one.
+    const server = Http.createServer((request, response) => {
+      response.setHeader('content-type', 'application/json')
+      if (request.url === '/device/code')
+        return response.end(
+          JSON.stringify({
+            device_code: 'device-code',
+            expires_in: 600,
+            interval: 0,
+            user_code: 'BCDF-GHJK',
+            verification_uri: 'http://127.0.0.1/device',
+            verification_uri_complete: 'http://127.0.0.1/device?code=BCDF-GHJK',
+          }),
+        )
+      return response.end(
+        JSON.stringify({
+          access_token: 'access-token',
+          account: '0x000000000000000000000000000000000000dEaD',
+          expires_in: 3600,
+          id_token: `e30.${Buffer.from('{"sub":"user"}').toString('base64url')}.e30`,
+          key_authorization: {
+            chainId: '0xa5bf',
+            expiry: null,
+            keyId: '0x000000000000000000000000000000000000bEEF',
+            keyType: 'secp256k1',
+            signature: { type: 'future' },
+          },
+          refresh_token: 'refresh-token',
+        }),
+      )
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as { port: number }
+    const directory = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-device-'))
+    const file = Path.join(directory, 'session.json')
+    const accounts = Accounts.create({
+      accessKey: { expiry: '7d', limits: [{ limit: '100', token: 'ousd' }] },
+      chain: 42431,
+      clientId: 'cli:acme-example',
+      plugins: [device({ onCode: () => {} })],
+      store: Store.file(file),
+      url: `http://127.0.0.1:${port}`,
+    })
+
+    try {
+      const error = await accounts.device
+        .signIn()
+        .catch((error: unknown) => error)
+
+      expect(error).toMatchInlineSnapshot(
+        `[Accounts.RequestError: Invalid key authorization: the response holds a key authorization that does not parse, such as of a newer signature type. Update the package, then sign in again.]`,
+      )
+      expect({
+        cause: (error as Error).cause,
+        code: (error as Accounts.RequestError).code,
+        file: Fs.existsSync(file),
+        session: await accounts.session.get(),
+        status: (error as Accounts.RequestError).status,
+      }).toMatchInlineSnapshot(`
+        {
+          "cause": undefined,
+          "code": "server_error",
+          "file": false,
+          "session": undefined,
+          "status": 200,
+        }
+      `)
+    } finally {
+      server.close()
+      Fs.rmSync(directory, { force: true, recursive: true })
+    }
   })
 
   test('poll throws RequestError with status 0 when the poll receives no response', async () => {

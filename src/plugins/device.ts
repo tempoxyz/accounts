@@ -292,6 +292,9 @@ export function device(options: device.Options = {}) {
          * @throws {Accounts.RequestError} While the call polls, with one of the `code` values of
          *   `device.poll` from the token endpoint: `access_denied`, `expired_token`, or
          *   `invalid_grant`.
+         * @throws {Accounts.RequestError} With `server_error` and status 200, after the approval, when
+         *   the token response holds a key authorization that does not parse, such as of a newer
+         *   signature type. The error quotes none of it. Update the package, then sign in again.
          * @throws {Accounts.RequestError} With `expired_token`, when the call polled until
          *   `expiresIn` passed. If the last poll failed with a network error, a rate limit, or a
          *   server error, `cause` holds that error. Request a new code.
