@@ -114,35 +114,41 @@ export function device(options: device.Options = {}) {
             name: 'AbortError',
           })
         if (signal?.aborted) throw reason()
-        const aborted = new Promise<never>((_, reject) =>
-          signal?.addEventListener('abort', () => reject(reason()), {
-            once: true,
-          }),
-        )
+        // The call removes its listener once it settles, so a signal that many calls share, such as
+        // a CLI's Ctrl+C, keeps none of them.
+        let abort: (() => void) | undefined
+        const aborted = new Promise<never>((_, reject) => {
+          abort = () => reject(reason())
+          signal?.addEventListener('abort', abort, { once: true })
+        })
         aborted.catch(() => undefined)
         /** Settles with `promise`, or rejects at once when `signal` aborts. */
         const until = <value>(promise: Promise<value>) =>
           Promise.race([promise, aborted])
 
-        const grant = await until(
-          DeviceActions.authorize(context.config, {
-            accessKey,
-            challenge: parameters.challenge,
-            funding: parameters.funding,
-            resource: parameters.resource,
-          }),
-        )
-        await until(
-          Promise.resolve(
-            onCode({
-              expiresIn: grant.expiresIn,
-              userCode: grant.userCode,
-              verificationUri: grant.verificationUri,
-              verificationUriComplete: grant.verificationUriComplete,
+        try {
+          const grant = await until(
+            DeviceActions.authorize(context.config, {
+              accessKey,
+              challenge: parameters.challenge,
+              funding: parameters.funding,
+              resource: parameters.resource,
             }),
-          ),
-        )
-        return await grant.wait({ signal })
+          )
+          await until(
+            Promise.resolve(
+              onCode({
+                expiresIn: grant.expiresIn,
+                userCode: grant.userCode,
+                verificationUri: grant.verificationUri,
+                verificationUriComplete: grant.verificationUriComplete,
+              }),
+            ),
+          )
+          return await grant.wait({ signal })
+        } finally {
+          if (abort) signal?.removeEventListener('abort', abort)
+        }
       }
 
       return {
