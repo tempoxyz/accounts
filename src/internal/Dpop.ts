@@ -17,6 +17,20 @@
 import { Base64, Bytes, Hash, type WebCryptoP256 } from 'ox'
 
 /**
+ * The JWS algorithms of the DPoP proofs that a verifier of `AccessToken.create` accepts, and that
+ * the relay route advertises in its `DPoP` challenge. Tempo ID accepts and advertises the same, so
+ * each proof that binds a token also verifies at the API.
+ *
+ * @example
+ * ```ts
+ * import { Dpop } from 'accounts/internal'
+ *
+ * const algs = Dpop.algorithms.join(' ')
+ * ```
+ */
+export const algorithms = ['ES256', 'EdDSA'] as const
+
+/**
  * How far the `iat` of each proof for Tempo ID lies before its signature, in seconds. Tempo ID refuses
  * an `iat` more than 5 seconds ahead of its clock, and accepts a proof for 300 seconds after it, so a
  * device clock up to 65 seconds fast, or 240 seconds slow, signs proofs that it accepts.
