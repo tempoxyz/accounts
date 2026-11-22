@@ -1175,16 +1175,26 @@ function siwe(
 
 /**
  * Returns the stored form of a session or a redirect's authorization. A session that `get` returned
- * leaves its `id` and `method`, which the read derives.
+ * leaves its `id` and `method`, which the read derives. The result of `email.signIn` leaves its
+ * `accounts`, whose accounts sign, so a store that clones each value refuses them.
  */
 function toStored(
   session: Session.TempoIdSession & {
+    accounts?: unknown
     id?: unknown
     method?: unknown
     signer?: unknown
   },
 ): StoredTempoId {
-  const { account, id: _, idToken, method: __, signer: ___, ...rest } = session
+  const {
+    account,
+    accounts: _,
+    id: __,
+    idToken,
+    method: ___,
+    signer: ____,
+    ...rest
+  } = session
   const sid = sessionId(idToken)
   return {
     ...rest,
