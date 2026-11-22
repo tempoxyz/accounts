@@ -1330,6 +1330,7 @@ describe('pay', () => {
       user: { email: 'user@example.com', id: 'user_1' },
     })
 
+    const messages: (string | undefined)[] = []
     const names: (string | undefined)[] = []
     for (const account of [undefined, owner.address]) {
       const error = await accounts
@@ -1344,6 +1345,7 @@ describe('pay', () => {
           () => undefined,
           (error: Error) => error,
         )
+      messages.push(error?.message)
       names.push(error?.name)
     }
 
@@ -1353,10 +1355,16 @@ describe('pay', () => {
         "Accounts.AccessKeyRequiredError",
       ]
     `)
+    expect(messages).toMatchInlineSnapshot(`
+      [
+        "The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain.",
+        "The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain.",
+      ]
+    `)
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
 
-  test('throws AccessKeyRequiredError for a fixed session whose access key on the chain expired, with a message that names no missing access key request, and sends no request', async () => {
+  test('throws SignedOutError for a fixed session whose only access key expired, as its viem client and mpp payer do, and sends no request', async () => {
     const owner = Account.fromSecp256k1(
       '0x0123456789012345678901234567890123456789012345678901234567890123',
     )
@@ -1407,12 +1415,7 @@ describe('pay', () => {
         (error: Error) => error,
       )
 
-    expect(error?.name).toMatchInlineSnapshot(
-      `"Accounts.AccessKeyRequiredError"`,
-    )
-    expect(error?.message).toMatchInlineSnapshot(
-      `"The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain."`,
-    )
+    expect(error?.name).toMatchInlineSnapshot(`"Accounts.SignedOutError"`)
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
 
