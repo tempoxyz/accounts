@@ -809,6 +809,56 @@ describe('pay', () => {
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
 
+  test('rejects a `to` that is no address with `invalid_field`, before it opens a page', async () => {
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'client_1',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const refusals: Record<string, unknown> = {}
+    for (const to of [
+      '0x123',
+      '0x1f9090aae28b8a3dceadf281b0f12828e676c32',
+      '0x1F9090aaE28b8a3dCeaDf281B0F12828e676c326',
+      'alice.eth',
+      '0x1f9090aae28b8a3dceadf281b0f12828e676c326',
+    ]) {
+      const error = await accounts
+        .pay({
+          account: '0x7a3f0000000000000000000000000000000000aa',
+          amount: '5',
+          to: to as `0x${string}`,
+          token: 'ousd',
+        })
+        .then(
+          () => undefined,
+          (error: Accounts.RequestError) => error,
+        )
+      refusals[to] =
+        `${error?.name} ${error?.code} ${error?.reason} ${error?.field}`
+    }
+
+    expect(refusals).toMatchInlineSnapshot(`
+      {
+        "0x123": "Accounts.RequestError invalid_request invalid_field to",
+        "0x1F9090aaE28b8a3dCeaDf281B0F12828e676c326": "Accounts.RequestError invalid_request invalid_field to",
+        "0x1f9090aae28b8a3dceadf281b0f12828e676c32": "Accounts.RequestError invalid_request invalid_field to",
+        "0x1f9090aae28b8a3dceadf281b0f12828e676c326": "Actions.account.PageRequiredError undefined undefined undefined",
+        "alice.eth": "Accounts.RequestError invalid_request invalid_field to",
+      }
+    `)
+    expect(requests).toMatchInlineSnapshot(`[]`)
+  })
+
   test('rejects outside a browser page with Actions.account.PageRequiredError', async () => {
     const accounts = Accounts.create({
       chain: 42431,

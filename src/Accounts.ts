@@ -2287,8 +2287,10 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       // A load of the stored session also loads the stored chain, so the default chain resolves
       // again after it.
       const chainOf = () => parameters.chainId ?? chain.get()
-      // An invalid amount or memo rejects before a read of the account, and before a plugin sends.
+      // An invalid amount, recipient, or memo rejects before a read of the account, and before a
+      // plugin sends.
       Payment.amount(parameters.amount)
+      Payment.to(parameters.to)
       const memo =
         parameters.memo === undefined
           ? undefined
