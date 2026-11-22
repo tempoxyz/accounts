@@ -7,6 +7,7 @@
 import { PGlite } from '@electric-sql/pglite'
 import * as Esbuild from 'esbuild'
 import { EmbeddedJWK, jwtVerify } from 'jose'
+import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
@@ -72,13 +73,14 @@ describe('dpop', () => {
   })
 
   test('keeps no private key in a shared store, and resolves with a DPoP key for the process when the store refuses the read or the write', async () => {
-    // Postgres refuses a CryptoKey, and a closed client refuses each query. One database serves
-    // both cases, since each start of PGlite takes seconds in CI.
     const database = new PGlite()
     const store = Store.postgres({
       query: (text: string, values: readonly unknown[]) =>
         database.query(text, [...values]),
     })
+    // The file store of a folder rejects each read, as a closed IndexedDB does.
+    const folder = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-dpop-'))
+    const unreadable = Store.file(folder)
     // A folder that only its owner reads refuses each write of the file store in it, also of the JWK.
     const directory = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-dpop-'))
     Fs.chmodSync(directory, 0o500)
@@ -86,15 +88,17 @@ describe('dpop', () => {
 
     const first = await dpop({ store })
     const second = await dpop({ store })
-    const rows = (await database.query('select key from tempo_id_store')).rows
     await database.close()
-    const refusedRead = await dpop({ store })
+    const refusedRead = await dpop({ store: unreadable }).finally(() =>
+      Fs.rmSync(folder, { force: true, recursive: true }),
+    )
     const refusedWrite = await dpop({ store: readOnly }).finally(() => {
       Fs.chmodSync(directory, 0o700)
       Fs.rmSync(directory, { force: true, recursive: true })
     })
 
-    // A database row would hold the private key beside the refresh token that it binds.
+    // A database row would hold the private key beside the refresh token that it binds, so the
+    // store holds none, and each call creates its own.
     expect(Dpop.thumbprint(keyOf(second))).not.toBe(
       Dpop.thumbprint(keyOf(first)),
     )
@@ -103,7 +107,24 @@ describe('dpop', () => {
         (plugin) => Dpop.thumbprint(keyOf(plugin)).length,
       ),
     ).toEqual([43, 43])
-    expect(rows).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('sends no query to a shared store, such as Store.postgres, which can hold no DPoP key', async () => {
+    const database = new PGlite()
+    // Each query records its first word, such as `select`.
+    const queries: string[] = []
+    const store = Store.postgres({
+      query(text: string, values: readonly unknown[]) {
+        queries.push(text.split(' ')[0]!)
+        return database.query(text, [...values])
+      },
+    })
+
+    const plugin = await dpop({ store })
+    await database.close()
+
+    expect(Dpop.thumbprint(keyOf(plugin)).length).toBe(43)
+    expect(queries).toMatchInlineSnapshot(`[]`)
   })
 
   test('returns the DPoP key of an earlier run from Store.file, which keeps it as a JWK, and imports it as non-extractable', async () => {
@@ -157,6 +178,83 @@ describe('dpop', () => {
     )
     expect(second).toBe(first)
   })
+
+  test('returns one DPoP key for concurrent first runs of two processes on one Store.file, such as two first runs of a CLI', async () => {
+    const directory = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-dpop-'))
+    const path = Path.join(directory, 'store.json')
+    // Each process runs Node with its global `navigator`, whose Web Locks span only that process.
+    // Each reports that it started over IPC, and calls the factory once the test releases both.
+    const output = await Esbuild.build({
+      bundle: true,
+      format: 'esm',
+      logLevel: 'silent',
+      platform: 'node',
+      stdin: {
+        contents: [
+          "import * as Dpop from '../internal/Dpop.ts'",
+          "import * as Store from '../Store.ts'",
+          "import { dpop } from './dpop.ts'",
+          `const path = ${JSON.stringify(path)}`,
+          "const released = new Promise((resolve) => process.once('message', resolve))",
+          "process.send('ready')",
+          'await released',
+          'const plugin = await dpop({ store: Store.file(path) })',
+          'console.log(Dpop.thumbprint(plugin.config().dpop))',
+          'process.disconnect()',
+        ].join('\n'),
+        loader: 'ts',
+        resolveDir: import.meta.dirname,
+      },
+      write: false,
+    })
+    const children = [0, 1].map(() =>
+      ChildProcess.spawn(process.execPath, ['--input-type=module'], {
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      }),
+    )
+    let ready = 0
+    const results = children.map(
+      (child) =>
+        new Promise<string>((resolve, reject) => {
+          let stderr = ''
+          let stdout = ''
+          child.on('message', () => {
+            ready++
+          })
+          child.stderr!.on('data', (chunk: Buffer) => {
+            stderr += chunk.toString()
+          })
+          child.stdout!.on('data', (chunk: Buffer) => {
+            stdout += chunk.toString()
+          })
+          child.on('close', (code) => {
+            if (code === 0) resolve(stdout.trim())
+            else reject(new Error(stderr))
+          })
+          child.stdin!.end(output.outputFiles[0]!.text)
+        }),
+    )
+
+    try {
+      await expect.poll(() => ready, { timeout: 10_000 }).toBe(2)
+      for (const child of children) child.send('start')
+      const thumbprints = await Promise.all(results)
+      // The next run reads the DPoP key that the file keeps, which binds the sessions of both.
+      const next = Dpop.thumbprint(
+        keyOf(await dpop({ store: Store.file(path) })),
+      )
+
+      expect({
+        same: thumbprints.every((thumbprint) => thumbprint === next),
+      }).toMatchInlineSnapshot(`
+        {
+          "same": true,
+        }
+      `)
+    } finally {
+      Fs.rmSync(directory, { force: true, recursive: true })
+    }
+  }, 20_000)
 
   test('creates a new DPoP key at each call without a store outside a browser', async () => {
     const plugins = await Promise.all([dpop(), dpop()])

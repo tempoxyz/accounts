@@ -5,7 +5,6 @@
   "scripts": {
     "build": "vite build && node scripts/og.ts",
     "check:types": "tsc --noEmit",
-    "deploy": "pnpm run build && wrangler deploy",
     "dev": "vite dev",
     "preview": "wrangler dev --infer-origin-from-routes=false"
   },

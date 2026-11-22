@@ -151,9 +151,10 @@ async function run(
               ? (parameters.account ?? renewing?.account)
               : parameters.account,
             challenge: parameters.challenge,
-            // The user of a saved session most likely still holds the browser's Tempo ID session, so its
-            // renewal sends the authorization alone, which returns no session at `session_required`.
-            check: renewed === undefined,
+            // A held or saved session shows that the user most likely holds the Tempo ID session. So
+            // the call sends the authorization alone. Its `session_required` refusal returns no
+            // session.
+            check: renewed === undefined && held === undefined,
             getFn: parameters.getFn ?? config.getFn,
             passkey: parameters.passkey,
           })

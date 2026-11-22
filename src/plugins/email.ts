@@ -3,7 +3,6 @@
  * `clientAssertion`, which only a backend holds, it calls the backend's routes.
  * @module
  */
-import * as BackendActions from '../actions/backend.js'
 import * as EmailActions from '../actions/email.js'
 import type * as Api from '../internal/Api.js'
 import * as SignIn from '../internal/SignIn.js'
@@ -31,7 +30,8 @@ const unlistedTtl = 10 * 60_000
  * import { Accounts } from 'accounts'
  * import { email } from 'accounts/plugins'
  *
- * const accounts = Accounts.create({ plugins: [email()] })
+ * // A first-party app's registration ID. A page origin names a third-party app.
+ * const accounts = Accounts.create({ clientId: 'example-app', plugins: [email()] })
  *
  * await accounts.email.sendCode({ email: 'user@example.com' })
  * const session = await accounts.email.signIn({
@@ -79,11 +79,14 @@ export function email(options: email.Options = {}) {
          * ```
          */
         async sendCode(parameters: email.sendCode.Parameters): Promise<void> {
-          if (backend)
-            return BackendActions.email.sendCode(config, {
+          if (backend) {
+            // Only a backend calls these routes, so a page's bundle loads them on demand.
+            const BackendEmail = await import('../actions/backend/email.js')
+            return BackendEmail.sendCode(config, {
               email: parameters.email,
               userIp: parameters.userIp,
             })
+          }
           return EmailActions.sendCode(config, { email: parameters.email })
         },
         /**
@@ -234,9 +237,11 @@ export function email(options: email.Options = {}) {
           const { createFn } = options
 
           const result = await (async () => {
-            if (backend)
+            if (backend) {
+              // Only a backend calls these routes, so a page's bundle loads them on demand.
+              const BackendEmail = await import('../actions/backend/email.js')
               return {
-                ...(await BackendActions.email.signIn(config, {
+                ...(await BackendEmail.signIn(config, {
                   accessKey,
                   challenge,
                   code,
@@ -245,6 +250,7 @@ export function email(options: email.Options = {}) {
                 })),
                 upgradeAvailable: false,
               }
+            }
             const chain = accessKey?.chainId ?? config.chainId
             const skipped = (unlisted.get(chain) ?? 0) > Date.now()
             const request = {

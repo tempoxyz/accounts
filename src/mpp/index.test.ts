@@ -1369,6 +1369,56 @@ describe('mpp', () => {
     `)
   })
 
+  test('sends the paid retry without identity to an endpoint of `identity.scope` that takes the credential in Authorization', async () => {
+    const store = Store.memory()
+    await store.setItem(name, {
+      state: { session: { ...session({ expiry: 3600 }), idToken: 'id-token' } },
+      version: 0,
+    })
+    const endpoint = server()
+    const accounts = instance({
+      fetch: endpoint.fetch,
+      identity: { scope: ['https://mpp.test'] },
+      store,
+    })
+
+    // Nothing listens at the endpoint's chain, so it refuses each credential.
+    const result = await accounts
+      .fetch('https://mpp.test/fortune')
+      .then((response) => response.status)
+      .catch((error: unknown) => error)
+
+    expect({
+      requests: endpoint.requests.map((request) => [
+        request.headers.get('authorization')?.split(' ')[0] ?? null,
+        request.headers.get('tempo-id-token'),
+      ]),
+      result,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          [
+            "Bearer",
+            "id-token",
+          ],
+          [
+            "Payment",
+            null,
+          ],
+          [
+            "Payment",
+            null,
+          ],
+          [
+            "Payment",
+            null,
+          ],
+        ],
+        "result": 402,
+      }
+    `)
+  })
+
   test('sends a request that carries a payment credential without identity once the session can no longer read its access token', async () => {
     const store = Store.memory()
     // An access token at its expiry needs a refresh, and nothing listens at Tempo ID's URL.

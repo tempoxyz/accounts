@@ -103,6 +103,41 @@ describe('passkey', () => {
     `)
   })
 
+  test('available and prepare share one GET /v1/realms for concurrent calls, such as the button and the prepared sign-in of one sign-in form', async () => {
+    const paths: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (input, init) => {
+        paths.push(
+          new URL(input instanceof Request ? input.url : input).pathname,
+        )
+        return fetch(input, init)
+      },
+      plugins: [passkey()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const prepared = accounts.passkey.prepare({ accessKey: false })
+    const available = await Promise.all([
+      accounts.passkey.available(),
+      prepared.available,
+    ])
+
+    expect(available).toMatchInlineSnapshot(`
+      [
+        false,
+        false,
+      ]
+    `)
+    expect(paths).toMatchInlineSnapshot(`
+      [
+        "/v1/realms",
+      ]
+    `)
+  })
+
   test('prepare with available sends no GET /v1/realms, and with true requests the options at once', async () => {
     const paths: string[] = []
     const accounts = Accounts.create({
@@ -465,6 +500,70 @@ describe('passkey', () => {
           "/oauth2/revoke",
         ],
         "session": undefined,
+      }
+    `)
+  })
+
+  test('register throws session_required, and sends no request, in an instance that holds the session once another process on the store signs out', async () => {
+    const paths: string[] = []
+    const store = Store.memory()
+    const create = (store: Store.Store) =>
+      Accounts.create({
+        chain: 42431,
+        clientId: 'https://app.example.com',
+        fetch: (input, init) => {
+          paths.push(
+            new URL(input instanceof Request ? input.url : input).pathname,
+          )
+          return fetch(input, init)
+        },
+        plugins: [
+          passkey(),
+          // Commits a session, as a sign-in does.
+          Plugin.from({
+            actions: (context) => ({
+              commit: () =>
+                context.session.change().commit(
+                  Session.from({
+                    accessToken: 'access-token',
+                    expiresAt: Date.now() + 60 * 60 * 1000,
+                    refreshToken: 'refresh-token',
+                    user: { email: 'user@example.com', id: 'user_1' },
+                  }),
+                ),
+            }),
+            id: 'test',
+          }),
+        ],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const accounts = create(store)
+    // Another process on the same entries, such as a replica on one `Store.postgres` table, whose
+    // messages never reach this one.
+    const other = create(
+      Store.from({
+        getItem: (key) => store.getItem(key),
+        removeItem: (key) => store.removeItem(key),
+        setItem: (key, value, options) => store.setItem(key, value, options),
+      }),
+    )
+    await other.test.commit()
+    // This process reads the stored session, then the other process signs it out. Its revocation
+    // receives no response, and the sign-out stores its mark.
+    const held = (await accounts.session.get())?.user?.id
+    await other.signOut().catch(() => undefined)
+    paths.length = 0
+
+    const error = await accounts.passkey
+      .register()
+      .catch((error: unknown) => (error as Accounts.RequestError).reason)
+
+    expect({ error, held, paths }).toMatchInlineSnapshot(`
+      {
+        "error": "session_required",
+        "held": "user_1",
+        "paths": [],
       }
     `)
   })

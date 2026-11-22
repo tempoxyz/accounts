@@ -25,19 +25,27 @@ Through a proxy that names another host, the dev server responds with an error. 
 
 ## Deployment
 
-`.github/workflows/site.yml` deploys the Worker `accounts-site` to Cloudflare, with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets.
+`.github/workflows/site.yml` deploys the Worker `accounts-site` to the production Cloudflare account. No job holds a long-lived Cloudflare token.
 
 | Event           | Deployment                                                                                    |
 | --------------- | --------------------------------------------------------------------------------------------- |
-| Push to `main`  | The Worker, at the route of `wrangler.json`, or its workers.dev URL without one               |
+| Push to `main`  | The Worker, at its workers.dev URL, which `accounts.tempo.xyz` proxies, through the broker    |
 | Pull request    | A version with the preview alias `pr-<number>`, whose URL a comment on the pull request names |
-| Manual dispatch | The Worker, from the selected branch                                                          |
+| Manual dispatch | The Worker, from `main` only, as a push deploys it                                            |
 
-A pull request from a fork only builds. After `pnpm --dir site exec wrangler login`, `pnpm --dir site deploy` builds and deploys the same Worker from a checkout.
+A push to `main` deploys through the [Cloudflare Deploy Broker](https://github.com/tempoxyz/cloudflare-deploy-broker), so no job of the push holds a Cloudflare token. The `attest` job runs the broker's trusted build workflow, which runs `pnpm build`, bundles the Worker, and attests the Worker, `wrangler.json`, and the files of `dist/public`. The `deploy` job sends them to the broker as the deployment `accounts-site`. The broker uploads and promotes the version, checks Cloudflare's readback, and keeps the Worker's secrets. The job then requests `accounts.tempo.xyz`.
 
-`wrangler.json` names `dist/public` as the assets of the Worker, and `src/server/Worker.ts` as its script. The workflow reads the domain of the deployment from its first route with `jq`, so the file holds no comments.
+The `accounts` entry of [`tempoxyz/cloudflare-deploy-policies`](https://github.com/tempoxyz/cloudflare-deploy-policies) authorizes the first broker deployment, and the broker then keeps the grant for this repository, the deployment, and the Worker. A change of the code, a variable, or the files needs no other change. A new binding, a route, or a change of the KV namespace, the account, or the name of the Worker needs a new policy entry. The broker requires `account_id`, the `ASSETS` binding of the assets, and the `CF_VERSION_METADATA` binding. The Worker reads neither binding. `STORE` names the ID of the namespace that Wrangler created, since a binding without an ID asks the broker for a new namespace. The Workers tab of the broker's dashboard, `https://cf.tehq.net/`, changes the Worker's secrets.
 
-The deploy job checks out no code. The build job thus bundles the Worker to `dist/worker`, and names the bundle in the `wrangler.json` that it uploads.
+A pull request's `build` job builds the site and bundles the Worker without secrets, and uploads both. After it succeeds, `.github/workflows/site-preview.yml` runs on `workflow_run`, so GitHub runs main's copy of the workflow, never the pull request's. It checks out only main's `wrangler.json` and catalog, and uploads the pull request's files as data with `wrangler versions upload --no-bundle`. So no code of the pull request runs where the Cloudflare token is. A change of `wrangler.json` or of the Wrangler version reaches the previews only after it merges. A pull request from a fork or from Dependabot only builds.
+
+A preview of the broker binds no secret and no KV namespace, and the demos' routes read both, so a preview uploads a version with Wrangler. The token comes from [Cloudflare STS](https://github.com/tempoxyz/cloudflare-sts), under the `preview-upload` policy of this repository, which admits only `site-preview.yml` on `main`. It holds Workers Scripts Write on the production account, serves only the runner's IP address, and lasts at most the job's 10 minutes. That permission reaches every Worker of the account, so the job never runs the code of a pull request. The version inherits the Worker's secrets and binds its KV namespace, so the code of a pull request runs at its preview URL with both.
+
+Cloudflare Access fronts each preview alias, `pr-<number>-accounts-site.porto.workers.dev`, as tempoxyz/cloudflare `stacks/apps/accounts` configures. It admits only Tailscale App Connector egress and the service token of the `SITE_PREVIEW_ACCESS_CLIENT_ID` and `SITE_PREVIEW_ACCESS_CLIENT_SECRET` secrets. The runner of `site-preview.yml` is off the tailnet, so its check sends the token in the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers, to the alias only. The site at `accounts.tempo.xyz` and its workers.dev URL stay public.
+
+Only `main` deploys the Worker. No command deploys it from a checkout.
+
+`wrangler.json` names `dist/public` as the assets of the Worker, and `src/server/Worker.ts` as its script. The preview names the files of the pull request in place of both.
 
 The Worker holds no Durable Object, since Cloudflare gives a Worker with one no preview URL.
 

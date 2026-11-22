@@ -72,9 +72,13 @@ export class PageRequiredError extends Error {
   constructor(options: PageRequiredError.Options = {}) {
     // The payment page has no redirect, so its message names what sends a payment outside a page.
     super(
-      options.payment
-        ? "No browser window: the payment page opens only from a page. Outside a page, only the session's access key sends a payment, within its limits and before its expiry, so a payment above them needs a sign-in for an access key that holds it."
-        : 'No browser window: the approval page opens in a frame or a popup only from a page. Open it through a redirect instead.',
+      (() => {
+        if (!options.payment)
+          return 'No browser window: the approval page opens in a frame or a popup only from a page. Open it through a redirect instead.'
+        if (options.sender === false)
+          return "No browser window, and no plugin sends payments: the payment page opens only from a page. Outside a page, add a plugin that sends a payment with the session's access key."
+        return "No browser window: the payment page opens only from a page. Outside a page, only the session's access key sends a payment, within its limits and before its expiry, so a payment above them needs a sign-in for an access key that holds it."
+      })(),
       options.cause === undefined ? undefined : { cause: options.cause },
     )
   }
@@ -92,6 +96,12 @@ export declare namespace PageRequiredError {
      * for an access key that holds the payment. Defaults to `false`.
      */
     payment?: boolean | undefined
+    /**
+     * Whether a plugin of the instance sends a payment with the session's access key. Without one,
+     * the message of the payment page names that plugin as the fix, since no sign-in sends the
+     * payment. Defaults to `true`.
+     */
+    sender?: boolean | undefined
   }
 }
 
@@ -413,8 +423,9 @@ export declare namespace get {
  * its handle to the popup, so a popup's call stays pending until `signal` aborts.
  *
  * @throws {RequestError} `invalid_request` with the reason `invalid_field` and the field `amount`
- * for an `amount` that is not a decimal above 0 with at most 6 decimal places, before any page
- * opens. `invalid_request` for a `memo` over 32 bytes, before any page opens, for a `challenge`
+ * for an `amount` that is not a decimal above 0 with at most 6 decimal places, and with the field
+ * `to` for a `to` that is no address, before any page opens. `invalid_request` for a `memo` over
+ * 32 bytes, before any page opens, for a `challenge`
  * that is no Sign-In with Ethereum message for the redirect URI's origin and the payment's chain
  * without resources, and for a return without a transaction hash, an account, or the challenge's
  * signature. `access_denied` when the user rejects the payment.
@@ -445,6 +456,7 @@ export async function pay<const options extends pay.Options>(
 ): Promise<pay.ReturnType<options>> {
   const { account, attempt, challenge, note, to, token } = options
   const amount = Payment.amount(options.amount)
+  Payment.to(to)
   // Text goes on the chain as its UTF-8 bytes, and hex as its own bytes.
   const memo =
     options.memo === undefined ? undefined : Payment.memo(options.memo)
