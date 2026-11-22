@@ -251,8 +251,8 @@ export function post(
 
 /**
  * Returns `auth` with a `fetch` that throws {@link RequestError} with status 0 and `message`
- * when the request receives no response, such as offline. The original error is its `cause`. A sign-in
- * uses it only before the user signs in, so a later failure keeps the `signedIn` error of {@link signedIn}.
+ * when the request receives no response, such as offline. The original error is its `cause`. A caller
+ * after the user signs in, such as the code exchange, marks the error `signedIn` itself.
  */
 export function answered(
   auth: Accounts.Config,
