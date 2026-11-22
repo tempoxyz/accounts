@@ -53,7 +53,8 @@ import type * as TempoAccount from './internal/TempoAccount.js'
  * - A transaction from the account of a `viem` client whose session holds no access key, outside a
  *   page, or with `retry.accessKey` off for a session with an access key on another chain.
  * - `accounts.viem({ session })` for a session without an access key.
- * - `accounts.pay({ session })` for a session without a live access key on the payment's chain.
+ * - `accounts.pay({ session })` for a session without a live access key on the payment's chain,
+ *   unless every access key of the session expired, which throws `Accounts.SignedOutError`.
  */
 export class AccessKeyRequiredError extends Error {
   override readonly name = 'Accounts.AccessKeyRequiredError'
@@ -1140,8 +1141,10 @@ export type Accounts<
      * neither the store nor Tempo ID. Outside a page, a payment that the access key does not send,
      * such as one above its limits, throws `Actions.account.PageRequiredError` once the access key's
      * attempt ends. A payment above what is left of a limit, which only the node knows, throws it
-     * with the node's refusal as its `cause`. A session without a live access key on the payment's chain, such as one whose access key
-     * expired, throws {@link AccessKeyRequiredError} before any request, also with `account`. An `account` other than
+     * with the node's refusal as its `cause`. A session whose every access key expired throws
+     * {@link SignedOutError} before any request, as its `viem` client and `mpp` payer do. A session
+     * without a live access key on the payment's chain otherwise throws {@link AccessKeyRequiredError}
+     * before any request. Both apply also with `account`. An `account` other than
      * that access key's account throws {@link RequestError} with the reason `invalid_field` and the
      * field `account`. With `challenge`, the call ignores `session`.
      *
@@ -2313,7 +2316,19 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
             Number(entry.chainId) === chainId &&
             !AccessKey_internal.expired(entry),
         )
-        if (!key) throw new AccessKeyRequiredError()
+        if (!key) {
+          // As a client of the fixed session refuses it, a session whose every access key expired
+          // can no longer act, and a session with a live access key on another chain needs one here.
+          const held = [fixed.accessKey, ...(fixed.accessKeys ?? [])].filter(
+            (entry) => entry !== undefined,
+          )
+          if (
+            held.length > 0 &&
+            held.every((entry) => AccessKey_internal.expired(entry))
+          )
+            throw new SignedOutError()
+          throw new AccessKeyRequiredError()
+        }
         // Only the session's access key sends, so another account could only reach the payment page.
         if (
           parameters.account !== undefined &&

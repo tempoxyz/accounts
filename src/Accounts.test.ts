@@ -1235,7 +1235,7 @@ describe('pay', () => {
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
 
-  test('throws AccessKeyRequiredError for a fixed session whose access key on the chain expired, and sends no request', async () => {
+  test('throws SignedOutError for a fixed session whose only access key expired, as its viem client and mpp payer do, and sends no request', async () => {
     const owner = Account.fromSecp256k1(
       '0x0123456789012345678901234567890123456789012345678901234567890123',
     )
@@ -1286,9 +1286,7 @@ describe('pay', () => {
         (error: Error) => error,
       )
 
-    expect(error?.name).toMatchInlineSnapshot(
-      `"Accounts.AccessKeyRequiredError"`,
-    )
+    expect(error?.name).toMatchInlineSnapshot(`"Accounts.SignedOutError"`)
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
 
