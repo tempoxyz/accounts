@@ -54,7 +54,9 @@ export function create(secureStore: create.SecureStore): Store.Store {
         `_${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
     )
   return Store.from({
-    connect,
+    // An engine without `WeakRef`, such as JavaScriptCore on Android, holds no listener, so its
+    // instances read sign-outs from the store instead.
+    ...(typeof WeakRef === 'function' ? { connect } : {}),
     async getItem(key) {
       const text = await secureStore.getItemAsync(encode(key))
       return text === null ? undefined : StoreValue.parse(text)
