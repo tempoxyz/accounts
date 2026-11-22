@@ -20,8 +20,8 @@ import { redirect } from './redirect.js'
  * The secure store holds the session, with its keys encoded to the characters that it accepts, and
  * each value as ox's `Json`, which keeps a `bigint`. Every instance on an `expo` preset in the app,
  * also of two presets, shares the device's secure store, and React Native has no Web Locks. So the
- * store's `lock` serializes their session refreshes. A sign-out of one instance empties the session
- * of the other instances on the same preset at once.
+ * store's `lock` serializes their session refreshes, and a sign-out of one instance empties the
+ * session of the others at once.
  *
  * The preset has an entry of its own, since it imports Expo modules that only an Expo app installs,
  * so a React Native app without Expo never resolves them. `expo-secure-store`, `expo-web-browser`,
