@@ -713,7 +713,10 @@ export type Accounts<
        * import { Accounts } from 'accounts'
        * import { email } from 'accounts/plugins'
        *
-       * const accounts = Accounts.create({ plugins: [email()] })
+       * const accounts = Accounts.create({
+       *   clientId: 'example-app',
+       *   plugins: [email()],
+       * })
        * const session = await accounts.email.signIn({ code, email: address })
        * if (session.upgradeAvailable) await accounts.account.upgrade()
        * ```
