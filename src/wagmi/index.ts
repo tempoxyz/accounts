@@ -108,14 +108,15 @@ export class SignInIncompleteError extends Error {
 
 /**
  * A connection without `signIn` on an instance whose sign-in plugins each take input, such as an
- * emailed code. The `connect` of {@link tempoId} throws it. Pass `signIn`.
+ * emailed code, or, outside a page, whose sign-in plugin is `dialog`, which needs a page. The
+ * `connect` of {@link tempoId} throws it before the sign-in, and sends no request. Pass `signIn`.
  */
 export class SignInRequiredError extends Error {
   override readonly name = 'wagmi.SignInRequiredError'
 
   constructor() {
     super(
-      "The connector's sign-in plugins each take input, such as an emailed code. Pass `signIn` to `connect`, or add the `dialog`, `passkey`, `redirect`, or `device` plugin.",
+      'The connector has no sign-in plugin that signs in here without input: `email` and `backend` take input, and `dialog` needs a page. Pass `signIn` to `connect`, or add the `passkey`, `redirect`, or `device` plugin.',
     )
   }
 }
@@ -151,7 +152,9 @@ export class StoreRequiredError extends Error {
  * With a session and without `accessKey`, `connect` returns the session's account, with no sign-in.
  * Otherwise it runs `signIn`, or the `signIn` of the first plugin of `plugins` that signs in without
  * input: `device`, `dialog`, `passkey`, or `redirect`. An instance without a sign-in plugin holds
- * `dialog`. The `email` and `backend` plugins take input, so they need `signIn`. Outside a browser
+ * `dialog`. The `email` and `backend` plugins take input, so they need `signIn`. Outside a page,
+ * `dialog` has no page to show, so a `connect` without `signIn` or another such plugin throws
+ * {@link SignInRequiredError} and sends no request. Outside a browser
  * without `store`, the instance holds no session, so a sign-in throws {@link StoreRequiredError} and
  * sends no request. Outside a page, `connect` and wagmi's `reconnect` read the store again without
  * a session, so a session that another instance saved to a shared store since, such as another
@@ -180,6 +183,8 @@ export class StoreRequiredError extends Error {
  * @throws {ChainNotConfiguredError} From `createConfig`, when `chainId` names no chain of the
  *   config's `chains`.
  * @throws {StoreRequiredError} From `connect`, before a sign-in outside a browser without `store`.
+ * @throws {SignInRequiredError} From `connect`, before a sign-in without `signIn`, when no plugin
+ *   signs in without input here, such as `dialog` outside a page.
  *
  * @example
  * ```ts
@@ -831,12 +836,20 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           return current
         // Without a session, the instance drops the sign-in's tokens, which stay live at Tempo ID.
         if (!instance.session.actor) throw new StoreRequiredError()
-        if (!signIn && !defaultSignIn) throw new SignInRequiredError()
+        // Outside a page, such as in Node or React Native, the dialog has no page to show, so the
+        // first other plugin that signs in without input signs in.
+        const fallback =
+          typeof document === 'undefined'
+            ? Object.keys(instance).find(
+                (key) => key !== 'dialog' && defaultSignInIds.has(key),
+              )
+            : defaultSignIn
+        if (!signIn && !fallback) throw new SignInRequiredError()
         if (signIn)
           await signIn(instance as tempoId.Instance<plugins>, { accessKey })
         else
           await (instance as unknown as Record<string, SignInFn>)[
-            defaultSignIn!
+            fallback!
           ]!.signIn({ accessKey })
         // A sign-in that returned without a session, such as at the email step of a passkey, leaves
         // the held session as it was, so only a new session completes it.
