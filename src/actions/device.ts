@@ -389,22 +389,35 @@ async function request<chainId extends number, hasAccessKey extends boolean>(
     return { slowDown: body === 'slow_down', status: 'pending' }
 
   // `accessKey` decides both the type and the runtime value of the authorization.
-  const authorization = resolved
-    ? Api.authorization<chainId>(
-        {
-          account: body.account,
-          ...(body.challenge_signature
-            ? { challenge_signature: body.challenge_signature }
-            : {}),
-          key_authorization: body.key_authorization,
-          tokens: Api.tokens(body),
-        },
-        { ...resolved, challenged: options.challenged },
-      )
-    : Api.withoutAccessKey(
-        { ...body, tokens: Api.tokens(body) },
-        { challenged: options.challenged },
-      )
+  const read = () =>
+    resolved
+      ? Api.authorization<chainId>(
+          {
+            account: body.account,
+            ...(body.challenge_signature
+              ? { challenge_signature: body.challenge_signature }
+              : {}),
+            key_authorization: body.key_authorization,
+            tokens: Api.tokens(body),
+          },
+          { ...resolved, challenged: options.challenged },
+        )
+      : Api.withoutAccessKey(
+          { ...body, tokens: Api.tokens(body) },
+          { challenged: options.challenged },
+        )
+  const authorization = await (async () => {
+    try {
+      return read()
+    } catch (error) {
+      // No session holds a refused approval's refresh token, so it is revoked, as the redirect
+      // path revokes a refused response's. A failed revocation leaves the refusal as the error.
+      const refreshToken = (body as { refresh_token?: unknown }).refresh_token
+      if (typeof refreshToken === 'string')
+        await Api.revoke(auth, { refreshToken }).catch(() => undefined)
+      throw error
+    }
+  })()
   return {
     authorization: authorization as authorize.Authorized<chainId, hasAccessKey>,
     status: 'approved',

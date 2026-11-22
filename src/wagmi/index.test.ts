@@ -16,6 +16,8 @@ import {
   signTypedData,
 } from '@wagmi/core'
 import * as Fs from 'node:fs/promises'
+import * as Http from 'node:http'
+import type * as Net from 'node:net'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
 import { Address, Base64, Secp256k1 } from 'ox'
@@ -26,11 +28,14 @@ import { sendTransaction, signTransaction } from 'viem/actions'
 import { Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vite-plus/test'
-import { getNextSnapshot, initialTransition } from 'xstate'
+import { createActor, getNextSnapshot, initialTransition } from 'xstate'
 import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
+import { device } from '../plugins/device.js'
+import { dialog } from '../plugins/dialog.js'
 import { email } from '../plugins/email.js'
 import * as Dpop from '../internal/Dpop.js'
+import * as InternalSession from '../internal/Session.js'
 import * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
@@ -377,6 +382,51 @@ describe('tempoId', () => {
     expect(signIns).toMatchInlineSnapshot(`[]`)
     expect(error).toMatchInlineSnapshot(
       `[wagmi.StoreRequiredError: The instance holds no session outside a browser without \`store\`, so no sign-in connects. Pass \`store\`, such as \`Store.memory()\`.]`,
+    )
+  })
+
+  test('refuses a connection outside a page with `store` and the default dialog before it signs in', async () => {
+    const config = createConfig({
+      chains,
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          store: Store.memory(),
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports,
+    })
+
+    const error = await connect(config, {
+      connector: config.connectors[0]!,
+    }).catch((error: Error) => error)
+
+    expect(error).toMatchInlineSnapshot(
+      `[wagmi.SignInRequiredError: The connector has no sign-in plugin that signs in here without input: \`email\` and \`backend\` take input, and \`dialog\` needs a page. Pass \`signIn\` to \`connect\`, or add the \`passkey\`, \`redirect\`, or \`device\` plugin.]`,
+    )
+  })
+
+  test('signs in outside a page with the first plugin after `dialog` that takes no input', async () => {
+    const config = createConfig({
+      chains,
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          plugins: [dialog(), device({ onCode() {} })],
+          store: Store.memory(),
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports,
+    })
+
+    const error = await connect(config, {
+      connector: config.connectors[0]!,
+    }).catch((error: Error) => error)
+
+    expect(error).toMatchInlineSnapshot(
+      `[Accounts.RequestError: The code request received no response. Check the connection, and request a new code.]`,
     )
   })
 
@@ -1142,6 +1192,206 @@ describe('tempoId', () => {
 
     expect(error).toMatchInlineSnapshot(`"Accounts.SignedOutError"`)
   })
+
+  test("disconnects at the access key's expiry, as the session's status signs out, and once", async () => {
+    const config = createConfig({
+      chains: [tempo],
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          store: await sessionStore({ expiresIn: 2 }),
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
+    })
+    await reconnect(config)
+    const connector = config.connectors[0]!
+    const instance = await connector.getInstance()
+    const provider = (await connector.getProvider()) as {
+      on: (event: 'disconnect', listener: () => void) => void
+    }
+    const events: string[] = []
+    config.subscribe(
+      (state) => state.status,
+      (status) => events.push(`wagmi:${status}`),
+    )
+    instance.session.status.subscribe((status) =>
+      events.push(`session:${status.status}`),
+    )
+    provider.on('disconnect', () => events.push('provider:disconnect'))
+
+    await expect
+      .poll(() => instance.session.status.get().status, { timeout: 5_000 })
+      .toBe('signedOut')
+    const expired = getConnection(config).status
+    // A later read empties the expired session, and ends nothing again.
+    events.push('read')
+    const accounts = await connector.getAccounts()
+
+    expect({
+      accounts,
+      events,
+      expired,
+      status: getConnection(config).status,
+    }).toMatchInlineSnapshot(`
+      {
+        "accounts": [],
+        "events": [
+          "wagmi:disconnected",
+          "provider:disconnect",
+          "session:signedOut",
+          "read",
+        ],
+        "expired": "disconnected",
+        "status": "disconnected",
+      }
+    `)
+  }, 10_000)
+
+  /**
+   * Returns a wagmi config whose session's access key expires in 2 seconds, and the events of wagmi,
+   * the session's status, and the provider after the expiry.
+   */
+  async function expiring(options: { owner: `0x${string}` }) {
+    const store = await sessionStore({ expiresIn: 2, owner: options.owner })
+    const config = createConfig({
+      chains: [tempo],
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          store,
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
+    })
+    await reconnect(config)
+    const connector = config.connectors[0]!
+    const instance = await connector.getInstance()
+    const provider = (await connector.getProvider()) as {
+      on: (
+        event: 'accountsChanged' | 'disconnect',
+        listener: () => void,
+      ) => void
+    }
+    await expect
+      .poll(() => instance.session.status.get().status, { timeout: 5_000 })
+      .toBe('signedOut')
+    const events: string[] = []
+    config.subscribe(
+      (state) => state.status,
+      (status) => events.push(`wagmi:${status}`),
+    )
+    provider.on('accountsChanged', () =>
+      events.push('provider:accountsChanged'),
+    )
+    provider.on('disconnect', () => events.push('provider:disconnect'))
+    return { config, connector, events, instance, store }
+  }
+
+  test("connects again when the same account's valid session replaces the expired one", async () => {
+    const owner = Secp256k1.randomPrivateKey()
+    const { config, connector, events, store } = await expiring({ owner })
+    const key =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]'
+
+    // Another tab saves a valid session of the same account, which a read adopts.
+    await store.setItem(key, await (await sessionStore({ owner })).getItem(key))
+    const accounts = await connector.getAccounts()
+
+    await expect.poll(() => getConnection(config).status).toBe('connected')
+    expect({ accounts: accounts.length, events }).toMatchInlineSnapshot(`
+      {
+        "accounts": 1,
+        "events": [
+          "provider:accountsChanged",
+          "wagmi:connected",
+        ],
+      }
+    `)
+  }, 10_000)
+
+  test('keeps wagmi connected while an authorization runs across the expiry, and disconnects once when it fails', async () => {
+    // A server that holds each request open until the test drops its connection.
+    const held: Net.Socket[] = []
+    const server = Http.createServer((request) => held.push(request.socket))
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const url = `http://127.0.0.1:${(server.address() as Net.AddressInfo).port}`
+    // A first-party app authorizes headlessly, so its authorization waits for the request.
+    const store = await sessionStore({ expiresIn: 2 })
+    await store.setItem(
+      `tempo-id:session:["${url}","client_1",4217]`,
+      await store.getItem(
+        'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]',
+      ),
+    )
+    const config = createConfig({
+      chains: [tempo],
+      connectors: [tempoId({ clientId: 'client_1', store, url })],
+      transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
+    })
+    await reconnect(config)
+    const connector = config.connectors[0]!
+    const instance = await connector.getInstance()
+    const provider = (await connector.getProvider()) as {
+      on: (event: 'disconnect', listener: () => void) => void
+    }
+    const events: string[] = []
+    provider.on('disconnect', () => events.push('provider:disconnect'))
+
+    const authorization = instance.authorize().then(
+      () => undefined,
+      (error: Error) => error.name,
+    )
+    await expect
+      .poll(
+        () =>
+          InternalSession.machines.expired(
+            instance.session.actor!.getSnapshot(),
+          ),
+        { timeout: 5_000 },
+      )
+      .toBe(true)
+    const during = getConnection(config).status
+    for (const socket of held) socket.destroy()
+    const error = await authorization
+    server.close()
+
+    expect({
+      after: getConnection(config).status,
+      during,
+      error,
+      events,
+    }).toMatchInlineSnapshot(`
+      {
+        "after": "disconnected",
+        "during": "connected",
+        "error": "Accounts.RequestError",
+        "events": [
+          "provider:disconnect",
+        ],
+      }
+    `)
+  }, 10_000)
+
+  test('disconnects once when a renewal after the expiry fails', async () => {
+    const { events, instance } = await expiring({
+      owner: Secp256k1.randomPrivateKey(),
+    })
+
+    const error = await instance.authorize().then(
+      () => undefined,
+      (error: Error) => error.name,
+    )
+
+    expect({ error, events }).toMatchInlineSnapshot(`
+      {
+        "error": "Accounts.RequestError",
+        "events": [],
+      }
+    `)
+  }, 10_000)
 })
 
 describe('wagmi', () => {
@@ -1378,6 +1628,33 @@ describe('machines.disconnect', () => {
     expect(retried.value).toMatchInlineSnapshot(`"idle"`)
   })
 
+  test("ends a connected session once at its access keys' expiry, until a change of the session", () => {
+    const ended: string[] = []
+    const actor = createActor(
+      machines.disconnect.provide({
+        actions: { end: () => ended.push('end') },
+      }),
+    ).start()
+
+    actor.send({ connected: true, type: 'session.expire' })
+    actor.send({ connected: true, type: 'session.expire' })
+    const expired = actor.getSnapshot()
+    actor.send({ type: 'session.change' })
+    const changed = actor.getSnapshot()
+    actor.send({ connected: false, type: 'session.expire' })
+
+    expect(expired.value).toMatchInlineSnapshot(`"expired"`)
+    expect(machines.expired(expired)).toMatchInlineSnapshot(`true`)
+    expect(machines.stale(expired)).toMatchInlineSnapshot(`false`)
+    expect(changed.value).toMatchInlineSnapshot(`"idle"`)
+    expect(actor.getSnapshot().value).toMatchInlineSnapshot(`"idle"`)
+    expect(ended).toMatchInlineSnapshot(`
+      [
+        "end",
+      ]
+    `)
+  })
+
   test('reaches every state along its shortest paths, handles every event type, and counts sign-outs only while it signs out', () => {
     const snapshots = getShortestPaths(machines.disconnect, traversal).map(
       (path) => path.state,
@@ -1395,6 +1672,7 @@ describe('machines.disconnect', () => {
 
     expect([...reached].sort()).toMatchInlineSnapshot(`
       [
+        "expired",
         "held",
         "idle",
         "signingOut",
@@ -1430,6 +1708,10 @@ describe('machines.disconnect', () => {
     ) => readonly machines.disconnect.Event[]
   } = {
     'session.change': () => [{ type: 'session.change' }],
+    'session.expire': () => [
+      { connected: false, type: 'session.expire' },
+      { connected: true, type: 'session.expire' },
+    ],
     'signOut.fail': (snapshot) =>
       snapshot.context.runs > 0 ? [{ type: 'signOut.fail' }] : [],
     'signOut.finish': (snapshot) =>
@@ -1442,6 +1724,7 @@ describe('machines.disconnect', () => {
   const traversal = {
     events: (snapshot: machines.disconnect.Snapshot) => [
       ...events['session.change'](snapshot),
+      ...events['session.expire'](snapshot),
       ...events['signOut.fail'](snapshot),
       ...events['signOut.finish'](snapshot),
       ...events['signOut.start'](snapshot),
@@ -1455,15 +1738,24 @@ describe('machines.disconnect', () => {
  * Returns a store that holds a session of `user_1` with an access key on Tempo mainnet, and
  * `accessToken` as its access token.
  */
-async function sessionStore(options: { accessToken?: string } = {}) {
-  const { accessToken = 'access-token' } = options
+async function sessionStore(
+  options: {
+    accessToken?: string
+    expiresIn?: number
+    owner?: `0x${string}` | undefined
+  } = {},
+) {
+  const {
+    accessToken = 'access-token',
+    expiresIn = 3600,
+    owner = Secp256k1.randomPrivateKey(),
+  } = options
   const store = Store.memory()
-  const owner = Secp256k1.randomPrivateKey()
   const privateKey = Secp256k1.randomPrivateKey()
   const authorization = KeyAuthorization.from({
     address: Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey })),
     chainId: BigInt(tempo.id),
-    expiry: Math.floor(Date.now() / 1000) + 3600,
+    expiry: Math.floor(Date.now() / 1000) + expiresIn,
     type: 'secp256k1',
   })
   const signature = Secp256k1.sign({

@@ -22,6 +22,8 @@ export type Ticket = {
   chainId?: number | undefined
   /** The app that started the redirect. */
   clientId?: string | undefined
+  /** The origin of the Tempo ID deployment of the instance that started the redirect. */
+  issuer?: string | undefined
   /** Where Tempo ID redirects back to. The code exchange repeats it. */
   redirectUri: string
   /** The value that the callback must echo. */
@@ -48,6 +50,7 @@ export function save(
           chainId: pending.chainId,
           clientId: pending.clientId,
           configured: configuredOf(auth),
+          issuer: pending.issuer,
           redirectUri: pending.redirectUri,
           state: pending.state,
         } satisfies Mark),
@@ -75,13 +78,15 @@ export function started(
     const value = storage.getItem(markKey)
     if (!value) return undefined
     const mark = JSON.parse(value) as Mark
+    // A mark of an earlier version names no Tempo ID deployment, so no instance owns it.
+    if (mark.issuer === undefined) storage.removeItem(markKey)
     // Another instance of the page, such as one of another app or chain, keeps its own redirect's
     // mark. The configured chain names the instance, since a store that lost a `switchChain`
     // selection no longer holds the chain that the redirect started on.
     const own =
       mark.configured === undefined
         ? owns(auth, mark)
-        : owns(auth, { clientId: mark.clientId }) &&
+        : owns(auth, { clientId: mark.clientId, issuer: mark.issuer }) &&
           mark.configured === configuredOf(auth)
     if (!own || mark.state !== options.state) return undefined
     storage.removeItem(markKey)
@@ -99,6 +104,8 @@ export function take(auth: Config): Ticket | undefined {
     const value = storage.getItem(storageKey)
     if (!value) return undefined
     const ticket = JSON.parse(value) as Ticket
+    // A ticket of an earlier version names no Tempo ID deployment, so no instance redeems it.
+    if (ticket.issuer === undefined) storage.removeItem(storageKey)
     // Another instance of the page, such as one of another app, keeps its own redirect's ticket.
     if (!owns(auth, ticket)) return undefined
     storage.removeItem(storageKey)
@@ -109,17 +116,29 @@ export function take(auth: Config): Ticket | undefined {
 }
 
 /**
- * Returns whether the redirect of `pending` belongs to the instance of `auth`: its app and its
- * chain. A redirect of an earlier version names neither, and belongs to every instance.
+ * Returns whether the redirect of `pending` belongs to the instance of `auth`: its app, its chain,
+ * and its Tempo ID deployment. A redirect of an earlier version names no Tempo ID deployment, and
+ * belongs to no instance, since instances of one app and chain on two deployments that share a
+ * store each redeem its code at their own deployment. Its sign-in starts again.
  */
 export function owns(
   auth: Config,
-  pending: { chainId?: number | undefined; clientId?: string | undefined },
+  pending: {
+    chainId?: number | undefined
+    clientId?: string | undefined
+    issuer?: string | undefined
+  },
 ): boolean {
   return (
     (pending.clientId ?? auth.clientId) === auth.clientId &&
-    (pending.chainId ?? auth.chainId) === auth.chainId
+    (pending.chainId ?? auth.chainId) === auth.chainId &&
+    pending.issuer === issuerOf(auth)
   )
+}
+
+/** Returns the origin of the instance's Tempo ID deployment, which a redirect names as `issuer`. */
+export function issuerOf(auth: Config): string {
+  return new URL(auth.url).origin
 }
 
 /** Returns the ticket of `pending`, without the material of its access key. */
@@ -130,6 +149,7 @@ function ticket(
     accessKey: pending.accessKey !== false,
     chainId: pending.chainId,
     clientId: pending.clientId,
+    issuer: pending.issuer,
     redirectUri: pending.redirectUri,
     state: pending.state,
     verifier: pending.verifier,
@@ -165,6 +185,8 @@ export type Mark = {
    * changes. Absent in a mark that an earlier version saved.
    */
   configured?: number | undefined
+  /** The origin of the Tempo ID deployment of the instance that started the redirect. */
+  issuer?: string | undefined
   /**
    * Where Tempo ID redirects back to. Its own query parameters are the app's, not the callback's.
    * Absent in a mark that an earlier version saved.

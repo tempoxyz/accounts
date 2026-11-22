@@ -208,8 +208,9 @@ export declare namespace react {
      * and `false` elsewhere. A third-party app has no grant to read the Tempo ID session, and a
      * native app holds no browser session, so neither authorizes by default.
      *
-     * A failure of the default authorization, such as an unreachable Tempo ID or a page origin
-     * without a CORS grant, leaves the status `signedOut`. After a failure without an answer from
+     * A failure of the default authorization, such as an unreachable Tempo ID, a check of the
+     * Tempo ID session without a response within 10 seconds, or a page origin without a CORS
+     * grant, leaves the status `signedOut`. After a failure without an answer from
      * Tempo ID, a server error, or a rate limit, a component that mounts 30 seconds later
      * authorizes again. After any other refusal, such as `webauthn_required` for a passkey prompt
      * that the user dismissed, or `redirect_refused` for a `url` that redirects, it authorizes

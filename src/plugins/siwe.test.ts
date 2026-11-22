@@ -108,6 +108,19 @@ describe('siwe.start', () => {
 })
 
 describe('siwe.complete', () => {
+  test("throws for `accessTokens.clientIds: 'any'`, which would accept another app's token", () => {
+    expect(() =>
+      siwe({
+        accessTokens: {
+          audience: 'https://api.example',
+          clientIds: 'any',
+        },
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[Error: Invalid \`accessTokens.clientIds\`: \`'any'\` accepts every app's token, which proves no sign-in for this app. Name the app's own client IDs.]`,
+    )
+  })
+
   test('stores the SIWE session of the account that signs a message of an unknown account', async () => {
     const { accounts } = instance()
     const account = privateKeyToAccount(generatePrivateKey())

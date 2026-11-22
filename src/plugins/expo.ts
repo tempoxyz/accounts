@@ -6,7 +6,6 @@
 /* istanbul ignore file -- Expo's modules run only in a native app, which only an app drives. */
 import * as SecureStore from 'expo-secure-store'
 import * as WebBrowser from 'expo-web-browser'
-import { Json } from 'ox'
 import * as Lock from '../internal/Lock.js'
 import * as StoreValue from '../internal/StoreValue.js'
 import * as Plugin from '../Plugin.js'
@@ -84,7 +83,7 @@ export function expo(options: expo.Options) {
     lock,
     removeItem: (key) => SecureStore.deleteItemAsync(encode(key)),
     setItem: (key, value) =>
-      SecureStore.setItemAsync(encode(key), Json.stringify(value)),
+      SecureStore.setItemAsync(encode(key), StoreValue.stringify(value)),
   })
 
   return [

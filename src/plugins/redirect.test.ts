@@ -405,6 +405,40 @@ describe('redirect', () => {
     `)
   })
 
+  test('removes the stored email in one store call for each sign-out', async () => {
+    const memory = Store.memory()
+    const removals: string[] = []
+    const store = Store.from({
+      getItem: (key) => memory.getItem(key),
+      async removeItem(key) {
+        removals.push(key.split(':')[1]!)
+        await memory.removeItem(key)
+      },
+      setItem: (key, value) => memory.setItem(key, value),
+    })
+    await store.setItem(
+      'tempo-id:login-hint:["http://127.0.0.1:9","example-mobile"]',
+      'user@example.com',
+    )
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'example-mobile',
+      plugins: [redirect({ open: () => Promise.resolve(undefined) })],
+      redirectUri: 'com.example.app:/callback',
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+
+    await accounts.signOut()
+
+    expect(removals.filter((key) => key === 'login-hint'))
+      .toMatchInlineSnapshot(`
+        [
+          "login-hint",
+        ]
+      `)
+  })
+
   test('opens the browser with prompt=login while a sign-out at the call still runs', async () => {
     const name =
       'tempo-id:session:["http://127.0.0.1:9","example-mobile",42431]'

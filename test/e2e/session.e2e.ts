@@ -604,6 +604,28 @@ test.describe('useSession', () => {
     })
   })
 
+  test('shows `signedOut` at a mount whose check of the Tempo ID session receives no response', async ({
+    capture,
+    page,
+  }) => {
+    // Tempo ID accepts the check, and never answers it, as over a stalled connection.
+    await page.route(`${TempoId.url}/v1/auth/session`, () => {})
+    await page.clock.install()
+    await page.goto(url)
+
+    await test.step('shows `pending` while the check waits', async () => {
+      await expect(page.locator('#history')).toHaveText('pending')
+      await capture('pending')
+    })
+
+    await test.step('shows `signedOut` once the check times out', async () => {
+      await page.clock.runFor(10_000)
+
+      await expect(page.locator('#history')).toHaveText('pending signedOut')
+      await capture('signed out')
+    })
+  })
+
   test('stays signed out at a page load after a sign-out of the app alone', async ({
     capture,
     code,

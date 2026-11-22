@@ -310,8 +310,10 @@ export function create(options: create.Options): create.ReturnType {
   frame.style.height = '376px'
 
   const listener = (event: MessageEvent) => {
-    // Only this frame's page, at Tempo ID's origin, sends the sign-in's messages.
-    if (event.origin !== origin || event.source !== frame.contentWindow) return
+    // Only this frame's page, at Tempo ID's origin, sends the sign-in's messages. A removed frame has
+    // no window, and a message without a source is no frame's.
+    const source = frame.contentWindow
+    if (!source || event.origin !== origin || event.source !== source) return
     const message = parse(event.data)
     if (!message) return
     // A click in the frame also activates this page, so the popup can open within that gesture.
@@ -897,8 +899,9 @@ export function load(options: load.Options): load.ReturnType {
     element.replaceWith(panel)
   }
   const listener = (event: MessageEvent) => {
-    if (event.origin !== origin || event.source !== element.contentWindow)
-      return
+    // A frame that the offer replaced has no window, and a message without a source is no frame's.
+    const source = element.contentWindow
+    if (!source || event.origin !== origin || event.source !== source) return
     const data = event.data as {
       amount?: unknown
       covered?: unknown
@@ -944,7 +947,12 @@ export function load(options: load.Options): load.ReturnType {
         }
       })()
       if (
-        (popup.method || (cover === 'free' && Popup.activated())) &&
+        machines.automatic({
+          activated: Popup.activated(),
+          cover,
+          covered: options.covered === true,
+          method: popup.method !== undefined,
+        }) &&
         handlers()?.onPopup({ ...popup, automatic: true })
       )
         return
@@ -1772,6 +1780,31 @@ export namespace machines {
   /** Returns whether the dialog offers a popup in place of its frame, which then takes no request. */
   export function failed(snapshot: machines.sheet.Snapshot) {
     return snapshot.matches({ open: { frame: 'failed' } })
+  }
+
+  /**
+   * Returns whether `Sheet.load`'s dialog opens the popup that its page requests at once, in place of
+   * its offer. A method's popup opens at once, unless a covered page waits for another send of the
+   * same payment, which a popup must not overlap. A deferred page's popup opens blank, and loads once
+   * the challenge arrives. A popup without a method opens at once only once the cover lifts, while
+   * the page holds a gesture.
+   */
+  export function automatic(options: automatic.Options) {
+    if (options.method) return !options.covered || options.cover === 'free'
+    return options.cover === 'free' && options.activated
+  }
+
+  export declare namespace automatic {
+    type Options = {
+      /** Whether the page holds a gesture, such as a click in the frame. */
+      activated: boolean
+      /** The cover of the page: `free` once `uncover` lifts it, or for a page without one. */
+      cover: 'free' | 'held' | 'listening'
+      /** Whether the page loaded with `covered`, so a send of the same payment can still run. */
+      covered: boolean
+      /** Whether the popup runs a method, such as Buy MACH or a sign-in as another user. */
+      method: boolean
+    }
   }
 
   /**

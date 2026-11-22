@@ -173,6 +173,79 @@ describe('handleCallback', () => {
       }
     `)
   })
+  test('reports a client assertion that fails before the code exchange as its cause, not as an exchange without a response', async () => {
+    // Nothing listens at the URL, so only the client assertion's fault ends the exchange.
+    const auth = from({
+      clientAssertion: () =>
+        Promise.reject(new Error('The signer refused the client assertion.')),
+      clientId: 'https://app.example.com',
+      url: 'http://127.0.0.1:9',
+    })
+    const url = new URL(pending.redirectUri)
+    url.search = new URLSearchParams({
+      code: 'code',
+      state: pending.state,
+    }).toString()
+
+    const error = await handleCallback(auth, { pending, url }).catch(
+      (error: unknown) => error,
+    )
+
+    expect(
+      error instanceof RequestError
+        ? {
+            cause: String(error.cause),
+            code: error.code,
+            message: error.message,
+            signedIn: error.signedIn,
+            status: error.status,
+          }
+        : String(error),
+    ).toMatchInlineSnapshot(`
+      {
+        "cause": "Error: The signer refused the client assertion.",
+        "code": "server_error",
+        "message": "The code exchange failed before its request. Check the client assertion and the DPoP key, and sign in again.",
+        "signedIn": true,
+        "status": 0,
+      }
+    `)
+  })
+
+  test('throws RequestError with status 0 and `signedIn` when the code exchange receives no response', async () => {
+    // Nothing listens at the URL, so the exchange rejects with a network error.
+    const auth = from({
+      clientId: 'https://app.example.com',
+      url: 'http://127.0.0.1:9',
+    })
+    const url = new URL(pending.redirectUri)
+    url.search = new URLSearchParams({
+      code: 'code',
+      state: pending.state,
+    }).toString()
+
+    const error = await handleCallback(auth, { pending, url }).catch(
+      (error: unknown) => error,
+    )
+
+    expect(
+      error instanceof RequestError
+        ? {
+            code: error.code,
+            message: error.message,
+            signedIn: error.signedIn,
+            status: error.status,
+          }
+        : String(error),
+    ).toMatchInlineSnapshot(`
+      {
+        "code": "server_error",
+        "message": "The code exchange received no response. Check the connection, and sign in again.",
+        "signedIn": true,
+        "status": 0,
+      }
+    `)
+  })
 })
 
 describe('handleResult', () => {

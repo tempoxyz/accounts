@@ -32,7 +32,8 @@ const maxNameSize = 1024
  *
  * A session ID whose object name exceeds 1024 bytes, such as the value of a crafted cookie, names
  * no session. `get`, `headers`, `end`, and `take` then return without a call, and `complete`
- * throws `Accounts.PendingNotFoundError`, as for any other unknown ID.
+ * throws `Accounts.PendingNotFoundError`, as for any other unknown ID. The plugin's `start` and
+ * `save` refuse an `id` that is no session ID before they call an object.
  *
  * @throws {Accounts.PendingNotFoundError} From a returned operation, when an object returns it.
  * @throws {Accounts.RedirectUriRequiredError} From `start`, when neither the call nor the instance

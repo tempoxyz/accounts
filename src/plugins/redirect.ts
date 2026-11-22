@@ -113,6 +113,9 @@ export function redirect(options: redirect.Options = {}) {
   const hintWrites = new WeakMap<Plugin.Context['config'], Promise<void>>()
   // The instances whose last removal of the email failed. They send no stored email until a write.
   const unhinted = new WeakSet<Plugin.Context['config']>()
+  // The removal of the email that each instance's own sign-out started, so its `afterSignOut` sends
+  // no second removal.
+  const removals = new WeakMap<Plugin.Context['config'], Promise<void>>()
   // Removes the stored email. A store that throws or rejects marks the instance as unhinted.
   const unhint = async (context: Plugin.Context) => {
     hinted.delete(context.config)
@@ -387,14 +390,31 @@ export function redirect(options: redirect.Options = {}) {
           signingOut.delete(context.config)
           if (!signedOut) return session
           await (async () => {
-            const current = await store?.getItem(signedOutKey(context.config))
+            const key = signedOutKey(context.config)
+            // A store whose `update` is one conditional write, such as `Store.postgres`, removes the flag
+            // only while it holds the read value, so another instance's newer flag stays. A sign-out of
+            // this instance since the read keeps its flag on any store, also where `update` reads and
+            // writes in two calls, such as `Store.redis` on a cluster.
+            if (store?.update) {
+              await store.update(key, (current) => ({
+                result: undefined,
+                value:
+                  current != null &&
+                  (current === stored || current === own) &&
+                  (signOuts.get(context.config) ?? 0) === started
+                    ? undefined
+                    : current,
+              }))
+              return
+            }
+            const current = await store?.getItem(key)
             if (current == null) return
             if (current !== stored && current !== own) return
-            // A sign-out of this instance during the read writes a newer flag, which stays. The store
-            // has no atomic removal, so another instance's sign-out at this moment can still lose its
-            // flag.
+            // A sign-out of this instance during the read writes a newer flag, which stays. Without
+            // `update`, the store has no atomic removal, so another instance's sign-out at this moment
+            // can still lose its flag.
             if ((signOuts.get(context.config) ?? 0) !== started) return
-            await store?.removeItem(signedOutKey(context.config))
+            await store?.removeItem(key)
           })().catch(() => undefined)
           return session
         },
@@ -408,6 +428,9 @@ export function redirect(options: redirect.Options = {}) {
         // session still holds the user. It runs beside the sign-in, since a sign-out can wait for
         // the sign-in's change. A failed write only drops the hint of a later sign-in.
         // A local session names no user, so it leaves the hint of the last sign-in.
+        // A sign-in after a sign-out that rejected, which ran no `afterSignOut`, can write the email
+        // again, so a later sign-out of another tab removes it.
+        removals.delete(context.config)
         if (!session.user) return
         const { email } = session.user
         const started = hintOuts.get(context.config) ?? 0
@@ -433,17 +456,24 @@ export function redirect(options: redirect.Options = {}) {
         })().catch(() => undefined)
         hintWrites.set(context.config, write)
       },
-      afterSignOut(context) {
+      async afterSignOut(context) {
         // Another tab's sign-out, also from an instance without this plugin, removes the email too.
         // A sign-in that commits before a delayed hook runs keeps its email.
         if (context.session.get()) return
-        return unhint(context)
+        // The instance's own sign-out removed the email in `beforeSignOut`. Only a failed removal
+        // runs again.
+        const removal = removals.get(context.config)
+        removals.delete(context.config)
+        await removal
+        if (removal && !unhinted.has(context.config)) return
+        await unhint(context)
       },
       async beforeSignOut(context) {
         // A sign-out removes the stored email, so the next sign-in page holds no address. A failed
         // removal never fails the sign-out, and the instance then sends no stored email.
         hintOuts.set(context.config, (hintOuts.get(context.config) ?? 0) + 1)
         const removed = unhint(context)
+        removals.set(context.config, removed)
         // A system browser's Tempo ID session outlives the app's sign-out, also one with
         // `everywhere`, since its logout sends the app's cookies, not the browser's. The flag is set
         // before the sign-out starts, so a sign-in that overlaps the sign-out, or follows a sign-out
