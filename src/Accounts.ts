@@ -2633,8 +2633,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
    * signature to read it.
    */
   function readMoved(moved: Session.Any) {
-    // A third-party app reads no account, as `switchChain` describes.
-    if (ClientId.thirdParty(config.clientId)) return
+    // A third-party app reads no account, as `switchChain` describes. An instance with
+    // `account: false` reads none either, so a page's read creates none.
+    if (ClientId.thirdParty(config.clientId) || config.account === false) return
     const chainId = chain.get()
     void (async () => {
       const account = await Core.getAccount(context, {
@@ -2684,7 +2685,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
           // A local session's account is the owner key's on every chain, so Tempo ID reads none.
           !Session.local(held) &&
           !InternalSession.toChain(held, { chainId }).accessKey &&
-          !ClientId.thirdParty(config.clientId)
+          !ClientId.thirdParty(config.clientId) &&
+          // An instance with `account: false` holds no account to read.
+          config.account !== false
             ? await Core.getAccount(context, {
                 accessToken: await accessToken(),
                 chainId,
