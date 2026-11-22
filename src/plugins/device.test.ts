@@ -5,6 +5,7 @@
  */
 import { PGlite } from '@electric-sql/pglite'
 import * as ChildProcess from 'node:child_process'
+import * as Events from 'node:events'
 import * as Fs from 'node:fs'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
@@ -41,6 +42,20 @@ describe('device', () => {
       `[Accounts.RequestError: The code request received no response. Check the connection, and request a new code.]`,
     )
     expect((error as Accounts.RequestError).status).toMatchInlineSnapshot(`0`)
+  })
+
+  test('request removes its listener of `signal` once it settles, so a shared signal keeps no listener of each call', async () => {
+    const accounts = create()
+    const controller = new AbortController()
+
+    for (let call = 0; call < 3; call++)
+      await accounts.device
+        .request({ signal: controller.signal })
+        .catch(() => undefined)
+
+    expect(
+      Events.getEventListeners(controller.signal, 'abort').length,
+    ).toMatchInlineSnapshot(`0`)
   })
 
   test('signIn rejects with the reason of an aborted signal before the code request, and keeps the user signed out', async () => {
