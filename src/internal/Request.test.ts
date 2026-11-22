@@ -219,6 +219,7 @@ describe('authorizeUrl', () => {
         "accessKey",
         "chainId",
         "clientId",
+        "issuer",
         "redirectUri",
         "state",
         "verifier",

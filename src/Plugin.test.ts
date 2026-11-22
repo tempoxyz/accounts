@@ -157,6 +157,20 @@ describe('Plugin', () => {
     ).toMatchInlineSnapshot(`[]`)
   })
 
+  test("loads the backend routes of the email plugin from a chunk of their own, so a page's email app bundles none", async () => {
+    const { lazy, loaded } = await bundle(
+      `import { Accounts } from '${Path.join(source, 'index.ts')}'
+      import { email } from '${Path.join(source, 'plugins/index.ts')}'
+      export const tempoId = Accounts.create({ clientId: 'client_test', plugins: [email()] })`,
+    )
+
+    expect(loaded.files).toContain('plugins/email.ts')
+    expect(
+      loaded.files.filter((file) => file.startsWith('actions/backend')),
+    ).toMatchInlineSnapshot(`[]`)
+    expect(lazy).toContain('actions/backend/email.ts')
+  })
+
   test('loads the default dialog of an instance without a sign-in plugin from a chunk of its own', async () => {
     const { entry, lazy } = await bundle(
       `import { Accounts } from '${Path.join(source, 'index.ts')}'

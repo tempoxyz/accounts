@@ -22,7 +22,7 @@ import {
   test,
 } from 'vite-plus/test'
 import { Account } from 'viem/tempo'
-import { Bytes, Hash, Json, Secp256k1 } from 'ox'
+import { Address, Bytes, Hash, Json, Secp256k1 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import * as Accounts from './Accounts.js'
 import * as DefaultAccounts from './internal/DefaultAccounts.js'
@@ -666,6 +666,77 @@ describe('create', () => {
 })
 
 describe('pay', () => {
+  test("rejects a payment within the access key's limit outside a page, on an instance without a plugin that sends it, with a PageRequiredError that names the missing plugin rather than a sign-in", async () => {
+    const store = Store.memory()
+    const owner = Secp256k1.randomPrivateKey()
+    const privateKey = Secp256k1.randomPrivateKey()
+    const authorization = KeyAuthorization.from({
+      address: Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey })),
+      chainId: 4217n,
+      expiry: Math.floor(Date.now() / 1000) + 86_400,
+      limits: [
+        {
+          limit: 100_000_000n,
+          token: '0x20c0000000000000000000000000000000000000',
+        },
+      ],
+      type: 'secp256k1',
+    })
+    const signature = Secp256k1.sign({
+      payload: KeyAuthorization.getSignPayload(authorization),
+      privateKey: owner,
+    })
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",4217]',
+      {
+        state: {
+          session: Session.from({
+            accessKey: {
+              account: Address.fromPublicKey(
+                Secp256k1.getPublicKey({ privateKey: owner }),
+              ),
+              chainId: 4217,
+              keyAuthorization: KeyAuthorization.toRpc(
+                KeyAuthorization.from(authorization, { signature }),
+              ),
+              privateKey,
+            },
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    // A native app's instance, with a session and its access key but no `viem` plugin.
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'client_1',
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+
+    const error = await accounts
+      .pay({
+        amount: '1',
+        to: '0x0000000000000000000000000000000000000001',
+        token: '0x20c0000000000000000000000000000000000000',
+      })
+      .then(
+        () => undefined,
+        (error: Error) => error,
+      )
+
+    expect({ message: error?.message, name: error?.name })
+      .toMatchInlineSnapshot(`
+        {
+          "message": "No browser window, and no plugin sends payments: the payment page opens only from a page. Outside a page, add a plugin that sends a payment with the session's access key.",
+          "name": "Actions.account.PageRequiredError",
+        }
+      `)
+  })
   test('rejects an amount of 100,000 digits and a letter, or a long fraction, in linear time', async () => {
     const accounts = Accounts.create({
       chain: 1337,
@@ -804,6 +875,56 @@ describe('pay', () => {
         "field": "memo",
         "message": "Invalid \`memo\`: it holds no byte, or more than 32 bytes. Pass text or hex of 1 to 32 bytes.",
         "name": "Accounts.RequestError",
+      }
+    `)
+    expect(requests).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('rejects a `to` that is no address with `invalid_field`, before it opens a page', async () => {
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'client_1',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const refusals: Record<string, unknown> = {}
+    for (const to of [
+      '0x123',
+      '0x1f9090aae28b8a3dceadf281b0f12828e676c32',
+      '0x1F9090aaE28b8a3dCeaDf281B0F12828e676c326',
+      'alice.eth',
+      '0x1f9090aae28b8a3dceadf281b0f12828e676c326',
+    ]) {
+      const error = await accounts
+        .pay({
+          account: '0x7a3f0000000000000000000000000000000000aa',
+          amount: '5',
+          to: to as `0x${string}`,
+          token: 'ousd',
+        })
+        .then(
+          () => undefined,
+          (error: Accounts.RequestError) => error,
+        )
+      refusals[to] =
+        `${error?.name} ${error?.code} ${error?.reason} ${error?.field}`
+    }
+
+    expect(refusals).toMatchInlineSnapshot(`
+      {
+        "0x123": "Accounts.RequestError invalid_request invalid_field to",
+        "0x1F9090aaE28b8a3dCeaDf281B0F12828e676c326": "Accounts.RequestError invalid_request invalid_field to",
+        "0x1f9090aae28b8a3dceadf281b0f12828e676c32": "Accounts.RequestError invalid_request invalid_field to",
+        "0x1f9090aae28b8a3dceadf281b0f12828e676c326": "Actions.account.PageRequiredError undefined undefined undefined",
+        "alice.eth": "Accounts.RequestError invalid_request invalid_field to",
       }
     `)
     expect(requests).toMatchInlineSnapshot(`[]`)
@@ -1235,7 +1356,7 @@ describe('pay', () => {
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
 
-  test('throws AccessKeyRequiredError for a fixed session whose access key on the chain expired, and sends no request', async () => {
+  test('throws AccessKeyRequiredError for a fixed session whose access key on the chain expired, with a message that names no missing access key request, and sends no request', async () => {
     const owner = Account.fromSecp256k1(
       '0x0123456789012345678901234567890123456789012345678901234567890123',
     )
@@ -1288,6 +1409,9 @@ describe('pay', () => {
 
     expect(error?.name).toMatchInlineSnapshot(
       `"Accounts.AccessKeyRequiredError"`,
+    )
+    expect(error?.message).toMatchInlineSnapshot(
+      `"The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain."`,
     )
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
@@ -5065,6 +5189,68 @@ describe('Plugin.Context.session.reload', () => {
       {
         "reloaded": undefined,
         "signIns": [],
+      }
+    `)
+  })
+
+  test("adopts another context's sign-out, and reads none of the revocation entries", async () => {
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const memory = Store.memory()
+    const calls: string[] = []
+    const store = Store.from({
+      ...memory,
+      getItem: (key) => {
+        calls.push(`getItem ${key.slice(name.length)}`)
+        return memory.getItem(key)
+      },
+      lock: (key, fn) => {
+        calls.push(`lock ${key.slice(name.length)}`)
+        return memory.lock!(key, fn)
+      },
+    })
+    const contexts: Plugin.Context[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      plugins: [
+        Plugin.from({
+          id: 'record',
+          setup(context) {
+            contexts.push(context)
+          },
+        }),
+      ],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+    const [context] = contexts
+
+    // Another process's sign-out empties the store, and revoked the stored refresh token.
+    await memory.setItem(name, { state: {}, version: 0 })
+    calls.length = 0
+    const reloaded = await context!.session.reload()
+    // A later hold of the lock runs after any hold that the reload queued.
+    await context!.session.exclusive(() => Promise.resolve())
+
+    expect({ calls, reloaded }).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "getItem ",
+        ],
+        "reloaded": undefined,
       }
     `)
   })

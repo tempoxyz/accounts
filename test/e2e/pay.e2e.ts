@@ -13,6 +13,7 @@ import * as Apps from '../Apps.js'
 import * as Chain from '../Chain.js'
 import * as Playwright from '../Playwright.js'
 import { expect, test } from '../Playwright.js'
+import * as TempoId from '../TempoId.js'
 import * as Web from '../Web.js'
 
 /** The recipient of each payment of the dialog page. */
@@ -259,6 +260,83 @@ test.describe('pay', () => {
         await Chain.transfers({ hash: result.value.transaction }),
       ).toContainEqual({ amount: 5_000_000n, from: key.account, to: recipient })
       await capture('sent with the access key after the deposit')
+    })
+  })
+
+  test('offers the popup of a method that the hidden payment page requests, in place of opening it, and opens it from Continue once the dialog shows', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    const key = await Web.enter_dialog(page, { capture, code, email })
+
+    await test.step('sends 96 OUSD within the limit of 100', async () => {
+      const transfer = await Playwright.send(page, {
+        amount: '96',
+        to: recipient,
+      })
+
+      expect(transfer.state).toBe('fulfilled')
+    })
+    const before = await balance(key.account)
+    // The access key's fill of the send of 5 OUSD, which the chain refuses, waits on the node until
+    // the release, so the dialog stays hidden meanwhile.
+    const fills = await hold(page)
+    const popups: string[] = []
+    page.on('popup', (window) => popups.push(window.url()))
+
+    await test.step('offers the popup that the hidden page requests, and opens no popup or dialog', async () => {
+      await watch(page)
+      await Playwright.start(page, { name: 'Pay 5 OUSD' })
+      await expect.poll(() => fills.fills.length).toBe(1)
+      await expect.poll(() => covered(page)).toBe(true)
+      // The hidden page requests the popup of a method, as its Buy MACH does, from Tempo ID's origin.
+      const frame = page
+        .frames()
+        .find((frame) => new URL(frame.url()).pathname === '/embed/pay')
+      expect(frame).toBeDefined()
+      await frame!.evaluate(() =>
+        window.parent.postMessage(
+          { amount: '5', method: 'mach', type: 'tempo-id:embed.popup' },
+          '*',
+        ),
+      )
+
+      await expect(
+        page.locator('dialog[data-tempo-id-dialog] [data-panel]'),
+      ).toHaveCount(1)
+      expect(await open(page)).toBe(false)
+      expect(popups).toEqual([])
+    })
+
+    await test.step('shows the offer once the chain refuses the access key, opens the popup from Continue, and sends nothing at its close', async () => {
+      fills.release()
+      await fills.unhold()
+      const prompt = Playwright.prompt(page)
+      await expect(prompt.locator('[data-panel]')).toBeVisible()
+      expect(
+        await prompt
+          .locator('[data-panel]')
+          .evaluate((panel) => (panel as HTMLElement).inert),
+      ).toBe(false)
+      await capture('offer of the popup after the refusal')
+      const window = await Playwright.popup(page, {
+        open: () =>
+          prompt.getByRole('button', { exact: true, name: 'Continue' }).click(),
+      })
+
+      await window.waitForURL((url) => url.origin === TempoId.url)
+      await capture('popup from Continue', window)
+      await window.close()
+
+      expect(await paid(page, 'Pay 5 OUSD')).toMatchObject({
+        state: 'rejected',
+        value: { name: 'AbortError' },
+      })
+      await Playwright.uncovered(page)
+      expect(await balance(key.account)).toBe(before)
+      await capture('closed the popup')
     })
   })
 

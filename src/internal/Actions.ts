@@ -74,13 +74,22 @@ export async function authorize<
   const [session, generated] = await Promise.all([
     (async () => {
       if (options.check === false) return { user: true }
-      return Api.json<{ user: unknown }>(
-        await answered.fetch!(new URL('/v1/auth/session', auth.url), {
-          credentials: 'include',
-          // A redirect would send the session cookie's request to another origin.
-          redirect: 'manual',
-        }),
-      )
+      // React Native's `AbortSignal` has no `timeout`, so a timer aborts the controller. The timer
+      // covers the response's body too. A check that it aborts throws as one without a response.
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), Api.sessionTimeout)
+      try {
+        return await Api.json<{ user: unknown }>(
+          await answered.fetch!(new URL('/v1/auth/session', auth.url), {
+            credentials: 'include',
+            // A redirect would send the session cookie's request to another origin.
+            redirect: 'manual',
+            signal: controller.signal,
+          }),
+        )
+      } finally {
+        clearTimeout(timer)
+      }
     })(),
     accessKey
       ? AccessKey.resolve(accessKey).then(
@@ -117,17 +126,23 @@ export async function authorize<
   }
   const body = await Api.json<Api.Headless>(response)
   const [first] = body.tempo ?? []
+  // A refused response's refresh token is revoked, since no session holds it.
+  const authorization = await Headless.revoking(auth, {
+    body,
+    fn: () =>
+      resolved
+        ? Api.authorization(body, {
+            ...resolved,
+            challenged: options.challenge !== undefined,
+            sentAt,
+          })
+        : Api.withoutAccessKey(body, {
+            challenged: options.challenge !== undefined,
+            sentAt,
+          }),
+  })
   const result: Headless.Result & { account?: TempoAccount.TempoAccount } = {
-    ...(resolved
-      ? Api.authorization(body, {
-          ...resolved,
-          challenged: options.challenge !== undefined,
-          sentAt,
-        })
-      : Api.withoutAccessKey(body, {
-          challenged: options.challenge !== undefined,
-          sentAt,
-        })),
+    ...authorization,
     // The response lists the access key's account first, so the app reads no `GET /v1/account`.
     // An account that the client cannot rebuild stays absent, so the session holds the access key alone.
     ...(resolved && first

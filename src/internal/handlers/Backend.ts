@@ -94,6 +94,9 @@ const pendingBytes = 3072
  */
 const maxLogoutBodySize = 64 * 1_024
 
+/** The largest JSON body that `POST /callback` and the SIWE routes read: 64 KiB. */
+const maxJsonBodySize = 64 * 1_024
+
 /**
  * The script of the page that `GET /callback` returns to a popup of the dialog. It posts the callback
  * URL on the channel that the dialog's page listens on, as `Actions.dialog.callback` does, and closes
@@ -122,7 +125,7 @@ const relayScript = `(() => {
  * | `GET /login` | Starts a sign-in, sets a `__Host-tempo-id.pending.` cookie of its own for 10 minutes, and redirects to Tempo ID. Passes the `loginHint` query parameter, and `prompt=login`, to `backend.start` |
  * | `POST /login` | Starts a sign-in in the dialog, sets a `__Host-tempo-id.pending.` cookie of its own for 10 minutes, and returns `{ url }` |
  * | `GET /callback` | Completes the sign-in, sets `__Host-tempo-id.sid`, deletes the session that the cookie named before without a revocation, and redirects to `returnTo` |
- * | `POST /callback` | Completes the dialog's sign-in from `{ url }`, sets `__Host-tempo-id.sid`, deletes the session that the cookie named before without a revocation, and returns `{ session: { account, method, user } }` |
+ * | `POST /callback` | Completes the dialog's sign-in from `{ url }`, sets `__Host-tempo-id.sid`, deletes the session that the cookie named before without a revocation, and returns `{ session: { account, method, user } }`. Answers 413 to a body above 64 KiB |
  * | `POST /logout` | Ends the session, and deletes its cookie |
  * | `GET /session` | Returns `{ session: { account, method, user } }`, `{ session: { account, method: 'siwe' } }` for a SIWE session, or `{ session: null }`. Deletes a cookie whose session ended |
  * | `POST /siwe/challenge` | With `siwe`, starts a SIWE sign-in from an optional `{ address }`, sets `__Host-tempo-id.siwe` for 10 minutes, and returns `{ message }` |
@@ -130,7 +133,8 @@ const relayScript = `(() => {
  *
  * Any other method on these paths receives 405. `POST /login`, `POST /callback`, `POST /logout`,
  * and the SIWE routes compare the request's `Origin` with its URL's origin, and refuse another
- * origin with 403.
+ * origin with 403. `POST /callback` and the SIWE routes answer 413 to a body above 64 KiB, and
+ * stop reading at the chunk that crosses it.
  *
  * With `siwe({ token: true })`, the SIWE routes set no cookie. `POST /siwe/challenge` returns
  * `{ id, message }`, and both verify routes take `id` in the body and return `{ session, token }`.
@@ -352,9 +356,9 @@ export function create(options: create.Options): Handler.Handler {
     const refusal = foreign(request)
     if (refusal) return refusal
 
-    const body = (await request.json().catch(() => undefined)) as
-      | { url?: unknown }
-      | undefined
+    const json = await readJson(request)
+    if (json === tooLarge) return refuseTooLarge()
+    const body = json as { url?: unknown } | undefined
     const url = typeof body?.url === 'string' ? URL.parse(body.url) : null
     if (!url)
       return Response.json(
@@ -508,7 +512,9 @@ export function create(options: create.Options): Handler.Handler {
     if (refusal) return refusal
 
     // The body is optional, so a request without one starts the sign-in of an unknown account.
-    const body = (await request.json().catch(() => undefined)) as
+    const json = await readJson(request)
+    if (json === tooLarge) return refuseTooLarge()
+    const body = json as
       | { address?: unknown; chainId?: unknown }
       | null
       | undefined
@@ -588,7 +594,9 @@ export function create(options: create.Options): Handler.Handler {
     const refusal = foreign(request, { origins: pageOrigins })
     if (refusal) return refusal
 
-    const body = (await request.json().catch(() => undefined)) as
+    const json = await readJson(request)
+    if (json === tooLarge) return refuseTooLarge()
+    const body = json as
       | {
           address?: unknown
           id?: unknown
@@ -1349,6 +1357,35 @@ function withError(path: string, options: { error: string; origin: string }) {
  * streamed size exceeds `limit`, in bytes, and cancels the rest of the body. The runtime sets the
  * size of each chunk, so the route reads `limit` bytes and at most the one chunk that crosses it.
  */
+/** The result of {@link readJson} for a body above its limit. */
+const tooLarge = Symbol('tooLarge')
+
+/**
+ * Returns the JSON body of the request, read up to 64 KiB, so that a route stops at the chunk that
+ * crosses it. Returns `tooLarge` for a larger body, and `undefined` for a body that is not JSON.
+ */
+async function readJson(request: Request): Promise<unknown> {
+  const text = await read(request, { limit: maxJsonBodySize }).catch(() => '')
+  if (text === undefined) return tooLarge
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return undefined
+  }
+}
+
+/** Answers 413 `invalid_request` to a JSON body above 64 KiB. */
+function refuseTooLarge() {
+  return Response.json(
+    {
+      error: 'invalid_request',
+      error_description:
+        'Request too large: the body exceeds 64 KiB. Send only the fields that the route reads.',
+    },
+    { status: 413 },
+  )
+}
+
 async function read(request: Request, options: { limit: number }) {
   const { limit } = options
   if (Number(request.headers.get('content-length')) > limit) {

@@ -2,12 +2,16 @@
  * Resolves the next `accounts` release for the Main workflow, from the squash commit titles on
  * `main` since the last release.
  *
- * - Each version is `<breaking>.<time>.<n>`, such as `1.20261118194700.0`: `<time>` is the commit's
- *   UTC time, and `<n>` is `0` unless `latest` holds the same time, so a rerun of a commit resolves the
- *   same version. No version is a prerelease, so a caret range resolves each later release.
+ * - Each version is `<breaking>.<minor>.<time>`, such as `1.2.20261118194700`: `<time>` is the
+ *   commit's UTC time, so a rerun of a commit resolves the same version. If `latest` holds the same
+ *   or a later time in the same `<breaking>.<minor>`, `<time>` is one more than its time. No version
+ *   is a prerelease, so a caret range resolves each later release.
  * - A title marked breaking, such as `feat!: …` or one whose commit says `BREAKING CHANGE:`, raises
- *   `<breaking>`. It starts at `1`, after the `0.x` releases of `tempoxyz/accounts`. A `dogfood: ` prefix is
- *   read past, so `dogfood: feat!: …` is breaking too.
+ *   `<breaking>` and resets `<minor>` to `0`. Else a `feat` title raises `<minor>`. A `dogfood: `
+ *   prefix is read past, so `dogfood: feat!: …` is breaking too.
+ * - The first release of this scheme is `1.0.<time>`, after the `0.x` releases of
+ *   `tempoxyz/accounts` and the `<breaking>.<time>.<n>` versions before it, such as
+ *   `2.20261120231248.0`.
  * - `ci` and `test` commits change nothing that the package ships, so they release nothing alone. A
  *   later release's notes leave them out. A manual run of Main releases them anyway.
  * - Each release counts its commits from the `gitHead` that npm records for the last version. A rerun
@@ -30,18 +34,24 @@ type Commit = { message: string; sha: string }
 
 const title = /^(?:dogfood: )?(?<type>[a-z]+)(?:\([^)]*\))?(?<breaking>!)?: /
 
-/** A release version, such as `1.20261118194700.0` or the earlier `0.21.1`. The `1.0.0-alpha.…` versions don't match. */
+/**
+ * A release version, such as `1.2.20261118194700`, the earlier `2.20261118194700.0`, or the
+ * `0.x` `0.21.1`. The `1.0.0-alpha.…` versions don't match.
+ */
 const release = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9a-z]+)?$/
 
+/** A version of this scheme, such as `1.2.20261118194700`. */
+const channel = /^[1-9]\d*\.\d{1,13}\.\d{14}$/
+
 /**
- * A version of this scheme, such as `1.20261118194700.0`, or one that it published under `alpha`
- * before, such as `1.20261118194700.0-86519034c`.
+ * A version of the scheme before, `<breaking>.<time>.<n>`, such as `2.20261118194700.0`, or one
+ * that it published under `alpha`, such as `1.20261118194700.0-86519034c`.
  */
-const channel = /^[1-9]\d*\.\d{14}\.\d+(?:-[0-9a-z]+)?$/
+const legacy = /^[1-9]\d*\.\d{14}\.\d+(?:-[0-9a-z]+)?$/
 
 /**
  * Returns the version after `latest` that `commits` release, from the commit made at `time`, or
- * `undefined` when they release nothing. Without `base`, no commit raises `<breaking>`.
+ * `undefined` when they release nothing. Without `base`, no commit raises `<breaking>` or `<minor>`.
  */
 function next(
   latest: string,
@@ -53,8 +63,6 @@ function next(
   const match = release.exec(latest)
   if (!match || latest.startsWith('0.0.0'))
     throw new Error(`npm's latest version ${latest} is not a release version.`)
-  const major = Number(match[1])
-
   const releasing = commits.filter((commit) => {
     const type = title.exec(subject(commit))?.groups?.type
     return type !== 'ci' && type !== 'test'
@@ -62,16 +70,23 @@ function next(
   if (releasing.length === 0 && !force) return undefined
 
   // Without the commit of `latest`, such as the `1.x` releases from `tempoxyz/accounts2`'s private
-  // history, the commits since it are unknown, so `<breaking>` stays.
-  const raised = !!base && commits.some(breaking)
-  // The `0.x` releases came before this scheme, so its first release is 1 either way.
-  const breakingVersion = Math.max(1, raised ? major + 1 : major)
-  const at = timestamp(time)
-  // npm refuses a version twice, so a release in the same second as `latest` raises the last number.
-  const patch = latest.startsWith(`${breakingVersion}.${at}.`)
-    ? Number(match[3]) + 1
-    : 0
-  return `${breakingVersion}.${at}.${patch}`
+  // history, the commits since it are unknown, so `<breaking>` and `<minor>` stay.
+  const known = base ? commits : []
+  const at = Number(timestamp(time))
+  // The `0.x` and `<breaking>.<time>.<n>` releases came before this scheme, so its first release is
+  // `1.0` whatever its commits.
+  if (!channel.test(latest)) return `1.0.${at}`
+
+  const major = Number(match[1])
+  const minor = Number(match[2])
+  if (known.some(breaking)) return `${major + 1}.0.${at}`
+  if (
+    known.some((commit) => title.exec(subject(commit))?.groups?.type === 'feat')
+  )
+    return `${major}.${minor + 1}.${at}`
+  // npm refuses a version twice, and a later version must sort above `latest`, so a release in the
+  // same second as `latest` raises its time by one.
+  return `${major}.${minor}.${Math.max(at, Number(match[3]) + 1)}`
 }
 
 /** Returns `time` in UTC as `YYYYMMDDHHMMSS`. */
@@ -185,7 +200,7 @@ function run(command: string, args: string[], cwd?: string): string {
 
 /**
  * Returns the release that npm took just before `latest`, from npm's `time` map of each version to
- * when it was published, among the versions of this scheme. Publish order decides, not the version, so a release from the same commit
+ * when it was published, among the versions of this scheme and the one before. Publish order decides, not the version, so a release from the same commit
  * second as `latest` counts as before it.
  */
 export function previous(
@@ -197,7 +212,9 @@ export function previous(
   return Object.keys(times)
     .filter(
       (version) =>
-        channel.test(version) && version !== latest && at(version) < at(latest),
+        (channel.test(version) || legacy.test(version)) &&
+        version !== latest &&
+        at(version) < at(latest),
     )
     .sort((a, b) => at(a) - at(b))
     .at(-1)
@@ -251,14 +268,8 @@ function main() {
   if (tip !== sha)
     return summary(`Skipped \`${sha}\`, since main moved to \`${tip}\`.`)
 
-  // Releases go under the `latest` dist-tag. Until the first one, `latest` holds `0.21.1`, and the
-  // releases of this scheme are under `alpha`, so the first release counts from `alpha`.
-  const tagged = run('npm', ['view', 'accounts', 'dist-tags.latest'])
-  const latest = (() => {
-    if (channel.test(tagged)) return tagged
-    const alpha = run('npm', ['view', 'accounts', 'dist-tags.alpha'])
-    return channel.test(alpha) ? alpha : tagged
-  })()
+  // Releases go under the `latest` dist-tag.
+  const latest = run('npm', ['view', 'accounts', 'dist-tags.latest'])
 
   // A rerun after npm took this commit's version resumes that release: the GitHub release runs again,
   // and Publish skips the version that npm already has.

@@ -12,6 +12,7 @@ import {
 } from 'jose'
 import { Address, Base64, Bytes, Hash } from 'ox'
 import { type Config, RequestError } from './Accounts.js'
+import * as Dpop from './internal/Dpop.js'
 import * as KeySet from './internal/KeySet.js'
 
 /**
@@ -44,12 +45,6 @@ const accessKeyRequestType = 'access-key-request+jwt'
 
 /** How long after its `iat` a DPoP proof verifies, in seconds, as at Tempo ID's own endpoints. */
 const proofMaxAge = 300
-
-/**
- * The JWS algorithms of the DPoP proofs that the verifier accepts. Tempo ID accepts and advertises
- * the same, so each proof that binds a token also verifies at the API.
- */
-const proofAlgorithms = ['ES256', 'EdDSA'] as const
 
 /**
  * How far a DPoP proof's `iat` may be from the verifier's clock beyond its window, in seconds. The
@@ -604,7 +599,7 @@ async function proof(options: {
     dpop.proof,
     EmbeddedJWK,
     {
-      algorithms: [...proofAlgorithms],
+      algorithms: [...Dpop.algorithms],
       clockTolerance: proofSkew,
       maxTokenAge: proofMaxAge,
       requiredClaims: ['ath', 'htm', 'htu', 'iat', 'jti'],

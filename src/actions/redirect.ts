@@ -54,7 +54,8 @@ export function complete(
   auth: Config,
   options: complete.Options = {},
 ): Promise<complete.ReturnType> {
-  const owner = `${auth.clientId}:${auth.chainId}`
+  // Instances that differ in their app, chain, or Tempo ID deployment each complete their own redirect.
+  const owner = `${auth.clientId}:${auth.chainId}:${Verifier.issuerOf(auth)}`
   const store = DefaultStore.get(auth.store)!
   let results = completed.get(store)
   if (!results) completed.set(store, (results = new Map()))
@@ -100,13 +101,27 @@ export function complete(
         return { key: legacyStoreKey, taken: false, value: legacy }
       return undefined
     })()
-    const stored = entry?.value
+      .then(async (found) => {
+        if (found === undefined || !outdated(auth, found.value)) return found
+        // A redirect of an earlier version names no Tempo ID deployment, so no instance redeems its
+        // code. Its entry is removed, and its callback still clears and throws, so its sign-in starts
+        // again.
+        if (!found.taken) await store.removeItem(found.key)
+        return found
+      })
+      .catch(async (error: unknown) => {
+        // The early exchange may have issued tokens that no session will hold.
+        await discard(auth, early)
+        throw error
+      })
+    const legacy = entry !== undefined && outdated(auth, entry.value)
+    const stored = legacy ? undefined : entry?.value
     // A registered redirect URI may hold its own `error`, which the app keeps. Only an `error` that
     // the callback added after it belongs to the authorization response.
     // Without the redirect's state, the tab's mark, or else the instance's `redirectUri`, names the
     // registered parameters.
     const redirectUri =
-      stored?.redirectUri ??
+      entry?.value.redirectUri ??
       ticket?.redirectUri ??
       started?.redirectUri ??
       auth.redirectUri ??
@@ -120,6 +135,7 @@ export function complete(
     // too. A crafted link carries no such mark.
     const mine =
       ours ||
+      legacy ||
       started !== undefined ||
       (ticket !== undefined && ticket.state === state)
     // The code exchange reads nothing of the removal, so both run in one round. The entry holds the
@@ -167,6 +183,17 @@ export function complete(
     }
     if (!url.searchParams.has('code') || !stored) {
       await removed
+      // The code of a redirect of an earlier version stays unredeemed, so the app signs in again.
+      if (legacy && url.searchParams.has('code')) {
+        await discard(auth, early)
+        throw new RequestError({
+          code: 'invalid_request',
+          field: 'state',
+          message:
+            'Expired sign-in: the redirect started with an earlier version of the package, which names no Tempo ID deployment. Start sign-in again.',
+          status: 400,
+        })
+      }
       // A callback of a redirect that this tab started, whose state the store lost, such as a store
       // in memory that the page load emptied, is a sign-in that no session keeps. A crafted link
       // carries no such mark. The code stays unredeemed, so the session stays as it was.
@@ -203,10 +230,17 @@ export function complete(
         status: 400,
       })
     }
-    const [body] = await Promise.all([
-      ours && early ? early : redeem(auth, { pending: stored, url }),
-      removed,
-    ])
+    const exchange =
+      ours && early ? early : redeem(auth, { pending: stored, url })
+    // A failed removal surfaces first, below, so a refused exchange is not unhandled meanwhile.
+    exchange.catch(() => undefined)
+    // A failed removal fails the sign-in, so the exchange's tokens, which no session will hold, are
+    // revoked.
+    await removed?.catch(async (error: unknown) => {
+      await discard(auth, exchange)
+      throw error
+    })
+    const body = await exchange
     // `start` takes only the app's own access key, so the result holds `accessKey`.
     return (await finish_revoke(auth, {
       accessKey: options.accessKey,
@@ -334,7 +368,10 @@ export declare namespace createUrl {
  * Checks the callback's `state`, and redeems its code for the authorization. Throws a
  * `RequestError` for a URL that is not a valid absolute URL, a forged `state`, a callback without a `code`,
  * or a refused code. If it refuses the token response of a redeemed code, such as one without a key
- * authorization, it revokes the response's refresh token before it throws.
+ * authorization, it revokes the response's refresh token before it throws. An exchange without a
+ * response, such as offline, throws `server_error` with status 0 and `signedIn`. A fault before the
+ * request, such as in the client assertion or the DPoP proof, throws `server_error` with status 0,
+ * `signedIn`, and the fault as its `cause`. Its message names the client assertion and the DPoP key.
  *
  * @example
  * ```ts
@@ -504,6 +541,22 @@ export declare namespace handleCallback {
 }
 
 /**
+ * Revokes the refresh token of a code exchange whose sign-in failed for another reason, such as a
+ * store's error, since no session holds it. A refused exchange issued no tokens, and a failed
+ * revocation leaves the other failure as the error.
+ */
+async function discard(
+  auth: Config,
+  exchange: ReturnType<typeof redeem> | undefined,
+): Promise<void> {
+  const body = await exchange?.catch(() => undefined)
+  if (body?.refresh_token)
+    await Api.revoke(auth, { refreshToken: body.refresh_token }).catch(
+      () => undefined,
+    )
+}
+
+/**
  * Checks the callback's `state`, and redeems its code with the verifier of `pending`. Throws a
  * `RequestError` for a forged `state`, a callback without a `code`, or a refused code.
  */
@@ -529,7 +582,13 @@ async function redeem(auth: Config, options: redeem.Options) {
 
   // A code with this redirect's `state` shows that the user signed in on Tempo ID's pages, so the
   // browser holds that user's Tempo ID session. A failed exchange then ends the app's earlier session.
-  return await Api.token(auth, {
+  // Only a fetch that rejects is an exchange without a response. A fault before it, such as in the
+  // client assertion or the DPoP proof, is the `cause` of its own error.
+  const config = Api.answered(auth, {
+    message:
+      'The code exchange received no response. Check the connection, and sign in again.',
+  })
+  return await Api.token(config, {
     code,
     code_verifier: verifier,
     grant_type: 'authorization_code',
@@ -551,11 +610,15 @@ async function redeem(auth: Config, options: redeem.Options) {
         status: error.status,
       })
     if (error instanceof RequestError) throw signedIn(error)
+    // The user signed in on Tempo ID's pages, so the error is `signedIn` too, which ends the app's
+    // earlier session.
     throw new RequestError({
       cause: error,
       code: 'server_error',
+      // The message can reach the browser, as a backend's refusal, so the fault's own text, which can
+      // name a signing service or an access key, stays in `cause`.
       message:
-        'The code exchange received no response. Check the connection, and sign in again.',
+        'The code exchange failed before its request. Check the client assertion and the DPoP key, and sign in again.',
       signedIn: true,
       status: 0,
     })
@@ -627,6 +690,7 @@ function finish(
       chainId: _chainId,
       challenge: challenged,
       clientId: _clientId,
+      issuer: _issuer,
       key: earlier,
       redirectUri: _redirectUri,
       state: _state,
@@ -902,6 +966,17 @@ const pendingLifetime = 60 * 60 * 1000
 const legacyStoreKey = 'tempo-id:redirect'
 
 /** A redirect's pending state as `store` returns it. A custom store may return `null`. */
+/**
+ * Returns whether `stored` is this instance's redirect of an earlier version, which names no Tempo
+ * ID deployment, so no instance redeems its code.
+ */
+function outdated(auth: Config, stored: NonNullable<Stored>) {
+  return (
+    stored.issuer === undefined &&
+    Verifier.owns(auth, { ...stored, issuer: Verifier.issuerOf(auth) })
+  )
+}
+
 type Stored =
   | Pending.Addressed
   | Pending.Pending

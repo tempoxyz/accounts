@@ -1875,6 +1875,64 @@ describe('fetch with siwe', () => {
     `)
   })
 
+  test('POST /callback, POST /siwe/challenge, and POST /siwe/verify answer 413 for a body above 64 KiB, and stop reading at the chunk that crosses 64 KiB', async () => {
+    const accounts = siweInstance()
+    const results = await Promise.all(
+      ['callback', 'siwe/challenge', 'siwe/verify'].map(async (path) => {
+        const chunk = new TextEncoder().encode('a'.repeat(16 * 1_024))
+        // The `Origin` check passes for any client, so the body streams 16 MiB, which the route must
+        // not buffer.
+        let read = 0
+        const body = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (read === 0)
+              controller.enqueue(new TextEncoder().encode('{"a":"'))
+            if (read >= 16 * 1_024 * 1_024) return controller.close()
+            read += chunk.byteLength
+            controller.enqueue(chunk)
+          },
+        })
+        const response = await accounts.handler.fetch(
+          new Request(`${origin}/accounts/auth/${path}`, {
+            body,
+            duplex: 'half',
+            headers: { 'content-type': 'application/json', origin },
+            method: 'POST',
+          } as RequestInit),
+        )
+        return {
+          error: ((await response.json()) as { error: string }).error,
+          path,
+          read: read <= 80 * 1_024,
+          status: response.status,
+        }
+      }),
+    )
+
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "error": "invalid_request",
+          "path": "callback",
+          "read": true,
+          "status": 413,
+        },
+        {
+          "error": "invalid_request",
+          "path": "siwe/challenge",
+          "read": true,
+          "status": 413,
+        },
+        {
+          "error": "invalid_request",
+          "path": "siwe/verify",
+          "read": true,
+          "status": 413,
+        },
+      ]
+    `)
+  })
+
   test('POST /siwe/challenge and POST /siwe/verify refuse another origin, and a malformed body', async () => {
     const accounts = siweInstance()
 

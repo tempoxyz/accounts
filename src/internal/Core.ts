@@ -14,6 +14,7 @@ import * as Api from './Api.js'
 import * as ClientId from './ClientId.js'
 import * as Permissions from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
+import * as Request from './Request.js'
 import * as Session from '../Session.js'
 import * as InternalSession from './Session.js'
 import type * as TempoAccount from './TempoAccount.js'
@@ -95,6 +96,33 @@ async function run(
   const { config } = context
   // The stored session loads first, so a sign-in that another tab saves later counts as newer.
   const held = await context.session.load()
+  // The headless authorization names no `resource`, so its tokens are for Tempo ID's origin, which
+  // the resource's API refuses. An instance with a resource thus sends none and keeps its session,
+  // as the viem retry does, and signs in with a redirect, which names the resource. An empty list
+  // names Tempo ID's origin, as no `resource` does.
+  if (Request.resources(config).length > 0) {
+    // Only a call that requests nothing beyond the held session returns it. A challenge, an access
+    // key, a passkey, or another account needs a new authorization, which only a sign-in on a page
+    // sends, so the call never returns the held session as its result. A local session is no
+    // Tempo ID sign-in, so it never answers the call either.
+    if (held && !Session.local(held) && holds(held, parameters))
+      return { ...held, upgradeAvailable: false }
+    if (!held) {
+      // Without a session, the status settles as for an authorization that finds no Tempo ID
+      // session.
+      const change = context.session.change({ restore: true })
+      if (!change.overtaken())
+        await context.session.reload().catch(() => undefined)
+      await change.commit(undefined)
+    }
+    throw new RequestError({
+      code: 'interaction_required',
+      field: 'resource',
+      message:
+        'Authorization refused: an instance with `resource` authorizes only through a sign-in on a page. Sign in with a redirect or the dialog.',
+      status: 0,
+    })
+  }
   // The authorization reads the browser's Tempo ID session, which a sign-in that completes first
   // replaces, so that sign-in overtakes it.
   const change = context.session.change({ restore: true })
@@ -151,9 +179,10 @@ async function run(
               ? (parameters.account ?? renewing?.account)
               : parameters.account,
             challenge: parameters.challenge,
-            // The user of a saved session most likely still holds the browser's Tempo ID session, so its
-            // renewal sends the authorization alone, which returns no session at `session_required`.
-            check: renewed === undefined,
+            // A held or saved session shows that the user most likely holds the Tempo ID session. So
+            // the call sends the authorization alone. Its `session_required` refusal returns no
+            // session.
+            check: renewed === undefined && held === undefined,
             getFn: parameters.getFn ?? config.getFn,
             passkey: parameters.passkey,
           })
@@ -627,12 +656,37 @@ export async function getSession(
 }
 
 /**
+ * Returns whether the held session answers `parameters` as it is: the call names no challenge, no
+ * access key, no passkey, and no account other than the session's own.
+ */
+function holds(session: Session.Session, parameters: authorize.Options) {
+  if (parameters.challenge !== undefined) return false
+  if (parameters.accessKey !== undefined) return false
+  if (parameters.passkey) return false
+  if (parameters.account === undefined) return true
+  const { account } = parameters
+  return [
+    session.accessKey?.account,
+    session.account?.address,
+    session.address,
+  ].some((entry) => entry !== undefined && Address.isEqual(entry, account))
+}
+
+/**
  * Returns whether `error` is a refusal that only an interactive sign-in resolves, such as a
  * passkey's. A `webauthn_required` with a cause is a ceremony that ran on the page and failed, such
  * as a dismissed prompt, so it is not one. Tempo ID's own `webauthn_required`, sent before any
  * ceremony, has no cause.
  */
 function interactiveRefusal(error: unknown) {
+  // An instance with `resource` authorizes only on a page, so its refusal leaves the visitor signed
+  // out too.
+  if (
+    error instanceof RequestError &&
+    error.code === 'interaction_required' &&
+    error.field === 'resource'
+  )
+    return true
   return (
     error instanceof RequestError &&
     interactive.has(error.reason!) &&

@@ -2,7 +2,6 @@
  * A store in one JSON file of the user's, such as a CLI's session, as `Store.file` returns it.
  * @module
  */
-import { Json } from 'ox'
 import * as Expiry from '../internal/Expiry.js'
 import * as Node from '../internal/Node.js'
 import * as StoreValue from '../internal/StoreValue.js'
@@ -84,8 +83,9 @@ export class NodeRequiredError extends Error {
  * removes that file. If a process ends before its rename, such as at a crash, the next write removes
  * its temporary file once it is older than 10 seconds, since it holds the tokens. Each value is
  * stored as ox's `Json`, so a `bigint` survives. A read skips an expired entry, and a
- * write deletes the expired entries. A removal of an absent entry writes nothing, and creates no
- * file or folder. `takeItem` reads and deletes an entry under the lock, so of several processes on
+ * write deletes the expired entries. A removal of an absent entry, and a write of the value and
+ * expiry that an entry holds, such as a second sign-out's, write nothing, and create no file or
+ * folder. `takeItem` reads and deletes an entry under the lock, so of several processes on
  * the file, one takes each value. `lock` holds a lock file of its key beside the file,
  * `<path>.<SHA-256 of the key>.lock`, so the instances of several processes on the file send one
  * refresh. The hold renews the lock file for at most 30 seconds, so a slow refresh keeps it. The
@@ -146,7 +146,7 @@ export function create(path?: string): Store.Store {
 
     const entries = (() => {
       try {
-        return Json.parse(text) as unknown
+        return StoreValue.decode(text)
       } catch {
         return undefined
       }
@@ -172,7 +172,8 @@ export function create(path?: string): Store.Store {
    * Applies `fn` to the entries after every earlier write, and writes the file. The read and the
    * write hold the file's lock, so a write of another process, such as a second run of a CLI, never
    * lands between them and is never lost. A write that `options.skip` finds without effect on the
-   * entries before the lock takes no lock, writes no file, and returns `undefined`. Returns the
+   * entries before the lock takes no lock, writes no file, and returns `undefined`. It still removes
+   * the temporary files older than the stale lock, which can hold tokens. Returns the
    * result of `fn`, or `undefined` if another process took the lock over before the rename.
    */
   function update<value>(
@@ -182,7 +183,12 @@ export function create(path?: string): Store.Store {
     const next = pending
       .catch(() => undefined)
       .then(async () => {
-        if (options.skip?.(await read())) return undefined
+        if (options.skip?.(await read())) {
+          // A temporary file of a process that ended before its rename can hold a new refresh
+          // token, so a skipped write, such as a second sign-out, removes it as a write does.
+          await sweep(resolve())
+          return undefined
+        }
         const { Fs, Path } = node()
         const target = resolve()
         await Fs.mkdir(Path.dirname(target), { mode: 0o700, recursive: true })
@@ -257,9 +263,25 @@ export function create(path?: string): Store.Store {
       // JSON keeps a non-extractable `CryptoKey` as `{}`, which signs nothing after a restore, so such a
       // value rejects before the lock, and the file keeps its entries.
       StoreValue.stringify(value)
-      await update((entries) => {
-        entries[key] = { expiresAt: options.expiresAt, value }
-      })
+      await update(
+        (entries) => {
+          entries[key] = { expiresAt: options.expiresAt, value }
+        },
+        // A write of the value and expiry that a live entry holds changes nothing, such as the
+        // signed-out mark and the empty session of a second sign-out. The comparison reads the value
+        // when the queued write runs, as the write does, so a change after the call persists.
+        {
+          skip: (entries) => {
+            const entry = entries[key]
+            return (
+              !!entry &&
+              !Expiry.expired(entry) &&
+              entry.expiresAt === options.expiresAt &&
+              StoreValue.stringify(entry.value) === StoreValue.stringify(value)
+            )
+          },
+        },
+      )
     },
     // A write that another process overtakes runs `fn` again on the new entries. A write whose lock
     // another process took over before the rename returns `undefined`. So at most one process

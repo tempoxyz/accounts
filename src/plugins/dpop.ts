@@ -31,8 +31,8 @@ const key = 'tempo-id:dpop'
  * `private`, such as `Store.file`, refuses a `CryptoKey`, and keeps the private key as a JWK instead, as
  * it keeps the session's refresh token and access keys. Each later call imports it as
  * non-extractable, so the next run of a CLI refreshes its session. A shared store, such as
- * `Store.postgres` or `Store.redis`, rejects the write and keeps no private key, so each call creates a
- * new DPoP key. In a browser, the factory keeps no private key in a form that a script can read.
+ * `Store.postgres` or `Store.redis`, keeps no private key, so each call creates a new DPoP key and
+ * sends the store no query. In a browser, the factory keeps no private key in a form that a script can read.
  *
  * The factory never rejects for its store or its lock, so an app that awaits it at load still loads.
  * A page that refuses the lock, such as one without site storage, reads the store without it. If the
@@ -40,12 +40,12 @@ const key = 'tempo-id:dpop'
  * and writes nothing over the stored one. If the store rejects the write, such as on a full quota,
  * the new DPoP key lasts for the page only.
  *
- * With Web Locks, such as in a browser, concurrent calls read and write the entry under one lock,
- * also in two tabs, so a first load in both returns one DPoP key. The lock spans one process only
- * outside a browser. So concurrent first calls of two processes on one store, such as two first
- * runs of a CLI on one `Store.file`, can each create a DPoP key, and only the last write stays. A
- * sign-in of the other process then binds tokens that the next run cannot refresh, and the user
- * signs in again. Without Web Locks, concurrent first calls in one process behave the same way.
+ * Concurrent calls read and write the entry under one lock, so a first load in each returns one
+ * DPoP key: the `lock` of a store with `private`, which spans the processes of `Store.file`, such as
+ * two first runs of a CLI, and otherwise Web Locks, which span the tabs of a browser and one
+ * process outside it. Without either, concurrent first calls can each create a DPoP key, and only
+ * the last write stays. A sign-in of the other call then binds tokens that the next run cannot
+ * refresh, and the user signs in again.
  *
  * The `dpop` that `Accounts.create` receives wins over the plugin's.
  *
@@ -68,7 +68,9 @@ export async function dpop(options: dpop.Options = {}) {
     ?.locks
 
   const value = await (async () => {
-    if (!store) return await Dpop.create()
+    // A shared JSON store, such as `Store.postgres`, keeps no `CryptoKey` and no private JWK, so it
+    // holds no DPoP key, and the factory sends it no query.
+    if (!store || (store.json && !store.private)) return await Dpop.create()
     const load = async () => {
       // A refused read, such as of a closed IndexedDB, keeps the stored DPoP key, so the factory
       // writes no new one over it.
@@ -96,7 +98,11 @@ export async function dpop(options: dpop.Options = {}) {
       return await exported(store)
     }
     // The lock's name is no entry of the store, so a store that locks each entry never waits for
-    // the lock that its caller holds.
+    // the lock that its caller holds. The `lock` of a `private` store spans its processes, such as
+    // the lock file of `Store.file`, so two first runs of a CLI keep one DPoP key. A shared store
+    // keeps no DPoP key, so its lock only adds rounds. A refused lock reads the store without it.
+    if (store.private && store.lock)
+      return await store.lock(`${key}:exclusive`, load).catch(() => load())
     if (!locks) return await load()
     // A page without site storage, such as an opaque origin, refuses the lock before `load` runs.
     return await locks.request(`${key}:exclusive`, load).catch(() => load())

@@ -25,8 +25,17 @@ function firstParty(auth: Config) {
   if (!ClientId.thirdParty(auth.clientId)) return
   throw new RequestError({
     code: 'invalid_request',
-    // A CLI has no browser window or redirect URI, so it signs in through the device grant.
-    message: `Email sign-in refused: the client ID names a third-party app, which signs in only on an approval page. Sign in with ${ClientId.cli(auth.clientId) ? '`device.signIn`' : '`dialog.signIn` or `redirect.signIn`'}.`,
+    message: (() => {
+      // A CLI has no browser window or redirect URI, so it signs in through the device grant.
+      if (ClientId.cli(auth.clientId))
+        return 'Email sign-in refused: the client ID names a third-party app, which signs in only on an approval page. Sign in with `device.signIn`.'
+      // A page without `clientId` uses its origin as the client ID, so the fault is often the
+      // missing registration ID, not the flow.
+      // A regular expression, since some runtimes, such as React Native, have no `URL.parse`.
+      if (/^https?:\/\/[^/?#]+$/.test(auth.clientId))
+        return "Email sign-in refused: the client ID is an origin, which names a third-party app. Pass `clientId`, the ID of the app's first-party registration, or sign in with `dialog.signIn` or `redirect.signIn`."
+      return 'Email sign-in refused: the client ID names a third-party app, which signs in only on an approval page. Sign in with `dialog.signIn` or `redirect.signIn`.'
+    })(),
     reason: 'rejected',
     status: 400,
   })
@@ -239,8 +248,15 @@ export async function signIn<
     )
     const { authorization } = registered
     // The registration's tokens become the session, so they must be the code's user's.
-    if (authorization.user.id !== body.user.id)
-      Api.signedIn(Headless.sessionChanged())
+    // A mismatch revokes the registration's refresh token, which no session holds, as
+    // `Headless.complete` does.
+    await Headless.revoking(auth, {
+      body: { tokens: authorization as never },
+      fn: () => {
+        if (authorization.user.id !== body.user.id)
+          Api.signedIn(Headless.sessionChanged())
+      },
+    })
     return {
       ...authorization,
       // The registration received the generated access key by its account alone, so the access key

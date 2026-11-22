@@ -1001,11 +1001,16 @@ export function create(options: create.Options): create.ReturnType {
    * in the background. Two contexts that sign in at once can each save before the other's read, so
    * the later save overwrites a session that no sign-in revokes, and no store holds it. The
    * revocation skips a token that another context rotated into the stored session, or still keeps.
+   * An adopted sign-out drops no token: that sign-out revoked the stored tokens under the lock.
    * `since` is when the instance obtained `current`.
    */
   function revokeDropped(current: Session.Any | undefined, since: number) {
     if (!current?.refreshToken) return
-    if (current.refreshToken === context().session?.refreshToken) return
+    // Without a stored session, `machines.adopts` keeps every token, so the revocation would only
+    // take the lock and read the store.
+    const session = context().session
+    if (!session) return
+    if (current.refreshToken === session.refreshToken) return
     void revokeReplaced(current, since)
   }
 
@@ -4337,6 +4342,17 @@ export namespace machines {
    */
   export function loaded(snapshot: machines.session.Snapshot): boolean {
     return snapshot.context.loaded
+  }
+
+  /**
+   * Returns whether the instance holds a session whose access keys expired while it held it, which
+   * the status shows as signed out until a read empties it.
+   */
+  export function expired(snapshot: machines.session.Snapshot): boolean {
+    return (
+      snapshot.context.session !== undefined &&
+      snapshot.context.session === snapshot.context.expired
+    )
   }
 
   /**

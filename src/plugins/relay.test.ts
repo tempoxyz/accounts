@@ -517,6 +517,45 @@ describe('relay guard', () => {
     expect((await summary(accepted)).status).toMatchInlineSnapshot(`503`)
   })
 
+  test('refuses a DPoP request whose token or proof fails with a DPoP challenge, and a Bearer request with a Bearer challenge', async () => {
+    const keys = await issuer()
+    const accounts = instance(keys)
+    const dpop = await Dpop.create()
+    const token = await keys.sign({ jkt: Dpop.thumbprint(dpop) })
+    const proof = await Dpop.proof(dpop, {
+      accessToken: token,
+      method: 'POST',
+      url: 'https://app.example/api/other',
+    })
+
+    const responses = await Promise.all([
+      accounts.relay.fetch(request({ dpop: proof, token })),
+      accounts.relay.fetch(
+        request({
+          token: await keys.sign({ clientId: 'https://other.example' }),
+        }),
+      ),
+    ])
+
+    expect(
+      responses.map((response) => [
+        response.status,
+        response.headers.get('www-authenticate'),
+      ]),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          401,
+          "DPoP error="invalid_token", algs="ES256 EdDSA"",
+        ],
+        [
+          401,
+          "Bearer error="invalid_token"",
+        ],
+      ]
+    `)
+  })
+
   test('refuses a repeated DPoP proof with 401 and invalid_dpop_proof, and relays a new proof and a repeated Bearer token', async () => {
     const keys = await issuer()
     const accounts = instance(keys)

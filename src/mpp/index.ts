@@ -692,6 +692,15 @@ export function mpp(options: mpp.Options = {}) {
         return {
           ...from(''),
           async prove(request, attempt) {
+            // An endpoint without mppx's `requiresAuth` takes the credential in `Authorization`,
+            // where no access token fits. The credential can pay a transfer that the app already
+            // sent, so the request goes out without the identity, in place of a rejection.
+            const authorization = request.headers.get('Authorization')
+            if (
+              authorization &&
+              Credential.extractPaymentScheme(authorization) !== null
+            )
+              return request
             // A local session holds no Tempo ID tokens, so its requests go out without an identity.
             const held = context.session.get()
             if (held && Session.local(held) && !ended()) return request
@@ -1279,8 +1288,10 @@ export declare namespace mpp {
      * the access token, with a new proof of the instance's `dpop` key for a DPoP token, and the ID
      * token, which names the user's email address, until it expires. A token refresh may return no
      * ID token, and once the earlier one expires the requests carry none until the next sign-in, so
-     * an endpoint that requires the email can refuse a long session. A payer of a fixed `session` or a named
-     * `account` sends none. Defaults to no identity.
+     * an endpoint that requires the email can refuse a long session. A paid request to an endpoint
+     * without mppx's `requiresAuth`, which takes the credential in `Authorization`, carries no
+     * identity. A payer of a fixed `session` or a named `account` sends none. Defaults to no
+     * identity.
      *
      * @example
      * ```ts
