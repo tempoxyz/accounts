@@ -4,10 +4,10 @@
  * @module
  */
 import { Json } from 'ox'
+import * as Store from '../Store.js'
 import * as Broadcast from './Broadcast.js'
 import * as Lock from './Lock.js'
 import * as StoreValue from './StoreValue.js'
-import * as Store from '../Store.js'
 
 /**
  * The lock of every preset's store. React Native has no Web Locks, and every preset reads the one
@@ -35,10 +35,14 @@ const connect = Broadcast.create()
  *
  * @example
  * ```ts
- * import * as SecureStore from 'expo-secure-store'
- * import * as DeviceStore from './DeviceStore.js'
+ * import { Accounts } from 'accounts'
+ * import { expo } from 'accounts/expo'
  *
- * const store = DeviceStore.create(SecureStore)
+ * // `expo` sets the instance's `store` with `DeviceStore.create`.
+ * const accounts = Accounts.create({
+ *   clientId: 'client_…',
+ *   plugins: [expo({ redirectUri: 'com.example.app:/callback' })],
+ * })
  * ```
  */
 export function create(secureStore: create.SecureStore): Store.Store {
