@@ -13,12 +13,12 @@ import { DemoButton, DemoStep } from '../components/Demo.tsx'
 
 /**
  * The demo's instance, on Tempo testnet. The page's origin is its client ID, so the site needs no
- * registration. A sign-in passes `accessKey: false`, since the demo only renders the session.
+ * registration. The instance sets `provision: 'wallet'`, since the demo only renders the session.
  */
 export const accounts = Accounts.create({
-  accessKey: false,
   chain: 'testnet',
   plugins: [react()],
+  provision: 'wallet',
 })
 
 /** The action that runs, or how the last one ended. */

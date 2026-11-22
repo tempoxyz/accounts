@@ -50,7 +50,8 @@ import type * as TempoAccount from './internal/TempoAccount.js'
  * the sign-in requested no access key, its access key expired, or its access key acts on another
  * chain. Thrown in these cases:
  *
- * - `device.signIn` without `accessKey`, since the device grant always requests an access key.
+ * - `device.signIn` under the `accessKey` provision, when neither the call nor the instance names
+ *   an access key, and the call carries no challenge.
  * - A transaction from the account of a `viem` client whose session holds no access key, outside a
  *   page, or with `retry.accessKey` off for a session with an access key on another chain.
  * - `accounts.viem({ session })` for a session without an access key.
@@ -555,6 +556,19 @@ export type Config = {
    */
   par?: boolean | undefined
   /**
+   * What a sign-in creates for the user. Each value includes the one before it:
+   *
+   * - `user`: the Tempo ID user alone, with no Tempo Account and no access key.
+   * - `wallet`: also the user's Tempo Account, with no access key.
+   * - `accessKey`: also an access key for the app.
+   *
+   * Defaults to `accessKey`. Under `user`, the actions of `Actions` read no Tempo Account, as
+   * with `account: false`. Tempo ID still creates a Tempo Account for an app whose
+   * [first account](https://github.com/tempoxyz/id/blob/main/docs/realms.md#apps-without-a-first-account)
+   * is not `none`, on a sign-in that its pages or a backend complete.
+   */
+  provision?: Provision | undefined
+  /**
    * Where Tempo ID redirects back to, such as a mobile app's custom scheme. Register it with the
    * app first. Defaults to the page's origin in a browser. Outside a browser, a redirect sign-in
    * without it throws {@link RedirectUriRequiredError}.
@@ -607,6 +621,12 @@ export type Config = {
    */
   url: string
 }
+
+/**
+ * What a sign-in creates for the user: `user`, the user alone, `wallet`, also a Tempo Account, or
+ * `accessKey`, also an access key. See `Config.provision`.
+ */
+export type Provision = 'accessKey' | 'user' | 'wallet'
 
 /**
  * A Tempo ID instance: its configuration, its session, and the namespace of each plugin. Each
@@ -1708,8 +1728,11 @@ export declare namespace from {
  * instead.
  *
  * Without `accessKey`, each sign-in without a challenge requests an access key that may transfer up
- * to 5 OUSD, and expires a day after the sign-in. `accessKey: false` requests none.
+ * to 5 OUSD, and expires a day after the sign-in. `provision: 'wallet'` or `provision: 'user'`
+ * requests none.
  *
+ * @throws {TypeError} For `accessKey` permissions beside a `provision` other than `accessKey`, or
+ *   for `accessKey: false` beside `provision`.
  * @throws {ClientIdRequiredError} Outside a browser without `clientId`, where no page's origin can
  *   serve as one.
  * @throws {ChainNameInvalidError} For a `chain` that is neither `mainnet`, `testnet`, nor a chain
@@ -1765,6 +1788,18 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     ...named.map((plugin) => plugin.config?.()),
     given,
   ) as from.Options
+  // Permissions describe an access key, which only the `accessKey` provision creates.
+  // `accessKey: false` is the deprecated form of `provision: 'wallet'`.
+  if (
+    merged.provision !== undefined &&
+    accessKey_option !== undefined &&
+    (merged.provision !== 'accessKey' || accessKey_option === false)
+  )
+    throw new TypeError(
+      `Conflicting options: \`accessKey\` describes an access key, which only \`provision: "accessKey"\` creates, and \`accessKey: false\` is the deprecated form of \`provision: "wallet"\`. Remove \`accessKey\`, or set \`provision\` to "accessKey" beside permissions.`,
+    )
+  merged.provision ??= accessKey_option === false ? 'wallet' : 'accessKey'
+  const provision = merged.provision
   // A `cli:` client ID names a program of one user, so its instance without a store keeps its
   // session in the file that the user's CLIs share. Every reader of `config.store` then reads it.
   // `false` refuses the file, and a plugin's store with it, for an instance of many users.
@@ -2012,8 +2047,8 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
 
   const context: Plugin.Context = {
     accessKey,
-    defaultAccessKey: () =>
-      accessKey_option === undefined ? defaultAccessKey() : undefined,
+    defaultAccessKey: () => (accessKey_option ? undefined : defaultAccessKey()),
+    provision,
     chain: {
       configured: chain.configured,
       get: chain.get,
@@ -2210,7 +2245,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     authorize: (parameters?: Core.authorize.Parameters) =>
       Core.authorize(context, {
         ...parameters,
-        renew: accessKey_option === undefined,
+        renew: provision === 'accessKey' && accessKey_option === undefined,
       }),
     chain: { get: chain.get, subscribe: chain.subscribe },
     config,
@@ -2512,7 +2547,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
               InternalSession.machines.declined(session.actor.getSnapshot()),
             delegate: session.delegate,
             reauthorize,
-            renew: accessKey_option === undefined,
+            renew: provision === 'accessKey' && accessKey_option === undefined,
             async restore() {
               // A restore, such as a redirect's callback, completes on the selected chain, so the
               // stored selection loads first. A failed read runs no hook, so a later read restores.
@@ -2795,100 +2830,128 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
 export declare namespace create {
   type Options<
     plugins extends readonly Plugin.Option[] = readonly Plugin.Option[],
-  > = Omit<from.Options, 'par' | 'store'> & {
-    /**
-     * The access key of each sign-in that names none: what it may do, a function that the instance
-     * calls at each sign-in to return it, or `false` for no access key. A duration expiry, such as
-     * `'7d'`, counts from the sign-in. Without an expiry, the access key expires a day after the
-     * sign-in, as one of a sign-in's own `accessKey` does. Defaults to an access key that may
-     * transfer up to 5 OUSD, and expires a day after the sign-in. The default applies to no sign-in
-     * with a challenge, whose signature stays an EIP-191 signature, and to no page whose `store`
-     * has `json`, which cannot keep the access key.
-     */
-    accessKey?:
-      | Permissions
-      | false
-      | (() => Permissions | undefined)
-      | undefined
-    /**
-     * The IDs of the chains that `switchChain` may select, and that a stored selection may restore.
-     * Defaults to Tempo's built-in chains: mainnet, testnet, devnet, and a local node. The
-     * configured `chain` is always one of them. The wagmi connector passes its config's chains.
-     */
-    chains?: readonly number[] | undefined
-    /**
-     * The connections of a registered resource's API, for `connections.connect`: its `resource`,
-     * the apps whose tokens it accepts, and the `store` that holds each connection's API access
-     * key, or the `adapter` that reaches it. Only the API's server sets it, with `clientSecret` or
-     * `clientAssertion` of the OAuth app that the resource's access key policy names. With
-     * `metadata`, Tempo ID discovers the API from the metadata that `handler` serves, the client ID
-     * is the handler's `/client.json` on the resource's origin, and the instance signs its
-     * client assertions with `metadata.privateKey`. `create` then throws for `clientAssertion`,
-     * `clientId`, `clientSecret`, or a resource with a query or a fragment. The instance
-     * loads the connections' code at the first call, so a page's bundle holds none of it. Defaults
-     * to none. Absent, `accounts.connections` throws `Accounts.ConnectionsRequiredError`.
-     */
-    connections?: Connections.Options | undefined
-    /** The options of `accounts.handler`, the instance's server routes. Defaults to `{}`. */
-    handler?:
-      | {
-          /**
-           * The path that the routes sit under, such as `/accounts`, for an app that mounts the
-           * handler under another prefix. Defaults to `/api`. `''` serves the routes at the root.
-           * With `connections.metadata`, the default client ID sits under it, so a new path makes a
-           * new app, which holds none of the earlier app's connections.
-           */
-          basePath?: string | undefined
-          /**
-           * Whether the handler serves the `relay` plugin's route at `/relay`. The relay accepts each
-           * signed-in user of the app, and spends the fee payer's balance, so it is off unless set.
-           * Defaults to `false`.
-           */
-          relay?: boolean | undefined
-        }
-      | undefined
-    /**
-     * The session hint, a cookie that a page reads synchronously at startup, so it loads the
-     * instance only for a returning visitor. `Hint.has` of `accounts/hint` reads it. A session in
-     * IndexedDB has no synchronous read. In a browser, the instance sets the cookie for 30 days at
-     * each sign-in or restore, and removes it at each sign-out, and when it reads no saved session.
-     * The cookie holds only `1`, on the path `/`, and no token. `cookie: true` names it
-     * `tempo_session`. Defaults to no hint.
-     */
-    hint?:
-      | {
-          /** The cookie's name, or `true` for `tempo_session`. */
-          cookie: string | true
-        }
-      | undefined
-    /**
-     * The plugins, each of which adds a namespace with its `id`. An entry can be a list, such as a
-     * preset that combines plugins, or a falsy value, which adds nothing. Defaults to none. The
-     * root entry's `Accounts.create` adds the `dialog`, `funding`, and `mpp` plugins that it lacks.
-     * The built-in plugins come from `accounts/plugins`, and `Plugin.from` defines another. Each
-     * plugin's `setup` runs once, in the order of `plugins`.
-     *
-     * - `backend`, as `accounts.backend`: a backend's sessions, one for each user.
-     * - `device`, as `accounts.device`: the device grant, such as in a CLI.
-     * - `dialog`, as `accounts.dialog`: Tempo ID's sign-in in a dialog or popup.
-     * - `email`, as `accounts.email`: an emailed code in the app's own UI.
-     * - `funding`, as `accounts.funding`: Tempo ID's deposit page.
-     * - `mpp`, from `accounts/mpp`, as `accounts.fetch` and `accounts.mpp`: the payments of MPP
-     *   endpoints.
-     * - `passkey`, as `accounts.passkey`: a passkey in the app's own UI.
-     * - `redirect`, as `accounts.redirect`: a redirect to Tempo ID's pages.
-     * - `viem`, as `accounts.viem`: a Viem client with the session's access key.
-     */
-    plugins?: plugins | undefined
-    /**
-     * The store of `Accounts.from`, with its defaults: IndexedDB in a browser, and the file of
-     * `Store.file()` for a `cli:` client ID elsewhere. `false` refuses that file, so the instance
-     * holds no session and writes nothing, as a backend's. Pass it in a service that signs in many
-     * users with a `cli:` client ID, such as a bot, so that each sign-in only returns its session.
-     * In a browser, `false` keeps IndexedDB, which a page's sign-in needs.
-     */
-    store?: Store | false | undefined
-  }
+  > = Omit<from.Options, 'par' | 'provision' | 'store'> &
+    Provisioning & {
+      /**
+       * The IDs of the chains that `switchChain` may select, and that a stored selection may restore.
+       * Defaults to Tempo's built-in chains: mainnet, testnet, devnet, and a local node. The
+       * configured `chain` is always one of them. The wagmi connector passes its config's chains.
+       */
+      chains?: readonly number[] | undefined
+      /**
+       * The connections of a registered resource's API, for `connections.connect`: its `resource`,
+       * the apps whose tokens it accepts, and the `store` that holds each connection's API access
+       * key, or the `adapter` that reaches it. Only the API's server sets it, with `clientSecret` or
+       * `clientAssertion` of the OAuth app that the resource's access key policy names. With
+       * `metadata`, Tempo ID discovers the API from the metadata that `handler` serves, the client ID
+       * is the handler's `/client.json` on the resource's origin, and the instance signs its
+       * client assertions with `metadata.privateKey`. `create` then throws for `clientAssertion`,
+       * `clientId`, `clientSecret`, or a resource with a query or a fragment. The instance
+       * loads the connections' code at the first call, so a page's bundle holds none of it. Defaults
+       * to none. Absent, `accounts.connections` throws `Accounts.ConnectionsRequiredError`.
+       */
+      connections?: Connections.Options | undefined
+      /** The options of `accounts.handler`, the instance's server routes. Defaults to `{}`. */
+      handler?:
+        | {
+            /**
+             * The path that the routes sit under, such as `/accounts`, for an app that mounts the
+             * handler under another prefix. Defaults to `/api`. `''` serves the routes at the root.
+             * With `connections.metadata`, the default client ID sits under it, so a new path makes a
+             * new app, which holds none of the earlier app's connections.
+             */
+            basePath?: string | undefined
+            /**
+             * Whether the handler serves the `relay` plugin's route at `/relay`. The relay accepts each
+             * signed-in user of the app, and spends the fee payer's balance, so it is off unless set.
+             * Defaults to `false`.
+             */
+            relay?: boolean | undefined
+          }
+        | undefined
+      /**
+       * The session hint, a cookie that a page reads synchronously at startup, so it loads the
+       * instance only for a returning visitor. `Hint.has` of `accounts/hint` reads it. A session in
+       * IndexedDB has no synchronous read. In a browser, the instance sets the cookie for 30 days at
+       * each sign-in or restore, and removes it at each sign-out, and when it reads no saved session.
+       * The cookie holds only `1`, on the path `/`, and no token. `cookie: true` names it
+       * `tempo_session`. Defaults to no hint.
+       */
+      hint?:
+        | {
+            /** The cookie's name, or `true` for `tempo_session`. */
+            cookie: string | true
+          }
+        | undefined
+      /**
+       * The plugins, each of which adds a namespace with its `id`. An entry can be a list, such as a
+       * preset that combines plugins, or a falsy value, which adds nothing. Defaults to none. The
+       * root entry's `Accounts.create` adds the `dialog`, `funding`, and `mpp` plugins that it lacks.
+       * The built-in plugins come from `accounts/plugins`, and `Plugin.from` defines another. Each
+       * plugin's `setup` runs once, in the order of `plugins`.
+       *
+       * - `backend`, as `accounts.backend`: a backend's sessions, one for each user.
+       * - `device`, as `accounts.device`: the device grant, such as in a CLI.
+       * - `dialog`, as `accounts.dialog`: Tempo ID's sign-in in a dialog or popup.
+       * - `email`, as `accounts.email`: an emailed code in the app's own UI.
+       * - `funding`, as `accounts.funding`: Tempo ID's deposit page.
+       * - `mpp`, from `accounts/mpp`, as `accounts.fetch` and `accounts.mpp`: the payments of MPP
+       *   endpoints.
+       * - `passkey`, as `accounts.passkey`: a passkey in the app's own UI.
+       * - `redirect`, as `accounts.redirect`: a redirect to Tempo ID's pages.
+       * - `viem`, as `accounts.viem`: a Viem client with the session's access key.
+       */
+      plugins?: plugins | undefined
+      /**
+       * The store of `Accounts.from`, with its defaults: IndexedDB in a browser, and the file of
+       * `Store.file()` for a `cli:` client ID elsewhere. `false` refuses that file, so the instance
+       * holds no session and writes nothing, as a backend's. Pass it in a service that signs in many
+       * users with a `cli:` client ID, such as a bot, so that each sign-in only returns its session.
+       * In a browser, `false` keeps IndexedDB, which a page's sign-in needs.
+       */
+      store?: Store | false | undefined
+    }
+
+  /**
+   * What a sign-in creates, as `Config.provision` describes, and what the access key of each
+   * sign-in that names none may do. `accessKey` permissions apply only beside the `accessKey`
+   * provision, else the type refuses them and `create` throws a `TypeError`.
+   */
+  type Provisioning =
+    | {
+        /**
+         * The access key of each sign-in that names none: what it may do, or a function that the
+         * instance calls at each sign-in to return it. A duration expiry, such as `'7d'`, counts
+         * from the sign-in. Without an expiry, the access key expires a day after the sign-in, as
+         * one of a sign-in's own `accessKey` does. Defaults to an access key that may transfer up
+         * to 5 OUSD, and expires a day after the sign-in. The default applies to no sign-in with a
+         * challenge, whose signature stays an EIP-191 signature, and to no page whose `store` has
+         * `json`, which cannot keep the access key. `false`, which is deprecated, stands for
+         * `provision: 'wallet'`.
+         */
+        accessKey?:
+          | Permissions
+          | false
+          | (() => Permissions | undefined)
+          | undefined
+        /** Defaults to `accessKey`, or to `wallet` with `accessKey: false`. */
+        provision?: undefined
+      }
+    | {
+        /** As without `provision`, but never `false`. */
+        accessKey?: Permissions | (() => Permissions | undefined) | undefined
+        /** Each sign-in also creates an access key. See `Config.provision`. */
+        provision: 'accessKey'
+      }
+    | {
+        /** Never an option, since the provision creates no access key. */
+        accessKey?: undefined
+        /**
+         * `user` creates no Tempo Account and no access key, and `wallet` creates no access key.
+         * See `Config.provision`.
+         */
+        provision: 'user' | 'wallet'
+      }
 }
 
 /**

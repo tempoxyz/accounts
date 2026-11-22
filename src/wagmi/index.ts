@@ -142,7 +142,7 @@ export class StoreRequiredError extends Error {
  * disconnects. `@wagmi/core` is an optional peer dependency of `accounts`, so an app with wagmi
  * installs it beside the package.
  *
- * The connector takes the options of `Accounts.create` but `chain`. It creates the instance on
+ * The connector takes the options of `Accounts.create` but `chain`, such as `provision`. It creates the instance on
  * first use, with `Accounts.create`, from `options` and the connector's chain, and adds the `viem`
  * plugin over the config's `chains` and `transports`. A `viem` plugin in `plugins`, such as
  * `viem({ feeToken })`, gives its other options to that plugin. In a browser, the instance is
@@ -347,7 +347,7 @@ export declare namespace tempoId {
 
   type Options<
     plugins extends readonly Plugin.Option[] = readonly Plugin.Option[],
-  > = Omit<Accounts.create.Options<plugins>, 'chain' | 'chainId'> & {
+  > = OmitChain<Accounts.create.Options<plugins>> & {
     /**
      * The connector's chain, the instance's configured chain, which must be one of the config's
      * `chains`. The instance's access keys and wagmi's connection belong to it. Defaults to the
@@ -360,6 +360,14 @@ export declare namespace tempoId {
      */
     chainId?: number | undefined
   }
+
+  /**
+   * The options of `Accounts.create` without `chain` and `chainId`, for each of its `provision`
+   * cases, so `accessKey` stays refused beside `provision: 'user'` or `'wallet'`.
+   */
+  type OmitChain<options> = options extends unknown
+    ? Omit<options, 'chain' | 'chainId'>
+    : never
 
   /** The members that the connector adds to wagmi's. */
   type Properties<

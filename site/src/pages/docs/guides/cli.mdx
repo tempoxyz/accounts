@@ -480,6 +480,40 @@ export const accounts = Accounts.create({
 
 :::
 
+### Sign in without a wallet
+
+<SourceLink name="Config.provision" path="src/Accounts.ts">`provision`</SourceLink> sets what a sign-in creates. With `'user'`, the device grant requests no access key, and the session holds only the user and the tokens. Tempo ID creates no Tempo Account for an app whose [first account](https://github.com/tempoxyz/id/blob/main/docs/realms.md#apps-without-a-first-account) is `none`. With `'wallet'`, the user receives a Tempo Account, and no access key.
+
+:::code-group
+
+```ts [index.ts]
+import { accounts } from './tempo.config.js'
+
+const { user } = await accounts.device.signIn()
+console.log(`Signed in as ${user.email}.`)
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { device } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'cli:acme-example',
+  plugins: [
+    device({
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+  ],
+  provision: 'user', // [!code hl]
+})
+```
+
+:::
+
 ### Send above the limit or the balance
 
 With the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, a transfer above the limit of the access key, or above the balance, starts a new device grant. <SourceLink name="onCode" path="src/plugins/device.ts">`onCode`</SourceLink> shows its code. After the approval, the transfer sends again.

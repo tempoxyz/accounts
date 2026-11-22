@@ -13,12 +13,12 @@ import { Fields } from './identity/Fields.tsx'
 
 /**
  * The demo's instance, on Tempo testnet. The page's origin is its client ID, so the site needs no
- * registration. A sign-in passes `accessKey: false`, since the demo signs no transaction.
+ * registration. The instance sets `provision: 'wallet'`, since the demo signs no transaction.
  */
 export const accounts = Accounts.create({
-  accessKey: false,
   chain: 'testnet',
   plugins: [react()],
+  provision: 'wallet',
 })
 
 /** The sign-in that runs, or how the last one ended. */

@@ -176,10 +176,16 @@ export type Context = {
    */
   accessKey: () => Permissions | undefined
   /**
-   * Returns the access key of a sign-in of an instance without `accessKey` that names none: up to 5
-   * OUSD for a day. `undefined` for an instance with `accessKey`, also `false`.
+   * Returns the access key of a sign-in of an instance without `accessKey` permissions that names
+   * none: up to 5 OUSD for a day. `undefined` for an instance with `accessKey` permissions. Only a
+   * sign-in under the `accessKey` provision requests it.
    */
   defaultAccessKey: () => Permissions | undefined
+  /**
+   * What each sign-in of the instance creates, unless the sign-in names its own `provision`. See
+   * `Accounts.Config.provision`.
+   */
+  provision: Accounts.Provision
   /** The instance's chain, which `switchChain` selects. */
   chain: {
     /**

@@ -496,7 +496,7 @@ describe('create', () => {
       logged.some((value) => value.includes('cs_secret')),
     ).toMatchInlineSnapshot(`false`)
     expect(JSON.stringify(accounts.config)).toMatchInlineSnapshot(
-      `"{"clientId":"client_acme","clientSecret":"[redacted]","chainId":42431,"scope":"openid email offline_access","url":"http://127.0.0.1:9"}"`,
+      `"{"clientId":"client_acme","clientSecret":"[redacted]","provision":"accessKey","chainId":42431,"scope":"openid email offline_access","url":"http://127.0.0.1:9"}"`,
     )
     expect(accounts.config.clientSecret).toMatchInlineSnapshot(`"cs_secret"`)
   })
@@ -576,6 +576,87 @@ describe('create', () => {
     expect(JSON.stringify(accounts.config)).toMatchInlineSnapshot(
       `"{"clientId":"client_acme"}"`,
     )
+  })
+
+  test('resolves `provision` to `accessKey` by default, and to `wallet` for the deprecated `accessKey: false`, and passes it to plugins', () => {
+    const provision = (options: Accounts.create.Options) => {
+      let seen: Accounts.Provision | undefined
+      const accounts = Accounts.create({
+        ...options,
+        clientId: 'client_acme',
+        plugins: [
+          Plugin.from({
+            actions: (context) => {
+              seen = context.provision
+              return {}
+            },
+            id: 'probe',
+          }),
+        ],
+        store: false,
+      })
+      return [accounts.config.provision, seen]
+    }
+
+    expect([
+      provision({}),
+      provision({ accessKey: false }),
+      provision({ accessKey: { limits: [] }, provision: 'accessKey' }),
+      provision({ provision: 'user' }),
+      provision({ provision: 'wallet' }),
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          "accessKey",
+          "accessKey",
+        ],
+        [
+          "wallet",
+          "wallet",
+        ],
+        [
+          "accessKey",
+          "accessKey",
+        ],
+        [
+          "user",
+          "user",
+        ],
+        [
+          "wallet",
+          "wallet",
+        ],
+      ]
+    `)
+  })
+
+  test('throws a TypeError for `accessKey` beside `provision: "user"` or `"wallet"`, and for `accessKey: false` beside `provision`, which the type refuses too', () => {
+    const create = (options: object) => () =>
+      Accounts.create({
+        ...(options as Accounts.create.Options),
+        clientId: 'client_acme',
+        store: false,
+      })
+
+    const typed = () =>
+      Accounts.create({
+        accessKey: { limits: [] },
+        clientId: 'client_acme',
+        // @ts-expect-error An access key needs `provision: 'accessKey'`.
+        provision: 'user',
+      })
+
+    expect(typed).toThrow(TypeError)
+    expect(create({ accessKey: { limits: [] }, provision: 'wallet' })).toThrow(
+      TypeError,
+    )
+    expect(create({ accessKey: () => undefined, provision: 'user' })).toThrow(
+      TypeError,
+    )
+    expect(create({ accessKey: false, provision: 'accessKey' })).toThrow(
+      TypeError,
+    )
+    expect(create({ accessKey: false, provision: 'wallet' })).toThrow(TypeError)
   })
 
   test('throws ChainNameInvalidError for a `chain` that names no chain, such as an environment variable', () => {

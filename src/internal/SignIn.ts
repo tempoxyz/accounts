@@ -4,7 +4,7 @@
  * @module
  */
 import { KeyAuthorization } from 'ox/tempo'
-import { RequestError } from '../Accounts.js'
+import { type Provision, RequestError } from '../Accounts.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
@@ -43,20 +43,30 @@ export type External = Permissions & {
 }
 
 /**
- * Returns the access key of a sign-in, or `undefined` for a sign-in without an access key. An
- * access key without `expiry` expires `AccessKey.defaultExpiry` after the sign-in. The default
- * access key of an instance without `accessKey` applies only to a sign-in without a challenge, on a
- * store that can keep it. Throws a `TypeError` on a page whose instance's `store` has `json`, for
- * an access key that the sign-in generates, before any request.
+ * Returns the access key of a sign-in, or `undefined` for a sign-in without an access key. Only a
+ * sign-in under the `accessKey` {@link provision} has one. An access key without `expiry` expires
+ * `AccessKey.defaultExpiry` after the sign-in. The default access key of an instance without
+ * `accessKey` applies only to a sign-in without a challenge, on a store that can keep it. Throws a
+ * `TypeError` for an access key beside a `provision` other than `accessKey`, and on a page whose
+ * instance's `store` has `json`, for an access key that the sign-in generates, before any request.
  */
 export function accessKey(
   context: Plugin.Context,
   value: AccessKeyOption_external,
   options: accessKey.Options = {},
 ): Permissions | External | undefined {
+  if (
+    provision(context, { accessKey: value, provision: options.provision }) !==
+    'accessKey'
+  ) {
+    if (value)
+      throw new TypeError(
+        `Conflicting options: \`accessKey\` describes an access key, which \`provision: "${options.provision}"\` creates none of. Remove \`accessKey\`, or remove \`provision\`.`,
+      )
+    return undefined
+  }
   const resolved = (() => {
     const given = (() => {
-      if (value === false) return undefined
       if (typeof value === 'function') return value()
       if (value) return value
       const configured = context.accessKey()
@@ -92,8 +102,57 @@ export declare namespace accessKey {
   type Options = {
     /** Whether the sign-in carries a challenge. Defaults to `false`. */
     challenge?: boolean | undefined
+    /** The sign-in's own `provision`. Absent, {@link provision} decides. */
+    provision?: Provision | undefined
   }
 }
+
+/**
+ * Returns what a sign-in creates: its own `provision`, else `accessKey` for a sign-in that names an
+ * access key, else `wallet` for one with `accessKey: false` on an instance that provisions more,
+ * else the instance's `provision`.
+ */
+export function provision(
+  context: Pick<Plugin.Context, 'provision'>,
+  options: provision.Options,
+): Provision {
+  if (options.provision) return options.provision
+  if (options.accessKey === false)
+    return context.provision === 'user' ? 'user' : 'wallet'
+  if (options.accessKey) return 'accessKey'
+  return context.provision
+}
+
+export declare namespace provision {
+  type Options = {
+    /** The sign-in's own `accessKey`. */
+    accessKey?: AccessKeyOption_external
+    /** The sign-in's own `provision`. */
+    provision?: Provision | undefined
+  }
+}
+
+/**
+ * The `accessKey` and `provision` of a sign-in. An access key applies only beside the `accessKey`
+ * provision, so the type refuses one beside `user` or `wallet`.
+ */
+export type Provisioned<accessKey> =
+  | {
+      accessKey?: accessKey
+      /**
+       * What the sign-in creates, in place of the instance's `provision`. Absent, a sign-in that
+       * names an access key provisions `accessKey`.
+       */
+      provision?: 'accessKey' | undefined
+    }
+  | {
+      accessKey?: false | undefined
+      /**
+       * What the sign-in creates, in place of the instance's `provision`: `user` creates no Tempo
+       * Account and no access key, and `wallet` creates no access key.
+       */
+      provision: 'user' | 'wallet'
+    }
 
 /** Returns the session of a sign-in's result: its tokens, its user, its access key, and its account. */
 export function toSession(
