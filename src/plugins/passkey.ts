@@ -45,9 +45,31 @@ export function passkey(options: passkey.Options = {}) {
     actions: (context) => {
       const { config } = context
       const getFn = options.getFn ?? config.getFn
-      // The read that runs, which concurrent calls of `available` share. A settled read clears it, so
-      // a later call reads the realms again.
+      // The read that runs, which concurrent calls of `available` and `prepare` share. A settled read
+      // clears it, so a later call reads the realms again.
       let reading: { promise: Promise<boolean>; startedAt: number } | undefined
+
+      // Returns the read of `GET /v1/realms` that runs, or starts one.
+      function read(): Promise<boolean> {
+        // A request without a response never settles, so a call after `sharedReadLifetime`
+        // sends its own request, and a stalled read holds no later call.
+        const startedAt = Date.now()
+        if (reading && startedAt - reading.startedAt < sharedReadLifetime)
+          return reading.promise
+
+        const entry = {
+          promise: PasskeyActions.available(config),
+          startedAt,
+        }
+        reading = entry
+        // A `fetch` that throws at once rejects the read. The cleanup handles both outcomes, so it
+        // adds no unhandled rejection, and the caller receives the rejection.
+        const clear = () => {
+          if (reading === entry) reading = undefined
+        }
+        void entry.promise.then(clear, clear)
+        return entry.promise
+      }
 
       // Commits the session of a sign-in's result. The email step leaves the session as it is.
       async function finish(
@@ -92,7 +114,7 @@ export function passkey(options: passkey.Options = {}) {
         /**
          * Returns whether a passkey sign-in runs on this page, from `GET /v1/realms`. Never rejects.
          * Concurrent calls, such as the two effects of a React StrictMode mount, share one request
-         * for up to 5 seconds after it starts.
+         * for up to 5 seconds after it starts, also with `passkey.prepare`.
          *
          * @example
          * ```ts
@@ -100,24 +122,7 @@ export function passkey(options: passkey.Options = {}) {
          * ```
          */
         available(): Promise<boolean> {
-          // A request without a response never settles, so a call after `sharedReadLifetime`
-          // sends its own request, and a stalled read holds no later call.
-          const startedAt = Date.now()
-          if (reading && startedAt - reading.startedAt < sharedReadLifetime)
-            return reading.promise
-
-          const entry = {
-            promise: PasskeyActions.available(config),
-            startedAt,
-          }
-          reading = entry
-          // A `fetch` that throws at once rejects the read. The cleanup handles both outcomes, so it
-          // adds no unhandled rejection, and the caller receives the rejection.
-          const clear = () => {
-            if (reading === entry) reading = undefined
-          }
-          void entry.promise.then(clear, clear)
-          return entry.promise
+          return read()
         },
         /**
          * Registers a new passkey for the signed-in user, with the plugin's `getFn`, and returns
@@ -127,7 +132,9 @@ export function passkey(options: passkey.Options = {}) {
          *
          * After a `signOut` without `everywhere`, or one with it that rejects or whose logout has
          * no answer yet, such as after a reload during it, and before the next sign-in, the call throws `session_required` before any request or prompt, also in a new
-         * instance on the same store. Such a sign-out can keep the browser's Tempo ID session, so the
+         * instance on the same store, and in one that holds the session from before the sign-out,
+         * such as a replica on the same `Store.postgres` table. The call reads the store for the
+         * sign-out once. Such a sign-out can keep the browser's Tempo ID session, so the
          * passkey would join the account of the user who signed out. A sign-in in another instance
          * on the same store, such as another tab, is the next sign-in. The call reads the stored
          * session, and sets it as the instance's session. While a sign-out runs in the instance,
@@ -188,6 +195,9 @@ export function passkey(options: passkey.Options = {}) {
          *   ID can hold the passkey, so the authenticator keeps it.
          * @throws {Error} Named `AbortError`, when the user closes the passkey prompt, or
          *   lets it time out. The session does not change.
+         * @throws {Error} Named `InvalidStateError`, when the authenticator already holds one of
+         *   the user's passkeys, before any request after the options. Offer a sign-in with that
+         *   passkey. The session does not change.
          * @throws {TypeError} On a page, when the instance's `store` has `json`, such as
          *   `Store.redis`, and the call generates an access key. The call throws before any
          *   request.
@@ -209,8 +219,10 @@ export function passkey(options: passkey.Options = {}) {
         ): Promise<passkey.register.ReturnType<parameters>> {
           // A sign-out without `everywhere` keeps the browser's Tempo ID session, which would
           // receive the passkey, so the user who signed out would hold it. A sign-in in another
-          // instance on the same store clears the mark, as `signedOut` reads it.
-          if (!context.session.get() && (await context.session.signedOut()))
+          // instance on the same store clears the mark, as `signedOut` reads it. An instance that
+          // holds a session reads the mark too, since another process on the store, such as a
+          // replica on one `Store.postgres` table, posts it no message of its sign-out.
+          if (await context.session.signedOut())
             throw new Accounts.RequestError({
               code: 'login_required',
               message:
@@ -293,10 +305,9 @@ export function passkey(options: passkey.Options = {}) {
           })()
           if ('error' in resolved)
             return {
-              available:
-                parameters.available === undefined
-                  ? PasskeyActions.available(config)
-                  : Promise.resolve(parameters.available),
+              available: Promise.resolve(parameters.available ?? read()).catch(
+                () => false,
+              ),
               signIn: () => Promise.reject(resolved.error),
             }
           // The options of a signed-in user name only that user's passkeys. The handle compares the
@@ -308,7 +319,7 @@ export function passkey(options: passkey.Options = {}) {
             const session = context.session.get()
             return session ? Session.subject(session) : undefined
           }
-          const request = (available: boolean | undefined) =>
+          const request = (available: boolean | Promise<boolean>) =>
             PasskeyActions.prepare(config, {
               accessKey: resolved.accessKey,
               available,
@@ -321,7 +332,9 @@ export function passkey(options: passkey.Options = {}) {
               select: select(parameters),
             })
           let requested = subject()
-          let prepared = request(parameters.available)
+          // Without `available`, the handle shares the read of `available` that runs, such as the
+          // sign-in form's read for its passkey button.
+          let prepared = request(parameters.available ?? read())
           return {
             available: prepared.available,
             async signIn() {
@@ -455,7 +468,7 @@ export declare namespace passkey {
        * Whether a passkey sign-in runs on this page, if the app knows it, such as a first-party app
        * on its own origin. The handle then sends no `GET /v1/realms`. With `true`, it requests the
        * options at once. With `false`, it requests no options until its `signIn`. Absent, the
-       * handle reads it as `passkey.available` does.
+       * handle shares the read of `passkey.available`, also one that runs.
        */
       available?: boolean | undefined
     }

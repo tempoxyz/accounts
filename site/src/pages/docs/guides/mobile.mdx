@@ -94,6 +94,8 @@ For a local Tempo ID or another chain, [Use another Tempo ID or chain](/docs/gui
 | iOS      | Keychain                                         | `ASWebAuthenticationSession` |
 | Android  | `SharedPreferences`, encrypted with the Keystore | Custom Tab                   |
 
+An app has no page, so only the session's access key sends a payment of <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink>, through the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin. Add `viem()` to `plugins` to send payments: without it, `pay` throws <SourceLink name="PageRequiredError" path="src/actions/account.ts">`Actions.account.PageRequiredError`</SourceLink>, whose message names the missing plugin.
+
 :::note
 `accounts` installs `crypto.getRandomValues`, which React Native lacks. If a module imports `viem` or `ox` before `accounts`, import `react-native-get-random-values` first, since their hash library reads `crypto` once as it loads.
 :::

@@ -11,6 +11,7 @@ import { describe, expect, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
 import * as BackendSessions from '../internal/BackendSessions.js'
 import * as Dpop from '../internal/Dpop.js'
+import * as TempoAccount from '../internal/TempoAccount.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
 import { backend } from './backend.js'
@@ -45,6 +46,67 @@ describe('backend', () => {
     expect(
       restored?.method === 'tempo-id' && Session.expired(restored),
     ).toMatchInlineSnapshot(`false`)
+  })
+
+  test('serves a session without a refresh token in the last 30 seconds of its access token, without the refresh lock', async () => {
+    const memory = Store.memory()
+    const calls: string[] = []
+    const store = Store.from({
+      getItem: (key) => {
+        calls.push(`getItem ${key.split(':')[1]}`)
+        return memory.getItem(key)
+      },
+      lock: (key, fn) => {
+        calls.push(`lock ${key.split(':')[1]}`)
+        return memory.lock!(key, fn)
+      },
+      removeItem: (key) => memory.removeItem(key),
+      setItem: (key, value, options) => memory.setItem(key, value, options),
+    })
+    const accounts = instance({ store })
+    const { id } = await accounts.backend.save({
+      session: session({ expiresAt: Date.now() + 10_000, expiry: 60 }),
+    })
+    calls.length = 0
+
+    const restored = await accounts.backend.get({ id })
+
+    expect(restored?.id === id).toMatchInlineSnapshot(`true`)
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        "getItem session",
+      ]
+    `)
+  })
+
+  test("stores the session of an email sign-in, whose `accounts` hold the user's Tempo Accounts, without them", async () => {
+    const store = Store.memory()
+    const accounts = instance({ store })
+    const signedIn = session({ expiry: 60 })
+    const account = TempoAccount.deserialize({
+      address: signedIn.accessKey!.account,
+      keys: [],
+      owner: 'secp256k1',
+      realm: { id: 'default', name: 'Tempo' },
+    })
+
+    // `email.signIn` returns the session with every Tempo Account of the user, each of which signs.
+    const result = { ...signedIn, account, accounts: [account] }
+
+    const { id } = await accounts.backend.save({ session: result })
+    const restored = await accounts.backend.get({ id })
+
+    expect({
+      account:
+        restored?.method === 'tempo-id' &&
+        restored.account?.address === account.address,
+      accounts: 'accounts' in (restored ?? {}),
+    }).toMatchInlineSnapshot(`
+      {
+        "account": true,
+        "accounts": false,
+      }
+    `)
   })
 
   test('returns the access keys of a session that an earlier release stored as `key` and `keys`', async () => {

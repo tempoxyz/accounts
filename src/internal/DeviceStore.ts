@@ -3,7 +3,6 @@
  * preset in the app shares.
  * @module
  */
-import { Json } from 'ox'
 import * as Store from '../Store.js'
 import * as Broadcast from './Broadcast.js'
 import * as Lock from './Lock.js'
@@ -63,7 +62,7 @@ export function create(secureStore: create.SecureStore): Store.Store {
     lock,
     removeItem: (key) => secureStore.deleteItemAsync(encode(key)),
     setItem: (key, value) =>
-      secureStore.setItemAsync(encode(key), Json.stringify(value)),
+      secureStore.setItemAsync(encode(key), StoreValue.stringify(value)),
   })
 }
 

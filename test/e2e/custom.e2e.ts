@@ -269,6 +269,49 @@ test.describe('custom', () => {
       })
     })
 
+    test('rejects a second passkey on an authenticator that holds the user’s passkey, and keeps the session', async ({
+      capture,
+      code,
+      email,
+      page,
+    }) => {
+      const authenticator = await Playwright.authenticator(page)
+      const passkey = await Web.enroll(page, {
+        authenticator,
+        capture,
+        code,
+        email,
+      })
+
+      await test.step('rejects with an `InvalidStateError`, since the options exclude the passkey', async () => {
+        const result = await Playwright.run(page, {
+          name: 'Register a passkey',
+        })
+
+        expect(result).toMatchObject({
+          state: 'rejected',
+          value: {
+            message:
+              'The authenticator already holds a passkey of the user. Sign in with that passkey, or register on another authenticator.',
+            name: 'InvalidStateError',
+          },
+        })
+        expect(await authenticator.credentials()).toHaveLength(1)
+        await capture('rejected the second passkey')
+      })
+
+      await test.step('keeps the session of the email', async () => {
+        const session = await Playwright.run(page, { name: 'Session' })
+
+        expect(session).toMatchObject({
+          state: 'fulfilled',
+          value: { email, key: { account: passkey.account } },
+        })
+        await expect(page.locator('#status')).toHaveText('signedIn')
+        await capture('session of the email')
+      })
+    })
+
     test('requests the options of a passkey sign-in before the click, which then sends one request', async ({
       capture,
       code,

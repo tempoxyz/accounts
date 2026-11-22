@@ -3,6 +3,8 @@
  * `UserRejectedRequestError`.
  * @module
  */
+import * as Esbuild from 'esbuild'
+import * as Vm from 'node:vm'
 import { describe, expect, test } from 'vite-plus/test'
 import { RequestError } from '../Accounts.js'
 import * as Callback from './Callback.js'
@@ -330,6 +332,21 @@ describe('Callback.checkRedirectUri', () => {
       expected: true,
       redirectUri: 'https://app.example/a^b',
     },
+    {
+      callback: 'constructor://HOST/callback?code=c',
+      expected: false,
+      redirectUri: 'constructor://host/callback',
+    },
+    {
+      callback: 'constructor:\\\\host\\callback?code=c',
+      expected: false,
+      redirectUri: 'constructor://host/callback',
+    },
+    {
+      callback: 'constructor:callback/.?code=c',
+      expected: false,
+      redirectUri: 'constructor:callback/',
+    },
   ])('returns $expected for $callback at $redirectUri', (row) => {
     const accepted = (() => {
       try {
@@ -344,6 +361,55 @@ describe('Callback.checkRedirectUri', () => {
     })()
 
     expect(accepted).toBe(row.expected)
+  })
+
+  test("refuses another IPv6 host under a `URL` that cuts the host at its first colon, as React Native's does", async () => {
+    const output = await Esbuild.build({
+      bundle: true,
+      format: 'iife',
+      logLevel: 'silent',
+      platform: 'browser',
+      stdin: {
+        contents: [
+          "import * as Callback from './Callback.ts'",
+          'const accepted = (callback) => {',
+          '  try {',
+          "    Callback.checkRedirectUri(callback, { redirectUri: 'https://[2001:db8::1]/callback' })",
+          '    return true',
+          '  } catch (error) {',
+          "    return error.name + ': ' + error.message",
+          '  }',
+          '}',
+          'globalThis.outcome = {',
+          "  other: accepted('https://[2001:db8::2]/callback?code=c'),",
+          "  same: accepted('https://[2001:DB8::1]/callback?code=c'),",
+          '}',
+        ].join('\n'),
+        loader: 'ts',
+        resolveDir: import.meta.dirname,
+      },
+      write: false,
+    })
+    // A new context holds only the language's globals and the `URL` of React Native 0.88, whose
+    // `hostname` is the text after the scheme up to the first colon, slash, `?`, or `#`.
+    const context = Vm.createContext({
+      URL: class {
+        readonly hostname: string
+        constructor(url: string) {
+          this.hostname =
+            /^https?:\/\/(?:[^@]+@)?([^:/?#]+)/.exec(url)?.[1] ?? ''
+        }
+      },
+    })
+
+    Vm.runInContext(output.outputFiles[0]!.text, context)
+
+    expect(context.outcome).toMatchInlineSnapshot(`
+      {
+        "other": "Accounts.RequestError: Invalid callback URL: it returns outside the redirect URI \`https://[2001:db8::1]/callback\`. Resolve the callback at the redirect URI that \`open\` receives.",
+        "same": true,
+      }
+    `)
   })
 })
 

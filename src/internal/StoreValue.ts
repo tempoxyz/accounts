@@ -2,7 +2,19 @@
  * The JSON form of a store's values, as the stores that serialize them write it.
  * @module
  */
-import { Json } from 'ox'
+/** The suffix of a `bigint`'s string, as ox's `Json` writes it. */
+const bigintSuffix = '#__bigint'
+
+/**
+ * The escape of a string that ends with `#__bigint`, before that suffix. An earlier version wrote
+ * such a string verbatim, and its read failed for any text before the suffix other than an integer,
+ * so no readable value of that version ends with `#__string#__bigint`, and each of its strings reads
+ * unchanged.
+ */
+const stringEscape = '#__string'
+
+/** The integer text of a `bigint`, before its suffix. */
+const integer = /^-?\d+$/
 
 /**
  * Thrown by a read of `Store.postgres`, `Store.redis`, `Store.workersKv`, or the secure store of `expo` for a stored
@@ -42,10 +54,26 @@ export class InvalidValueError extends Error {
  */
 export function parse(text: string): unknown {
   try {
-    return Json.parse(text) as unknown
+    return decode(text)
   } catch {
     throw new InvalidValueError()
   }
+}
+
+/**
+ * Returns the value of `text`, as {@link parse} does, and throws the parser's own error. A string
+ * that {@link stringify} escaped reads as written. A string of an earlier version reads unchanged,
+ * and one that ends with `#__bigint` reads as a `bigint` only if an integer precedes the suffix,
+ * and as the string otherwise, so one stored string never fails the read of the entries beside it.
+ */
+export function decode(text: string): unknown {
+  return JSON.parse(text, (_key, entry: unknown) => {
+    if (typeof entry !== 'string' || !entry.endsWith(bigintSuffix)) return entry
+    const body = entry.slice(0, -bigintSuffix.length)
+    if (integer.test(body)) return BigInt(body)
+    if (body.endsWith(stringEscape)) return body.slice(0, -stringEscape.length)
+    return entry
+  }) as unknown
 }
 
 /**
@@ -59,12 +87,17 @@ export function parse(text: string): unknown {
  * ```
  */
 export function stringify(value: unknown): string {
-  return Json.stringify(value, (_key, entry: unknown) => {
+  return JSON.stringify(value, (_key, entry: unknown) => {
     if (typeof CryptoKey !== 'undefined' && entry instanceof CryptoKey)
       throw new TypeError(
         'Unserializable value: a non-extractable access key has no JSON form. In a browser, keep the session in the default store.',
       )
-    // A replacer turns off ox's own form of a `bigint`, so each `bigint` takes that form here.
-    return typeof entry === 'bigint' ? JSON.parse(Json.stringify(entry)) : entry
+    // Each `bigint` takes ox's form, an integer with the suffix `#__bigint`.
+    if (typeof entry === 'bigint') return `${entry}${bigintSuffix}`
+    // A string that ends with the suffix, such as an app's SIWE statement, takes the escape before
+    // it, so its read returns the same string, and never a `bigint`.
+    if (typeof entry === 'string' && entry.endsWith(bigintSuffix))
+      return `${entry}${stringEscape}${bigintSuffix}`
+    return entry
   })
 }

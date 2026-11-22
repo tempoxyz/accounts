@@ -28,6 +28,11 @@ type Base = {
   challenge?: true | undefined
   /** The app that started the redirect. Absent in a redirect of an earlier version. */
   clientId?: string | undefined
+  /**
+   * The origin of the Tempo ID deployment that the redirect signed in at, whose token endpoint
+   * redeems its code. Absent in a redirect of an earlier version.
+   */
+  issuer?: string | undefined
   /** Where Tempo ID redirects back to. The code exchange repeats it. */
   redirectUri: string
   /** The value that the callback must echo, so a forged callback fails. */

@@ -793,13 +793,24 @@ async function authorize<
 
     // Tempo ID redeemed the code of a request in the web message mode, and posted its authorization.
     if ('authorization' in callback) {
-      const authorization = redirect.handleResult({
-        accessKey: rest.accessKey,
-        authorization: callback.authorization,
-        // Only a request that the page builds asks for the web message mode, so `pending` is set.
-        pending: pending!,
-        state: callback.state,
-      }) as result
+      const authorization = await (async () => {
+        try {
+          return redirect.handleResult({
+            accessKey: rest.accessKey,
+            authorization: callback.authorization,
+            // Only a request that the page builds asks for the web message mode, so `pending` is set.
+            pending: pending!,
+            state: callback.state,
+          }) as result
+        } catch (error) {
+          // No session holds the refresh token of a refused response, so it is revoked, as a refused
+          // redemption's is. A failed revocation leaves the refusal as the error.
+          const refreshToken = callback.authorization.refresh_token
+          if (typeof refreshToken === 'string')
+            await Api.revoke(auth, { refreshToken }).catch(() => undefined)
+          throw error
+        }
+      })()
       if (settle)
         await Promise.race([
           settle(authorization as Authorization, ending.signal),

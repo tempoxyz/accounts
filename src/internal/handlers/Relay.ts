@@ -8,6 +8,7 @@ import { Base64, Bytes, Hash } from 'ox'
 import { Relay } from 'viem/tempo'
 import { RequestError } from '../../Accounts.js'
 import * as AccessToken from '../../AccessToken.js'
+import * as Dpop from '../Dpop.js'
 import * as Handler from '../Handler.js'
 
 /**
@@ -134,7 +135,7 @@ export function create(options: create.Options): Handler.Handler {
       const [scheme, accessToken] = (
         request.headers.get('authorization') ?? ''
       ).split(' ')
-      if (!accessToken) return unauthorized()
+      if (!accessToken) return unauthorized(scheme)
 
       const token = await verifier
         .verify({
@@ -150,7 +151,7 @@ export function create(options: create.Options): Handler.Handler {
         })
         // `verify` rejects only with errors.
         .catch((error: Error) => error)
-      if (token instanceof AccessToken.InvalidError) return unauthorized()
+      if (token instanceof AccessToken.InvalidError) return unauthorized(scheme)
       // The issuer's key set cannot be fetched, so the token can still be valid.
       if (token instanceof RequestError && token.status === 0)
         return failure({
@@ -347,10 +348,19 @@ function pop(heap: Expiry[]): Expiry {
   }
 }
 
-/** Refuses a request without a valid access token (RFC 6750 §3), so the page signs in again. */
-function unauthorized() {
+/**
+ * Refuses a request without a valid access token, so the page signs in again. The challenge follows
+ * the request's scheme: `DPoP` with the proof algorithms that the route accepts (RFC 9449 §7.1), or
+ * `Bearer` (RFC 6750 §3).
+ */
+function unauthorized(scheme: string | undefined) {
   return failure({
-    headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
+    headers: {
+      'www-authenticate':
+        scheme?.toLowerCase() === 'dpop'
+          ? `DPoP error="invalid_token", algs="${Dpop.algorithms.join(' ')}"`
+          : 'Bearer error="invalid_token"',
+    },
     message:
       'Invalid access token: the request carries no valid access token of the app. Sign in again.',
     reason: 'invalid_token',

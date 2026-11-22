@@ -231,15 +231,24 @@ async function plan(request: Request, options: plan.Options) {
   // its challenge, and so does the request that pays a challenge. mppx refuses a challenge that
   // this Worker did not issue, so a subscriber cannot choose an expiry.
   const now = Date.now()
+  // The latest expiry of a subscription that starts now. Each challenge that this Worker issued
+  // names one no later, so a later one is a credential that mppx has not verified yet.
+  const latest = Math.ceil(now / 1000) * 1000 + lifetime
   const paid = await plans.getItem(`paid:${subscriber}`)
   const expires = (() => {
     if (typeof paid === 'string' && Date.parse(paid) > now) return paid
 
     const offered = offer(request)
-    if (offered && Date.parse(offered) > now) return offered
+    if (offered && Date.parse(offered) > now && Date.parse(offered) <= latest)
+      return offered
 
-    return new Date(Math.ceil(now / 1000) * 1000 + lifetime).toISOString()
+    return new Date(latest).toISOString()
   })()
+  // No entry of the subscription is read after its expiry, when a request starts another one. An
+  // anonymous request makes mppx write its access key before any credential, so each entry expires
+  // with the subscription, and no request leaves a permanent entry in KV. The server's own bound
+  // caps the expiry, so no request leaves a long-lived entry either.
+  const expiresAt = Math.min(Date.parse(expires), latest) + lifetime
 
   /** Returns the stored charges of the subscription, oldest first. */
   const read = async () =>
@@ -253,8 +262,8 @@ async function plan(request: Request, options: plan.Options) {
     const { reference, timestamp } = parameters.receipt
     charges = [...(await read()), { reference, timestamp }]
     await Promise.all([
-      plans.setItem(`charges:${subscriber}:${expires}`, charges),
-      plans.setItem(`paid:${subscriber}`, expires),
+      plans.setItem(`charges:${subscriber}:${expires}`, charges, { expiresAt }),
+      plans.setItem(`paid:${subscriber}`, expires, { expiresAt }),
     ])
   }
 
@@ -280,12 +289,12 @@ async function plan(request: Request, options: plan.Options) {
         store: MppStore.cloudflare({
           delete: (key) => subscriptions.removeItem(key),
           get: async (key) => (await subscriptions.getItem(key)) ?? null,
-          put: (key, value) => subscriptions.setItem(key, value),
+          put: (key, value) => subscriptions.setItem(key, value, { expiresAt }),
           async update(key, fn) {
             const current = await subscriptions.getItem(key)
             const change = fn(typeof current === 'string' ? current : null)
             if (change.op === 'set')
-              await subscriptions.setItem(key, change.value)
+              await subscriptions.setItem(key, change.value, { expiresAt })
             if (change.op === 'delete') await subscriptions.removeItem(key)
             return change.result
           },

@@ -658,7 +658,7 @@ test.describe('access keys', () => {
           state: 'rejected',
           value: {
             message: expect.stringContaining(
-              'Sign in with an access key to send transactions.',
+              'Sign in with an access key on the chain.',
             ),
             name: 'TransactionExecutionError',
           },
