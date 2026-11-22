@@ -8,6 +8,7 @@ import { Base64, Bytes, Hash } from 'ox'
 import { Relay } from 'viem/tempo'
 import { RequestError } from '../../Accounts.js'
 import * as AccessToken from '../../AccessToken.js'
+import * as Dpop from '../Dpop.js'
 import * as Handler from '../Handler.js'
 
 /**
@@ -357,7 +358,7 @@ function unauthorized(scheme: string | undefined) {
     headers: {
       'www-authenticate':
         scheme?.toLowerCase() === 'dpop'
-          ? 'DPoP error="invalid_token", algs="ES256 EdDSA"'
+          ? `DPoP error="invalid_token", algs="${Dpop.algorithms.join(' ')}"`
           : 'Bearer error="invalid_token"',
     },
     message:
