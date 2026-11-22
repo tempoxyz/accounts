@@ -6,20 +6,9 @@
 /* istanbul ignore file -- Expo's modules run only in a native app, which only an app drives. */
 import * as SecureStore from 'expo-secure-store'
 import * as WebBrowser from 'expo-web-browser'
-import * as Lock from '../internal/Lock.js'
-import * as StoreValue from '../internal/StoreValue.js'
+import * as DeviceStore from '../internal/DeviceStore.js'
 import * as Plugin from '../Plugin.js'
-import * as Store from '../Store.js'
 import { redirect } from './redirect.js'
-
-/**
- * The lock of every preset's store. React Native has no Web Locks, and every preset reads the one
- * secure store of the device, which no instance owns, so the lock lives in module scope. Two
- * instances on one `url`, `clientId`, and chain hold one session, such as a config that Fast
- * Refresh runs again while the old instance lives, and refresh it one at a time. A lock for each
- * preset let them send the same refresh token, which Tempo ID refuses as a reuse.
- */
-const lock = Lock.create()
 
 /**
  * Returns the plugins of an Expo app, from `accounts/expo`. The first sets the instance's `store`,
@@ -29,9 +18,10 @@ const lock = Lock.create()
  * over the preset's.
  *
  * The secure store holds the session, with its keys encoded to the characters that it accepts, and
- * each value as ox's `Json`, which keeps a `bigint`. Its `lock` serializes the session refreshes of
- * every instance on an `expo` preset in the app, also of two presets, since they share the device's
- * secure store, and React Native has no Web Locks.
+ * each value as ox's `Json`, which keeps a `bigint`. Every instance on an `expo` preset in the app,
+ * also of two presets, shares the device's secure store, and React Native has no Web Locks. So the
+ * store's `lock` serializes their session refreshes. A sign-out of one instance empties the session
+ * of the other instances on the same preset at once.
  *
  * The preset has an entry of its own, since it imports Expo modules that only an Expo app installs,
  * so a React Native app without Expo never resolves them. `expo-secure-store`, `expo-web-browser`,
@@ -66,25 +56,7 @@ const lock = Lock.create()
 export function expo(options: expo.Options) {
   const { ephemeral = true, redirectUri } = options
 
-  // The secure store holds strings under keys of letters, digits, `.`, `-`, and `_`, so the store
-  // encodes both. The key's encoding escapes `_` too, so two keys never share one. ox's `Json`
-  // keeps a `bigint`.
-  const encode = (key: string) =>
-    key.replace(
-      /[^A-Za-z0-9.-]/g,
-      (character) =>
-        `_${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
-    )
-  const store = Store.from({
-    async getItem(key) {
-      const text = await SecureStore.getItemAsync(encode(key))
-      return text === null ? undefined : StoreValue.parse(text)
-    },
-    lock,
-    removeItem: (key) => SecureStore.deleteItemAsync(encode(key)),
-    setItem: (key, value) =>
-      SecureStore.setItemAsync(encode(key), StoreValue.stringify(value)),
-  })
+  const store = DeviceStore.create(SecureStore)
 
   return [
     Plugin.from({ config: () => ({ redirectUri, store }), id: 'expo' }),
