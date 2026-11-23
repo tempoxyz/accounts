@@ -4365,8 +4365,10 @@ export namespace machines {
     const { context } = snapshot
     if (snapshot.matches('signedIn') && context.session)
       return { session: context.session, status: 'signedIn' }
-    if (snapshot.matches('reauthorizing') && context.renewing)
-      return { session: context.renewing, status: 'reauthorizing' }
+    // Until `load` empties it, the held session that expired is the one that the authorization renews.
+    const renewing = context.renewing ?? context.session
+    if (snapshot.matches('reauthorizing') && renewing)
+      return { session: renewing, status: 'reauthorizing' }
     if (snapshot.matches('signedOut'))
       return { session: undefined, status: 'signedOut' }
     return { session: undefined, status: 'pending' }
@@ -4654,7 +4656,14 @@ export namespace machines {
       context.session !== context.expired
     )
       return 'signedIn'
-    if (context.authorizations > 0 && context.renewing) return 'reauthorizing'
+    // Until `load` empties it, the held session that expired is the one that the authorization
+    // renews, so the status shows no `pending` between `signedOut` and `reauthorizing`.
+    const renewing =
+      context.renewing ??
+      (context.session !== undefined && context.session === context.expired
+        ? context.session
+        : undefined)
+    if (context.authorizations > 0 && renewing) return 'reauthorizing'
     if (!context.loaded || context.authorizations > 0) return 'pending'
     return 'signedOut'
   }
