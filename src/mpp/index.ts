@@ -2730,7 +2730,9 @@ function shortfall(error: unknown): Retry.Failure | undefined {
  * `cause`. Returns any other error as it is.
  */
 function revoked(error: unknown) {
-  if (!(error instanceof BaseError)) return error
+  // A Viem copy other than this package's, such as mppx's own, builds the refusal, so any error
+  // decodes.
+  if (!(error instanceof Error)) return error
   if (ExecutionError.from(error).errorName !== 'KeyAlreadyRevoked') return error
   return new Accounts.AccessKeyRequiredError({ cause: error })
 }
