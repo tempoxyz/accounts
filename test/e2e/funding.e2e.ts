@@ -74,7 +74,35 @@ test.describe('funding', () => {
 
       const deposit =
         await test.step('shows the deposit page in the frame, with no amount', async () => {
+          // The deposit page's document waits until the skeleton is checked, so the dialog shows it.
+          let release = () => {}
+          const released = new Promise<void>((resolve) => {
+            release = resolve
+          })
+          await page.route(`${TempoId.url}/embed/deposit?*`, async (route) => {
+            await released
+            await route.continue()
+          })
           await Playwright.start(page, { name: 'Deposit' })
+          const skeleton = Playwright.prompt(page).getByRole('progressbar', {
+            name: 'Loading',
+          })
+          await expect(skeleton).toBeVisible()
+          // The skeleton's address sits where the frame's bar draws its own: 8 pixels from the
+          // dialog's top and side, 24 pixels tall. The dialog's entrance moves both until it ends.
+          await expect
+            .poll(async () => {
+              const dialog = await Playwright.prompt(page).boundingBox()
+              const bar = await skeleton.locator('[data-bar]').boundingBox()
+              return {
+                height: bar?.height,
+                left: (bar?.x ?? 0) - (dialog?.x ?? 0),
+                top: (bar?.y ?? 0) - (dialog?.y ?? 0),
+              }
+            })
+            .toEqual({ height: 24, left: 8, top: 8 })
+          await capture('skeleton before the deposit page loads')
+          release()
           const deposit = await Playwright.deposit(
             await Playwright.dialog(page),
           )
