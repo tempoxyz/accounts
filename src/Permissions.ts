@@ -148,6 +148,7 @@ export type Permissions<chainId extends number = number> = {
    * years away. For `false`, the request sends an expiry of 0. Tempo ID accepts it only for a headless sign-in of a
    * first-party app with the `tempo-id:sign` scope, and refuses it elsewhere with
    * [`invalid_expiry`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_expiry).
+   * A redirect sign-in throws it with status 0, before the navigation to Tempo ID.
    * Absent, a sign-in and `authorize` request `'1d'`. {@link resolve} leaves it absent, and Tempo
    * ID then fills it with the app's refresh token lifetime, at most one year.
    */

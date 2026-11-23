@@ -22,6 +22,9 @@ const pending = Pending.from({
   verifier: 'verifier',
 })
 
+/** The limits of each access key that a test requests, since Tempo ID's page refuses one without them. */
+const limits = [{ limit: '5', token: 'ousd' }] as const
+
 /** Returns the error that `handleResult` throws for `options`. */
 function refusal(options: Omit<handleResult.Options, 'pending'>) {
   try {
@@ -352,7 +355,7 @@ describe("handleResult with the app's own access key", () => {
       privateKey: owner,
     })
     const started = await createUrl(auth, {
-      accessKey: { account: own, expiry },
+      accessKey: { account: own, expiry, limits },
       redirectUri: 'https://app.example.com/',
     })
 
@@ -419,7 +422,7 @@ describe("handleResult with the app's own access key", () => {
       privateKey: owner,
     })
     const started = await createUrl(auth, {
-      accessKey: { account: own },
+      accessKey: { account: own, limits },
       redirectUri: 'https://app.example.com/',
     })
 
@@ -497,7 +500,7 @@ describe('handleResult with an addressed access key', () => {
       { pad: false, url: true },
     )
     const started = await createUrl(auth, {
-      accessKey: { address, expiry },
+      accessKey: { address, expiry, limits },
       redirectUri: 'https://app.example.com/',
     })
 
@@ -563,7 +566,7 @@ describe('handleResult with an addressed access key', () => {
       { pad: false, url: true },
     )
     const started = await createUrl(auth, {
-      accessKey: { address, expiry },
+      accessKey: { address, expiry, limits },
       redirectUri: 'https://app.example.com/',
     })
     const { accessKey, ...rest } = started.pending
@@ -636,7 +639,7 @@ describe('handleResult with an addressed access key and a challenge', () => {
       { pad: false, url: true },
     )
     const started = await createUrl(auth, {
-      accessKey: { address, expiry },
+      accessKey: { address, expiry, limits },
       challenge: 'Sign in to app.example.com',
       redirectUri: 'https://app.example.com/',
     })
@@ -714,6 +717,40 @@ describe('createUrl', () => {
         "signedIn": false,
         "status": 0,
       }
+    `)
+  })
+
+  test('refuses an access key without bounds before any navigation, with the reason that the callback of Tempo ID omits', async () => {
+    const auth = from({
+      clientId: 'https://app.example.com',
+      url: 'http://127.0.0.1:9',
+    })
+
+    const results = await Promise.all(
+      [
+        { expiry: '1d', limits, scopes: 'any' },
+        { expiry: '1d' },
+        { expiry: false, limits },
+      ].map((accessKey) =>
+        createUrl(auth, {
+          accessKey: accessKey as createUrl.Options['accessKey'],
+          redirectUri: 'https://app.example.com/',
+        }).then(
+          () => 'navigates',
+          (error: unknown) =>
+            error instanceof RequestError
+              ? `${error.reason} ${error.field} ${error.status}`
+              : String(error),
+        ),
+      ),
+    )
+
+    expect(results).toMatchInlineSnapshot(`
+      [
+        "missing_permissions accessKey.scopes 0",
+        "missing_permissions accessKey.limits 0",
+        "invalid_expiry accessKey.expiry 0",
+      ]
     `)
   })
 })

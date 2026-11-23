@@ -161,6 +161,10 @@ export function redirect(options: redirect.Options = {}) {
          *     for an `accessKey.expiry` in Unix seconds that has passed,
          *     [`invalid_expiry`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_expiry)
          *     for an `accessKey.expiry` that is not a whole number of seconds or holds milliseconds,
+         *     or is `false`,
+         *     [`missing_permissions`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#missing_permissions)
+         *     for an `accessKey` without `limits`, or with `scopes: 'any'`, since Tempo ID's page
+         *     refuses an access key without bounds,
          *     [`invalid_period`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_period)
          *     for an `accessKey.limits` `period` that is fractional, negative, or above
          *     `Number.MAX_SAFE_INTEGER` seconds,
