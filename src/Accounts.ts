@@ -358,6 +358,7 @@ export declare namespace RequestError {
     | 'invalid_recipients'
     | 'invalid_redirect_uri'
     | 'invalid_resource'
+    | 'invalid_scope'
     | 'invalid_target'
     | 'invalid_token'
     | 'limit_exceeds_maximum'
