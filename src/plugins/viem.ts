@@ -1721,7 +1721,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             // shows the code.
             if (!page) {
               const authorization = await deviceRequests.get(config)!({
-                // The new tokens keep an API's scopes that the replaced session's tokens hold.
+                // The new tokens keep the API audiences and the API scopes of the replaced session's
+                // tokens.
                 ...Api.grant(config, before.accessToken),
                 accessKey,
                 funding: funding && {
