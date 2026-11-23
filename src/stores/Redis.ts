@@ -9,6 +9,7 @@ import {
   type SnapshotFrom,
   setup,
 } from 'xstate'
+import * as Broadcast from '../internal/Broadcast.js'
 import * as StoreValue from '../internal/StoreValue.js'
 import type * as Store from '../Store.js'
 
@@ -25,7 +26,10 @@ import type * as Store from '../Store.js'
  * the key only if it still holds the value read and no `lock` holds the key, and reads again otherwise. On
  * Redis Cluster, where the key and its lock occupy two hash slots, `update` writes under `lock`. So the `backend` plugin's
  * replicas write the logout index of each `sid` in a read and a write, without the lock, and a
- * logout token ends every session of the `sid`. The store needs Redis 6.2 or later.
+ * logout token ends every session of the `sid`. The store needs Redis 6.2 or later. The instances on
+ * one store hear each other's saved changes in memory through `connect`, so a sign-out empties the
+ * session of every instance in the process at once. An instance in another process reads the
+ * sign-out from Redis at its next refresh.
  *
  * `client` is any client with `sendCommand(args)`, such as a `redis` client.
  *
@@ -236,6 +240,8 @@ export function create(client: create.Client): Store.Store {
   }
 
   return {
+    // The instances on the store in this process hear the saved changes of each other through it.
+    connect: Broadcast.create(),
     getItem,
     json: true,
     lock,

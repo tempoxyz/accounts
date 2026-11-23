@@ -553,6 +553,78 @@ describe('Store.redis', () => {
     `)
   }, 120_000)
 
+  test('behavior: a sign-out of one instance empties the session of another instance on the store in the same process', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    const store = Redis.create({
+      sendCommand: (args) => client.call(...(args as [string, ...string[]])),
+    })
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 3_600_000,
+            refreshToken: 'refresh-token',
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    // `fetch` records each request, and answers the revocation.
+    const requests: string[] = []
+    const create = () =>
+      Accounts.create({
+        chain: 1337,
+        clientId: 'https://app.example.com',
+        fetch(input) {
+          requests.push(new URL(String(input)).pathname)
+          return Promise.resolve(new Response(null, { status: 200 }))
+        },
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const first = create()
+    const second = create()
+    await Promise.all([first.session.get(), second.session.get()])
+
+    // The second instance reads no store before its next refresh, so only a message tells it of the
+    // sign-out.
+    const { session, status } = await (async () => {
+      try {
+        await first.signOut()
+        await expect
+          .poll(() => second.session.status.get().status, { timeout: 1_000 })
+          .toBe('signedOut')
+        return {
+          session: await second.session.get(),
+          status: second.session.status.get().status,
+        }
+      } finally {
+        client.disconnect()
+        await container.stop()
+      }
+    })()
+
+    expect({ requests, session, status }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          "/oauth2/revoke",
+        ],
+        "session": undefined,
+        "status": "signedOut",
+      }
+    `)
+  }, 120_000)
+
   test('behavior: sends one refresh for two processes on one Redis, whose Web Locks span one process', async () => {
     const container = await new GenericContainer('redis:7.4-alpine')
       .withExposedPorts(6379)
