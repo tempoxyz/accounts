@@ -43,7 +43,7 @@ Only `main` deploys the Worker. No command deploys it from a checkout.
 
 `wrangler.json` names `dist/public` as the assets of the Worker, and `src/server/Worker.ts` as its script.
 
-`DURABLE_STORE` binds the `DurableStore` Durable Object of `src/server/Store.ts`, one object for each key, for the values that a demo takes once, such as a challenge. Workers KV has no atomic read and delete. The first deploy of the class applies the migration `v1` of `wrangler.json`.
+`DURABLE_STORE` binds the `DurableStore` Durable Object of `src/server/Store.ts`, one object for each key, for the values that a demo takes once, such as a challenge. Workers KV has no atomic read and delete. `exports` of `wrangler.json` declares the class with SQLite storage, since the broker refuses `migrations`.
 
 Until `wrangler.json` names a route, Vercel serves `accounts.tempo.xyz`. `vercel.json` builds only `proxy.txt`, since Vercel refuses an empty output, and proxies each other path to the Worker's workers.dev URL. Its `X-Robots-Tag` header replaces the `noindex` that `public/_headers` sets for workers.dev. The Worker reads a request with `x-forwarded-host: accounts.tempo.xyz` as one to that origin, so the demos' client ID is the page's.
 
