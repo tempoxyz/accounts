@@ -1441,22 +1441,18 @@ export function create(options: create.Options): create.ReturnType {
       const current = context().session
       if (current && !Session.expired(current)) return await fn()
       // The other authorization can wait for the user, such as at a passkey prompt, so the wait
-      // ends after `authorizeWait`, and `fn` then runs beside it.
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), authorizeWait)
-      ;(timer as { unref?: () => void }).unref?.()
-      let granted = false
+      // ends after `authorizeWait`, and `fn` then runs beside it. The signal ends only the wait:
+      // the request rejects with its reason only before the lock is granted.
+      const signal = AbortSignal.timeout(authorizeWait)
       return await locks
-        .request(key, { signal: controller.signal }, async () => {
-          granted = true
-          clearTimeout(timer)
+        .request(key, { signal }, async () => {
           // The other authorization's session commits nothing here, so its adoption runs the
           // plugins' `afterSignIn` hooks. A failed read leaves the session that `fn` loads.
           await reload({ hooks: true }).catch(() => undefined)
           return await fn()
         })
         .catch((error: unknown) => {
-          if (granted || !controller.signal.aborted) throw error
+          if (error !== signal.reason) throw error
           return fn()
         })
     })
