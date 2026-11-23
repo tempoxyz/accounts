@@ -30,6 +30,7 @@ async function run(contents: readonly string[], options: run.Options = {}) {
         "import * as DurableObjectStore from './DurableObject.ts'",
         'export class STORE extends DurableObject {',
         '  store = DurableObjectStore.create(this.ctx.storage)',
+        '  alarm() { return this.store.alarm() }',
         '  async fetch(request) {',
         "    if (new URL(request.url).pathname === '/read') return Response.json(this.read())",
         '    const store = this.store',
@@ -146,6 +147,29 @@ describe('Store.durableObject', () => {
             "second",
             "signedOut",
           ],
+        ],
+      }
+    `)
+  }, 30_000)
+
+  test('behavior: takeItem returns a value to one of concurrent calls, and no expired value', async () => {
+    const { result } = await run([
+      "await store.setItem('challenge', 'value')",
+      "await store.setItem('expired', 'value', { expiresAt: Date.now() - 1 })",
+      "const taken = await Promise.all([store.takeItem('challenge'), store.takeItem('challenge'), store.takeItem('challenge')])",
+      "const expired = await store.takeItem('expired')",
+      "const after = await store.getItem('challenge')",
+      'return Response.json({ after: after ?? null, expired: expired ?? null, taken: taken.map((value) => value ?? null) })',
+    ])
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "after": null,
+        "expired": null,
+        "taken": [
+          "value",
+          null,
+          null,
         ],
       }
     `)

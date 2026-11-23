@@ -72,9 +72,11 @@ export declare namespace create {
 }
 
 /**
- * Returns a store in the Durable Object of `DURABLE_STORE` that `prefix` names, such as for the
- * challenges of the `siwe` plugin. Its `takeItem` reads and deletes a value in one call of the
- * object, so of concurrent calls, only one receives the value.
+ * Returns a store whose values live in the Durable Objects of `DURABLE_STORE`, one object for each
+ * key, such as for the challenges of the `siwe` plugin. One object serves all calls of a key, and
+ * its `takeItem` reads and deletes the value in one call, so of concurrent calls, only one
+ * receives it. No object serves the calls of other keys, so a burst of challenges loads no shared
+ * object.
  *
  * @example
  * ```ts
@@ -92,19 +94,19 @@ export function durableObject(
   options: durableObject.Options,
 ): durableObject.ReturnType {
   const { prefix } = options
-  const stub = () => env.DURABLE_STORE.getByName(prefix)
+  const stub = (key: string) => env.DURABLE_STORE.getByName(`${prefix}${key}`)
 
   return {
-    getItem: (key) => stub().getItem(key),
-    removeItem: (key) => stub().removeItem(key),
-    setItem: (key, value, options) => stub().setItem(key, value, options),
-    takeItem: (key) => stub().takeItem(key),
+    getItem: (key) => stub(key).getItem(key),
+    removeItem: (key) => stub(key).removeItem(key),
+    setItem: (key, value, options) => stub(key).setItem(key, value, options),
+    takeItem: (key) => stub(key).takeItem(key),
   }
 }
 
 export declare namespace durableObject {
   type Options = {
-    /** Name of the object that holds the store, such as `siwe:`. */
+    /** Prefix of the name of each key's object, such as `siwe:`. */
     prefix: string
   }
 
@@ -134,11 +136,7 @@ export class DurableStore extends DurableObject {
     return this.#store.setItem(key, value, options)
   }
 
-  // Between the read and the delete, the object awaits only its storage, and its input gate admits
-  // no other call meanwhile, so only one call receives the value.
-  async takeItem(key: string): Promise<unknown> {
-    const value = await this.#store.getItem(key)
-    if (value !== undefined) await this.#store.removeItem(key)
-    return value
+  takeItem(key: string): Promise<unknown> {
+    return this.#store.takeItem(key)
   }
 }

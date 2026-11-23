@@ -79,7 +79,7 @@ export type Store = {
    * redirect in progress, and the `redirect` plugin each redirect that the returning tab started.
    * Absent, a caller reads and deletes in two calls, so each process takes a value once, but two
    * processes can both read it.
-   * `Store.file`, `Store.memory`, `Store.postgres`, and `Store.redis` set it.
+   * `Store.durableObject`, `Store.file`, `Store.memory`, `Store.postgres`, and `Store.redis` set it.
    */
   takeItem?: ((key: string) => Promise<unknown>) | undefined
   /**
