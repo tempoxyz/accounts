@@ -1424,7 +1424,8 @@ export function create(options: create.Options): create.ReturnType {
    * Runs `fn`, an authorization, while no authorization of another instance on the store runs, such
    * as another tab's restore of the same Tempo ID session. An authorization that waited reads the
    * store first, so a session that the other one saved returns with no request, and runs the plugins'
-   * `afterSignIn` hooks. An instance whose saved session holds waits for no lock. An uncontended
+   * `afterSignIn` hooks. An instance whose saved session holds waits for no lock, and a wait ends
+   * after `authorizeWait`, so a passkey prompt in another tab holds no restore. An uncontended
    * authorization reads nothing more. Without Web Locks, `fn` runs as it is.
    */
   function serialized<value>(fn: () => Promise<value>): Promise<value> {
@@ -1439,12 +1440,25 @@ export function create(options: create.Options): create.ReturnType {
       await hydrate().catch(() => undefined)
       const current = context().session
       if (current && !Session.expired(current)) return await fn()
-      return await locks.request(key, async () => {
-        // The other authorization's session commits nothing here, so its adoption runs the
-        // plugins' `afterSignIn` hooks. A failed read leaves the session that `fn` loads.
-        await reload({ hooks: true }).catch(() => undefined)
-        return await fn()
-      })
+      // The other authorization can wait for the user, such as at a passkey prompt, so the wait
+      // ends after `authorizeWait`, and `fn` then runs beside it.
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), authorizeWait)
+      ;(timer as { unref?: () => void }).unref?.()
+      let granted = false
+      return await locks
+        .request(key, { signal: controller.signal }, async () => {
+          granted = true
+          clearTimeout(timer)
+          // The other authorization's session commits nothing here, so its adoption runs the
+          // plugins' `afterSignIn` hooks. A failed read leaves the session that `fn` loads.
+          await reload({ hooks: true }).catch(() => undefined)
+          return await fn()
+        })
+        .catch((error: unknown) => {
+          if (granted || !controller.signal.aborted) throw error
+          return fn()
+        })
     })
   }
 
@@ -2495,6 +2509,12 @@ export type Status<session extends Session.Any = Session.Any> = {
 
 /** The number of rotations that the store keeps. */
 const rotationLimit = 8
+
+/**
+ * The longest wait of an authorization for another instance's authorization of the same session, in
+ * milliseconds, after which it runs beside it.
+ */
+const authorizeWait = 3_000
 
 /** The status of a session that holds nothing, such as a backend's. */
 const signedOut_status: Session.Status<Session.Any> = {

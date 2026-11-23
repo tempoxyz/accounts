@@ -2071,6 +2071,53 @@ describe('session.get', () => {
     `)
   })
 
+  test('authorizes beside another instance of the session whose authorization waits for the user', async () => {
+    const name = 'tempo-id:session:["http://127.0.0.1:9","cli:mercator",4217]'
+    const create = (store: Store.Store) =>
+      Accounts.create({
+        chain: 4217,
+        clientId: 'cli:mercator',
+        plugins: [local()],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const stores = [Store.memory(), Store.memory()] as const
+    for (const store of stores) {
+      await create(store).local.create()
+      await store.removeItem(name)
+    }
+    const waiting = create(stores[0])
+    const restoring = create(stores[1])
+    // The first authorization waits for the user, as at a passkey prompt, until the gate opens.
+    const gate = Promise.withResolvers<void>()
+    const order: string[] = []
+
+    const authorized = waiting.session
+      .get({
+        reauthorize: async () => {
+          await gate.promise
+          return await waiting.local.signIn()
+        },
+      })
+      .then(() => void order.push('authorized'))
+    const restored = restoring.session
+      .get({ reauthorize: async () => await restoring.local.signIn() })
+      .then(() => void order.push('restored'))
+    try {
+      await expect.poll(() => order, { timeout: 8_000 }).toEqual(['restored'])
+    } finally {
+      gate.resolve()
+    }
+    await Promise.all([authorized, restored])
+
+    expect(order).toMatchInlineSnapshot(`
+      [
+        "restored",
+        "authorized",
+      ]
+    `)
+  }, 10_000)
+
   test('reads the stored session once when a plugin reloads it as the instance is created', async () => {
     const name =
       'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
