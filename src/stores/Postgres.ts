@@ -2,8 +2,10 @@
  * A store in a Postgres table, as `Store.postgres` returns it.
  * @module
  */
+import { createActor } from 'xstate'
 import * as StoreValue from '../internal/StoreValue.js'
 import type * as Store from '../Store.js'
+import * as Redis from './Redis.js'
 
 /**
  * Returns a store in a Postgres table. On first use, it creates the table and an index on
@@ -16,8 +18,10 @@ import type * as Store from '../Store.js'
  * `delete … returning`, so replicas that share the table take each value once. `update` writes only
  * if the row still holds the value it read, so replicas that share the table write the logout
  * index of a `sid` without losing each other's sessions, in a read and a write. `lock` holds a
- * row with a 30-second lease on the database's clock, so replicas that share the table refresh a
- * session's token once.
+ * row with a 30-second lease on the database's clock, and renews the lease each 10 seconds while the
+ * hold runs, until the lease ends 120 seconds after the hold starts. So replicas that share the
+ * table refresh a session's token once, also when the refresh outlasts the lease. A crashed
+ * holder's lock expires within 30 seconds, and a hung holder's at about 120 seconds.
  *
  * `client` is any client with `query(text, values)`, such as a `pg` pool.
  *
@@ -134,9 +138,33 @@ export function create(
         if (updated.rows.length > 0) break
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
+      // A hold that runs longer than the lease, such as a slow refresh, renews it, so no other replica
+      // takes the lock and sends the same refresh token. The renewals follow those of `Store.redis`.
+      // Each renewal caps the lease at the deadline of the hold, also if a timer runs late, so the
+      // lock of a hold that never settles expires at about 120 seconds.
+      const deadline = Date.now() + holdLimit
+      const renewal = createActor(
+        Redis.machines.renewal.provide({
+          actions: {
+            // The timer of the next renewal does not wait on this one. A failed renewal leaves the
+            // lease, which the next renewal extends, or which expires.
+            renew: () => {
+              const left = Math.min(lease, deadline - Date.now())
+              if (left <= 0) return
+              void client
+                .query(
+                  `update ${table} set value = ${value} where key = $1 and value::json->>'token' = $2`,
+                  [name, token, left],
+                )
+                .catch(() => undefined)
+            },
+          },
+        }),
+      ).start()
       try {
         return await fn()
       } finally {
+        renewal.send({ type: 'hold.end' })
         // A failed release leaves the lease, which expires within `lease`.
         await client
           .query(
@@ -263,8 +291,17 @@ export function create(
   }
 }
 
-/** How long a hold of `lock` keeps the lock, in milliseconds, unless it releases it first. */
+/**
+ * How long a hold of `lock` keeps the lock without a renewal, in milliseconds, unless it releases
+ * it first. A holder renews it each third of the lease while its `fn` runs.
+ */
 const lease = 30_000
+
+/**
+ * Milliseconds after the start of a hold past which no renewal extends its lease, so a hold whose
+ * `fn` never settles frees the lock for other replicas.
+ */
+const holdLimit = 120_000
 
 export declare namespace create {
   /**

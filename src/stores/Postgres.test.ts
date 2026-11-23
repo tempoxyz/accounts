@@ -298,6 +298,44 @@ describe('Store.postgres', () => {
     `)
   })
 
+  test('behavior: a hold that runs past a third of the lease renews it, and keeps the lock', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const store = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+    // The end of the lease, in milliseconds of the database's clock.
+    const until = async () => {
+      const { rows } = await database.query<{ until: string }>(
+        "select value::json->>'until' as until from tempo_id_store where key = 'key:lock'",
+      )
+      return Number(rows[0]?.until)
+    }
+
+    // A hold such as a slow refresh, whose token request outlasts a third of the lease. Without a
+    // renewal, the lease keeps its end, and another replica takes the lock once it passes.
+    const renewed = await store.lock!('key', async () => {
+      const first = await until()
+      await expect
+        .poll(async () => (await until()) > first, {
+          interval: 500,
+          timeout: 15_000,
+        })
+        .toBe(true)
+      return true
+    })
+    const { rows } = await database.query(
+      "select key from tempo_id_store where key = 'key:lock'",
+    )
+
+    expect({ renewed, rows }).toMatchInlineSnapshot(`
+      {
+        "renewed": true,
+        "rows": [],
+      }
+    `)
+  }, 30_000)
+
   test('behavior: a write with an expiry replaces its own expired row', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())
