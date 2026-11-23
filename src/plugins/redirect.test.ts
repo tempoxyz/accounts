@@ -44,8 +44,11 @@ describe('redirect', () => {
   })
 
   test('refuses a sign-in without open in React Native, whose window holds no page, before it writes the pending redirect to the store', async () => {
-    // The program runs in Node with the globals of React Native, whose `window` is the global object,
-    // without `document` or `location`.
+    const directory = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'session.json')
+    // The program runs in a process of its own with the one global of React Native that Node lacks:
+    // `window`, the global object, without `document` or `location`. Node defines neither, so
+    // only this global tells a page check by `window` from one by `document`.
     const output = await Esbuild.build({
       bundle: true,
       format: 'esm',
@@ -57,23 +60,16 @@ describe('redirect', () => {
           "import * as Store from '../Store.ts'",
           "import { redirect } from './index.ts'",
           'globalThis.window = globalThis',
-          'const writes = []',
           'const accounts = Accounts.create({',
           '  chain: 42431,',
           "  clientId: 'example-mobile',",
           '  plugins: [redirect()],',
           "  redirectUri: 'com.example.app:/callback',",
-          '  store: Store.from({',
-          '    async getItem() {},',
-          '    async removeItem() {},',
-          '    async setItem(key) {',
-          '      writes.push(key)',
-          '    },',
-          '  }),',
+          `  store: Store.file(${JSON.stringify(path)}),`,
           "  url: 'http://127.0.0.1:9',",
           '})',
           'const error = await accounts.redirect.signIn({ accessKey: false }).catch((error) => error)',
-          'console.log(JSON.stringify({ error: `${error.name}: ${error.message}`, writes }))',
+          'console.log(JSON.stringify(`${error.name}: ${error.message}`))',
         ].join('\n'),
         loader: 'ts',
         resolveDir: import.meta.dirname,
@@ -87,12 +83,11 @@ describe('redirect', () => {
       { encoding: 'utf8', input: output.outputFiles[0]!.text },
     )
 
-    expect(JSON.parse(result.stdout)).toMatchInlineSnapshot(`
-      {
-        "error": "TypeError: Missing \`open\`: outside a page, a redirect has no page to leave. Pass \`open\` to the plugin, to show the sign-in URL, such as in a system browser.",
-        "writes": [],
-      }
-    `)
+    expect(JSON.parse(result.stdout)).toMatchInlineSnapshot(
+      `"TypeError: Missing \`open\`: outside a page, a redirect has no page to leave. Pass \`open\` to the plugin, to show the sign-in URL, such as in a system browser."`,
+    )
+    // The store keeps no PKCE verifier of a redirect that never leaves.
+    expect(Fs.readdirSync(directory)).toMatchInlineSnapshot(`[]`)
   }, 20_000)
 
   test('requests an access key of 5 OUSD for a day without `accessKey`, a day of expiry for one without `expiry`, and none for `accessKey: false` or a sign-in with a challenge', async () => {
