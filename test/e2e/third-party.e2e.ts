@@ -168,34 +168,37 @@ test.describe('third-party app', () => {
     })
   })
 
-  test('signs a new user in through the frame with `signIn` without `held`, which waits until the content shows', async ({
-    browser,
+  test('signs a new user in through the frame with `signIn` without `held`, which waits until a cover over the content goes', async ({
     capture,
     code,
     email,
+    page,
   }) => {
-    const states: string[] = []
+    await page.goto(urls.dialog)
 
-    // Each sign-in runs in a browser without a Tempo ID session, so the frame shows the sign-in form.
-    // The form shows the code field before the content shows, so each attempt can fill it early.
-    for (const attempt of [1, 2, 3]) {
-      const context = await browser.newContext()
-      const page = await context.newPage()
-      await page.goto(urls.dialog)
-
-      await test.step(`signs in, attempt ${attempt}`, async () => {
-        await Playwright.start(page, { name: 'Sign in' })
-        await Playwright.signIn(await Playwright.dialog(page), {
-          code,
-          email: `${attempt}.${email}`,
-        })
-        states.push((await Playwright.outcome(page, { name: 'Sign in' })).state)
-        await capture(`signed in, attempt ${attempt}`, page)
+    await test.step('signs in while a cover hides the content of the frame', async () => {
+      await Playwright.start(page, { name: 'Sign in' })
+      await Playwright.signIn(await Playwright.dialog(page), {
+        code,
+        email,
+        // The cover lets clicks through, and stays past the code's arrival, so the frame holds the
+        // email's submit and the code until it goes.
+        filled: () =>
+          page.evaluate(() => {
+            const cover = document.createElement('div')
+            cover.popover = 'manual'
+            cover.style.cssText =
+              'background: white; border: 0; height: 100vh; inset: 0; margin: 0; opacity: 0.5; pointer-events: none; width: 100vw;'
+            document.body.append(cover)
+            cover.showPopover()
+            setTimeout(() => cover.remove(), 3_000)
+          }),
       })
-      await context.close()
-    }
+      const session = await Playwright.outcome(page, { name: 'Sign in' })
 
-    expect(states).toEqual(['fulfilled', 'fulfilled', 'fulfilled'])
+      expect(session).toMatchObject({ state: 'fulfilled', value: { email } })
+      await capture('signed in')
+    })
   })
 
   test('signs in through a popup, which closes after the code, and sends OUSD', async ({
