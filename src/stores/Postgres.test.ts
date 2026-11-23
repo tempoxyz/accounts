@@ -336,6 +336,54 @@ describe('Store.postgres', () => {
     `)
   }, 30_000)
 
+  test('behavior: a renewal keeps the lease within the deadline of the hold, and revives no expired lease', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    // The renewals that the database ran, each of which writes the lease with `least`.
+    let renewals = 0
+    const store = Postgres.create({
+      async query(text, values) {
+        const result = await database.query(text, [...values])
+        if (text.includes('least(')) renewals += 1
+        return result
+      },
+    })
+    const until = async () => {
+      const { rows } = await database.query<{ until: string }>(
+        "select value::json->>'until' as until from tempo_id_store where key = 'key:lock'",
+      )
+      return Number(rows[0]?.until)
+    }
+    const write = (limit: number, lease: number) =>
+      database.query(
+        `update tempo_id_store set value = json_build_object('limit', $1::bigint, 'token', value::json->>'token', 'until', $2::bigint)::text where key = 'key:lock'`,
+        [limit, lease],
+      )
+
+    // A deadline that passes before a full lease, as for a renewal that runs late. Then a lease
+    // that expired, as after a renewal that waited for a connection past it.
+    const leases = await store.lock!('key', async () => {
+      const limit = Date.now() + 15_000
+      await write(limit, limit + 45_000)
+      await expect
+        .poll(() => renewals, { interval: 200, timeout: 15_000 })
+        .toBe(1)
+      const capped = (await until()) - limit
+      await write(limit + 45_000, 0)
+      await expect
+        .poll(() => renewals, { interval: 200, timeout: 15_000 })
+        .toBe(2)
+      return { capped, expired: await until() }
+    })
+
+    expect(leases).toMatchInlineSnapshot(`
+      {
+        "capped": 0,
+        "expired": 0,
+      }
+    `)
+  }, 45_000)
+
   test('behavior: a write with an expiry replaces its own expired row', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())

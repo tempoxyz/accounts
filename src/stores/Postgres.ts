@@ -120,7 +120,9 @@ export function create(
       // Each hold writes a token of its own, so a holder whose lease expired deletes no lock that
       // another replica took since.
       const token = crypto.randomUUID()
-      const value = `json_build_object('token', $2::text, 'until', ${now} + $3::bigint)::text`
+      // `limit` is the deadline of the hold on the database's clock, past which no renewal extends
+      // the lease.
+      const value = `json_build_object('limit', ${now} + $4::bigint, 'token', $2::text, 'until', ${now} + $3::bigint)::text`
       while (true) {
         // A refused `on conflict do update` still locks the row of the holder. If the client of this
         // replica runs inside a transaction, that lock blocks the release of the holder until the
@@ -128,33 +130,32 @@ export function create(
         // expired lease, since it locks only the rows that match.
         const inserted = await client.query(
           `insert into ${table} (key, value, expires_at) values ($1, ${value}, null) on conflict (key) do nothing returning key`,
-          [name, token, lease],
+          [name, token, lease, holdLimit],
         )
         if (inserted.rows.length > 0) break
         const updated = await client.query(
           `update ${table} set value = ${value}, expires_at = null where key = $1 and coalesce((value::json->>'until')::bigint, 0) <= ${now} returning key`,
-          [name, token, lease],
+          [name, token, lease, holdLimit],
         )
         if (updated.rows.length > 0) break
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
       // A hold that runs longer than the lease, such as a slow refresh, renews it, so no other replica
       // takes the lock and sends the same refresh token. The renewals follow those of `Store.redis`.
-      // Each renewal caps the lease at the deadline of the hold, also if a timer runs late, so the
-      // lock of a hold that never settles expires at about 120 seconds.
-      const deadline = Date.now() + holdLimit
+      // Each renewal caps the lease at the deadline of the hold, and extends only a live lease, both
+      // on the database's clock when the query runs. So a renewal that waits for a pooled connection
+      // or a row lock neither passes the deadline nor revives an expired lease, and the lock of a
+      // hold that never settles expires at about 120 seconds.
       const renewal = createActor(
         Redis.machines.renewal.provide({
           actions: {
             // The timer of the next renewal does not wait on this one. A failed renewal leaves the
             // lease, which the next renewal extends, or which expires.
             renew: () => {
-              const left = Math.min(lease, deadline - Date.now())
-              if (left <= 0) return
               void client
                 .query(
-                  `update ${table} set value = ${value} where key = $1 and value::json->>'token' = $2`,
-                  [name, token, left],
+                  `update ${table} set value = json_build_object('limit', (value::json->>'limit')::bigint, 'token', $2::text, 'until', least(${now} + $3::bigint, (value::json->>'limit')::bigint))::text where key = $1 and value::json->>'token' = $2 and (value::json->>'until')::bigint > ${now}`,
+                  [name, token, lease],
                 )
                 .catch(() => undefined)
             },
