@@ -4,8 +4,8 @@
  * frame or in a popup. Tempo ID serves the routes of an app's own form, and of an owner's signature,
  * to first-party apps alone, and `useSession` authorizes nothing at a mount.
  *
- * The frame of a third-party app holds each action until its content shows, so each helper of the
- * frame takes `held`.
+ * The frame of a third-party app holds each action until its content shows. `signIn` detects the
+ * hold, and each other helper of the frame takes `held`.
  * @module
  */
 import type { Page } from '@playwright/test'
@@ -166,6 +166,36 @@ test.describe('third-party app', () => {
       await sent(page)
       await capture('approved and sent')
     })
+  })
+
+  test('signs a new user in through the frame with `signIn` without `held`, which waits until the content shows', async ({
+    browser,
+    capture,
+    code,
+    email,
+  }) => {
+    const states: string[] = []
+
+    // Each sign-in runs in a browser without a Tempo ID session, so the frame shows the sign-in form.
+    // The form shows the code field before the content shows, so each attempt can fill it early.
+    for (const attempt of [1, 2, 3]) {
+      const context = await browser.newContext()
+      const page = await context.newPage()
+      await page.goto(urls.dialog)
+
+      await test.step(`signs in, attempt ${attempt}`, async () => {
+        await Playwright.start(page, { name: 'Sign in' })
+        await Playwright.signIn(await Playwright.dialog(page), {
+          code,
+          email: `${attempt}.${email}`,
+        })
+        states.push((await Playwright.outcome(page, { name: 'Sign in' })).state)
+        await capture(`signed in, attempt ${attempt}`, page)
+      })
+      await context.close()
+    }
+
+    expect(states).toEqual(['fulfilled', 'fulfilled', 'fulfilled'])
   })
 
   test('signs in through a popup, which closes after the code, and sends OUSD', async ({

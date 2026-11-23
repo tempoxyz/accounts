@@ -151,7 +151,7 @@ An app without `tempo-id:sign` meets Tempo ID's bounds for a sign-in with no pag
 `Apps.thirdParty` is the `web` package, built a second time with its origin as its client ID. Tempo ID holds no registration of it, and accepts a localhost origin as a client ID. `Web.url({ origin: Apps.thirdParty.url })` returns the URL of one of its pages.
 
 - The user grants each access key on a page of Tempo ID. The sign-in form shows the grant to a new user, and the approval page shows it to a signed-in one.
-- The dialog's frame holds each action until its controls show for a moment. `signIn` and `approve` take `held: true` for that frame.
+- The dialog's frame holds each action until its controls show for a moment. `signIn` detects the hold from the frame's report of its visibility, and `approve` takes `held: true` for that frame.
 - Tempo ID's responses to the routes of an app's own form name no third-party origin. The browser blocks each one, and logs two console errors, which the spec asserts and removes from `errors`.
 - `accounts.authorize` rejects before any request, and `useSession` authorizes nothing at a mount.
 
