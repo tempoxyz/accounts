@@ -138,6 +138,64 @@ describe('email', () => {
     `)
   })
 
+  test("signIn reads a code in full-width or Arabic-Indic digits, as a keyboard of the user's script types it, as its ASCII digits, on a page and on a backend", async () => {
+    const codes: unknown[] = []
+    // Records the code of each sign-in request, which then fails with a network error.
+    const record = (async (input, init) => {
+      const body = init?.body
+      codes.push(
+        body instanceof URLSearchParams
+          ? body.get('code')
+          : (JSON.parse(String(body)) as { code?: unknown }).code,
+      )
+      return fetch(input, init)
+    }) satisfies typeof fetch
+    const page = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
+      fetch: record,
+      plugins: [email()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const backend = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      clientSecret: 'client-secret',
+      fetch: record,
+      plugins: [email()],
+      url: 'http://127.0.0.1:9',
+    })
+
+    const reasons = await Promise.all(
+      [
+        page.email.signIn({ code: '４６８ ８８３', email: 'user@example.com' }),
+        page.email.signIn({ code: '٤٦٨٨٨٣', email: 'user@example.com' }),
+        backend.email.signIn({ code: '۴۶۸۸۸۳', email: 'user@example.com' }),
+      ].map((promise) =>
+        promise.then(
+          () => undefined,
+          (error: Accounts.RequestError) => error.reason ?? error.code,
+        ),
+      ),
+    )
+
+    expect({ codes, reasons }).toMatchInlineSnapshot(`
+      {
+        "codes": [
+          "468883",
+          "468883",
+          "468883",
+        ],
+        "reasons": [
+          "server_error",
+          "server_error",
+          "server_error",
+        ],
+      }
+    `)
+  })
+
   test('signIn refuses a code without exactly 6 digits with invalid_field and status 0, on a page and on a backend, before any request or prompt', async () => {
     const paths: string[] = []
     // Records the path of each request, which then fails with a network error.

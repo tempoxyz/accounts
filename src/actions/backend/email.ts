@@ -162,7 +162,10 @@ export declare namespace signIn {
      * A sign-in on the app's page needs the `tempo-id:sign` scope.
      */
     challenge?: string | undefined
-    /** The 6-digit code that Tempo ID emailed. The call drops each character other than a digit. */
+    /**
+     * The 6-digit code that Tempo ID emailed. The call drops each character other than a digit, and
+     * reads a full-width or Arabic-Indic digit as its ASCII digit.
+     */
     code: string
     /** The address that received the code. */
     email: string
