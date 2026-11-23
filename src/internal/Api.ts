@@ -535,6 +535,7 @@ export function grant(
     if (!segment.test(payload)) return {}
     const claims = JSON.parse(Base64.toString(payload)) as {
       aud?: unknown
+      iss?: unknown
       scope?: unknown
     }
     if (typeof claims.scope !== 'string') return {}
@@ -542,8 +543,10 @@ export function grant(
     if (claims.scope.split(' ').every((entry) => !entry || own.has(entry)))
       return {}
     // An API's own scopes need the API as `resource`. The audience also names Tempo ID's userinfo
-    // endpoint, which is no resource.
-    const origin = new URL(auth.url).origin
+    // endpoint, which is no resource, on its public origin (`iss`), which `url` may not match.
+    const origin = new URL(
+      typeof claims.iss === 'string' ? claims.iss : auth.url,
+    ).origin
     const resource = [claims.aud]
       .flat()
       .filter(

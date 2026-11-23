@@ -298,9 +298,10 @@ describe('grant', () => {
       Base64.fromString(JSON.stringify(claims), { pad: false, url: true }),
       'signature',
     ].join('.')
+  // The instance reaches Tempo ID at another URL than its public origin, the tokens' `iss`.
   const auth = {
     scope: 'openid email offline_access',
-    url: 'https://id.tempo.xyz',
+    url: 'http://tempo-id.internal:8787',
   }
 
   test("returns the scopes and the audiences outside Tempo ID of a token with an API's own scopes", () => {
@@ -312,6 +313,7 @@ describe('grant', () => {
             'https://api.tempo.xyz',
             'https://id.tempo.xyz/oauth2/userinfo',
           ],
+          iss: 'https://id.tempo.xyz',
           scope: 'openid email offline_access data:read',
         }),
       ),
@@ -329,7 +331,11 @@ describe('grant', () => {
     expect([
       Api.grant(
         auth,
-        token({ aud: 'https://id.tempo.xyz', scope: 'openid email' }),
+        token({
+          aud: 'https://id.tempo.xyz',
+          iss: 'https://id.tempo.xyz',
+          scope: 'openid email',
+        }),
       ),
       Api.grant(auth, 'not-a-token'),
     ]).toMatchInlineSnapshot(`
