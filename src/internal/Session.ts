@@ -1420,12 +1420,36 @@ export function create(options: create.Options): create.ReturnType {
   // The authorizations that run now, each settled to `undefined`, which `settled` waits for.
   const authorizations = new Set<Promise<void>>()
 
+  /**
+   * Runs `fn`, an authorization, while no authorization of another instance on the store runs, such
+   * as another tab's restore of the same Tempo ID session. An authorization that waited reads the
+   * store first, so a session that the other one saved returns with no request. An uncontended
+   * authorization reads nothing more. Without Web Locks, `fn` runs as it is.
+   */
+  function serialized<value>(fn: () => Promise<value>): Promise<value> {
+    const locks = (globalThis.navigator as { locks?: LockManager } | undefined)
+      ?.locks
+    if (!locks || !writes) return fn()
+    const key = `${name}:authorize`
+    return locks.request(key, { ifAvailable: true }, async (held) => {
+      if (held) return await fn()
+      return await locks.request(key, async () => {
+        // A failed read leaves the session that `fn` loads.
+        await reload().catch(() => undefined)
+        return await fn()
+      })
+    })
+  }
+
   return {
     actor,
     async authorize(fn) {
       if (!actor) return await fn()
+      // Only the first authorization of the instance takes the lock. A nested one, or one beside
+      // another, runs as it is, since the one that holds the lock can wait for it.
+      const first = authorizations.size === 0 && context().delegations === 0
       actor.send({ type: 'authorize.start' })
-      const promise = fn()
+      const promise = first ? serialized(fn) : fn()
       const entry = promise.then(
         () => undefined,
         () => undefined,

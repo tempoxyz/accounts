@@ -30,6 +30,7 @@ import * as StoreValue from './internal/StoreValue.js'
 import * as Plugin from './Plugin.js'
 import * as Session from './Session.js'
 import * as Store from './Store.js'
+import { local } from './plugins/local.js'
 import { viem } from './plugins/viem.js'
 
 describe('authorize', () => {
@@ -1958,6 +1959,54 @@ describe('session.get', () => {
       `"signedOut"`,
     )
     expect(requests).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('authorizes once for two instances on one store that restore together, and the later one returns the earlier one’s session', async () => {
+    const name = 'tempo-id:session:["http://127.0.0.1:9","cli:mercator",4217]'
+    const store = Store.memory()
+    const create = () =>
+      Accounts.create({
+        chain: 4217,
+        clientId: 'cli:mercator',
+        plugins: [local()],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    // The store holds the owner key and no session, as after a cleared session in another tab.
+    await create().local.create()
+    await store.removeItem(name)
+    const first = create()
+    const second = create()
+    const authorizations: string[] = []
+
+    const [a, b] = await Promise.all(
+      [first, second].map((accounts, index) =>
+        accounts.session.get({
+          reauthorize: async () => {
+            authorizations.push(index === 0 ? 'first' : 'second')
+            return await accounts.local.signIn()
+          },
+        }),
+      ),
+    )
+
+    expect(authorizations).toMatchInlineSnapshot(`
+      [
+        "first",
+      ]
+    `)
+    expect(a?.accessKey?.keyAuthorization).toEqual(
+      b?.accessKey?.keyAuthorization,
+    )
+    expect([
+      first.session.status.get().status,
+      second.session.status.get().status,
+    ]).toMatchInlineSnapshot(`
+      [
+        "signedIn",
+        "signedIn",
+      ]
+    `)
   })
 
   test('reads the stored session once when a plugin reloads it as the instance is created', async () => {
