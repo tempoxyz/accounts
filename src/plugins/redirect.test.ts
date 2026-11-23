@@ -4,6 +4,8 @@
  * @module
  */
 import { PGlite } from '@electric-sql/pglite'
+import * as Esbuild from 'esbuild'
+import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
@@ -40,6 +42,58 @@ describe('redirect', () => {
     // The store keeps no PKCE verifier of a redirect that never leaves.
     expect(Fs.readdirSync(directory)).toMatchInlineSnapshot(`[]`)
   })
+
+  test('refuses a sign-in without open in React Native, whose window holds no page, before it writes the pending redirect to the store', async () => {
+    // The program runs in Node with the globals of React Native, whose `window` is the global object,
+    // without `document` or `location`.
+    const output = await Esbuild.build({
+      bundle: true,
+      format: 'esm',
+      logLevel: 'silent',
+      platform: 'node',
+      stdin: {
+        contents: [
+          "import * as Accounts from '../Accounts.ts'",
+          "import * as Store from '../Store.ts'",
+          "import { redirect } from './index.ts'",
+          'globalThis.window = globalThis',
+          'const writes = []',
+          'const accounts = Accounts.create({',
+          '  chain: 42431,',
+          "  clientId: 'example-mobile',",
+          '  plugins: [redirect()],',
+          "  redirectUri: 'com.example.app:/callback',",
+          '  store: Store.from({',
+          '    async getItem() {},',
+          '    async removeItem() {},',
+          '    async setItem(key) {',
+          '      writes.push(key)',
+          '    },',
+          '  }),',
+          "  url: 'http://127.0.0.1:9',",
+          '})',
+          'const error = await accounts.redirect.signIn({ accessKey: false }).catch((error) => error)',
+          'console.log(JSON.stringify({ error: `${error.name}: ${error.message}`, writes }))',
+        ].join('\n'),
+        loader: 'ts',
+        resolveDir: import.meta.dirname,
+      },
+      write: false,
+    })
+
+    const result = ChildProcess.spawnSync(
+      process.execPath,
+      ['--input-type=module'],
+      { encoding: 'utf8', input: output.outputFiles[0]!.text },
+    )
+
+    expect(JSON.parse(result.stdout)).toMatchInlineSnapshot(`
+      {
+        "error": "TypeError: Missing \`open\`: outside a page, a redirect has no page to leave. Pass \`open\` to the plugin, to show the sign-in URL, such as in a system browser.",
+        "writes": [],
+      }
+    `)
+  }, 20_000)
 
   test('requests an access key of 5 OUSD for a day without `accessKey`, a day of expiry for one without `expiry`, and none for `accessKey: false` or a sign-in with a challenge', async () => {
     /** Returns the key authorization that a sign-in of an instance with `accessKey` requests. */
