@@ -1423,7 +1423,8 @@ export function create(options: create.Options): create.ReturnType {
   /**
    * Runs `fn`, an authorization, while no authorization of another instance on the store runs, such
    * as another tab's restore of the same Tempo ID session. An authorization that waited reads the
-   * store first, so a session that the other one saved returns with no request. An uncontended
+   * store first, so a session that the other one saved returns with no request, and runs the plugins'
+   * `afterSignIn` hooks. An instance whose saved session holds waits for no lock. An uncontended
    * authorization reads nothing more. Without Web Locks, `fn` runs as it is.
    */
   function serialized<value>(fn: () => Promise<value>): Promise<value> {
@@ -1433,9 +1434,15 @@ export function create(options: create.Options): create.ReturnType {
     const key = `${name}:authorize`
     return locks.request(key, { ifAvailable: true }, async (held) => {
       if (held) return await fn()
+      // A saved session that holds needs no authorization, so its read waits for no other one. The
+      // read is the store's first, which `fn` reads anyway.
+      await hydrate().catch(() => undefined)
+      const current = context().session
+      if (current && !Session.expired(current)) return await fn()
       return await locks.request(key, async () => {
-        // A failed read leaves the session that `fn` loads.
-        await reload().catch(() => undefined)
+        // The other authorization's session commits nothing here, so its adoption runs the
+        // plugins' `afterSignIn` hooks. A failed read leaves the session that `fn` loads.
+        await reload({ hooks: true }).catch(() => undefined)
         return await fn()
       })
     })

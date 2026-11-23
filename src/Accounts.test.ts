@@ -1964,19 +1964,27 @@ describe('session.get', () => {
   test('authorizes once for two instances on one store that restore together, and the later one returns the earlier one’s session', async () => {
     const name = 'tempo-id:session:["http://127.0.0.1:9","cli:mercator",4217]'
     const store = Store.memory()
-    const create = () =>
+    const signIns: string[] = []
+    const create = (label: string) =>
       Accounts.create({
         chain: 4217,
         clientId: 'cli:mercator',
-        plugins: [local()],
+        plugins: [
+          local(),
+          Plugin.from({
+            hooks: { afterSignIn: () => void signIns.push(label) },
+            id: 'record',
+          }),
+        ],
         store,
         url: 'http://127.0.0.1:9',
       })
     // The store holds the owner key and no session, as after a cleared session in another tab.
-    await create().local.create()
+    await create('owner').local.create()
     await store.removeItem(name)
-    const first = create()
-    const second = create()
+    signIns.length = 0
+    const first = create('first')
+    const second = create('second')
     const authorizations: string[] = []
 
     const [a, b] = await Promise.all(
@@ -2005,6 +2013,60 @@ describe('session.get', () => {
       [
         "signedIn",
         "signedIn",
+      ]
+    `)
+    // The later instance adopts the session, so its plugins' hooks run as at another tab's sign-in.
+    expect(signIns.toSorted()).toMatchInlineSnapshot(`
+      [
+        "first",
+        "second",
+      ]
+    `)
+  })
+
+  test('returns a saved session that holds while another instance of the session authorizes', async () => {
+    const create = (store: Store.Store) =>
+      Accounts.create({
+        chain: 4217,
+        clientId: 'cli:mercator',
+        plugins: [local()],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const name = 'tempo-id:session:["http://127.0.0.1:9","cli:mercator",4217]'
+    const empty = Store.memory()
+    await create(empty).local.create()
+    await empty.removeItem(name)
+    const saved = Store.memory()
+    await create(saved).local.create()
+    const authorizing = create(empty)
+    const restoring = create(saved)
+    const gate = Promise.withResolvers<void>()
+    const order: string[] = []
+
+    // The first instance holds its authorization until the gate opens.
+    const authorized = authorizing.session
+      .get({
+        reauthorize: async () => {
+          await gate.promise
+          return await authorizing.local.signIn()
+        },
+      })
+      .then(() => void order.push('authorized'))
+    const restored = restoring.session
+      .get({ reauthorize: async () => await restoring.local.signIn() })
+      .then(() => void order.push('restored'))
+    try {
+      await expect.poll(() => order).toEqual(['restored'])
+    } finally {
+      gate.resolve()
+    }
+    await Promise.all([authorized, restored])
+
+    expect(order).toMatchInlineSnapshot(`
+      [
+        "restored",
+        "authorized",
       ]
     `)
   })
