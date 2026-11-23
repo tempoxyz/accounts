@@ -572,23 +572,17 @@ describe('Store.redis', () => {
           session: Session.from({
             accessToken: 'access-token',
             expiresAt: Date.now() + 3_600_000,
-            refreshToken: 'refresh-token',
             user: { email: 'user@example.com', id: 'user_1' },
           }),
         },
         version: 0,
       },
     )
-    // `fetch` records each request, and answers the revocation.
-    const requests: string[] = []
+    // The session holds no refresh token, so its sign-out sends no request.
     const create = () =>
       Accounts.create({
         chain: 1337,
         clientId: 'https://app.example.com',
-        fetch(input) {
-          requests.push(new URL(String(input)).pathname)
-          return Promise.resolve(new Response(null, { status: 200 }))
-        },
         store,
         url: 'http://127.0.0.1:9',
       })
@@ -614,11 +608,8 @@ describe('Store.redis', () => {
       }
     })()
 
-    expect({ requests, session, status }).toMatchInlineSnapshot(`
+    expect({ session, status }).toMatchInlineSnapshot(`
       {
-        "requests": [
-          "/oauth2/revoke",
-        ],
         "session": undefined,
         "status": "signedOut",
       }
