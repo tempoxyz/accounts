@@ -47,22 +47,32 @@ import type * as TempoAccount from './internal/TempoAccount.js'
 
 /**
  * The call needs an access key, but the client's account holds no live access key on the chain:
- * the sign-in requested no access key, its access key expired, or its access key acts on another
- * chain. Thrown in these cases:
+ * the sign-in requested no access key, its access key expired or the chain holds it revoked, or its
+ * access key acts on another chain. Thrown in these cases:
  *
  * - A transaction from the account of a `viem` client whose session holds no access key, outside a
  *   page, or with `retry.accessKey` off for a session with an access key on another chain.
  * - `accounts.viem({ session })` for a session without an access key.
  * - `accounts.pay({ session })` for a session without a live access key on the payment's chain,
  *   unless every access key of the session expired, which throws `Accounts.SignedOutError`.
+ * - A charge of `accounts.fetch` or of a payer of `accounts.mpp` that the chain refuses, since it holds
+ *   the access key revoked, with the chain's refusal as `cause`.
  */
 export class AccessKeyRequiredError extends Error {
   override readonly name = 'Accounts.AccessKeyRequiredError'
 
-  constructor() {
+  constructor(options: AccessKeyRequiredError.Options = {}) {
     super(
       "The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain.",
+      { cause: options.cause },
     )
+  }
+}
+
+export declare namespace AccessKeyRequiredError {
+  type Options = {
+    /** The chain's refusal of an access key that it holds revoked. Absent otherwise. */
+    cause?: unknown
   }
 }
 
