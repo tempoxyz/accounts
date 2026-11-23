@@ -980,7 +980,12 @@ export function mpp(options: mpp.Options = {}) {
             if (!overrides.session && !overrides.account)
               await context.session.load()
             // A fixed session signs for a backend, which shows no screen.
-            if (overrides.session) return payer(overrides).fetch(input, init)
+            if (overrides.session)
+              return payer(overrides)
+                .fetch(input, init)
+                .catch((error: unknown) => {
+                  throw revoked(error)
+                })
             // mppx pays each 402 response of one request in turn, so a payment can fail after an
             // earlier one of the same request settled. The request sends again only before its
             // first credential, so no retry pays a settled charge again.
@@ -1008,6 +1013,8 @@ export function mpp(options: mpp.Options = {}) {
                 throw error
               }
             }
+            // The retry reads the chain's refusal of a revoked access key, so only a refusal that it
+            // leaves becomes the instance's error.
             return retried(send, {
               // A named account holds no access key, so only a deposit resolves its failure.
               kinds: overrides.account
@@ -1016,6 +1023,8 @@ export function mpp(options: mpp.Options = {}) {
               overrides,
               replayable: () => !sent && resendable(input, init),
               signal: signalOf(input, init),
+            }).catch((error: unknown) => {
+              throw revoked(error)
             })
           },
           // Each call resolves the payer, as `fetch` does, so a call after a load, a renewal, or a
@@ -1027,6 +1036,9 @@ export function mpp(options: mpp.Options = {}) {
               return payer(overrides)
                 .mcp(client)
                 .callTool(params, resultSchema, options)
+                .catch((error: unknown) => {
+                  throw revoked(error)
+                })
             },
           }),
           session(parameters) {
@@ -1508,7 +1520,9 @@ export declare namespace mpp {
      *   as another process of a server, signed out or signed in another user or Tempo Account.
      *   Before the dialog opens, for a subscription challenge after the tab signed out or switched
      *   accounts.
-     * @throws {Accounts.AccessKeyRequiredError} For a session without an access key. In a browser,
+     * @throws {Accounts.AccessKeyRequiredError} For a session without an access key. For a charge
+     *   that the chain refuses, since it holds the access key revoked, with the chain's refusal as
+     *   `cause`, after a retry of the `accessKey` kind, if one runs. In a browser,
      *   Tempo ID's payment page pays a charge of such an instance's session, if one transfer in
      *   `push` mode pays the charge. The error is then thrown only once a challenge needs an access
      *   key.
@@ -1565,7 +1579,8 @@ export declare namespace mpp {
      * for no new access key, and shows no deposit page, so `retry` does not apply.
      *
      * @throws {Accounts.SignedOutError} As for `fetch`.
-     * @throws {Accounts.AccessKeyRequiredError} For a session without an access key.
+     * @throws {Accounts.AccessKeyRequiredError} For a session without an access key, and for a
+     *   charge that the chain refuses, since it holds the access key revoked, as for `fetch`.
      * @throws {LimitError} As for `fetch`.
      * @throws {MaxAmountError} For a charge that costs more than `maxAmount`.
      * @throws {MaxAmountInvalidError} For a `maxAmount` that is no decimal amount of 0 or more.
@@ -2707,6 +2722,19 @@ function shortfall(error: unknown): Retry.Failure | undefined {
     current = (current as { cause?: unknown }).cause
   }
   return undefined
+}
+
+/**
+ * Returns `Accounts.AccessKeyRequiredError` for the chain's refusal of a charge whose access key it
+ * holds revoked, such as after a revocation on Tempo ID's connections page, with the refusal as
+ * `cause`. Returns any other error as it is.
+ */
+function revoked(error: unknown) {
+  // A Viem copy other than this package's, such as mppx's own, builds the refusal, so any error
+  // decodes.
+  if (!(error instanceof Error)) return error
+  if (ExecutionError.from(error).errorName !== 'KeyAlreadyRevoked') return error
+  return new Accounts.AccessKeyRequiredError({ cause: error })
 }
 
 /**
