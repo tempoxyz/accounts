@@ -49,7 +49,7 @@ const curve = 'cubic-bezier(0.32, 0.72, 0, 1)'
  */
 const payment = {
   bones: [
-    { height: 24, left: 8, radius: 999, top: 8, width: 122 },
+    { height: 24, left: 8, radius: 999, top: 8, width: 118 },
     { height: 16, radius: 999, right: 8, top: 12, width: 16 },
     { height: 48, radius: 999, top: 56, width: 48 },
     { height: 21, top: 125, width: 177 },
@@ -175,7 +175,7 @@ dialog[${attribute}] [data-skeleton] [data-bar] {
   height: 24px;
   margin-bottom: 12px;
   margin-left: -16px;
-  width: 122px;
+  width: 118px;
 }
 dialog[${attribute}] [data-skeleton] [data-title] {
   height: 28px;
