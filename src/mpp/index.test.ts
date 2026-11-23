@@ -1322,36 +1322,42 @@ describe('mpp', () => {
       },
       version: 0,
     })
-    const requests: Request[] = []
+    // An API serves `/fortune` free, and charges for `/charge` with an MPP endpoint.
     const endpoint = server({ amount: '1' })
-    const accounts = instance({
-      fetch: (input, init) => {
-        const request = new Request(input, init)
-        requests.push(request)
-        if (request.url.endsWith('/fortune'))
-          return Promise.resolve(new Response('free'))
-        return endpoint.fetch(request)
-      },
-      identity: { scope: ['https://api.example.com'] },
-      store,
+    const requests: (string | undefined)[][] = []
+    const api = Http.createServer((request, response) => {
+      requests.push([
+        request.url,
+        request.headers.authorization,
+        request.headers['tempo-id-token'] as string | undefined,
+      ])
+      // A failed response ends the request with 500, so the assertions below report it.
+      void (async () => {
+        const result =
+          request.url === '/fortune'
+            ? new Response('free')
+            : await endpoint.fetch(`https://mpp.test${request.url}`)
+        response.writeHead(result.status, Object.fromEntries(result.headers))
+        response.end(await result.text())
+      })().catch(() => response.writeHead(500).end())
     })
+    await new Promise<void>((resolve) => api.listen(0, '127.0.0.1', resolve))
+    const address = api.address()
+    if (!address || typeof address === 'string') throw new Error('No port.')
+    const origin = `http://127.0.0.1:${address.port}`
+    const accounts = instance({ identity: { scope: [origin] }, store })
 
     const free = await accounts
-      .fetch('https://api.example.com/fortune')
+      .fetch(`${origin}/fortune`)
       .then((response) => response.text())
     const paid = await accounts
-      .fetch('https://api.example.com/charge')
+      .fetch(`${origin}/charge`)
       .catch((error: Error) => error.name)
+    await new Promise((resolve) => api.close(resolve))
 
     expect(free).toMatchInlineSnapshot(`"free"`)
     expect(paid).toMatchInlineSnapshot(`"Accounts.AccessKeyRequiredError"`)
-    expect(
-      requests.map((request) => [
-        new URL(request.url).pathname,
-        request.headers.get('authorization'),
-        request.headers.get('tempo-id-token'),
-      ]),
-    ).toMatchInlineSnapshot(`
+    expect(requests).toMatchInlineSnapshot(`
       [
         [
           "/fortune",
