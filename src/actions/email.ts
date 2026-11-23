@@ -198,6 +198,13 @@ export async function signIn<
               }),
         },
       }),
+      // A refusal of a redirect URI that the app never passed names it.
+      {
+        redirectUri:
+          auth.redirectUri === undefined
+            ? prepared.authorize.redirect_uri
+            : undefined,
+      },
     )
     return { body, sentAt }
   }
