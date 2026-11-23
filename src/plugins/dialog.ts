@@ -11,7 +11,6 @@ import * as FrameTrust from '../internal/FrameTrust.js'
 import type * as Funding from '../internal/Funding.js'
 import * as Handler from '../internal/Handler.js'
 import type { PageSession } from '../internal/handlers/Backend.js'
-import * as Popup from '../internal/Popup.js'
 import { pushes } from '../internal/Request.js'
 import * as SignIn from '../internal/SignIn.js'
 import * as Plugin from '../Plugin.js'
@@ -59,9 +58,9 @@ const heldFor = 10_000
  * browser without IntersectionObserver v2 loads it on every page, since it frames the sign-in and
  * the approval pages, such as the payment's, only for an app that the loaded frame reports as
  * trusted. With `preload: false` or `mode: 'popup'`, no
- * page loads it. A page on `http:`, such as `http://localhost`, loads none either, and each sign-in
- * there runs in a popup, unless Tempo ID is on `http:` itself. The page must be on the redirect
- * URI's origin, since the callback reaches only a page of that origin.
+ * page loads it. A page outside a secure context loads none either, and each sign-in there runs in a
+ * popup. A page on `http://localhost` is a secure context, so it loads the frame. The page must be
+ * on the redirect URI's origin, since the callback reaches only a page of that origin.
  *
  * An instance without a sign-in plugin receives this plugin with its default options. Its code then
  * loads on demand, so `Accounts.create()` alone offers `accounts.dialog.signIn()`.
@@ -1044,10 +1043,10 @@ export declare namespace dialog {
       loginHint?: string | undefined
       /**
        * Whether the sign-in shows in a frame or in a popup window. Defaults to the plugin's `mode`.
-       * A popup opens only within a click. Outside a secure context, on a page on `http:` such as
-       * `http://localhost`, for a pushed request, for a request with a `resource`, and with `funding`
-       * for a hint of `MACH` on Tempo mainnet on iOS or iPadOS, `iframe` runs as `popup`. A page on
-       * `http:` keeps the frame only for a Tempo ID on `http:`, such as a local one.
+       * A popup opens only within a click. Outside a secure context, for a pushed request, for a
+       * request with a `resource`, and with `funding` for a hint of `MACH` on Tempo mainnet on iOS
+       * or iPadOS, `iframe` runs as `popup`. A page on `http://localhost` is a secure context, so it
+       * keeps the frame.
        */
       mode?: 'iframe' | 'popup' | undefined
       /**
@@ -1158,8 +1157,8 @@ function isPageSession(value: unknown): value is PageSession {
 
 /**
  * Returns whether the page frames Tempo ID's sign-in, as `Actions.dialog.preload` checks before it
- * loads a frame: a secure context on the redirect URI's origin, not on `http:` for a Tempo ID on
- * `https:`, for an instance that pushes no request.
+ * loads a frame: a secure context on the redirect URI's origin, for an instance that pushes no
+ * request.
  */
 function framed(config: Plugin.Context['config']) {
   const redirectUri = config.redirectUri ?? `${window.location.origin}/`
@@ -1167,7 +1166,6 @@ function framed(config: Plugin.Context['config']) {
     window.isSecureContext &&
     new URL(redirectUri, window.location.origin).origin ===
       window.location.origin &&
-    !Popup.http({ page: window.location.href, url: config.url }) &&
     !pushes(config)
   )
 }

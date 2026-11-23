@@ -135,8 +135,8 @@ export async function callback(auth: Config): Promise<boolean> {
  *
  * The frame loads without a request, so `signIn` takes it whatever its access key or challenge. Each sign-in keeps the frame loaded, and the next one posts its request to the same
  * frame, which starts the sign-in again. A call while the page holds a frame of the same redirect
- * URI that has not failed loads nothing. Outside a secure context, on a page on `http:` for a Tempo
- * ID on `https:`, and for an instance that pushes its requests with `par`, it loads nothing, since
+ * URI that has not failed loads nothing. Outside a secure context, and for an instance that pushes
+ * its requests with `par`, it loads nothing, since
  * `signIn` then opens a popup. An instance with a `resource` loads the frame, since
  * `signMessage` signs in it. On a page that is not on the redirect URI's origin it loads nothing
  * either, since `signIn` then throws.
@@ -159,7 +159,7 @@ export function preload(auth: Config, options: preload.Options = {}): void {
   if (machines.running(slot(auth).getSnapshot()))
     return slot(auth).send({ options, type: 'queue' })
   slot(auth).send({ type: 'discard' })
-  if (!framed(auth, { redirectUri }) || pushes(auth)) return
+  if (!framed({ redirectUri }) || pushes(auth)) return
 
   // A script that runs before the body parses, such as one in the head, preloads once it parses.
   if (!document.body) {
@@ -201,9 +201,9 @@ export declare namespace preload {
  *   screens. An access key may exceed the headless ceiling, since the approval page shows it.
  *
  * The page must be on the origin of the redirect URI, since the callback reaches the page only on
- * that origin. Outside a secure context, `iframe` signs in with `popup`. A page on `http:`, such as
- * `http://localhost`, signs in with `popup` too, unless Tempo ID is on `http:` itself, such as a
- * local one. An instance that pushes its requests with `par` signs in with `popup` as well, since the
+ * that origin. Outside a secure context, `iframe` signs in with `popup`. A page on
+ * `http://localhost` is a secure context, so it signs in with `iframe`, also for a Tempo ID on
+ * `https:`. An instance that pushes its requests with `par` signs in with `popup`, since the
  * frame takes the request's own parameters, and Tempo ID reads a pushed request only from its push.
  * A request with a `resource`, its own or the instance's, signs in with `popup` too, since the frame's
  * tokens are for Tempo ID's origin alone.
@@ -458,9 +458,8 @@ async function authorize<
   })()
 
   // The mode is chosen before the first `await`, so a popup still opens within the gesture. Tempo
-  // ID lets only the redirect URI's origin frame the sign-in, and only in a secure context. A page
-  // on `http:`, such as `http://localhost`, is one, but signs in with a popup for a Tempo ID on
-  // `https:`, as `Popup.http` describes. A browser without IntersectionObserver v2 cannot show
+  // ID lets only the redirect URI's origin frame the sign-in, and only in a secure context, which
+  // `http://localhost` is. A browser without IntersectionObserver v2 cannot show
   // that nothing covers the frame, so only a frame that Tempo ID trusts, as its loaded page
   // reports, signs in there. The frame takes the
   // request's own parameters, so an instance that pushes them signs in with a popup. Buy MACH on iOS
@@ -494,7 +493,7 @@ async function authorize<
     // Tempo ID's frame sets the request's resource to its own origin, so only a popup issues tokens
     // for a registered resource.
     resources(auth, rest).length === 0 &&
-    framed(auth, { redirectUri }) &&
+    framed({ redirectUri }) &&
     (visibility() || entry?.sheet.trusted() === true)
       ? 'iframe'
       : 'popup'
@@ -987,8 +986,8 @@ export declare namespace signIn {
     deferred?: boolean | undefined
     /**
      * `iframe` to sign in in a dialog on the page, or `popup` for a popup window. Defaults to
-     * `iframe`, which falls back to `popup` outside a secure context, on a page on `http:` for a
-     * Tempo ID on `https:`, for an instance that pushes its requests with `par`, and for a request
+     * `iframe`, which falls back to `popup` outside a secure context, for an instance that pushes
+     * its requests with `par`, and for a request
      * with `funding` whose deposit page runs Coinflow where no frame can: Buy MACH for a hint of
      * `MACH` on Tempo mainnet, on iOS and iPadOS.
      */
@@ -1343,13 +1342,13 @@ function slot(auth: Config) {
 
 /**
  * Returns whether Tempo ID can frame the sign-in on this page: a secure context on the redirect
- * URI's origin, and not a page on `http:` for a Tempo ID on `https:`.
+ * URI's origin. A page on `http://localhost` is a secure context, and Tempo ID's `frame-ancestors`
+ * names its origin, so its passkey ceremonies and frame cookies run as on `https:`.
  */
-function framed(auth: Config, options: framed.Options) {
+function framed(options: framed.Options) {
   return (
     window.isSecureContext &&
-    new URL(options.redirectUri).origin === window.location.origin &&
-    !Popup.http({ page: window.location.href, url: auth.url })
+    new URL(options.redirectUri).origin === window.location.origin
   )
 }
 
