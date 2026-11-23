@@ -18,8 +18,8 @@ export const path = '/api/account-proof'
 const challengeLifetime = 5 * 60 * 1000
 
 /**
- * Greatest length of a challenge of a request, in characters. A KV key holds 512 bytes, and a
- * character takes up to 3 of them.
+ * Greatest length of a challenge of a request, in characters, which bounds the key of the store.
+ * A character takes up to 3 bytes.
  */
 const maxChallengeLength = 160
 
@@ -51,10 +51,8 @@ async function issue(request: Request) {
 
 /**
  * Verifies the proof of a challenge, and returns the proven Tempo Account. The route spends the
- * challenge before it verifies the signature, so a second request with the same proof is refused.
- *
- * KV has no atomic delete, so the read and the delete are two calls. Two requests at the same time,
- * or a request in another location within a minute, can both read the challenge.
+ * challenge before it verifies the signature, so a second request with the same proof is refused,
+ * also one at the same time.
  */
 async function verify(request: Request) {
   const body = await read(request)
@@ -68,11 +66,9 @@ async function verify(request: Request) {
   )
     return refuse('invalid_request', 400)
 
-  const store = challenges()
-  const expiresAt = await store.getItem(challenge)
-  if (typeof expiresAt !== 'number') return refuse('invalid_challenge', 400)
-  await store.removeItem(challenge)
-  if (expiresAt <= Date.now()) return refuse('invalid_challenge', 400)
+  const expiresAt = await challenges().takeItem(challenge)
+  if (typeof expiresAt !== 'number' || expiresAt <= Date.now())
+    return refuse('invalid_challenge', 400)
 
   // Viem's default mode counts the signature of the account's owner, and not of an access key.
   const client = createClient({ chain: tempoTestnet, transport: http() })
@@ -135,7 +131,7 @@ async function verify_message(request: Request) {
 
 /** Returns the store of the challenges that `issue` keeps, each with its expiry in milliseconds. */
 function challenges() {
-  return Store.create({ prefix: 'account-proof:challenge:' })
+  return Store.durableObject({ prefix: 'account-proof:challenge:' })
 }
 
 /** Returns the JSON object of the request's body, or an empty object for any other body. */

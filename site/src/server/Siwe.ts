@@ -12,7 +12,8 @@ export const path = '/api/siwe'
 
 /**
  * Answers a request to a route of the topic. The handler serves its sign-in routes under
- * `/api/siwe/auth`, and keeps each challenge and each session in the store.
+ * `/api/siwe/auth`, and keeps each challenge and each session in a Durable Object, so each challenge
+ * verifies once, also for concurrent requests.
  *
  * | Route                                | Result                                                 |
  * | ------------------------------------ | ------------------------------------------------------ |
@@ -30,7 +31,7 @@ export async function fetch(request: Request): Promise<Response> {
     clientId: origin,
     handler: { basePath: path },
     plugins: [
-      backend({ store: Store.create({ prefix: 'siwe:' }) }),
+      backend({ store: Store.durableObject({ prefix: 'siwe:' }) }),
       siwe({ statement: 'Sign in to the demo of the accounts docs.' }),
     ],
   })

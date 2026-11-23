@@ -1,12 +1,14 @@
-/** The store of the demos' routes, in the Worker's KV namespace. @module */
-import { Store } from 'accounts'
-import { env } from 'cloudflare:workers'
+/** The stores of the demos' routes, in the Worker's KV namespace or in a Durable Object. @module */
+import { Store } from 'accounts/cloudflare'
+import { DurableObject, env } from 'cloudflare:workers'
 import { Json } from 'ox'
 
 declare global {
   namespace Cloudflare {
     /** The Worker's bindings, which `env` from `cloudflare:workers` holds. */
     interface Env {
+      /** The Durable Objects that hold each value that a route takes once, one for each prefix. */
+      DURABLE_STORE: DurableObjectNamespace<DurableStore>
       /** The KV namespace that holds each value of the demos' routes. */
       STORE: KVNamespace
     }
@@ -22,7 +24,8 @@ const leastTtl = 60
  * the routes of one topic read no value of another.
  *
  * KV is eventually consistent: a read in another location can miss a write of the last minute.
- * The store thus fits a demo, and not an app's sessions.
+ * The store thus fits a demo, and not an app's sessions. It has no `takeItem`, so a route whose
+ * values are taken once, such as a challenge, uses {@link durableObject} instead.
  *
  * @example
  * ```ts
@@ -65,5 +68,77 @@ export declare namespace create {
   type Options = {
     /** Text that each key of the store starts with, such as `backend:`. */
     prefix: string
+  }
+}
+
+/**
+ * Returns a store in the Durable Object of `DURABLE_STORE` that `prefix` names, such as for the
+ * challenges of the `siwe` plugin. Its `takeItem` reads and deletes a value in one call of the
+ * object, so of concurrent calls, only one receives the value.
+ *
+ * @example
+ * ```ts
+ * import { Accounts } from 'accounts'
+ * import { backend } from 'accounts/plugins'
+ * import * as Store from './Store.ts'
+ *
+ * const accounts = Accounts.create({
+ *   chain: 'testnet',
+ *   plugins: [backend({ store: Store.durableObject({ prefix: 'siwe:' }) })],
+ * })
+ * ```
+ */
+export function durableObject(
+  options: durableObject.Options,
+): durableObject.ReturnType {
+  const { prefix } = options
+  const stub = () => env.DURABLE_STORE.getByName(prefix)
+
+  return {
+    getItem: (key) => stub().getItem(key),
+    removeItem: (key) => stub().removeItem(key),
+    setItem: (key, value, options) => stub().setItem(key, value, options),
+    takeItem: (key) => stub().takeItem(key),
+  }
+}
+
+export declare namespace durableObject {
+  type Options = {
+    /** Name of the object that holds the store, such as `siwe:`. */
+    prefix: string
+  }
+
+  /** A {@link Store.Store} with `takeItem`. */
+  type ReturnType = Store.Store & {
+    takeItem: (key: string) => Promise<unknown>
+  }
+}
+
+/** The Durable Object that holds the store of {@link durableObject}, and deletes expired entries. */
+export class DurableStore extends DurableObject {
+  #store = Store.durableObject(this.ctx.storage)
+
+  alarm() {
+    return this.#store.alarm()
+  }
+
+  getItem(key: string): Promise<unknown> {
+    return this.#store.getItem(key)
+  }
+
+  removeItem(key: string) {
+    return this.#store.removeItem(key)
+  }
+
+  setItem(key: string, value: unknown, options?: Store.setItem.Options) {
+    return this.#store.setItem(key, value, options)
+  }
+
+  // Between the read and the delete, the object awaits only its storage, and its input gate admits
+  // no other call meanwhile, so only one call receives the value.
+  async takeItem(key: string): Promise<unknown> {
+    const value = await this.#store.getItem(key)
+    if (value !== undefined) await this.#store.removeItem(key)
+    return value
   }
 }
