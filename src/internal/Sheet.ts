@@ -40,7 +40,7 @@ const reportDelay = 500
 const curve = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 /**
- * The skeleton of the payment page, where its page in the 432-pixel frame draws its own skeleton,
+ * The skeleton of the payment page, where its page in the 400-pixel frame draws its own skeleton,
  * which skullet measures from the screen: the bar's address and close button, the header's logo,
  * title, and text, two cards and their rows, and the buttons. The second card draws two rows, the
  * currency and the account, whatever the payment's memo and fee. Each offset is in pixels from the
@@ -67,7 +67,7 @@ const payment = {
     { height: 20, radius: 0, right: 80, top: 369, width: 20 },
     { height: 12, right: 37, top: 374, width: 35 },
     { height: 12, left: 37, top: 418, width: 47 },
-    { height: 12, right: 37, top: 418, width: 247 },
+    { height: 12, right: 37, top: 418, width: 267 },
     { height: 40, left: 24, radius: 999, top: 470, width: 'calc(50% - 28px)' },
     { height: 40, radius: 999, right: 24, top: 470, width: 'calc(50% - 28px)' },
   ],
@@ -76,18 +76,17 @@ const payment = {
 } as const
 
 /**
- * The dialog's styles: a card of 432 pixels, the width of the popup window, or a bottom sheet below
- * 480 pixels of width. The frame draws the sign-in, so the dialog only places and sizes it. The
- * card sets its own `margin: auto`, which centers it, because a page's CSS reset removes the
- * browser's. A closed dialog keeps its size off screen, so a hidden frame lays out at the width
- * that it shows at. A browser with `corner-shape` draws squircle corners, with a larger radius for
- * the same visual size. A click on the backdrop targets the dialog, so the dialog takes no
- * selection, which repeated clicks would draw over the frame. The dialog's fill is the design
- * system's `background.elevated`, which the frame's page draws too, so the dialog shows no seam
- * while the frame loads. IntersectionObserver v2 reports the frame not visible under an opacity
- * below 1 or a scale, and `/embed` waits for a visible frame before it acts. So the card's entrance
- * translates without a scale, and its fade takes 120 milliseconds of the 320 that the translate
- * takes.
+ * The dialog's styles: a card of 400 pixels, or a bottom sheet below 480 pixels of width. The frame
+ * draws the sign-in, so the dialog only places and sizes it. The card sets its own `margin: auto`,
+ * which centers it, because a page's CSS reset removes the browser's. A closed dialog keeps its size off
+ * screen, so a hidden frame lays out at the width that it shows at. A browser with `corner-shape`
+ * draws squircle corners, with a larger radius for the same visual size. A click on the backdrop
+ * targets the dialog, so the dialog takes no selection, which repeated clicks would draw over the
+ * frame. The dialog's fill is the design system's `background.elevated`, which the frame's page
+ * draws too, so the dialog shows no seam while the frame loads. IntersectionObserver v2 reports the
+ * frame not visible under an opacity below 1 or a scale, and `/embed` waits for a visible frame
+ * before it acts. So the card's entrance translates without a scale, and its fade takes 120
+ * milliseconds of the 320 that the translate takes.
  */
 const css = `
 dialog[${attribute}] {
@@ -104,7 +103,7 @@ dialog[${attribute}] {
   padding: 0;
   -webkit-user-select: none;
   user-select: none;
-  width: 432px;
+  width: 400px;
 }
 dialog[${attribute}]:not([open]) {
   display: block;
