@@ -241,7 +241,9 @@ export function create(client: create.Client): Store.Store {
 
   return {
     // The instances on the store in this process hear the saved changes of each other through it.
-    connect: Broadcast.create(),
+    // A runtime without `WeakRef`, such as a Worker with a compatibility date before 2025-05-05,
+    // has no `connect`, so its instances read sign-outs from Redis instead.
+    ...(typeof WeakRef === 'function' ? { connect: Broadcast.create() } : {}),
     getItem,
     json: true,
     lock,
