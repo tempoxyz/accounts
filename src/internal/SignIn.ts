@@ -43,22 +43,28 @@ export type External = Permissions & {
 }
 
 /**
- * Returns the access key of a sign-in, or `undefined` for a sign-in without an access key. An
- * access key without `expiry` expires `AccessKey.defaultExpiry` after the sign-in. The default
- * access key of an instance without `accessKey` applies only to a sign-in without a challenge, on a
- * store that can keep it. Throws a `TypeError` on a page whose instance's `store` has `json`, for
- * an access key that the sign-in generates, before any request.
+ * Returns the access key of a sign-in, or `undefined` for a sign-in without an access key, such as
+ * one without a Tempo Account. An access key without `expiry` expires `AccessKey.defaultExpiry`
+ * after the sign-in. The default access key of an instance without `accessKey` applies only to a
+ * sign-in without a challenge, on a store that can keep it. Throws a `TypeError` for an access key
+ * beside `account: false`, and on a page whose instance's `store` has `json`, for an access key
+ * that the sign-in generates, before any request.
  */
 export function accessKey(
   context: Plugin.Context,
   value: AccessKeyOption_external,
   options: accessKey.Options = {},
 ): Permissions | External | undefined {
+  if (options.account === false && value)
+    throw new TypeError(
+      'Conflicting options: `accessKey` describes an access key for a Tempo Account, which `account: false` creates none of. Remove `accessKey`, or remove `account`.',
+    )
   const resolved = (() => {
     const given = (() => {
       if (value === false) return undefined
       if (typeof value === 'function') return value()
       if (value) return value
+      if (options.account === false) return undefined
       const configured = context.accessKey()
       if (configured) return configured
       // With the default access key, the challenge's signature would sign the key authorization,
@@ -90,10 +96,56 @@ export function accessKey(
 
 export declare namespace accessKey {
   type Options = {
+    /** The sign-in's own `account`. `false` requests no access key. */
+    account?: boolean | undefined
     /** Whether the sign-in carries a challenge. Defaults to `false`. */
     challenge?: boolean | undefined
   }
 }
+
+/**
+ * Returns whether a sign-in returns the user's Tempo Account: its own `account`, else `true` for a
+ * sign-in that names an access key, else the instance's `account`.
+ */
+export function withAccount(
+  context: Pick<Plugin.Context, 'config'>,
+  options: withAccount.Options,
+): boolean {
+  if (options.account !== undefined) return options.account
+  if (options.accessKey) return true
+  return context.config.account !== false
+}
+
+export declare namespace withAccount {
+  type Options = {
+    /** The sign-in's own `accessKey`. */
+    accessKey?: AccessKeyOption_external
+    /** The sign-in's own `account`. */
+    account?: boolean | undefined
+  }
+}
+
+/**
+ * The `accessKey` and `account` of a sign-in. An access key acts for a Tempo Account, so the type
+ * refuses one beside `account: false`.
+ */
+export type AccountOption<accessKey> =
+  | {
+      accessKey?: accessKey
+      /**
+       * Whether the sign-in returns the user's Tempo Account. Defaults to `true` for a sign-in that
+       * names an access key, else to the instance's `account`.
+       */
+      account?: true | undefined
+    }
+  | {
+      accessKey?: false | undefined
+      /**
+       * Signs the user in without a Tempo Account and without an access key, in place of the
+       * instance's `account`.
+       */
+      account: false
+    }
 
 /** Returns the session of a sign-in's result: its tokens, its user, its access key, and its account. */
 export function toSession(

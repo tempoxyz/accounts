@@ -75,6 +75,7 @@ export function passkey(options: passkey.Options = {}) {
       async function finish(
         change: ReturnType<Plugin.Context['session']['change']>,
         result: PasskeyActions.signIn.ReturnType,
+        withAccount: boolean,
       ): Promise<passkey.signIn.ReturnType> {
         if ('next' in result) {
           await change.check()
@@ -82,10 +83,11 @@ export function passkey(options: passkey.Options = {}) {
         }
 
         // The sign-in's own response holds the account that Tempo ID selects for the app. A server
-        // that predates it is read once, unless an access key names the account.
+        // that predates it is read once, unless an access key names the account. A sign-in without
+        // a Tempo Account reads none.
         const account = await (async () => {
           if ('account' in result) return result.account
-          if ('accessKey' in result) return undefined
+          if (!withAccount || 'accessKey' in result) return undefined
           // A refused read leaves the session without the account, since the user is signed in.
           return await SignIn.account(config, {
             getFn,
@@ -153,6 +155,9 @@ export function passkey(options: passkey.Options = {}) {
          * own witness signs its EIP-191 hash in a third prompt. If that prompt fails, the session
          * still holds the registration's access key, and the call throws the failure.
          *
+         * @throws {Accounts.RequestError} With `invalid_request`, the field `account`, and status 0,
+         *   before any request, on an instance with `account: false`, since a new passkey owns a
+         *   Tempo Account.
          * @throws {Accounts.RequestError} When Tempo ID refuses the registration, with one of these
          *   `reason` values, which
          *   [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md) describes:
@@ -222,6 +227,16 @@ export function passkey(options: passkey.Options = {}) {
           // instance on the same store clears the mark, as `signedOut` reads it. An instance that
           // holds a session reads the mark too, since another process on the store, such as a
           // replica on one `Store.postgres` table, posts it no message of its sign-out.
+          // A new passkey always owns a Tempo Account, which an instance with `account: false` holds
+          // none of.
+          if (config.account === false)
+            throw new Accounts.RequestError({
+              code: 'invalid_request',
+              field: 'account',
+              message:
+                'Invalid account: a passkey registration creates a Tempo Account, which `account: false` creates none of. Create the instance without `account`.',
+              status: 0,
+            })
           if (await context.session.signedOut())
             throw new Accounts.RequestError({
               code: 'login_required',
@@ -296,8 +311,10 @@ export function passkey(options: passkey.Options = {}) {
             try {
               return {
                 accessKey: SignIn.accessKey(context, parameters.accessKey, {
+                  account: parameters.account,
                   challenge: parameters.challenge !== undefined,
                 }),
+                account: SignIn.withAccount(context, parameters),
               }
             } catch (error) {
               return { error }
@@ -322,6 +339,7 @@ export function passkey(options: passkey.Options = {}) {
           const request = (available: boolean | Promise<boolean>) =>
             PasskeyActions.prepare(config, {
               accessKey: resolved.accessKey,
+              account: resolved.account,
               available,
               chainId,
               challenge: parameters.challenge,
@@ -346,7 +364,7 @@ export function passkey(options: passkey.Options = {}) {
                 prepared = request(await prepared.available)
               }
               const result = await prepared.signIn({ getFn }).catch(change.fail)
-              return finish(change, result)
+              return finish(change, result, resolved.account)
             },
           }
         },
@@ -430,10 +448,13 @@ export function passkey(options: passkey.Options = {}) {
           // The change starts first, so a sign-out that starts during the read of the mark
           // supersedes the sign-in. The options request awaits the read beside the access key.
           const change = context.session.change()
+          const account = SignIn.withAccount(context, parameters)
           const result = await PasskeyActions.signIn(config, {
             accessKey: SignIn.accessKey(context, parameters.accessKey, {
+              account: parameters.account,
               challenge: parameters.challenge !== undefined,
             }),
+            account,
             chainId: config.chainId,
             challenge: parameters.challenge,
             credentialId: parameters.credentialId,
@@ -441,7 +462,7 @@ export function passkey(options: passkey.Options = {}) {
             mediation: parameters.mediation,
             select: select(parameters),
           }).catch(change.fail)
-          return finish(change, result)
+          return finish(change, result, account)
         },
       }
     },
@@ -563,7 +584,7 @@ export declare namespace passkey {
   }
 
   namespace signIn {
-    type Parameters = {
+    type Parameters = SignIn.AccountOption<SignIn.AccessKeyOption_external> & {
       /**
        * The access key to request: what it may do, a function that returns it, or `false` for a
        * sign-in without an access key. Defaults to the instance's `accessKey`.
