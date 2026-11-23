@@ -129,6 +129,7 @@ export function device(options: device.Options = {}) {
               challenge: parameters.challenge,
               funding: parameters.funding,
               resource: parameters.resource,
+              scope: parameters.scope,
             }),
           )
           await until(
@@ -269,6 +270,8 @@ export function device(options: device.Options = {}) {
          *   describes:
          *   - `rejected`: `clientId` names no enabled public first-party device app.
          *   - `invalid_target`: `resource` names a resource that is not registered, or is disabled.
+         *   - `invalid_scope`: `scope` names a resource's own scope that the request names no
+         *     resource for, or that the resource does not define or the app may not request.
          *   - `invalid_chain`, `missing_key`, `missing_permissions`, `invalid_public_key`,
          *     `invalid_expiry`, `expiry_passed`, `empty_limits`, `empty_scopes`, `duplicate_limit`,
          *     `unsupported_token`, `invalid_period`, `scope_without_limit`, `unsupported_call`,
@@ -550,6 +553,14 @@ export declare namespace device {
        * `invalid_target`.
        */
       resource?: Config['resource']
+      /**
+       * Scopes beside the instance's `scope`, separated by spaces, such as `data:read` for an API that
+       * defines it as [its own scope](https://github.com/tempoxyz/id/blob/main/docs/resources.md)
+       * with `resource` naming it. The device page lists the API's scopes, and the tokens carry those
+       * that the user keeps. A scope that the API does not define, or that the app may not request,
+       * fails with `invalid_scope`.
+       */
+      scope?: string | undefined
       /**
        * Stops the polls, and rejects with the signal's reason. An aborted call shows no code. A
        * poll in flight finishes, so an approval that it carries still returns. Absent, the polls

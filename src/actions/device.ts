@@ -75,6 +75,14 @@ export async function authorize<
   // are for the code's resources.
   for (const resource of resources(auth, options))
     body.append('resource', resource)
+  // Each ID token needs `openid` and `email`, so the call's scopes add to the instance's.
+  if (options.scope !== undefined)
+    body.set(
+      'scope',
+      [...new Set([...auth.scope.split(' '), ...options.scope.split(' ')])]
+        .filter(Boolean)
+        .join(' '),
+    )
   const code = await Api.json<{
     device_code: string
     expires_in: number
@@ -220,6 +228,8 @@ export declare namespace authorize {
      * ID's origin. An unknown or disabled resource fails with `invalid_target`.
      */
     resource?: Config['resource']
+    /** Scopes that the code requests beside the instance's `scope`, as `device.signIn` describes. */
+    scope?: string | undefined
   }
 
   /** The authorization of an approved grant, without an access key for a grant without one. */

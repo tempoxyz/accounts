@@ -523,6 +523,54 @@ export function jkt(token: string) {
 }
 
 /**
+ * Returns the `resource` and `scope` of an access token that holds scopes beyond the instance's, such
+ * as an API's own, so a new grant requests them again. Returns `{}` for any other token.
+ */
+export function grant(
+  auth: Pick<Accounts.Config, 'scope' | 'url'>,
+  token: string,
+): grant.ReturnType {
+  try {
+    const payload = token.split('.')[1] ?? ''
+    if (!segment.test(payload)) return {}
+    const claims = JSON.parse(Base64.toString(payload)) as {
+      aud?: unknown
+      iss?: unknown
+      scope?: unknown
+    }
+    if (typeof claims.scope !== 'string') return {}
+    const own = new Set(auth.scope.split(' '))
+    if (claims.scope.split(' ').every((entry) => !entry || own.has(entry)))
+      return {}
+    // An API's own scopes need the API as `resource`. The audience also names Tempo ID's userinfo
+    // endpoint, which is no resource, on its public origin (`iss`), which `url` may not match.
+    const origin = new URL(
+      typeof claims.iss === 'string' ? claims.iss : auth.url,
+    ).origin
+    const resource = [claims.aud]
+      .flat()
+      .filter(
+        (entry): entry is string =>
+          typeof entry === 'string' && new URL(entry).origin !== origin,
+      )
+    if (resource.length === 0) return {}
+    return { resource, scope: claims.scope }
+  } catch {
+    // A token that does not decode holds no scopes to request again.
+    return {}
+  }
+}
+
+export declare namespace grant {
+  type ReturnType = {
+    /** The token's audiences outside Tempo ID. */
+    resource?: readonly string[] | undefined
+    /** The token's scopes, separated by spaces. */
+    scope?: string | undefined
+  }
+}
+
+/**
  * Milliseconds past a token's `exp` before `expired` returns `true`. A verifier accepts a token up
  * to 60 seconds past `exp`, so a device clock that runs fast keeps the token as long.
  */

@@ -480,6 +480,43 @@ export const accounts = Accounts.create({
 
 :::
 
+### Request an API's scopes
+
+An API can define [scopes of its own](https://github.com/tempoxyz/id/blob/main/docs/resources.md#resource-scopes), such as the Tempo API's `data:read`. <SourceLink name="signIn.scope" path="src/plugins/device.ts">`scope`</SourceLink> requests them beside `resource`, in addition to the instance's `scope`, for an app that an admin linked to the API's scopes. The device page lists them, the user can uncheck any, and the tokens carry those the user kept. A scope that the API does not define, or that the app may not request, fails with `invalid_scope`.
+
+:::code-group
+
+```ts [index.ts]
+import { accounts } from './tempo.config.js'
+
+const { user } = await accounts.device.signIn({
+  resource: 'https://api.tempo.xyz',
+  scope: 'data:read routes:read', // [!code hl]
+})
+console.log(`Signed in as ${user.email}.`)
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { device } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  // A registered app that a Tempo ID admin linked to the API's scopes.
+  clientId: 'acme-cli',
+  plugins: [
+    device({
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+  ],
+})
+```
+
+:::
+
 ### Sign in without a wallet
 
 With <SourceLink name="Config.account" path="src/Accounts.ts">`account: false`</SourceLink>, the device grant requests no access key, and the session holds only the user and the tokens. Tempo ID creates no Tempo Account for an app whose [first account](https://github.com/tempoxyz/id/blob/main/docs/realms.md#apps-without-a-first-account) is `none`. With `accessKey: false`, the user receives a Tempo Account, and no access key.
