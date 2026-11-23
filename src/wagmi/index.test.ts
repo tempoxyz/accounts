@@ -1306,6 +1306,64 @@ describe('tempoId', () => {
     return { config, connector, events, instance, store }
   }
 
+  test('disconnects once at the expiry when a renewal fails before a read empties the expired session', async () => {
+    const key =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]'
+    const saved = await sessionStore({ expiresIn: 2 })
+    // After `failing`, the store refuses each read, so the renewal's read of the session rejects.
+    const reads = { failing: false }
+    const store = Store.from({
+      ...saved,
+      getItem(name) {
+        if (reads.failing) return Promise.reject(new Error('Store locked.'))
+        return saved.getItem(name)
+      },
+    })
+    const config = createConfig({
+      chains: [tempo],
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          store,
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
+    })
+    await reconnect(config)
+    const connector = config.connectors[0]!
+    const instance = await connector.getInstance()
+    const provider = (await connector.getProvider()) as {
+      on: (event: 'disconnect', listener: () => void) => void
+    }
+    const events: string[] = []
+    provider.on('disconnect', () => events.push('provider:disconnect'))
+    await expect
+      .poll(() => instance.session.status.get().status, { timeout: 5_000 })
+      .toBe('signedOut')
+
+    reads.failing = true
+    const renewal = await instance.session.get({ reauthorize: true }).then(
+      () => 'resolved',
+      (error: Error) => error.message,
+    )
+    reads.failing = false
+    events.push('read')
+    await connector.getAccounts()
+
+    expect({ events, renewal, saved: (await saved.getItem(key)) !== undefined })
+      .toMatchInlineSnapshot(`
+        {
+          "events": [
+            "provider:disconnect",
+            "read",
+          ],
+          "renewal": "Store locked.",
+          "saved": true,
+        }
+      `)
+  }, 10_000)
+
   test("connects again when the same account's valid session replaces the expired one", async () => {
     const owner = Secp256k1.randomPrivateKey()
     const { config, connector, events, store } = await expiring({ owner })
