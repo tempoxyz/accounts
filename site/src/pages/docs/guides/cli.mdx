@@ -482,7 +482,7 @@ export const accounts = Accounts.create({
 
 ### Request an API's scopes
 
-An API can define [scopes of its own](https://github.com/tempoxyz/id/blob/main/docs/resources.md#resource-scopes), such as the Tempo API's `data:read`. <SourceLink name="signIn.scope" path="src/plugins/device.ts">`scope`</SourceLink> requests them beside `resource`, for an app that an admin linked to the API's scopes. The device page lists them, the user can uncheck any, and the tokens carry those the user kept. A scope that the API does not define, or that the app may not request, fails with `invalid_scope`.
+An API can define [scopes of its own](https://github.com/tempoxyz/id/blob/main/docs/resources.md#resource-scopes), such as the Tempo API's `data:read`. <SourceLink name="signIn.scope" path="src/plugins/device.ts">`scope`</SourceLink> requests them beside `resource`, in addition to the instance's `scope`, for an app that an admin linked to the API's scopes. The device page lists them, the user can uncheck any, and the tokens carry those the user kept. A scope that the API does not define, or that the app may not request, fails with `invalid_scope`.
 
 :::code-group
 
@@ -491,7 +491,7 @@ import { accounts } from './tempo.config.js'
 
 const { user } = await accounts.device.signIn({
   resource: 'https://api.tempo.xyz',
-  scope: `${accounts.config.scope} data:read routes:read`, // [!code hl]
+  scope: 'data:read routes:read', // [!code hl]
 })
 console.log(`Signed in as ${user.email}.`)
 ```

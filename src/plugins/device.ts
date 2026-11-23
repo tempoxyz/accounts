@@ -554,10 +554,11 @@ export declare namespace device {
        */
       resource?: Config['resource']
       /**
-       * The scopes of the tokens, separated by spaces, such as `openid email data:read` for an API
-       * that defines `data:read` as [its own scope](https://github.com/tempoxyz/id/blob/main/docs/resources.md)
+       * Scopes beside the instance's `scope`, separated by spaces, such as `data:read` for an API that
+       * defines it as [its own scope](https://github.com/tempoxyz/id/blob/main/docs/resources.md)
        * with `resource` naming it. The device page lists the API's scopes, and the tokens carry those
-       * that the user keeps. Defaults to Tempo ID's default scopes.
+       * that the user keeps. A scope that the API does not define, or that the app may not request,
+       * fails with `invalid_scope`.
        */
       scope?: string | undefined
       /**

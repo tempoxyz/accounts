@@ -75,8 +75,14 @@ export async function authorize<
   // are for the code's resources.
   for (const resource of resources(auth, options))
     body.append('resource', resource)
-  // Without `scope`, Tempo ID grants its default scopes. A resource's own scopes need its `resource`.
-  if (options.scope !== undefined) body.set('scope', options.scope)
+  // Each ID token needs `openid` and `email`, so the call's scopes add to the instance's.
+  if (options.scope !== undefined)
+    body.set(
+      'scope',
+      [...new Set([...auth.scope.split(' '), ...options.scope.split(' ')])]
+        .filter(Boolean)
+        .join(' '),
+    )
   const code = await Api.json<{
     device_code: string
     expires_in: number
@@ -222,12 +228,7 @@ export declare namespace authorize {
      * ID's origin. An unknown or disabled resource fails with `invalid_target`.
      */
     resource?: Config['resource']
-    /**
-     * The scopes of the tokens, separated by spaces, such as `openid email data:read` for an API
-     * that defines `data:read` as its own scope with `resource` naming it. The device page lists the
-     * API's scopes, and the tokens carry those that the user keeps. Defaults to Tempo ID's default
-     * scopes. A scope that the resource or the app may not request fails with `invalid_scope`.
-     */
+    /** Scopes that the code requests beside the instance's `scope`, as `device.signIn` describes. */
     scope?: string | undefined
   }
 
