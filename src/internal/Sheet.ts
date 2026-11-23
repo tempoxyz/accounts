@@ -78,8 +78,11 @@ const payment = {
 /**
  * The dialog's styles: a card of 400 pixels, or a bottom sheet below 480 pixels of width. The frame
  * draws the sign-in, so the dialog only places and sizes it. The card sets its own `margin: auto`,
- * which centers it, because a page's CSS reset removes the browser's. A closed dialog keeps its size off
- * screen, so a hidden frame lays out at the width that it shows at. A browser with `corner-shape`
+ * which centers it, because a page's CSS reset removes the browser's. A closed dialog stays on screen
+ * at its size, transparent and without pointer events, since Chromium paints no cross-origin frame
+ * that is off screen or hidden. So a preloaded frame paints its request and reports its height before
+ * the dialog shows. The dialog takes no transition, which a page's reduced-motion reset adds to every
+ * element, so it leaves the top layer in one frame. A browser with `corner-shape`
  * draws squircle corners, with a larger radius for the same visual size. A click on the backdrop
  * targets the dialog, so the dialog takes no selection, which repeated clicks would draw over the
  * frame. The dialog's fill is the design system's `background.elevated`, which the frame's page
@@ -101,16 +104,18 @@ dialog[${attribute}] {
   max-width: calc(100vw - 32px);
   overflow: hidden;
   padding: 0;
+  transition: none !important;
   -webkit-user-select: none;
   user-select: none;
   width: 400px;
 }
 dialog[${attribute}]:not([open]) {
   display: block;
-  left: -10000px;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
   position: fixed;
   top: 0;
-  visibility: hidden;
 }
 dialog[${attribute}]::backdrop {
   background: rgb(0 0 0 / 0.4);
