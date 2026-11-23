@@ -768,11 +768,16 @@ export function mpp(options: mpp.Options = {}) {
           signing.page === true &&
           !overrides.session &&
           typeof document !== 'undefined'
+        // Outside a page, the instance's session without an access key sends each request with its
+        // identity, as a page does, and a charge challenge throws `AccessKeyRequiredError`.
+        const unpaid =
+          signing.page === true && !overrides.session && !current.accessKey
         // No access key of the session signs here, and no sign-in adds one, so the payment page
         // pays each charge. The payer holds no access key, so it is the same for each session.
         if (
-          paged &&
-          Token.ownerSends(current, { chainId: instance.config.chainId })
+          unpaid ||
+          (paged &&
+            Token.ownerSends(current, { chainId: instance.config.chainId }))
         ) {
           const chainId = instance.config.chainId
           // The instance's session sends its identity while it holds the same user, as the access
@@ -796,8 +801,9 @@ export function mpp(options: mpp.Options = {}) {
             identity,
             landed: registrations.landed,
             limits: undefined,
-            pay: (transfer) =>
-              pay(transfer, { chainId, signal: signing.signal }),
+            pay: paged
+              ? (transfer) => pay(transfer, { chainId, signal: signing.signal })
+              : undefined,
             subscribe: undefined,
             turn: registrations.turn,
             verify: undefined,
@@ -1508,10 +1514,11 @@ export declare namespace mpp {
      *   as another process of a server, signed out or signed in another user or Tempo Account.
      *   Before the dialog opens, for a subscription challenge after the tab signed out or switched
      *   accounts.
-     * @throws {Accounts.AccessKeyRequiredError} For a session without an access key. In a browser,
-     *   Tempo ID's payment page pays a charge of such an instance's session, if one transfer in
-     *   `push` mode pays the charge. The error is then thrown only once a challenge needs an access
-     *   key.
+     * @throws {Accounts.AccessKeyRequiredError} For a fixed `session` without an access key, before
+     *   any request. The instance's session without an access key sends the request, with its
+     *   identity, and throws only once a challenge needs an access key. In a browser, Tempo ID's
+     *   payment page pays a charge of such a session, if one transfer in `push` mode pays the
+     *   charge.
      * @throws {AccessKey.SignerRequiredError} For an access key without material, and no `signer`
      *   override.
      * @throws {AccessKey.KeyTypeError} With the `signer` override, for a session whose
@@ -1921,8 +1928,10 @@ function create(options: {
   } = options
   // A payer of the payment page alone holds no access key. `check` pays each of its charges or
   // refuses it, so the method signs nothing.
+  // A payer of a named account pays only a subscription. Any other payer takes a charge, and `check`
+  // refuses one that no access key and no payment page pays with `AccessKeyRequiredError`.
   const charge =
-    account || pay
+    account || pay || !address
       ? ([
           tempo.charge({
             ...(account ? { account } : {}),

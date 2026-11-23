@@ -1310,6 +1310,63 @@ describe('mpp', () => {
     `)
   })
 
+  test("sends the identity of the instance's session without an access key outside a page, and refuses its charge challenge with Accounts.AccessKeyRequiredError", async () => {
+    const store = Store.memory()
+    await store.setItem(name, {
+      state: {
+        session: {
+          ...session({ expiry: 3600 }),
+          accessKey: undefined,
+          idToken: 'id-token',
+        },
+      },
+      version: 0,
+    })
+    const requests: Request[] = []
+    const endpoint = server({ amount: '1' })
+    const accounts = instance({
+      fetch: (input, init) => {
+        const request = new Request(input, init)
+        requests.push(request)
+        if (request.url.endsWith('/fortune'))
+          return Promise.resolve(new Response('free'))
+        return endpoint.fetch(request)
+      },
+      identity: { scope: ['https://api.example.com'] },
+      store,
+    })
+
+    const free = await accounts
+      .fetch('https://api.example.com/fortune')
+      .then((response) => response.text())
+    const paid = await accounts
+      .fetch('https://api.example.com/charge')
+      .catch((error: Error) => error.name)
+
+    expect(free).toMatchInlineSnapshot(`"free"`)
+    expect(paid).toMatchInlineSnapshot(`"Accounts.AccessKeyRequiredError"`)
+    expect(
+      requests.map((request) => [
+        new URL(request.url).pathname,
+        request.headers.get('authorization'),
+        request.headers.get('tempo-id-token'),
+      ]),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          "/fortune",
+          "Bearer access-token",
+          "id-token",
+        ],
+        [
+          "/charge",
+          "Bearer access-token",
+          "id-token",
+        ],
+      ]
+    `)
+  })
+
   test('sends the paid retry without identity once the session can no longer read its access token', async () => {
     const owner = Secp256k1.randomPrivateKey()
     const store = Store.memory()
