@@ -687,7 +687,7 @@ test.describe('dialog', () => {
       content: '@layer reset { *, ::backdrop { margin: 0; } }',
     })
 
-    await test.step('opens the dialog in the middle of the viewport', async () => {
+    await test.step('opens the dialog as a 400-pixel card in the middle of the viewport', async () => {
       await Playwright.start(page, { name: 'Sign in' })
       await Playwright.dialog(page)
 
@@ -698,6 +698,7 @@ test.describe('dialog', () => {
       expect(box).not.toBeNull()
       expect(viewport).not.toBeNull()
       if (!box || !viewport) return
+      expect(box.width).toBe(400)
       expect(Math.round(box.x * 2 + box.width)).toBe(viewport.width)
       expect(Math.round(box.y * 2 + box.height)).toBe(viewport.height)
       await capture('centered')
