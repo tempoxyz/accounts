@@ -1,8 +1,7 @@
 # Deploys the documentation site of `site/` to the production Cloudflare account. A push to main
 # deploys the Worker through the Cloudflare Deploy Broker, and no job of the push holds a Cloudflare
-# token. A pull request's build job runs the repository's code without secrets, and uploads the
-# Worker bundle and the files of the site. After it succeeds, `site-preview.yml` runs main's code to
-# upload them as a version with the preview alias `pr-<number>`.
+# token. A pull request's build job builds the site and bundles the Worker without secrets, and
+# deploys nothing. The Worker implements a Durable Object, so Cloudflare gives it no preview URL.
 name: Site
 on:
   pull_request:
@@ -68,22 +67,11 @@ jobs:
       - name: Build site
         run: pnpm --dir site build
 
-      # `site-preview.yml` checks out only main, and installs no dependency of this pull request, so
-      # this job bundles the Worker of `src/server/`. The preview uploads the bundle as it is.
+      # The dry run bundles the Worker of `src/server/` and reads `wrangler.json`, so a fault of
+      # either fails the pull request before main deploys it.
       - name: Bundle Worker
         working-directory: site
         run: pnpm exec wrangler deploy --dry-run --outdir dist/worker
-
-      # `site-preview.yml` reads the files at `public/` and the bundle at `worker/` of the artifact.
-      - name: Upload site
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          if-no-files-found: error
-          name: site
-          path: |
-            site/dist/public/
-            site/dist/worker/
-          retention-days: 1
 
   # The broker uploads the attested version, promotes it, and checks Cloudflare's readback. The
   # Worker keeps its secrets and its KV namespace.
