@@ -17,6 +17,8 @@ import * as SignOut from './SignOut.ts'
 import * as Siwe from './Siwe.ts'
 import * as Subscriptions from './Subscriptions.ts'
 
+export { DurableStore } from './Store.ts'
+
 /** A route of a topic, as a function of the Fetch API. */
 type Route = (request: Request) => Promise<Response> | Response
 
