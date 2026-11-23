@@ -578,6 +578,80 @@ describe('create', () => {
     )
   })
 
+  test('gives plugins `config.account` of `account: false`, no default access key for `account: false` or `accessKey: false`, and the default access key without either', () => {
+    const resolve = (options: Accounts.create.Options) => {
+      let seen: unknown[] = []
+      Accounts.create({
+        ...options,
+        clientId: 'client_acme',
+        plugins: [
+          Plugin.from({
+            actions: (context) => {
+              seen = [context.config.account, context.defaultAccessKey()]
+              return {}
+            },
+            id: 'probe',
+          }),
+        ],
+        store: false,
+      })
+      return seen
+    }
+
+    expect([
+      resolve({}),
+      resolve({ accessKey: false }),
+      resolve({ account: false }),
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          undefined,
+          {
+            "expiry": "1d",
+            "limits": [
+              {
+                "limit": "5",
+                "token": "ousd",
+              },
+            ],
+          },
+        ],
+        [
+          undefined,
+          undefined,
+        ],
+        [
+          false,
+          undefined,
+        ],
+      ]
+    `)
+  })
+
+  test('throws a TypeError for `accessKey` beside `account: false`, which the type refuses too', () => {
+    const typed = () =>
+      Accounts.create({
+        accessKey: { limits: [] },
+        // @ts-expect-error An access key acts for a Tempo Account.
+        account: false,
+        clientId: 'client_acme',
+        store: false,
+      })
+    const create = (accessKey: object | false) => () =>
+      Accounts.create({
+        ...({
+          accessKey,
+          account: false,
+        } as unknown as Accounts.create.Options),
+        clientId: 'client_acme',
+        store: false,
+      })
+
+    expect(typed).toThrow(TypeError)
+    expect(create(() => undefined)).toThrow(TypeError)
+    expect(create(false)).toThrow(TypeError)
+  })
+
   test('throws ChainNameInvalidError for a `chain` that names no chain, such as an environment variable', () => {
     const errors = ['localnet', '1337', 'Testnet'].map((chain) => {
       try {

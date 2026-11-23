@@ -75,7 +75,7 @@
 - The root entry exports only `AccessToken`, `Accounts`, `Challenge`, `LogoutToken`, `Permissions`, `Plugin`, `Session`, and `Store`, which sit at the top of `src/`. Every other module goes in `src/internal/`, and `accounts/internal` exports those that apps can use.
 - The root entry's `Accounts` is `src/internal/DefaultAccounts.ts`: `src/Accounts.ts` with a `create` that adds the `dialog`, `funding`, and `mpp` plugins. `accounts/lite` exports `src/Accounts.ts` itself. `src/Accounts.ts` never imports a default plugin, so the bundle of `accounts/lite` holds none.
 - Prefer stateless functions. Create an instance only for dependencies or lifecycle state, through `Module.create(options)` returning a plain object.
-- `Accounts.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons, except a lock on a resource of the whole device that no instance owns, such as the `expo` preset's lock on the device's secure store.
+- `Accounts.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons, except a lock or a `connect` on a resource of the whole device that no instance owns, such as the `expo` preset's lock and `connect` on the device's secure store.
 - Inject platform capabilities (fetch, storage, clock, `open`) through options. Keep them out of pure modules.
 - Type dependencies by the smallest capability used.
 - Factory operations close over state. Never depend on `this`.
@@ -333,7 +333,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - Name what changed, with codebase identifiers. State the change, not the reason.
 - Each message stands alone.
 - Keep the PR title accurate, since it becomes the squash commit.
-- Keep PR bodies short. Open with the release note: what changed for an app, in the past tense, such as "Added `loginHint` to `dialog.signIn`." Name exports in backticks. For a breaking change, add the migration and at most one short `ts` block.
+- Keep PR bodies short. Open with the release note: one or two sentences in the past tense that start with the verb, such as "Added `loginHint` to `dialog.signIn`." or "Fixed `accounts.pay` to throw `Accounts.SignedOutError` for a session whose access keys expired." No "now", "before", or background. Name exports in backticks. For a breaking change, add the migration and at most one short `ts` block.
 - Put the problem, the example, and the validation under `##` headings, such as `## API changes` and `## How to test`, also for the sections below. The release notes take the body only up to its first heading.
 - Never force push or amend a pushed commit.
 

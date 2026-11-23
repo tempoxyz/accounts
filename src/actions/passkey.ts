@@ -164,11 +164,11 @@ export declare namespace prepare {
      */
     accessKey?: accessKey
     /**
-     * `false` leaves out `account`, so Tempo ID reads no Tempo Accounts. Absent, the sign-in returns
-     * the user's Tempo Account in the realms of the app, as `Actions.account.get` does, on the
-     * chain of the access key, so no read follows it.
+     * `false` leaves out `account`, so Tempo ID reads no Tempo Accounts. `true` returns the user's
+     * Tempo Account in the realms of the app, as `Actions.account.get` does, on the chain of the
+     * access key, so no read follows it. Defaults to the `account` of `auth`, else `true`.
      */
-    account?: false | undefined
+    account?: boolean | undefined
     /**
      * Whether a passkey sign-in runs on this page, if the app knows it, such as a first-party app
      * on its own origin. The handle then sends no `GET /v1/realms`, and with `true` requests the
@@ -956,7 +956,7 @@ async function verify(auth: Config, options: verify.Options) {
       headers: await Headless.redemption(auth),
       json: {
         assertion,
-        ...(prepared.request.account === false
+        ...((prepared.request.account ?? auth.account) === false
           ? { tempo: false }
           : chain !== undefined
             ? { account: { chain } }
