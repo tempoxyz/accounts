@@ -430,7 +430,8 @@ export declare namespace email {
       challenge?: string | undefined
       /**
        * The 6-digit code that Tempo ID emailed. The call drops each character other than a digit,
-       * such as the spaces of a pasted code.
+       * such as the spaces of a pasted code. It reads a full-width or Arabic-Indic digit, as a
+       * Japanese input method or a Persian keyboard types it, as its ASCII digit.
        */
       code: string
       /** The address that received the code. */
