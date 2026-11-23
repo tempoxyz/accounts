@@ -4,8 +4,8 @@
  * frame or in a popup. Tempo ID serves the routes of an app's own form, and of an owner's signature,
  * to first-party apps alone, and `useSession` authorizes nothing at a mount.
  *
- * The frame of a third-party app holds each action until its content shows, so each helper of the
- * frame takes `held`.
+ * The frame of a third-party app holds each action until its content shows. `signIn` detects the
+ * hold, and each other helper of the frame takes `held`.
  * @module
  */
 import type { Page } from '@playwright/test'
@@ -165,6 +165,39 @@ test.describe('third-party app', () => {
       expect(session.value.key.id).not.toBe(first.id)
       await sent(page)
       await capture('approved and sent')
+    })
+  })
+
+  test('signs a new user in through the frame with `signIn` without `held`, which waits until a cover over the content goes', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    await page.goto(urls.dialog)
+
+    await test.step('signs in while a cover hides the content of the frame', async () => {
+      await Playwright.start(page, { name: 'Sign in' })
+      await Playwright.signIn(await Playwright.dialog(page), {
+        code,
+        email,
+        // The cover lets clicks through, and stays past the code's arrival, so the frame holds the
+        // email's submit and the code until it goes.
+        filled: () =>
+          page.evaluate(() => {
+            const cover = document.createElement('div')
+            cover.popover = 'manual'
+            cover.style.cssText =
+              'background: white; border: 0; height: 100vh; inset: 0; margin: 0; opacity: 0.5; pointer-events: none; width: 100vw;'
+            document.body.append(cover)
+            cover.showPopover()
+            setTimeout(() => cover.remove(), 3_000)
+          }),
+      })
+      const session = await Playwright.outcome(page, { name: 'Sign in' })
+
+      expect(session).toMatchObject({ state: 'fulfilled', value: { email } })
+      await capture('signed in')
     })
   })
 
