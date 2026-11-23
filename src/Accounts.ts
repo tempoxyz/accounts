@@ -1130,7 +1130,8 @@ export type Accounts<
      * that is still low after the deposit. Without `account`, the session's account on the chain pays. The
      * instance reads the stored session first, and Tempo ID only if the session holds no account.
      * A third-party client ID, such as an origin, sends no read, and the payment page picks the
-     * account. Outside a page, a call without a session throws {@link SignedOutError} before any request.
+     * account. So does a session that signed in without a Tempo Account on an instance with
+     * `account: false`, so the read creates no account. Outside a page, a call without a session throws {@link SignedOutError} before any request.
      * Call it in a click handler, with `account` for a popup on another chain than the instance's,
      * since a popup opens only before any read. Throws the
      * errors of `Actions.account.pay`, and {@link SignedOutError} without an account.
@@ -2440,8 +2441,15 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
             if (!context.session.get() && Api.page() === undefined)
               throw new SignedOutError()
             // Tempo ID returns the account only to a first-party app, and the page of a
-            // third-party app has no CORS grant for the read, so the payment page picks it.
-            if (ClientId.thirdParty(config.clientId)) return undefined
+            // third-party app has no CORS grant for the read, so the payment page picks it. A
+            // session that signed in without a Tempo Account reads none either, since a page's read
+            // would create one, so the payment page picks it too.
+            const current = context.session.get()
+            if (
+              ClientId.thirdParty(config.clientId) ||
+              (current && !withAccount(current))
+            )
+              return undefined
             return {
               account: (await getAccount({ chainId }))?.address,
               chainId,

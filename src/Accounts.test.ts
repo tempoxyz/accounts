@@ -1585,6 +1585,56 @@ describe('pay', () => {
     )
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
+
+  test('sends no account read outside a page for a session without a Tempo Account on an instance with account: false, and rejects with a PageRequiredError', async () => {
+    const store = Store.memory()
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",4217]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const requests: string[] = []
+    // A CLI's instance that signs users in without a Tempo Account, such as with the `device` plugin.
+    const accounts = Accounts.create({
+      account: false,
+      chain: 4217,
+      clientId: 'client_1',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      plugins: [viem()],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+
+    const error = await accounts
+      .pay({
+        amount: '1',
+        to: '0x0000000000000000000000000000000000000001',
+        token: '0x20c0000000000000000000000000000000000000',
+      })
+      .then(
+        () => undefined,
+        (error: Error) => error,
+      )
+
+    expect(error?.name).toMatchInlineSnapshot(
+      `"Actions.account.PageRequiredError"`,
+    )
+    expect(requests).toMatchInlineSnapshot(`[]`)
+  })
 })
 
 describe('RequestError', () => {
