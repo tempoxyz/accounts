@@ -180,7 +180,6 @@ export default defineConfig({
               text: 'Self-managed',
             },
             { link: '/docs/guides/payments/mpp', text: 'MPP' },
-            { link: '/docs/guides/payments/guest', text: 'Guest' },
           ],
           icon: 'arrow-up-right',
           link: '/docs/guides/payments',

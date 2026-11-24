@@ -59,8 +59,8 @@ export type Accounts<
  * @throws {ClientIdRequiredError} Outside a browser without `clientId`, where no page's origin can
  *   serve as one.
  * @throws {Error} For a plugin whose `id` is a member of every instance: `account`, `authorize`,
- *   `chain`, `config`, `connection`, `connections`, `guest`, `handler`, `pay`, `session`,
- *   `signOut`, or `switchChain`.
+ *   `chain`, `config`, `connection`, `connections`, `handler`, `session`, `signOut`, or
+ *   `switchChain`.
  * @throws {Error} With `connections.metadata`, for `clientAssertion`, `clientId`, or
  *   `clientSecret`, for a `connections.resource` with a query or a fragment, and for a `basePath`
  *   that does not start with `/` or sits inside `/.well-known/oauth-protected-resource`.
