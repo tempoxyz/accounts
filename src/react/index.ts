@@ -156,7 +156,8 @@ export function react(options: react.Options = {}) {
          * then keeps the status `signedOut`. After one with `everywhere`, it authorizes nothing until the logout's
          * answer. After a reload during that logout, it authorizes nothing until the next sign-in.
          * Every component's first render shares one restore. A failed restore,
-         * such as a refused callback, throws to the nearest error boundary. On a server render, the
+         * such as a refused callback, throws to the nearest error boundary, and the status shows
+         * the saved session, or `signedOut` without one. On a server render, the
          * status is `pending`.
          *
          * The hook reads `accounts.session.status` with `useSyncExternalStore`, so every component

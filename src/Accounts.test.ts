@@ -2328,6 +2328,81 @@ describe('session.get', () => {
     expect(second?.user?.id).toMatchInlineSnapshot(`"user_1"`)
   })
 
+  test('sets the status from the saved session when a restore hook throws, such as for a refused redirect callback', async () => {
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
+    const store = Store.memory()
+    await store.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    /** Returns an instance whose restore hook rejects, as a denied redirect callback does. */
+    const instance = (store: Store.Store) =>
+      Accounts.create({
+        chain: 1337,
+        clientId: 'https://app.example.com',
+        plugins: [
+          Plugin.from({
+            hooks: {
+              restore: () => Promise.reject(new Error('The callback failed.')),
+            },
+            id: 'callback',
+          }),
+        ],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+
+    const results = await Promise.all(
+      [false, true].flatMap((reauthorize) =>
+        [store, Store.memory()].map(async (store) => {
+          const accounts = instance(store)
+          const error = await accounts.session.get({ reauthorize }).then(
+            () => undefined,
+            (error: Error) => error.message,
+          )
+          return {
+            error,
+            reauthorize,
+            status: accounts.session.status.get().status,
+          }
+        }),
+      ),
+    )
+
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "error": "The callback failed.",
+          "reauthorize": false,
+          "status": "signedIn",
+        },
+        {
+          "error": "The callback failed.",
+          "reauthorize": false,
+          "status": "signedOut",
+        },
+        {
+          "error": "The callback failed.",
+          "reauthorize": true,
+          "status": "signedIn",
+        },
+        {
+          "error": "The callback failed.",
+          "reauthorize": true,
+          "status": "signedOut",
+        },
+      ]
+    `)
+  })
+
   test("rejects with the store's error, and keeps the status `pending`, when the read of the saved session fails", async () => {
     const name =
       'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
