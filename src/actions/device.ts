@@ -291,7 +291,8 @@ export declare namespace authorize {
  * ```ts
  * const { value } = await Actions.guest.request(auth, { chainId, checkout, redirectUri: '' })
  * const code = await Actions.device.fund(auth, {
- *   funding: { amount: '5', token: '0x20c0000000000000000000006a37da5c996874be' },
+ *   chainId,
+ *   funding: { amount: '5', token: 'ousd' },
  *   guest: value,
  * })
  * console.log(`Open ${code.verificationUriComplete}`)
@@ -301,11 +302,13 @@ export async function fund(
   auth: Config,
   options: fund.Options,
 ): Promise<fund.ReturnType> {
+  // `guest` names a sign-in's guest offer, so the guest request goes as `guest_request`.
   const body = new URLSearchParams({
+    chain_id: String(options.chainId),
     client_id: auth.clientId,
     device: hostname(),
     ...fundingParameters(options.funding),
-    guest: options.guest,
+    guest_request: options.guest,
   })
   const code = await Api.json<{
     expires_in: number
@@ -342,9 +345,14 @@ export async function fund(
 
 export declare namespace fund {
   type Options = {
+    /** The chain of the guest account's funds, which the guest request signs. */
+    chainId: number
     /** The amount and token that the guest account needs. */
     funding: Funding.Funding
-    /** The guest request that proves the guest account, from `Actions.guest.request`. */
+    /**
+     * The guest request that proves the guest account, from `Actions.guest.request` without a
+     * redirect URI. The request sends it as `guest_request`.
+     */
     guest: string
     /** Rejects the request with the signal's reason. */
     signal?: AbortSignal | undefined

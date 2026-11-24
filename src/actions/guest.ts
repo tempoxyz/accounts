@@ -293,6 +293,8 @@ type Quoted = {
   faucet: boolean
   /** The network fee. `token`, when present, names the fee token's address. */
   fee: { token?: `0x${string}` | undefined } | null
+  /** Whether the chain lists the token. */
+  listed?: boolean | undefined
   /** Why no transaction pays, other than a shortfall. */
   refusal: Refusal | null
   /** What the guest account lacks. */
@@ -471,8 +473,14 @@ export async function pay(
       throw short(
         `Insufficient balance: the guest account ${session.address} lacks ${read.shortfall.formatted} ${read.shortfall.symbol}, and the chain has no faucet. Add the \`device\` plugin with \`onCode\`, so the payment shows a funding code, or fund the guest account.`,
       )
+    // The funding hint names only a listed token. An unlisted token's shortfall counts every
+    // token of the hint's currency.
     const code = await fund({
-      funding: { amount, token: read.token },
+      chainId,
+      funding: {
+        amount,
+        ...(read.listed === false ? {} : { token: read.token }),
+      },
       guest: await guest(),
       signal,
     })
@@ -572,7 +580,8 @@ export declare namespace pay {
      */
     fund?:
       | ((options: {
-          funding: { amount: string; token: string }
+          chainId: number
+          funding: { amount: string; token?: string | undefined }
           guest: string
           signal?: AbortSignal | undefined
         }) => Promise<{ expiresIn: number; interval: number }>)

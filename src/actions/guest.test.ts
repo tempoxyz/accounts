@@ -481,7 +481,8 @@ describe('Accounts.pay of a guest session outside a page', () => {
             return Object.fromEntries(init.body)
           return undefined
         })() as Record<string, unknown> | undefined
-        const value = url.searchParams.get('guest') ?? body?.guest
+        const value =
+          url.searchParams.get('guest') ?? body?.guest ?? body?.guest_request
         sent.push({
           body,
           guest:
@@ -623,19 +624,22 @@ describe('Accounts.pay of a guest session outside a page', () => {
     const result = await accounts.pay(payment)
 
     expect({
-      code: { ...sent[1]!.body, device: undefined, guest: undefined },
+      code: { ...sent[1]!.body, device: undefined, guest_request: undefined },
+      codeGuest: sent[1]!.guest?.redirect_uri,
       codes,
       routes: sent.map((entry) => entry.route),
       transaction: result.transaction,
     }).toMatchInlineSnapshot(`
       {
         "code": {
+          "chain_id": "4217",
           "client_id": "cli:guest-example",
           "device": undefined,
           "funding_hint": "12.5",
           "funding_token": "0x20c0000000000000000000006a37da5c996874be",
-          "guest": undefined,
+          "guest_request": undefined,
         },
+        "codeGuest": "",
         "codes": [
           "ABCD-EFGH",
         ],
@@ -650,6 +654,37 @@ describe('Accounts.pay of a guest session outside a page', () => {
         "transaction": "0xabababababababababababababababababababababababababababababababab",
       }
     `)
+  })
+
+  test.for([
+    ['signs a guest-paid fee in the quoted fee token', ousd, 'paid'],
+    [
+      'refuses a guest-paid fee in another fee token than the quoted one',
+      '0x20c0000000000000000000000000000000000001',
+      'refused',
+    ],
+  ] as const)('%s', async ([, feeToken, expected]) => {
+    const { accounts, sent } = scripted({
+      'GET /i/guest/pay': [{ ...page, fee: { token: ousd }, sponsored: false }],
+      // Without the sponsor's marker, the guest account pays the fee.
+      'POST /i/guest/pay': [
+        prepared({ feePayerSignature: undefined, feeToken }),
+      ],
+      'POST /i/guest/pay/send': [{ paid: { transaction: hash }, redirect: '' }],
+    })
+
+    const result = await accounts.pay(payment).then(
+      () => 'paid',
+      (error: Error) =>
+        error.message.includes('fee token is not the quoted one')
+          ? 'refused'
+          : error.message,
+    )
+
+    expect([result, sent.length]).toEqual([
+      expected,
+      expected === 'paid' ? 3 : 2,
+    ])
   })
 
   test('rejects a shortfall without a faucet and without the `device` plugin with `insufficient_balance`', async () => {
