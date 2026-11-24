@@ -306,6 +306,36 @@ describe('machines.approval', () => {
   })
 })
 
+describe('machines.payer', () => {
+  const guest = '0x1f9090aae28b8a3dceadf281b0f12828e676c326'
+  const user = '0x000000000000000000000000000000000000dead'
+
+  test.for([
+    [
+      'a failed start of the guest session, then a sign-in on the page',
+      { account: user, signer: undefined },
+      '0x000000000000000000000000000000000000dEaD',
+    ],
+    [
+      "the guest account's signature",
+      { account: undefined, signer: guest },
+      guest,
+    ],
+    [
+      'a selected guest offer whose guest account signed nothing, without `account`',
+      { account: undefined, signer: undefined },
+      undefined,
+    ],
+    [
+      'a malformed `account`',
+      { account: '0x1234', signer: undefined },
+      undefined,
+    ],
+  ] as const)('returns the payer of %s', ([, options, expected]) => {
+    expect(machines.payer(options)).toBe(expected)
+  })
+})
+
 describe('machines.select', () => {
   test.for([
     [

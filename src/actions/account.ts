@@ -654,7 +654,9 @@ export declare namespace pay {
  * Continue as guest, the page posts `tempo-id:guest.request` with the `state`. The call then runs
  * the function, which starts the guest session, and answers with the first guest request, so the
  * same page pays from the guest account. If the user signs in instead, the page pays from the
- * user's account, and the call returns that account as `address`.
+ * user's account. The call returns the guest account as `address` only once its key pair signed the
+ * transfer, and otherwise the account that the page names, also after a failed start of the guest
+ * session.
  *
  * @throws {RequestError} As {@link pay} throws it for `amount`, `memo`, and `to`, before any page
  *   opens, and `access_denied` when the user rejects the payment.
@@ -700,15 +702,23 @@ export async function pay_guest(
     typeof options.session === 'function'
       ? Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
       : undefined
-  // A guest offer starts the guest session once, at the user's selection.
+  // A guest offer starts the guest session once, at the user's selection. A failed start lets the
+  // next selection try again, and fails no payment, since the user can still sign in on the page.
   let starting:
     | Promise<Pick<Session.GuestSession, 'address' | 'publicKey'>>
     | undefined
   const session = () => {
     const value = options.session
-    starting ??= typeof value === 'function' ? value() : Promise.resolve(value)
+    starting ??= (
+      typeof value === 'function' ? value() : Promise.resolve(value)
+    ).catch((error: unknown) => {
+      starting = undefined
+      throw error
+    })
     return starting
   }
+  // The guest account that signed the transfer. Only its signature makes the payment the guest's.
+  let signer: `0x${string}` | undefined
 
   const url = await approve(auth, {
     guest: {
@@ -733,9 +743,11 @@ export async function pay_guest(
           to,
           token,
         })
-        return await Guest.sign(envelope, {
+        const signed = await Guest.sign(envelope, {
           account: Guest.account(auth, { session: held }),
         })
+        signer = held.address
+        return signed
       },
       state,
     },
@@ -761,13 +773,12 @@ export async function pay_guest(
   })
   const transaction = transactionOf(url, { redirectUri })
   if (!transaction) throw transactionOf.missing()
-  // The guest account paid once the user selected Continue as guest. Otherwise the user signed in
-  // on the page, which names the account that paid.
-  if (starting) return { address: (await starting).address, transaction }
-  const value = Callback.parameter(url, { name: 'account', redirectUri })
-  if (value === undefined || !Address.validate(value, { strict: false }))
-    throw missing('account')
-  return { address: Address.checksum(value), transaction }
+  const address = machines.payer({
+    account: Callback.parameter(url, { name: 'account', redirectUri }),
+    signer,
+  })
+  if (!address) throw missing('account')
+  return { address, transaction }
 }
 
 export declare namespace pay_guest {
@@ -2367,6 +2378,31 @@ export namespace machines {
     options: { value: string },
   ) {
     return snapshot.context.requests.includes(options.value)
+  }
+
+  /**
+   * Returns the account that paid a guest payment: the guest account whose key pair signed the
+   * transfer, or else the account that the return URL names, of a user that signed in on the page.
+   * A guest offer that the user selected, but whose guest account signed nothing, paid nothing.
+   * Returns `undefined` without either, or for a malformed `account`.
+   */
+  export function payer(options: payer.Options): `0x${string}` | undefined {
+    if (options.signer) return options.signer
+    if (
+      options.account === undefined ||
+      !Address.validate(options.account, { strict: false })
+    )
+      return undefined
+    return Address.checksum(options.account)
+  }
+
+  export declare namespace payer {
+    type Options = {
+      /** The `account` parameter of the return URL. Absent when the page returned none. */
+      account: string | undefined
+      /** The guest account whose key pair signed the transfer. Absent when it signed none. */
+      signer: `0x${string}` | undefined
+    }
   }
 
   /** Returns whether the page's URL holds its values. */
