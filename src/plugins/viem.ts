@@ -2081,6 +2081,10 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           else if (
             within === false ||
             ((within === undefined || requested) &&
+              !(
+                failure.spent &&
+                Address.isEqual(failure.spent, current.keyAuthorization.keyId)
+              ) &&
               !(await spent(current, {
                 chainId,
                 limits: Retry.counted(current.keyAuthorization, {
