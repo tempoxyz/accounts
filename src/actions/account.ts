@@ -456,7 +456,7 @@ export async function pay<const options extends pay.Options>(
   auth: Config,
   options: options,
 ): Promise<pay.ReturnType<options>> {
-  const { account, attempt, challenge, note, to, token } = options
+  const { account, attempt, challenge, guest, note, to, token } = options
   const amount = Payment.amount(options.amount)
   Payment.to(to)
   // Text goes on the chain as its UTF-8 bytes, and hex as its own bytes.
@@ -470,6 +470,17 @@ export async function pay<const options extends pay.Options>(
     throw new PageRequiredError({ payment: true })
   }
   const redirectUri = approvalRedirectUri(auth, options)
+  const chainId = options.chainId ?? auth.chainId
+  // The guest account's key pair loads from the store, and signs the guest request, with no
+  // request. The popup opens blank meanwhile, so it still opens within the gesture.
+  const guested = guest
+    ? import('./guest.js').then(async (Guest) => ({
+        Guest,
+        ...(await Guest.request(auth, { chainId, redirectUri })),
+      }))
+    : undefined
+  // A failure rejects the call through `approve`.
+  guested?.catch(() => {})
   // A function's message arrives while the dialog or the popup opens, so the user waits for the
   // slower of the two only. Its signal aborts once the call ends.
   const ending = new AbortController()
@@ -480,6 +491,20 @@ export async function pay<const options extends pay.Options>(
 
   const url = await approve(auth, {
     challenge: issued,
+    guest: guested && {
+      sign: async (transaction) => {
+        const { Guest, keyPair } = await guested
+        const envelope = Guest.check(transaction, {
+          amount,
+          chainId,
+          memo,
+          to,
+          token,
+        })
+        return await Guest.sign(envelope, { keyPair })
+      },
+      value: guested.then((entry) => entry.value),
+    },
     hold: attempt,
     label: 'Pay with Tempo',
     mode: options.mode ?? 'iframe',
@@ -488,7 +513,7 @@ export async function pay<const options extends pay.Options>(
     query: {
       ...(account !== undefined ? { account } : {}),
       amount,
-      chain_id: String(options.chainId ?? auth.chainId),
+      chain_id: String(chainId),
       ...(typeof challenge === 'string' ? { challenge } : {}),
       client_id: auth.clientId,
       ...(memo !== undefined ? { memo } : {}),
@@ -568,6 +593,15 @@ export declare namespace pay {
      * Absent, the account signs no message.
      */
     challenge?: string | ((signal: AbortSignal) => Promise<string>) | undefined
+    /**
+     * Pays from the instance's guest account, a root Tempo Account whose owner is a
+     * non-extractable WebCrypto P256 key pair in the instance's store, with no Tempo ID sign-in. The
+     * first guest payment creates the key pair. The page reads the payment, offers a deposit for a
+     * shortfall, and posts the transfer for the key pair to sign, and Tempo ID's sponsor pays its
+     * fee. The key pair signs only the requested transfer. Tempo ID takes it only from a first-party
+     * or verified app. Absent, the payment page signs the user in.
+     */
+    guest?: true | undefined
     /**
      * The transfer's memo, which the chain records: text, sent as its UTF-8 bytes, or hex, of 1 to
      * 32 bytes. Hex is `0x` and an even count of hex digits. Any other value is text, such as
@@ -1421,7 +1455,7 @@ async function approve<held = never>(
   auth: Config,
   options: approve.Options<held>,
 ): Promise<URL | held> {
-  const { challenge, hold, mode, path, query, signal } = options
+  const { challenge, guest, hold, mode, path, query, signal } = options
   const redirectUri = query.redirect_uri
   signal?.throwIfAborted()
   // React Native defines `window` without `location`, so the check reads `document`.
@@ -1440,6 +1474,19 @@ async function approve<held = never>(
     },
     () => {},
   )
+  // The guest request, once the guest account signs it. The page receives it in its URL.
+  let guestRequest: string | undefined
+  guest?.value.then(
+    (value) => {
+      guestRequest = value
+    },
+    () => {},
+  )
+  // The values that the page's URL waits for: the challenge's message and the guest request.
+  const pending =
+    challenge || guest
+      ? Promise.all([challenge, guest?.value]).then(() => undefined)
+      : undefined
   /**
    * Returns the page's URL: in a frame at `/embed` and the path, or in a popup at the path. A popup
    * keeps the method that the frame requests, such as `mach` for Buy MACH.
@@ -1454,6 +1501,7 @@ async function approve<held = never>(
       ...(display === 'popup' && message !== undefined
         ? { challenge: message }
         : {}),
+      ...(guestRequest !== undefined ? { guest: guestRequest } : {}),
       ...(display === 'popup' ? { display } : {}),
       ...(method ? { method } : {}),
     }).toString()
@@ -1464,10 +1512,12 @@ async function approve<held = never>(
    * arrives, since a popup blocker accepts `window.open` only within the gesture.
    */
   const open = (method?: Sheet.load.Popup['method']) => {
-    if (!challenge || message !== undefined)
-      return Popup.openPopup(toUrl('popup', method))
+    const ready =
+      (!challenge || message !== undefined) &&
+      (!guest || guestRequest !== undefined)
+    if (!pending || ready) return Popup.openPopup(toUrl('popup', method))
     const popup = Popup.openPopup('about:blank')
-    challenge.then(
+    pending.then(
       () => {
         if (popup && !popup.closed) popup.location.href = toUrl('popup', method)
       },
@@ -1506,9 +1556,10 @@ async function approve<held = never>(
         )
         abort = () => reject(signal?.reason)
         signal?.addEventListener('abort', abort, { once: true })
-        // A rejected challenge closes the blank popup before any page shows. A blank popup sends no
-        // `tempo-id:popup.open`, so the watcher misses its close, which the challenge's end reads.
-        challenge?.then(() => {
+        // A rejected challenge or guest request closes the blank popup before any page shows. A
+        // blank popup sends no `tempo-id:popup.open`, so the watcher misses its close, which the
+        // end of `pending` reads.
+        pending?.then(() => {
           if (popup.closed) reject(closed())
         }, reject)
         unwatch = Popup.watchPopup(popup, {
@@ -1544,92 +1595,137 @@ async function approve<held = never>(
     }
   }
 
-  // A popup blocker accepts `window.open` only within the gesture, so the popup opens before any
-  // `await`. A popup cannot cover a send in progress, so `hold` settles first. As in a sign-in, a
-  // browser without IntersectionObserver v2 opens the popup within the gesture unless the preloaded
-  // frame reports the app as trusted. A plugin's send that outlasts the gesture leaves no popup to
-  // open, so the frame's page offers it, and the user's click on Continue opens it.
-  const direct =
-    mode === 'popup' || (Popup.activated() && !FrameTrust.frames(auth))
-  if (direct) {
-    const held = hold && (await hold)
-    if (held) return held
-    if (mode === 'popup' || Popup.activated()) {
-      const popup = open()
-      if (popup === null) throw new BlockedError()
-      return await watch(popup)
-    }
+  // The page posts the guest payment's transaction for the guest account to sign, from Tempo ID's
+  // origin. The check accepts only the requested transfer, so the listener needs no window check.
+  const listener = (event: MessageEvent) => {
+    const data = event.data as {
+      id?: unknown
+      transaction?: unknown
+      type?: unknown
+    } | null
+    if (
+      !guest ||
+      event.origin !== origin ||
+      data?.type !== 'tempo-id:guest.sign' ||
+      !event.source
+    )
+      return
+    const source = event.source as Window
+    guest.sign(data.transaction).then(
+      (transaction) =>
+        source.postMessage(
+          { id: data.id, transaction, type: 'tempo-id:guest.signature' },
+          origin,
+        ),
+      (error: unknown) =>
+        source.postMessage(
+          {
+            error: error instanceof Error ? error.message : 'Signing failed.',
+            id: data.id,
+            type: 'tempo-id:guest.signature',
+          },
+          origin,
+        ),
+    )
   }
-  // A send that settled before the frame leaves its page without a cover.
-  const covering = direct ? undefined : hold
-
-  const Sheet = await import('../internal/Sheet.js')
-  // An abort while the dialog's module loads fired before the listener below, so it rejects here.
-  signal?.throwIfAborted()
-  const sheet = Sheet.load({
-    // The page runs the passkey ceremony of the account's owner, for Tempo ID's origin. The payment
-    // page also signs a visitor without a session in, which creates a new user's passkey account.
-    allow:
-      options.path === '/pay'
-        ? `publickey-credentials-create ${origin}; publickey-credentials-get ${origin}`
-        : `publickey-credentials-get ${origin}`,
-    // A page that waits for `hold` takes no input until it settles. A page that waits for the
-    // challenge's message shows the payment meanwhile, and keeps Pay busy itself.
-    covered: covering !== undefined,
-    deferred: challenge !== undefined,
-    label: options.label,
-    origin,
-    // The payment page's sign-in opens its legal links in a new, unsandboxed tab.
-    sandbox:
-      'allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts',
-    skeleton: options.skeleton,
-    text: options.text,
-    // A covered page shows its own skeleton, measured from its screen, until the cover lifts.
-    url: `${toUrl('frame')}${covering ? '&covered=true' : ''}${challenge ? '&deferred=true' : ''}`,
-  })
-  let abort: (() => void) | undefined
+  if (guest) window.addEventListener('message', listener)
   try {
-    return await new Promise<URL | held>((resolve, reject) => {
-      abort = () => reject(signal?.reason)
-      signal?.addEventListener('abort', abort, { once: true })
-      const show = () =>
-        sheet.show({
-          onCallback: (value) => {
-            try {
-              resolve(finish(value))
-            } catch (error) {
-              reject(error)
-            }
-          },
-          onCancel: () => reject(closed()),
-          onPopup: (entry) => {
-            // The payment page opens the deposit pages at once for a frame's Buy MACH.
-            const popup = open(entry.method)
-            if (popup === null) {
-              // The offer's Continue is the user's click, so only a blocker refuses it.
-              if (!entry.automatic) reject(new BlockedError())
-              return false
-            }
-            sheet.close()
-            watch(popup).then(resolve, reject)
-            return true
-          },
-        })
-      // The page loads in the hidden dialog while `hold` runs, so an access key's send shows no
-      // dialog. A send of `hold` ends the call, and the dialog shows only once it sends nothing.
-      if (covering)
-        covering.then((held) => (held ? resolve(held) : show()), reject)
-      else show()
-      // The cover lifts once, after `hold` sends nothing and the message arrives, so the page takes
-      // no input while `hold` can still send, and receives the message with the lift.
-      if (covering || challenge)
-        Promise.all([covering, challenge]).then(([held, value]) => {
-          if (!held) sheet.uncover({ challenge: value })
-        }, reject)
-    })
+    return await present()
   } finally {
-    if (abort) signal?.removeEventListener('abort', abort)
-    sheet.close()
+    if (guest) window.removeEventListener('message', listener)
+  }
+
+  /** Shows the page in a popup or in the dialog's frame, and resolves with its return. */
+  async function present(): Promise<URL | held> {
+    // A popup blocker accepts `window.open` only within the gesture, so the popup opens before any
+    // `await`. A popup cannot cover a send in progress, so `hold` settles first. As in a sign-in, a
+    // browser without IntersectionObserver v2 opens the popup within the gesture unless the preloaded
+    // frame reports the app as trusted. A plugin's send that outlasts the gesture leaves no popup to
+    // open, so the frame's page offers it, and the user's click on Continue opens it.
+    const direct =
+      mode === 'popup' || (Popup.activated() && !FrameTrust.frames(auth))
+    if (direct) {
+      const held = hold && (await hold)
+      if (held) return held
+      if (mode === 'popup' || Popup.activated()) {
+        const popup = open()
+        if (popup === null) throw new BlockedError()
+        return await watch(popup)
+      }
+    }
+    // A send that settled before the frame leaves its page without a cover.
+    const covering = direct ? undefined : hold
+
+    const Sheet = await import('../internal/Sheet.js')
+    // The guest request is local work, so the frame's URL waits for it with no request.
+    if (guest) await guest.value
+    // An abort while the dialog's module loads fired before the listener below, so it rejects here.
+    signal?.throwIfAborted()
+    const sheet = Sheet.load({
+      // The page runs the passkey ceremony of the account's owner, for Tempo ID's origin. The payment
+      // page also signs a visitor without a session in, which creates a new user's passkey account.
+      allow:
+        options.path === '/pay'
+          ? `publickey-credentials-create ${origin}; publickey-credentials-get ${origin}`
+          : `publickey-credentials-get ${origin}`,
+      // A page that waits for `hold` takes no input until it settles. A page that waits for the
+      // challenge's message shows the payment meanwhile, and keeps Pay busy itself.
+      covered: covering !== undefined,
+      deferred: challenge !== undefined,
+      label: options.label,
+      origin,
+      // The payment page's sign-in opens its legal links in a new, unsandboxed tab.
+      sandbox:
+        'allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts',
+      skeleton: options.skeleton,
+      text: options.text,
+      // A covered page shows its own skeleton, measured from its screen, until the cover lifts.
+      url: `${toUrl('frame')}${covering ? '&covered=true' : ''}${challenge ? '&deferred=true' : ''}`,
+    })
+    let abort: (() => void) | undefined
+    try {
+      return await new Promise<URL | held>((resolve, reject) => {
+        abort = () => reject(signal?.reason)
+        signal?.addEventListener('abort', abort, { once: true })
+        const show = () =>
+          sheet.show({
+            onCallback: (value) => {
+              try {
+                resolve(finish(value))
+              } catch (error) {
+                reject(error)
+              }
+            },
+            onCancel: () => reject(closed()),
+            onPopup: (entry) => {
+              // The payment page opens the deposit pages at once for a frame's Buy MACH.
+              const popup = open(entry.method)
+              if (popup === null) {
+                // The offer's Continue is the user's click, so only a blocker refuses it.
+                if (!entry.automatic) reject(new BlockedError())
+                return false
+              }
+              sheet.close()
+              watch(popup).then(resolve, reject)
+              return true
+            },
+          })
+        // The page loads in the hidden dialog while `hold` runs, so an access key's send shows no
+        // dialog. A send of `hold` ends the call, and the dialog shows only once it sends nothing.
+        if (covering)
+          covering.then((held) => (held ? resolve(held) : show()), reject)
+        else show()
+        // The cover lifts once, after `hold` sends nothing and the message arrives, so the page takes
+        // no input while `hold` can still send, and receives the message with the lift.
+        if (covering || challenge)
+          Promise.all([covering, challenge]).then(([held, value]) => {
+            if (!held) sheet.uncover({ challenge: value })
+          }, reject)
+      })
+    } finally {
+      if (abort) signal?.removeEventListener('abort', abort)
+      sheet.close()
+    }
   }
 }
 
@@ -1642,6 +1738,19 @@ declare namespace approve {
      * holds any challenge.
      */
     challenge?: Promise<string> | undefined
+    /**
+     * The guest account of a guest payment: the guest request, once the guest account signs it,
+     * which the page's URL holds, and the signer of the transaction that the page posts. A popup
+     * opens blank until the request arrives. Absent, the page signs the user in.
+     */
+    guest?:
+      | {
+          /** Checks and signs the transaction that the page posts, and returns it serialized. */
+          sign: (transaction: unknown) => Promise<`0x${string}`>
+          /** The guest request. */
+          value: Promise<string>
+        }
+      | undefined
     /**
      * Another send of the same payment, which resolves with its result, or `undefined` if it sent
      * nothing. The frame loads in a hidden dialog until it settles, and a result returns with no

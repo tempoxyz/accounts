@@ -555,6 +555,12 @@ export type Config = {
    */
   getFn?: TempoAccount.deserialize.Options['getFn']
   /**
+   * Whether `pay` pays from the instance's guest account while no user signs in, with no Tempo ID
+   * sign-in, as `guest` describes. Tempo ID's payment page takes a guest payment only from a
+   * first-party or verified app. Defaults to `false`.
+   */
+  guest?: boolean | undefined
+  /**
    * The platform capabilities of the key set that the verifiers of Tempo ID's tokens fetch, such as
    * `AccessToken.create`: a cache that instances share, and a function that keeps background work
    * running. A verifier with `cache` starts from its copy, such as in a new Worker isolate, and
@@ -1078,6 +1084,20 @@ export type Accounts<
        * ```
        */
       revokeAccessKey: Connections.attach.ReturnType['revokeAccessKey']
+    }
+    /**
+     * The instance's guest account: a root Tempo Account whose owner is a non-extractable WebCrypto
+     * P256 key pair in the instance's store. With `guest: true`, `pay` pays from it while no user
+     * signs in, and its first payment creates it.
+     */
+    guest: {
+      /**
+       * Forgets the guest account: removes its key pair from the store. Its funds stay on its
+       * address, and no key signs for it again.
+       */
+      disconnect: () => Promise<void>
+      /** Returns the guest account's address, or `undefined` before a guest payment creates one. */
+      get: () => Promise<`0x${string}` | undefined>
     }
     /**
      * The handler of the instance's server routes, as a function of the Fetch API, under the
@@ -2326,6 +2346,11 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         return (await server).fetch(request)
       },
     },
+    guest: {
+      disconnect: async () =>
+        (await import('./actions/guest.js')).disconnect(config),
+      get: async () => (await import('./actions/guest.js')).get(config),
+    },
     pay: async (
       options: AccountActions.pay.Parameters & Pick<Payment.Payment, 'session'>,
     ) => {
@@ -2347,6 +2372,20 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         return await AccountActions.pay(config, {
           ...parameters,
           chainId: chainOf(),
+          memo,
+        })
+      // While no user signs in, the guest account pays on the page. The read is synchronous, so
+      // the dialog or the popup opens with no request.
+      if (
+        (parameters.guest || config.guest) &&
+        !fixed &&
+        parameters.account === undefined &&
+        !context.session.get()
+      )
+        return await AccountActions.pay(config, {
+          ...parameters,
+          chainId: chainOf(),
+          guest: true,
           memo,
         })
       // A fixed session's access key names the account, so the call reads neither the store nor
@@ -3044,6 +3083,7 @@ const reserved = new Set([
   'config',
   'connection',
   'connections',
+  'guest',
   'handler',
   'pay',
   'session',
