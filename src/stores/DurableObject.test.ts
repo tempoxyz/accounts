@@ -25,6 +25,7 @@ async function run(contents: readonly string[], options: run.Options = {}) {
     stdin: {
       contents: [
         "import { DurableObject } from 'cloudflare:workers'",
+        "import { Bytes, Hash } from 'ox'",
         "import * as Accounts from '../Accounts.ts'",
         "import * as Session from '../Session.ts'",
         "import * as DurableObjectStore from './DurableObject.ts'",
@@ -205,6 +206,44 @@ describe('Store.durableObject', () => {
           "/oauth2/token refresh-token",
         ],
         "status": "signedOut",
+      }
+    `)
+  }, 30_000)
+
+  test('behavior: session.refresh sends a refused token again once, when the store holds its pending rotation from a run that a restart ended', async () => {
+    const { result } = await run([
+      'const name = \'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]\'',
+      'const requests = []',
+      'const accounts = Accounts.create({',
+      '  chain: 1337,',
+      "  clientId: 'https://app.example.com',",
+      '  async fetch(input, init) {',
+      "    const token = new URLSearchParams(String(init?.body)).get('refresh_token')",
+      "    requests.push(new URL(String(input)).pathname + ' ' + token)",
+      "    if (requests.length === 1) return Response.json({ error: 'invalid_grant' }, { status: 400 })",
+      "    return Response.json({ access_token: 'access-token-1', expires_in: 3600, refresh_token: 'refresh-token-1', token_type: 'Bearer' })",
+      '  },',
+      '  store,',
+      "  url: 'http://127.0.0.1:9',",
+      '})',
+      'await store.setItem(name, {',
+      "  state: { session: Session.from({ accessToken: 'access-token', expiresAt: Date.now() + 3600000, refreshToken: 'refresh-token', user: { email: 'user@example.com', id: 'user_1' } }) },",
+      '  version: 0,',
+      '})',
+      "await store.setItem(name + ':rotated', [{ at: Date.now(), from: Hash.sha256(Bytes.fromString('refresh-token'), { as: 'Hex' }) }])",
+      'await accounts.session.get()',
+      'const session = await accounts.session.refresh()',
+      'return Response.json({ refreshToken: session?.refreshToken, requests, status: accounts.session.status.get().status })',
+    ])
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "refreshToken": "refresh-token-1",
+        "requests": [
+          "/oauth2/token refresh-token",
+          "/oauth2/token refresh-token",
+        ],
+        "status": "signedIn",
       }
     `)
   }, 30_000)
