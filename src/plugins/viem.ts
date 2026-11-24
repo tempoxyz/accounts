@@ -59,7 +59,6 @@ import * as SignIn from '../internal/SignIn.js'
 import type { Payment } from '../internal/Payment.js'
 import * as AccessKey from '../internal/viem/AccessKey.js'
 import * as Retry from '../internal/viem/Retry.js'
-import * as Settings from '../internal/viem/Settings.js'
 import * as Token from '../internal/viem/Token.js'
 import * as Signer from '../internal/Signer.js'
 import * as Verify from '../internal/viem/Verify.js'
@@ -2641,7 +2640,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         apply: (_, __, args: [viem.Overrides?]) => get(args[0]),
         // The settings key returns the plugin's chains and transports, which the wagmi plugin reads.
         // No client holds the key, so it shadows no member.
-        get: (_, key) => (key === Settings.key ? own : Reflect.get(get(), key)),
+        get: (_, key) => (key === settings ? own : Reflect.get(get(), key)),
         getOwnPropertyDescriptor(_, key) {
           const descriptor = Reflect.getOwnPropertyDescriptor(get(), key)
           return descriptor && { ...descriptor, configurable: true }
@@ -2663,7 +2662,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         deviceRequests.set(instance.config, devices.device.request)
       const namespace = (
         instance as unknown as {
-          viem: viem.Namespace & { [Settings.key]: viem.Settings }
+          viem: viem.Namespace & { [settings]: viem.Settings }
         }
       ).viem
       // A client on the first chain names the actions, since the instance's chain may be one that
@@ -2672,7 +2671,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       const sample = build(
         {
           account: Signer.live(() => undefined),
-          chain: namespace[Settings.key].chains[0],
+          chain: namespace[settings].chains[0],
           transport: custom({ request: () => Promise.resolve(undefined) }),
         },
         {
@@ -2982,7 +2981,7 @@ export declare namespace viem {
     url: string
   }
 
-  /** The chains and transports of the plugin, which `accounts.viem[Settings.key]` returns. */
+  /** The chains and transports of the plugin, which `accounts.viem[settings]` returns. */
   type Settings = {
     /**
      * Returns the chain of `chainId`: its options' `chain`, or Tempo's chain of that ID. Absent when
@@ -3191,6 +3190,12 @@ export declare namespace viem {
    */
   type Namespace = Client & ((overrides?: Overrides) => Client)
 }
+
+/**
+ * The key of `accounts.viem` that returns the plugin's {@link viem.Settings}. The entries of the
+ * package do not export it, so only the package's own plugins read it.
+ */
+export const settings = Symbol('viem.settings')
 
 /**
  * The key of a `viem` plugin that holds the options it was created with. The entries of the package

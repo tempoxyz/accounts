@@ -42,11 +42,10 @@ import * as FeeAllowance from '../internal/FeeAllowance.js'
 import * as Charge from '../internal/mpp/Charge.js'
 import * as SessionManager from '../internal/mpp/SessionManager.js'
 import * as Retry from '../internal/viem/Retry.js'
-import * as Settings from '../internal/viem/Settings.js'
 import * as Token from '../internal/viem/Token.js'
 import * as Accounts from '../Accounts.js'
 import * as Plugin from '../Plugin.js'
-import { RetryClosedError, viem } from '../plugins/viem.js'
+import { RetryClosedError, settings, viem } from '../plugins/viem.js'
 import * as Session from '../Session.js'
 
 /**
@@ -379,7 +378,7 @@ export function mpp(options: mpp.Options = {}) {
         registrations,
         retry,
         transport,
-      } = namespace[Settings.key as never] as unknown as viem.Settings
+      } = namespace[settings as never] as unknown as viem.Settings
       // A client without an account reads the chain and broadcasts. The access key signs.
       const clients = new Map<number, Client<Transport, Chain>>()
       // The payers of each access key, one for each setting of the charges.

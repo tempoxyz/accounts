@@ -16,8 +16,8 @@ import type * as Store from '../Store.js'
  * each value as it is. A read skips an expired entry. A write deletes the expired entries once the
  * store doubles its size since the last such sweep, so each write costs constant time on average. A
  * restart loses every value, so it serves one process, such as in development or tests. A page
- * load also loses every value, so `redirect.signIn` without `open`, and a guest payment of `pay` on a
- * page, refuse the store with `invalid_request` before any request. The store sets `local`, so where a lock spans the process, such as in Node or a
+ * load also loses every value, so `redirect.signIn` without `open` refuses the store with
+ * `invalid_request` before any request. The store sets `local`, so where a lock spans the process, such as in Node or a
  * browser, an instance's `session.refresh` that Tempo ID refuses throws after one request. The
  * `backend` plugin's refresh still sends a refused token again, since backends can share a store.
  * On a page, another tab's `signOut` with `everywhere` empties the tab's session and its store at

@@ -73,8 +73,6 @@ export class PageRequiredError extends Error {
     // The payment page has no redirect, so its message names what sends a payment outside a page.
     super(
       (() => {
-        if (options.guest)
-          return 'No browser window: the purchase page of a guest payment opens only from a page. Pay as a guest from a page, or with a balance that holds the payment.'
         if (!options.payment)
           return 'No browser window: the approval page opens in a frame or a popup only from a page. Open it through a redirect instead.'
         if (options.sender === false)
@@ -93,11 +91,6 @@ export declare namespace PageRequiredError {
      * that the access key sent above what is left of its limit.
      */
     cause?: unknown
-    /**
-     * Whether the page is the purchase page of a guest payment, which sells the MACH that the guest
-     * account lacks. Defaults to `false`.
-     */
-    guest?: boolean | undefined
     /**
      * Whether the page is the payment page, which has no redirect, so the message names a sign-in
      * for an access key that holds the payment. Defaults to `false`.
@@ -606,14 +599,7 @@ export declare namespace pay {
    * The options of `accounts.pay`. Without `account` and `challenge`, it reads the session's
    * account. With `challenge`, the page picks the account.
    */
-  type Parameters = Options & {
-    /**
-     * Whether a visitor without a session pays as a guest, in MACH from the instance's guest account,
-     * as `Actions.guest.pay` describes. With a session, `challenge`, or `session`, the call
-     * ignores it. Defaults to `false`.
-     */
-    guest?: boolean | undefined
-  }
+  type Parameters = Options
 
   type ReturnType<options extends Options = Options> = {
     /** The Tempo Account that paid. */

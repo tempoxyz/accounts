@@ -23,7 +23,6 @@ import * as BackendOperations from './internal/BackendOperations.js'
 import * as AccountActions from './actions/account.js'
 import * as AccessKey_internal from './internal/AccessKey.js'
 import * as Actions from './internal/Actions.js'
-import type * as GuestActions from './actions/guest.js'
 import type * as Connections from './internal/Connections.js'
 import * as Handler from './internal/Handler.js'
 import type { Dpop } from './internal/Dpop.js'
@@ -36,13 +35,11 @@ import * as DefaultStore from './internal/DefaultStore.js'
 import * as Hint from './internal/Hint.js'
 import * as InstanceChain from './internal/InstanceChain.js'
 import * as InternalSession from './internal/Session.js'
-import * as Settings from './internal/viem/Settings.js'
 import type * as KeySet from './internal/KeySet.js'
 import * as Payment from './internal/Payment.js'
 import type { Permissions } from './Permissions.js'
 import * as Plugin from './Plugin.js'
 import type { backend } from './plugins/backend.js'
-import type { viem } from './plugins/viem.js'
 import type * as React from './react/index.js'
 import * as Session from './Session.js'
 import type { Store } from './Store.js'
@@ -1081,46 +1078,6 @@ export type Accounts<
       revokeAccessKey: Connections.attach.ReturnType['revokeAccessKey']
     }
     /**
-     * The instance's guest account, which pays each `pay` with `guest: true` while the instance
-     * holds no session: a root Tempo Account whose owner is a non-extractable WebCrypto P256 key
-     * pair in `store`. Its code loads from a chunk of its own at the first call.
-     */
-    guest: {
-      /**
-       * Forgets the guest account: removes its key pair from `store`. The next guest payment
-       * creates a new guest account. The MACH that the forgotten guest account holds stays on its
-       * address, and no key signs for it again.
-       *
-       * @example
-       * ```ts
-       * import { Accounts } from 'accounts'
-       *
-       * const accounts = Accounts.create()
-       *
-       * await accounts.guest.disconnect()
-       * ```
-       */
-      disconnect: () => Promise<void>
-      /**
-       * Returns the address of the guest account, or `undefined` before a guest payment creates
-       * one. The read creates no guest account.
-       *
-       * @throws {Error} For a value at the guest account's entry of `store` that is no key pair,
-       *   and without a store, such as outside a browser without `store`.
-       * @throws {TypeError} For a store that keeps each value as JSON, such as `Store.redis`.
-       *
-       * @example
-       * ```ts
-       * import { Accounts } from 'accounts'
-       *
-       * const accounts = Accounts.create()
-       *
-       * const address = await accounts.guest.get()
-       * ```
-       */
-      get: () => Promise<GuestActions.get.ReturnType>
-    }
-    /**
      * The handler of the instance's server routes, as a function of the Fetch API, under the
      * `handler` option's `basePath`: `POST /access-keys`, the access key endpoint of a policy, with
      * `connections`, `GET /client.json`, the app's metadata document, with `connections.metadata`,
@@ -1217,17 +1174,6 @@ export type Accounts<
      * that access key's account throws {@link RequestError} with the reason `invalid_field` and the
      * field `account`. With `challenge`, the call ignores `session`.
      *
-     * With `guest: true`, a visitor without a session pays as a guest, in MACH on Tempo mainnet, from
-     * the instance's guest account, which the first guest payment creates, as `guest` describes.
-     * If the guest account holds less than `amount`, Tempo ID's purchase page opens in a popup and
-     * sells the MACH that it lacks with Apple Pay or Google Pay. The guest account then signs the
-     * transfer, and Tempo ID's sponsor pays its fee. The call ignores `account`, and throws
-     * {@link RequestError} with the reason `unsupported_token` for a token other than MACH, and
-     * `invalid_chain` for another chain. It throws the errors of `Actions.guest.pay`. The guest
-     * account's balance reads through the `viem` plugin's transport of the chain, or without the
-     * plugin, through Tempo's own RPC. With a session, `challenge`, or `session`, the call ignores
-     * `guest`.
-     *
      * @example
      * ```ts
      * import { Accounts } from 'accounts'
@@ -1249,14 +1195,6 @@ export type Accounts<
      *     challenge: message,
      *     to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
      *     token: 'ousd',
-     *   })
-     *
-     *   // Without a session, the guest account pays, and buys the MACH that it lacks.
-     *   const { address: guest } = await accounts.pay({
-     *     amount: '12.5',
-     *     guest: true,
-     *     to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
-     *     token: 'mach',
      *   })
      * }
      *
@@ -1800,8 +1738,8 @@ export declare namespace from {
  * @throws {ChainNameInvalidError} For a `chain` that is neither `mainnet`, `testnet`, nor a chain
  *   ID.
  * @throws {Error} For a plugin whose `id` is a member of every instance: `account`, `authorize`,
- *   `chain`, `config`, `connection`, `connections`, `guest`, `handler`, `pay`, `session`,
- *   `signOut`, or `switchChain`.
+ *   `chain`, `config`, `connection`, `connections`, `handler`, `session`, `signOut`, or
+ *   `switchChain`.
  * @throws {Error} With `connections.metadata`, for `clientAssertion`, `clientId`, or
  *   `clientSecret`, for a `connections.resource` with a query or a fragment, and for a `basePath`
  *   that does not start with `/` or sits inside `/.well-known/oauth-protected-resource`.
@@ -2349,13 +2287,6 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         parameters: Connections.create.revokeAccessKey.Options,
       ) => (await connections()).revokeAccessKey(parameters),
     },
-    // The guest's module loads from a chunk of its own, so an app that pays no guest bundles none of
-    // it.
-    guest: {
-      disconnect: async () =>
-        (await import('./actions/guest.js')).disconnect(config),
-      get: async () => (await import('./actions/guest.js')).get(config),
-    },
     handler: {
       async fetch(request: Request) {
         server ??= import('./internal/handlers/Server.js').then((module) =>
@@ -2404,38 +2335,6 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         parameters.memo === undefined
           ? undefined
           : Payment.memo(parameters.memo)
-      // A guest pays only while the instance holds no session, so a signed-in user pays as without
-      // `guest`. The load of the stored session also loads the stored chain.
-      if (
-        parameters.guest &&
-        parameters.challenge === undefined &&
-        !fixed &&
-        !(context.session.get() ?? (await context.session.load()))
-      ) {
-        const chainId = chainOf()
-        // The guest account's balance reads through the `viem` plugin's transport of the chain, so
-        // it reads the node that the instance's clients read. The transport receives the plugin's
-        // chain, whose RPC URL a transport without one, such as `http()`, reads.
-        const settings = (
-          instance.viem as Record<symbol, viem.Settings> | undefined
-        )?.[Settings.key]
-        const rpc = settings?.rpc(chainId)
-        const chain = settings?.chain(chainId)
-        return await (
-          await import('./actions/guest.js')
-        ).pay(config, {
-          amount: parameters.amount,
-          chainId,
-          memo: parameters.memo,
-          redirectUri: parameters.redirectUri,
-          signal: parameters.signal,
-          to: parameters.to,
-          token: parameters.token,
-          transport:
-            rpc &&
-            ((options) => rpc({ ...options, chain: options.chain ?? chain })),
-        })
-      }
       // Only the account's owner signs a challenge, on the page, so no plugin sends the payment. The
       // page picks the account, with no read, so a popup still opens within the gesture.
       if (parameters.challenge !== undefined)
@@ -3139,7 +3038,6 @@ const reserved = new Set([
   'config',
   'connection',
   'connections',
-  'guest',
   'handler',
   'pay',
   'session',
