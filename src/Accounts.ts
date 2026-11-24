@@ -391,6 +391,7 @@ export declare namespace RequestError {
     | 'payment_pending'
     | 'payment_reverted'
     | 'post_logout_redirect_not_permitted'
+    | 'privy_identity_rejected'
     | 'privy_link_expired'
     | 'privy_signature_rejected'
     | 'privy_signature_required'
