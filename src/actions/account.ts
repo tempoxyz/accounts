@@ -654,9 +654,9 @@ export declare namespace pay {
  * Continue as guest, the page posts `tempo-id:guest.request` with the `state`. The call then runs
  * the function, which starts the guest session, and answers with the first guest request, so the
  * same page pays from the guest account. If the user signs in instead, the page pays from the
- * user's account. The call returns the guest account as `address` only once its key pair signed the
- * transfer, and otherwise the account that the page names, also after a failed start of the guest
- * session.
+ * user's account. The call returns the account that the return URL names as `address`: the guest
+ * account once its transfer landed, and otherwise the account of the user that signed in, also after
+ * a failed start of the guest session or a guest transfer that never landed.
  *
  * @throws {RequestError} As {@link pay} throws it for `amount`, `memo`, and `to`, before any page
  *   opens, and `access_denied` when the user rejects the payment.
@@ -717,8 +717,6 @@ export async function pay_guest(
     })
     return starting
   }
-  // The guest account that signed the transfer. Only its signature makes the payment the guest's.
-  let signer: `0x${string}` | undefined
 
   const url = await approve(auth, {
     guest: {
@@ -743,11 +741,9 @@ export async function pay_guest(
           to,
           token,
         })
-        const signed = await Guest.sign(envelope, {
+        return await Guest.sign(envelope, {
           account: Guest.account(auth, { session: held }),
         })
-        signer = held.address
-        return signed
       },
       state,
     },
@@ -775,7 +771,6 @@ export async function pay_guest(
   if (!transaction) throw transactionOf.missing()
   const address = machines.payer({
     account: Callback.parameter(url, { name: 'account', redirectUri }),
-    signer,
   })
   if (!address) throw missing('account')
   return { address, transaction }
@@ -2381,13 +2376,13 @@ export namespace machines {
   }
 
   /**
-   * Returns the account that paid a guest payment: the guest account whose key pair signed the
-   * transfer, or else the account that the return URL names, of a user that signed in on the page.
-   * A guest offer that the user selected, but whose guest account signed nothing, paid nothing.
-   * Returns `undefined` without either, or for a malformed `account`.
+   * Returns the account that paid a guest payment, which the return URL names as `account`: the
+   * guest account after its transfer landed, or the account of a user that signed in on the page.
+   * A signature of the guest account proves no payment, since its transfer can fail to land, and the
+   * relay's fee payer signature changes the hash of a sponsored transfer. Returns `undefined` for a
+   * missing or malformed `account`.
    */
   export function payer(options: payer.Options): `0x${string}` | undefined {
-    if (options.signer) return options.signer
     if (
       options.account === undefined ||
       !Address.validate(options.account, { strict: false })
@@ -2400,8 +2395,6 @@ export namespace machines {
     type Options = {
       /** The `account` parameter of the return URL. Absent when the page returned none. */
       account: string | undefined
-      /** The guest account whose key pair signed the transfer. Absent when it signed none. */
-      signer: `0x${string}` | undefined
     }
   }
 

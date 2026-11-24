@@ -307,32 +307,27 @@ describe('machines.approval', () => {
 })
 
 describe('machines.payer', () => {
-  const guest = '0x1f9090aae28b8a3dceadf281b0f12828e676c326'
-  const user = '0x000000000000000000000000000000000000dead'
-
+  // The guest account signed a transfer in each row. Only the return URL names the account that paid.
   test.for([
     [
-      'a failed start of the guest session, then a sign-in on the page',
-      { account: user, signer: undefined },
+      'a failed start of the guest session, then a sign-in that pays',
+      '0x000000000000000000000000000000000000dead',
       '0x000000000000000000000000000000000000dEaD',
     ],
     [
-      "the guest account's signature",
-      { account: undefined, signer: guest },
-      guest,
+      "a guest's signed transfer that never landed, then a sign-in that pays",
+      '0x000000000000000000000000000000000000dead',
+      '0x000000000000000000000000000000000000dEaD',
     ],
     [
-      'a selected guest offer whose guest account signed nothing, without `account`',
-      { account: undefined, signer: undefined },
-      undefined,
+      "the guest's transfer that landed",
+      '0x1f9090aae28b8a3dceadf281b0f12828e676c326',
+      '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
     ],
-    [
-      'a malformed `account`',
-      { account: '0x1234', signer: undefined },
-      undefined,
-    ],
-  ] as const)('returns the payer of %s', ([, options, expected]) => {
-    expect(machines.payer(options)).toBe(expected)
+    ['a return without `account`', undefined, undefined],
+    ['a malformed `account`', '0x1234', undefined],
+  ] as const)('returns the payer of %s', ([, account, expected]) => {
+    expect(machines.payer({ account })).toBe(expected)
   })
 })
 
