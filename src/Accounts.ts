@@ -1324,6 +1324,7 @@ export type Accounts<
        *   reauthorizing --> signedIn: authorization returns a session
        *   reauthorizing --> signedOut: no Tempo ID session
        *   signedOut --> pending: authorization starts
+       *   signedOut --> reauthorizing: authorization starts, held access key expired
        *   signedOut --> signedIn: sign-in
        *   signedIn --> signedOut: signOut, or the access key expires
        * ```
