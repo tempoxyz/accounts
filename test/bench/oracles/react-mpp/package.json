@@ -10,7 +10,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "accounts": "1.0.0-alpha.20261112095625-8a78097",
-    "viem": "^2.57.19",
+    "viem": "^2.58.6",
     "mppx": "0.17.1"
   },
   "devDependencies": {
