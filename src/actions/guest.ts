@@ -38,9 +38,9 @@ import * as AccountActions from './account.js'
 
 /**
  * The RPC URL of each chain of a guest payment, by ID: Tempo mainnet, where Tempo ID sells MACH,
- * and a local Tempo node, which Tempo ID's test suite runs, as `viem/tempo/chains` names them. A
- * chain definition there adds Viem's Tempo formatters to the instance's bundle, so the action names
- * the URLs.
+ * and a local Tempo node, which Tempo ID's test suite runs, as `viem/tempo/chains` names them.
+ * Without `transport`, the reads of the balance use it. A chain definition there adds Viem's Tempo
+ * formatters to the instance's bundle, so the action names the URLs.
  */
 const rpcUrls: Readonly<Record<number, string>> = {
   [Chains.devIds.localnet]: 'http://localhost:8545',
@@ -188,14 +188,15 @@ export declare namespace get {
  * non-extractable WebCrypto P256 key pair that the instance's store keeps, whose address is a root
  * Tempo Account. The guest account pays every later guest payment while the store keeps it.
  *
- * The action reads the guest account's MACH balance beside Tempo ID's preparation of the transfer,
- * whose fee Tempo ID's sponsor pays. A new guest account holds no MACH, so it reads neither. If the
- * balance is below `amount`, Tempo ID's purchase page opens in a popup, and sells the MACH that the
- * account lacks with Apple Pay or Google Pay: at least 5 MACH, and at most 100 MACH. Outside a user
- * gesture, a dialog offers the popup, and its Continue opens it. Once the balance holds `amount`,
- * the transfer prepares again. The action checks that the prepared transaction makes the requested
- * transfer and nothing else, signs it with the key pair, and Tempo ID sends it. The action resolves
- * once the chain includes the transfer. A prepared transfer stays valid for about 4 minutes.
+ * The action reads the guest account's MACH balance through `transport`, beside Tempo ID's
+ * preparation of the transfer, whose fee Tempo ID's sponsor pays. A new guest account holds no MACH,
+ * so it reads neither. If the balance is below `amount`, Tempo ID's purchase page opens in a popup,
+ * and sells the MACH that the account lacks with Apple Pay or Google Pay: at least 5 MACH, and at
+ * most 100 MACH. Outside a user gesture, a dialog offers the popup, and its Continue opens it. Once
+ * the balance holds `amount`, the transfer prepares again. The action checks that the prepared
+ * transaction makes the requested transfer and nothing else, signs it with the key pair, and Tempo
+ * ID sends it. The action resolves once the chain includes the transfer. A prepared transfer stays
+ * valid for about 4 minutes.
  *
  * @throws {RequestError} With the reason `invalid_field` for an `amount`, a `to`, or a `memo` that
  *   `Actions.account.pay` refuses, `invalid_chain` for a chain other than Tempo mainnet or a local
@@ -380,8 +381,9 @@ export declare namespace pay {
     'amount' | 'chainId' | 'memo' | 'redirectUri' | 'signal' | 'to' | 'token'
   > & {
     /**
-     * The transport of the reads of the guest account's balance. Defaults to the RPC of the
-     * payment's chain.
+     * The transport of the reads of the guest account's balance. `accounts.pay` passes the `viem`
+     * plugin's transport of the payment's chain. Defaults to Tempo's own RPC of the payment's chain:
+     * `https://rpc.tempo.xyz`, or `http://localhost:8545` for a local Tempo node.
      */
     transport?: Transport | undefined
   }
