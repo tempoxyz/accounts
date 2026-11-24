@@ -2426,10 +2426,14 @@ export function create<
       // sign. With `guest: 'auto'`, a call without a session starts the guest session first. The
       // reads are local, so the dialog or the popup opens with no request.
       if (config.guest && !fixed && parameters.account === undefined) {
+        // With `auto`, the guest session's change starts before the read of the stored session, so a
+        // sign-out during the read overtakes it, and an aborted payment starts no guest session.
         const held =
-          context.session.get() ??
-          (await context.session.load()) ??
-          (await SignIn.guestAuto(context))
+          config.guest === 'auto'
+            ? ((await SignIn.guestAuto(context, {
+                signal: parameters.signal,
+              })) ?? context.session.get())
+            : (context.session.get() ?? (await context.session.load()))
         if (held && Session.guest(held)) {
           const { attempt: _attempt, ...rest } = parameters
           return await AccountActions.pay_guest(config, {

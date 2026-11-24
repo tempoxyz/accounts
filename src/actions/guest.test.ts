@@ -529,6 +529,71 @@ describe('Accounts.create with guest', () => {
     `)
   })
 
+  test('`pay` of `auto` with an aborted signal rejects with its reason, and starts no guest session', async () => {
+    const { accounts, requests } = create('auto')
+    const reason = new Error('Cancelled.')
+
+    const error = await accounts
+      .pay({ ...payment, signal: AbortSignal.abort(reason) })
+      .catch((error: unknown) => error)
+
+    expect([
+      error === reason,
+      await accounts.session.get(),
+      await accounts.guest.get(),
+      requests,
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        undefined,
+        undefined,
+        [],
+      ]
+    `)
+  })
+
+  test('`pay` of `auto` starts no guest session after a sign-out during the read of the stored session', async () => {
+    const memory = Store.memory()
+    const gate = Promise.withResolvers<void>()
+    const reading = Promise.withResolvers<void>()
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: 'auto',
+      // The first read of the stored session waits for the gate.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (!key.startsWith('tempo-id:guest:')) {
+            reading.resolve()
+            await gate.promise
+          }
+          return await memory.getItem(key)
+        },
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const pending = accounts.pay(payment).catch((error: unknown) => error)
+    await reading.promise
+    const signedOut = accounts.signOut()
+    gate.resolve()
+    await signedOut
+    const error = await pending
+
+    expect([
+      error instanceof Error ? error.name : error,
+      accounts.session.status.get().status,
+      await accounts.session.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        "Accounts.SupersededError",
+        "signedOut",
+        undefined,
+      ]
+    `)
+  })
+
   test('`auto` starts no guest session for a sign-in with a challenge, which signs in through Tempo ID', async () => {
     const { accounts, requests } = create('auto')
     const shown = DefaultAccounts.create({

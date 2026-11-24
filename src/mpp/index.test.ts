@@ -873,10 +873,17 @@ describe('mpp', () => {
     `)
   })
 
-  test('sends the requests of a session manager of a guest session, and refuses them with Accounts.SignedOutError after a sign-out', async () => {
+  test('sends the requests of a session manager of a guest session with `maxDeposit`, refuses them with Accounts.SignedOutError after a sign-out, and refuses a manager without `maxDeposit` with mpp.MaxDepositRequiredError', async () => {
     const accounts = instance({ store: Store.memory() })
     await accounts.renew.commit(await Guest.session(accounts.config))
-    const manager = accounts.mpp.session()
+    const unbounded = (() => {
+      try {
+        return accounts.mpp.session()
+      } catch (error) {
+        return error
+      }
+    })()
+    const manager = accounts.mpp({ maxDeposit: '1' }).session()
 
     // Nothing listens at the URL, so a request that the manager sends rejects with a network error.
     const sent = await (async () =>
@@ -888,11 +895,15 @@ describe('mpp', () => {
       manager.fetch('http://127.0.0.1:9/content'))().catch(
       (error: unknown) => error,
     )
+    // No channel is open, so the close signs nothing, and a sign-out never refuses it.
+    const closed = await manager.close().catch((error: unknown) => error)
 
-    expect([sent, ended]).toMatchInlineSnapshot(`
+    expect([unbounded, sent, ended, closed]).toMatchInlineSnapshot(`
       [
+        [mpp.MaxDepositRequiredError: Missing \`maxDeposit\`: a guest account has no access key limits, so a channel needs a bound. Pass \`maxDeposit\` to the payer, such as \`accounts.mpp({ maxDeposit: '1' })\`.],
         [TypeError: fetch failed],
         [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        undefined,
       ]
     `)
   })

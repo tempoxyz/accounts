@@ -236,6 +236,21 @@ export class MaxAmountRequiredError extends Error {
 }
 
 /**
+ * A session manager of a guest session has no `maxDeposit`, so it opens no channel. The guest
+ * account's key pair signs as the root account, with no access key limits, so only `maxDeposit`
+ * bounds the deposit that a channel holds.
+ */
+export class MaxDepositRequiredError extends Error {
+  override readonly name = 'mpp.MaxDepositRequiredError'
+
+  constructor() {
+    super(
+      "Missing `maxDeposit`: a guest account has no access key limits, so a channel needs a bound. Pass `maxDeposit` to the payer, such as `accounts.mpp({ maxDeposit: '1' })`.",
+    )
+  }
+}
+
+/**
  * A payer of a named `account` holds no access key, so it pays only subscriptions, which Tempo ID's
  * dialog approves in a page. Its `session()`, and its `fetch` outside a browser, throw before any
  * request.
@@ -790,12 +805,16 @@ export function mpp(options: mpp.Options = {}) {
           const reads = !messaged()
           const ended = () =>
             ends !== started || !Session.same(context.session.get(), guest)
+          // A session manager supplies its own check, which lets `close` sign the final voucher of
+          // an open channel after the session ends.
           const account = checked(
             Guest.account(instance.config, { session: guest }),
             {
-              check: () => {
-                if (ended()) throw new Accounts.SignedOutError()
-              },
+              check:
+                signing.check ??
+                (() => {
+                  if (ended()) throw new Accounts.SignedOutError()
+                }),
             },
           )
           return create({
@@ -1103,7 +1122,9 @@ export function mpp(options: mpp.Options = {}) {
           session(parameters) {
             if (overrides.session) return expiring({ overrides, parameters })
             if (overrides.account) throw new SubscriptionOnlyError()
-            if (context.session.get()) return guarded({ overrides, parameters })
+            const maxDeposit = overrides.maxDeposit ?? options.maxDeposit
+            if (context.session.get())
+              return guarded({ maxDeposit, overrides, parameters })
             // The instance reads its stored session only at `load`, such as after a restart, so the
             // manager loads it at its first request, as `fetch` does.
             return SessionManager.deferred(async () => {
@@ -1111,7 +1132,7 @@ export function mpp(options: mpp.Options = {}) {
               // manager's creation, returns without a store read, so the first request reads it.
               const loaded = !context.session.get()
               await context.session.load()
-              return guarded({ loaded, overrides, parameters })
+              return guarded({ loaded, maxDeposit, overrides, parameters })
             })
           },
         }
@@ -1193,6 +1214,8 @@ export function mpp(options: mpp.Options = {}) {
       function guarded(options: {
         /** The caller read the store just before, so the first request reads it no more. */
         loaded?: boolean | undefined
+        /** The payer's `maxDeposit`, of its overrides or the plugin. Absent without one. */
+        maxDeposit: string | undefined
         overrides: mpp.Overrides
         parameters: Parameters<mpp.Payer['session']>[0]
       }) {
@@ -1202,6 +1225,14 @@ export function mpp(options: mpp.Options = {}) {
         let fresh = options.loaded === true
         const held = context.session.get()
         const accessKey = held?.accessKey
+        // A guest account has no access key limits, so only `maxDeposit` bounds the deposit of its
+        // channel.
+        if (
+          held &&
+          Session.guest(held) &&
+          (parameters?.maxDeposit ?? options.maxDeposit) === undefined
+        )
+          throw new MaxDepositRequiredError()
         // A sign-out ends the manager for good, so a later sign-in of the same user does not resume
         // its access key.
         const started = ends
@@ -1698,6 +1729,10 @@ export declare namespace mpp {
      * manager throws `Accounts.SignedOutError` before any request, and the access key signs
      * nothing. `close()` still settles the channel, at the amount that the access key signed for.
      *
+     * A manager of a guest session signs with the guest account's key pair, and needs `maxDeposit`,
+     * since no access key limits bound its deposit. After a sign-out, its `close()` still signs the
+     * final voucher of an open channel.
+     *
      * The manager pays only on the payer's chain. `allowedChainIds` may narrow that policy;
      * it must include the payer's chain. HTTP and SSE select a matching-chain offer. A session
      * offer without a chain uses the payer chain. `close()` preserves dependency errors, including
@@ -1706,6 +1741,7 @@ export declare namespace mpp {
      * @throws {ChainError} For a session challenge on another chain than the payer's, except during `close()`.
      * @throws {RangeError} If `allowedChainIds` excludes the payer's chain.
      * @throws {TypeError} If every session offer names a malformed chain ID.
+     * @throws {MaxDepositRequiredError} For a guest session without `maxDeposit`, before any request.
      * @throws {SubscriptionOnlyError} For a payer of a named `account`, before any request.
      * @throws {Error} For a retry of the manager's `topUp(amount)`, when a request of the manager
      *   selected another channel while the deposit page showed. The manager tops up no channel. A
