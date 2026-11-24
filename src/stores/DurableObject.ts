@@ -13,8 +13,9 @@ import type * as Store from '../Store.js'
  * the object's `alarm` handler calls the returned `alarm`, which deletes the expired entries. A
  * read skips an expired entry before the alarm runs. Workerd has no Web Locks, so the store holds a
  * `lock` and a `connect` in memory: the instances on one store send one refresh, and a sign-out of
- * one empties the session of the others at once. Create one store for each object, such as in a
- * field of its class.
+ * one empties the session of the others at once. The store sets `local`, since only the object
+ * reads its storage, so an instance's `session.refresh` that Tempo ID refuses throws after one
+ * request. Create one store for each object, such as in a field of its class.
  *
  * @example
  * ```ts
@@ -92,6 +93,8 @@ export function create(storage: create.Storage): create.ReturnType {
       if (!entry || Expiry.expired(entry)) return undefined
       return entry.value
     },
+    // Only the object reads its storage, so a refusal of a refresh token is final.
+    local: true,
     // The instances in the object order their refreshes and `sid` index writes through it.
     lock: Lock.create(),
     async removeItem(key) {

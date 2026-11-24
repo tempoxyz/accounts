@@ -185,7 +185,7 @@ describe('Store.postgres', () => {
         async query(text, values) {
           const result = await database.query(text, [...values])
           if (values[0] !== 'session:lock') return result
-          if (text.startsWith('insert') && result.rows.length === 0)
+          if (!text.startsWith('delete') && result.rows.length === 0)
             refusals[index]! += 1
           return result
         },
@@ -225,6 +225,46 @@ describe('Store.postgres', () => {
     expect(
       (await database.query('select key from tempo_id_store')).rows,
     ).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: a replica that waits for the lock of another replica sends one query per attempt', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    // Each replica holds a store of its own on the table, as two processes do. The waiter records
+    // each query on the lock, with the count of rows that it returns.
+    const queries: string[] = []
+    const replicas = [0, 1].map((index) =>
+      Postgres.create({
+        async query(text, values) {
+          const result = await database.query(text, [...values])
+          if (index === 1 && values[0] === 'session:lock')
+            queries.push(`${text.split(' ')[0]} ${result.rows.length}`)
+          return result
+        },
+      }),
+    )
+    const release = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<void>()
+    const first = replicas[0]!.lock!('session', async () => {
+      held.resolve()
+      await release.promise
+    })
+    await held.promise
+
+    const second = replicas[1]!.lock!('session', () => Promise.resolve())
+    await expect.poll(() => queries.length).toBeGreaterThanOrEqual(4)
+    const waited = queries.slice(0, 4)
+    release.resolve()
+    await Promise.all([first, second])
+
+    expect(waited).toMatchInlineSnapshot(`
+      [
+        "with 0",
+        "with 0",
+        "with 0",
+        "with 0",
+      ]
+    `)
   })
 
   test('behavior: a hold whose lease another replica took deletes no lock of that replica', async () => {

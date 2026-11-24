@@ -4,7 +4,7 @@
  * Tempo Account.
  * @module
  */
-import { Address } from 'ox'
+import { Address, Bytes, Hash } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import * as AccountActions from '../actions/account.js'
 import * as Actions from './Actions.js'
@@ -331,8 +331,13 @@ export function refresh(
     // A refresh that held the lock first, in this context or another tab, saved tokens that hold.
     // The commit saves them under the lock, so a sign-out that waits for the lock reads the saved
     // copy. It runs the plugins' `afterSignIn` hooks, as a refresh's commit does.
+    // A session that the reload read from the store, in place of the loaded one, is saved already,
+    // so its commit writes nothing.
+    const adopted = current !== loaded
     if (margin !== undefined && current.expiresAt - margin > Date.now()) {
-      await context.session.change({ update: true }).commit(current)
+      await context.session
+        .change({ stored: adopted, update: true })
+        .commit(current)
       return context.session.get()
     }
     // A refresh or a sign-in that held the lock while this call waited saved tokens newer than the
@@ -350,7 +355,9 @@ export function refresh(
         startedAt,
       })
     ) {
-      await context.session.change({ update: true }).commit(current)
+      await context.session
+        .change({ stored: adopted, update: true })
+        .commit(current)
       return context.session.get()
     }
     // Another context saved other tokens during the reads, so its rotation can have completed
@@ -374,10 +381,20 @@ export function refresh(
     const spansContexts = typeof indexedDB !== 'undefined' && locks
     // A local store, such as `Store.memory`, has no context outside the process, so a lock there
     // serializes every refresh of its token, and a refusal is final too. Without Web Locks, such as
-    // in React Native, the store's own lock serializes them.
+    // in React Native, the store's own lock serializes them. A store that outlives the process, such
+    // as `Store.durableObject`, can hold the pending rotation of a run that a restart ended while
+    // Tempo ID still rotates its token. A refusal of that token, or after a failed read of the
+    // rotations, is then not final.
+    const sentDigest = Hash.sha256(Bytes.fromString(refreshToken), {
+      as: 'Hex',
+    })
+    const pending =
+      !rotations ||
+      rotations.some((entry) => entry.from === sentDigest && !entry.to)
     const final =
       spansContexts ||
       (context.config.store?.local === true &&
+        !pending &&
         (locks || !!context.config.store.lock))
     // Where the lock spans every context, it serializes the refreshes of this store, so a refusal
     // is final. Elsewhere, such as two runs of a CLI on one file, another process can rotate the
