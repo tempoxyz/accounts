@@ -38,8 +38,8 @@ export type Store = {
   json?: boolean | undefined
   /**
    * Whether only the process that created the store holds its values, as `Store.memory` does.
-   * In a browser, a page load empties such a store, so `redirect.signIn` without `open` refuses
-   * it before any request. An instance's `session.refresh` with such a store reads a refusal of its refresh token as final where a
+   * In a browser, a page load empties such a store, so `redirect.signIn` without `open` and a
+   * guest payment of `pay` refuse it before any request. An instance's `session.refresh` with such a store reads a refusal of its refresh token as final where a
    * lock spans the process, Web Locks or the store's `lock`, since no other process can rotate the token. Defaults to `false`.
    */
   local?: boolean | undefined
@@ -79,7 +79,7 @@ export type Store = {
    * redirect in progress, and the `redirect` plugin each redirect that the returning tab started.
    * Absent, a caller reads and deletes in two calls, so each process takes a value once, but two
    * processes can both read it.
-   * `Store.file`, `Store.memory`, `Store.postgres`, and `Store.redis` set it.
+   * `Store.durableObject`, `Store.file`, `Store.memory`, `Store.postgres`, and `Store.redis` set it.
    */
   takeItem?: ((key: string) => Promise<unknown>) | undefined
   /**

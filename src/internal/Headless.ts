@@ -220,15 +220,46 @@ export declare namespace prepare {
 
 /**
  * Reads the JSON response of a sign-in that carried the authorization request. A refusal with the
- * `Tempo-Id-Signed-In` header came after the session started, so it is marked `signedIn`.
+ * `Tempo-Id-Signed-In` header came after the session started, so it is marked `signedIn`. A
+ * `rejected` refusal before it names `options.redirectUri` in its message, since the app never
+ * passed that redirect URI.
  */
-export async function read<value>(response: Response): Promise<value> {
+export async function read<value>(
+  response: Response,
+  options: read.Options = {},
+): Promise<value> {
+  const { redirectUri } = options
   try {
     return await Api.json<value>(response)
   } catch (error) {
     if (response.headers.get('Tempo-Id-Signed-In') === 'true')
       return Api.signedIn(error)
-    throw error
+    if (
+      !redirectUri ||
+      !(error instanceof RequestError) ||
+      error.reason !== 'rejected'
+    )
+      throw error
+    throw new RequestError({
+      cause: error,
+      code: error.code,
+      field: error.field,
+      message: `${error.message} The request named ${redirectUri}, the default redirect URI, since the instance has no \`redirectUri\`. If the app did not register it, pass \`redirectUri\`, one of the app's registered redirect URIs.`,
+      meta: error.meta,
+      reason: error.reason,
+      status: error.status,
+      uri: error.uri,
+    })
+  }
+}
+
+export declare namespace read {
+  type Options = {
+    /**
+     * The redirect URI of the authorization request where the instance has no `redirectUri`, such
+     * as the root of the page's origin. Absent where the instance names one.
+     */
+    redirectUri?: string | undefined
   }
 }
 

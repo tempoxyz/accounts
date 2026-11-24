@@ -49,38 +49,43 @@ const curve = 'cubic-bezier(0.32, 0.72, 0, 1)'
  */
 const payment = {
   bones: [
-    { height: 24, left: 12, radius: 999, top: 6, width: 137 },
-    { height: 16, radius: 999, right: 12, top: 10, width: 16 },
-    { height: 48, radius: 999, top: 52, width: 48 },
-    { height: 21, top: 121, width: 177 },
-    { height: 15, top: 157, width: 281 },
-    { height: 145, kind: 'surface', left: 24, right: 24, top: 199 },
-    { height: 27, top: 233, width: 84 },
-    { height: 12, left: 37, top: 288, width: 14 },
-    { height: 11, right: 61, top: 288, width: 79 },
-    { height: 16, radius: 0, right: 37, top: 285, width: 16 },
-    { height: 12, left: 37, top: 316, width: 27 },
-    { height: 12, right: 37, top: 316, width: 109 },
-    { height: 90, kind: 'surface', left: 24, right: 24, top: 356 },
-    { height: 1, kind: 'line', left: 25, right: 25, top: 402 },
-    { height: 12, left: 37, top: 374, width: 52 },
-    { height: 20, radius: 0, right: 80, top: 369, width: 20 },
-    { height: 12, right: 37, top: 374, width: 35 },
-    { height: 12, left: 37, top: 418, width: 47 },
-    { height: 12, right: 37, top: 418, width: 267 },
-    { height: 40, left: 24, radius: 999, top: 470, width: 'calc(50% - 28px)' },
-    { height: 40, radius: 999, right: 24, top: 470, width: 'calc(50% - 28px)' },
+    { height: 24, left: 8, radius: 999, top: 8, width: 118 },
+    { height: 16, radius: 999, right: 8, top: 12, width: 16 },
+    { height: 48, radius: 999, top: 56, width: 48 },
+    { height: 21, top: 125, width: 177 },
+    { height: 15, top: 161, width: 281 },
+    { height: 145, kind: 'surface', left: 24, right: 24, top: 203 },
+    { height: 27, top: 237, width: 84 },
+    { height: 12, left: 37, top: 292, width: 14 },
+    { height: 11, right: 61, top: 292, width: 79 },
+    { height: 16, radius: 0, right: 37, top: 289, width: 16 },
+    { height: 12, left: 37, top: 320, width: 27 },
+    { height: 12, right: 37, top: 320, width: 109 },
+    { height: 90, kind: 'surface', left: 24, right: 24, top: 360 },
+    { height: 1, kind: 'line', left: 25, right: 25, top: 406 },
+    { height: 12, left: 37, top: 378, width: 52 },
+    { height: 20, radius: 0, right: 80, top: 373, width: 20 },
+    { height: 12, right: 37, top: 378, width: 35 },
+    { height: 12, left: 37, top: 422, width: 47 },
+    { height: 12, right: 37, top: 422, width: 267 },
+    { height: 40, left: 24, radius: 999, top: 474, width: 'calc(50% - 28px)' },
+    { height: 40, radius: 999, right: 24, top: 474, width: 'calc(50% - 28px)' },
   ],
   /** The page's height, which the frame takes until the page reports its own. */
-  height: 542,
+  height: 546,
 } as const
 
 /**
  * The dialog's styles: a card of 400 pixels, or a bottom sheet below 480 pixels of width. The frame
  * draws the sign-in, so the dialog only places and sizes it. The card sets its own `margin: auto`,
- * which centers it, because a page's CSS reset removes the browser's. A closed dialog keeps its size off
- * screen, so a hidden frame lays out at the width that it shows at. A browser with `corner-shape`
- * draws squircle corners, with a larger radius for the same visual size. A click on the backdrop
+ * which centers it, because a page's CSS reset removes the browser's. A closed dialog stays on screen
+ * at its size, transparent and without pointer events, since Chromium paints no cross-origin frame
+ * that is off screen or hidden. So a preloaded frame paints its request and reports its height before
+ * the dialog shows. The dialog takes no transition, which a page's reduced-motion reset adds to every
+ * element, so it leaves the top layer in one frame. The frame's page insets its address 8 pixels,
+ * with a 12-pixel radius, so it is concentric with the dialog's 20-pixel corner. A browser with
+ * `corner-shape` draws squircle corners at 1.84 times the radius, which meets the round corner's 45
+ * degree point, as the design system draws them. A click on the backdrop
  * targets the dialog, so the dialog takes no selection, which repeated clicks would draw over the
  * frame. The dialog's fill is the design system's `background.elevated`, which the frame's page
  * draws too, so the dialog shows no seam while the frame loads. IntersectionObserver v2 reports the
@@ -101,16 +106,18 @@ dialog[${attribute}] {
   max-width: calc(100vw - 32px);
   overflow: hidden;
   padding: 0;
+  transition: none !important;
   -webkit-user-select: none;
   user-select: none;
   width: 400px;
 }
 dialog[${attribute}]:not([open]) {
   display: block;
-  left: -10000px;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
   position: fixed;
   top: 0;
-  visibility: hidden;
 }
 dialog[${attribute}]::backdrop {
   background: rgb(0 0 0 / 0.4);
@@ -155,7 +162,7 @@ dialog[${attribute}] [data-skeleton] {
   flex-direction: column;
   gap: 12px;
   inset: 0;
-  padding: 12px 24px 24px;
+  padding: 8px 24px 24px;
   position: absolute;
 }
 dialog[${attribute}] [data-skeleton] > div {
@@ -164,9 +171,11 @@ dialog[${attribute}] [data-skeleton] > div {
   flex: none;
 }
 dialog[${attribute}] [data-skeleton] [data-bar] {
-  height: 20px;
-  margin-bottom: 20px;
-  width: 120px;
+  border-radius: 12px;
+  height: 24px;
+  margin-bottom: 12px;
+  margin-left: -16px;
+  width: 118px;
 }
 dialog[${attribute}] [data-skeleton] [data-title] {
   height: 28px;
@@ -210,7 +219,7 @@ dialog[${attribute}] [data-skeleton][data-payment] > [data-line] {
 }
 @supports (corner-shape: squircle) {
   dialog[${attribute}] {
-    border-radius: 32px;
+    border-radius: 36.8px;
     corner-shape: squircle;
   }
   dialog[${attribute}] [data-panel] button {
@@ -222,7 +231,7 @@ dialog[${attribute}] [data-skeleton][data-payment] > [data-line] {
   }
   @media (max-width: 480px) {
     dialog[${attribute}] {
-      border-radius: 32px 32px 0 0;
+      border-radius: 36.8px 36.8px 0 0;
     }
   }
 }

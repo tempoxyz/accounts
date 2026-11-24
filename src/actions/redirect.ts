@@ -275,6 +275,10 @@ export declare namespace complete {
  * default, it first pushes the request to `/oauth2/par`, and the URL holds only `client_id` and
  * `request_uri`.
  *
+ * Throws a `RequestError` with status 0, before any request, for an access key without bounds,
+ * which Tempo ID's page refuses: `missing_permissions` without `limits`, or with `scopes: 'any'`,
+ * and `invalid_expiry` for `expiry: false`.
+ *
  * @example
  * ```ts
  * const { pending, url } = await Actions.redirect.createUrl(auth, {
@@ -292,6 +296,9 @@ export async function createUrl<
 ): Promise<
   createUrl.ReturnType<HasAccessKey<accessKey>, Addressed<accessKey>>
 > {
+  // Tempo ID's page refuses an access key without bounds, and its callback names no `reason`, so
+  // the request is refused before any navigation, with the reason of Tempo ID's refusal.
+  if (options.accessKey) bounded(options.accessKey)
   // `accessKey` decides both the type and the runtime value of `pending`.
   return (await authorizeUrl(auth, options)) as createUrl.ReturnType<
     HasAccessKey<accessKey>,
@@ -538,6 +545,38 @@ export declare namespace handleCallback {
 
   /** A sign-in without an access key: the tokens and the user. */
   type WithoutAccessKey = Omit<Authorization, 'accessKey' | 'signer'>
+}
+
+/**
+ * Throws a `RequestError` with status 0 for an access key without bounds, which every page of Tempo
+ * ID refuses: `missing_permissions` without `limits`, or with `scopes: 'any'`, and `invalid_expiry`
+ * for an access key that never expires. Only a headless sign-in requests such an access key.
+ */
+function bounded(accessKey: WithAccount | WithAddress) {
+  // Absent scopes fill from the limits, so only `'any'`, or absent limits, leaves the scopes out.
+  const missing = [
+    ...(accessKey.limits === undefined ? (['limits'] as const) : []),
+    ...(accessKey.limits === undefined || accessKey.scopes === 'any'
+      ? (['scopes'] as const)
+      : []),
+  ]
+  if (missing[0])
+    throw new RequestError({
+      code: 'invalid_request',
+      field: `accessKey.${missing[0]}`,
+      message: `Missing ${missing.map((field) => `\`${field}\``).join(' and ')}: an access key that spends any amount or makes any call needs a headless sign-in. Name \`limits\`, and leave out \`scopes\` to fill them from \`limits\`.`,
+      reason: 'missing_permissions',
+      status: 0,
+    })
+  if (accessKey.expiry === false || accessKey.expiry === 0)
+    throw new RequestError({
+      code: 'invalid_request',
+      field: 'accessKey.expiry',
+      message:
+        "Invalid `expiry`: an access key that never expires needs a headless sign-in. Use a duration, such as `'1d'`, or a future Unix time in seconds.",
+      reason: 'invalid_expiry',
+      status: 0,
+    })
 }
 
 /**

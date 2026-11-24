@@ -178,6 +178,48 @@ describe('passkey', () => {
     `)
   })
 
+  test('prepare requests options that offer every passkey at the signIn of a handle that a signOut without everywhere followed', async () => {
+    const allows: unknown[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : input)
+        if (url.pathname === '/v1/auth/passkey/options')
+          allows.push(
+            (JSON.parse(String(init?.body)) as { allow?: unknown }).allow ??
+              null,
+          )
+        return fetch(input, init)
+      },
+      plugins: [passkey()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const prepared = accounts.passkey.prepare({
+      accessKey: false,
+      available: true,
+    })
+    await expect.poll(() => allows.length).toBe(1)
+    // The sign-out keeps the browser's Tempo ID session, whose user alone the options would name.
+    await accounts.signOut()
+    await prepared.signIn().catch(() => undefined)
+
+    // Nothing answers, so the signIn requests the options of the new request again.
+    expect(allows).toMatchInlineSnapshot(`
+      [
+        null,
+        {
+          "type": "all",
+        },
+        {
+          "type": "all",
+        },
+      ]
+    `)
+  })
+
   test('register and signIn throw expiry_passed, and send no request, for an access key whose expiry in Unix seconds has passed', async () => {
     const paths: string[] = []
     const accounts = Accounts.create({

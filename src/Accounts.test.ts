@@ -3,7 +3,9 @@
  * sends after another context on the store signs out, its abort with React Native's `AbortSignal`,
  * the refresh token of an expired session whose revocation receives no response, the one refresh of
  * two instances on one store without Web Locks, and the refusal of a
- * third-party app's `authorize` before any request, and the reasons of `RequestError`.
+ * third-party app's `authorize` before any request, a guest payment only without a session, the read
+ * of the guest account's balance through the `viem` plugin's transport, and the reasons of
+ * `RequestError`.
  * @module
  */
 import { AbortController as NativeAbortController } from 'abort-controller'
@@ -21,15 +23,18 @@ import {
   expectTypeOf,
   test,
 } from 'vite-plus/test'
+import { custom } from 'viem'
 import { Account } from 'viem/tempo'
 import { Address, Bytes, Hash, Json, Secp256k1 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
+import * as AccountActions from './actions/account.js'
 import * as Accounts from './Accounts.js'
 import * as DefaultAccounts from './internal/DefaultAccounts.js'
 import * as StoreValue from './internal/StoreValue.js'
 import * as Plugin from './Plugin.js'
 import * as Session from './Session.js'
 import * as Store from './Store.js'
+import { local } from './plugins/local.js'
 import { viem } from './plugins/viem.js'
 
 describe('authorize', () => {
@@ -740,6 +745,123 @@ describe('create', () => {
 })
 
 describe('pay', () => {
+  test('pays as a guest without a session, and ignores `guest` with a session', async () => {
+    const store = Store.memory()
+    const owner = Secp256k1.randomPrivateKey()
+    const privateKey = Secp256k1.randomPrivateKey()
+    const authorization = KeyAuthorization.from({
+      address: Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey })),
+      chainId: 4217n,
+      expiry: Math.floor(Date.now() / 1000) + 86_400,
+      type: 'secp256k1',
+    })
+    const signature = Secp256k1.sign({
+      payload: KeyAuthorization.getSignPayload(authorization),
+      privateKey: owner,
+    })
+    const options = {
+      chain: 4217,
+      clientId: 'client_1',
+      store,
+      url: 'http://127.0.0.1:9',
+    } as const
+    const payment = {
+      amount: '1',
+      guest: true,
+      to: '0x0000000000000000000000000000000000000001',
+      token: 'ousd',
+    } as const
+    const guest = Accounts.create(options)
+
+    const refused = await guest
+      .pay(payment)
+      .catch((error: Accounts.RequestError) => error.reason)
+    const address = await guest.guest.get()
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",4217]',
+      {
+        state: {
+          session: Session.from({
+            accessKey: {
+              account: Address.fromPublicKey(
+                Secp256k1.getPublicKey({ privateKey: owner }),
+              ),
+              chainId: 4217,
+              keyAuthorization: KeyAuthorization.toRpc(
+                KeyAuthorization.from(authorization, { signature }),
+              ),
+              privateKey,
+            },
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const signedIn = await Accounts.create(options)
+      .pay(payment)
+      .catch((error: unknown) => error)
+
+    // Only a guest payment refuses a token other than MACH, before any request.
+    expect(refused).toBe('unsupported_token')
+    expect(address).toBeUndefined()
+    // The session pays as without `guest`, and outside a page no plugin sends it.
+    expect(signedIn).toBeInstanceOf(AccountActions.PageRequiredError)
+  })
+
+  test("reads the guest account's balance through the `viem` plugin's transport of the chain", async () => {
+    const requests: { method: string; to: unknown }[] = []
+    const accounts = Accounts.create({
+      chain: 1337,
+      clientId: 'client_1',
+      // Tempo ID refuses each preparation for the balance, so each payment goes on to the purchase.
+      fetch: () =>
+        Promise.resolve(
+          Response.json(
+            { error: 'invalid_request', reason: 'insufficient_balance' },
+            { status: 409 },
+          ),
+        ),
+      plugins: [
+        viem({
+          transport: custom({
+            request: (args: { method: string; params?: unknown }) => {
+              const [call] = (args.params ?? []) as [{ to?: unknown }?]
+              requests.push({ method: args.method, to: call?.to })
+              return Promise.resolve(`0x${'0'.repeat(64)}`)
+            },
+          }),
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const payment = {
+      amount: '1',
+      guest: true,
+      to: '0x0000000000000000000000000000000000000001',
+      token: 'mach',
+    } as const
+
+    // A new guest account holds no MACH, so the first payment reads no balance.
+    const created = await accounts.pay(payment).catch((error: unknown) => error)
+    const held = await accounts.pay(payment).catch((error: unknown) => error)
+
+    // Outside a page, the purchase page does not open.
+    expect(created).toBeInstanceOf(AccountActions.PageRequiredError)
+    expect(held).toBeInstanceOf(AccountActions.PageRequiredError)
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        {
+          "method": "eth_call",
+          "to": "0x20c000000000000000000000f37de3740adec032",
+        },
+      ]
+    `)
+  })
+
   test("rejects a payment within the access key's limit outside a page, on an instance without a plugin that sends it, with a PageRequiredError that names the missing plugin rather than a sign-in", async () => {
     const store = Store.memory()
     const owner = Secp256k1.randomPrivateKey()
@@ -1585,6 +1707,56 @@ describe('pay', () => {
     )
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
+
+  test('sends no account read outside a page for a session without a Tempo Account on an instance with account: false, and rejects with a PageRequiredError', async () => {
+    const store = Store.memory()
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",4217]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const requests: string[] = []
+    // A CLI's instance that signs users in without a Tempo Account, such as with the `device` plugin.
+    const accounts = Accounts.create({
+      account: false,
+      chain: 4217,
+      clientId: 'client_1',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      plugins: [viem()],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+
+    const error = await accounts
+      .pay({
+        amount: '1',
+        to: '0x0000000000000000000000000000000000000001',
+        token: '0x20c0000000000000000000000000000000000000',
+      })
+      .then(
+        () => undefined,
+        (error: Error) => error,
+      )
+
+    expect(error?.name).toMatchInlineSnapshot(
+      `"Actions.account.PageRequiredError"`,
+    )
+    expect(requests).toMatchInlineSnapshot(`[]`)
+  })
 })
 
 describe('RequestError', () => {
@@ -1959,6 +2131,163 @@ describe('session.get', () => {
     )
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
+
+  test('authorizes once for two instances on one store that restore together, and the later one returns the earlier one’s session', async () => {
+    const name = 'tempo-id:session:["http://127.0.0.1:9","cli:mercator",4217]'
+    const store = Store.memory()
+    const signIns: string[] = []
+    const create = (label: string) =>
+      Accounts.create({
+        chain: 4217,
+        clientId: 'cli:mercator',
+        plugins: [
+          local(),
+          Plugin.from({
+            hooks: { afterSignIn: () => void signIns.push(label) },
+            id: 'record',
+          }),
+        ],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    // The store holds the owner key and no session, as after a cleared session in another tab.
+    await create('owner').local.create()
+    await store.removeItem(name)
+    signIns.length = 0
+    const first = create('first')
+    const second = create('second')
+    const authorizations: string[] = []
+
+    const [a, b] = await Promise.all(
+      [first, second].map((accounts, index) =>
+        accounts.session.get({
+          reauthorize: async () => {
+            authorizations.push(index === 0 ? 'first' : 'second')
+            return await accounts.local.signIn()
+          },
+        }),
+      ),
+    )
+
+    expect(authorizations).toMatchInlineSnapshot(`
+      [
+        "first",
+      ]
+    `)
+    expect(a?.accessKey?.keyAuthorization).toEqual(
+      b?.accessKey?.keyAuthorization,
+    )
+    expect([
+      first.session.status.get().status,
+      second.session.status.get().status,
+    ]).toMatchInlineSnapshot(`
+      [
+        "signedIn",
+        "signedIn",
+      ]
+    `)
+    // The later instance adopts the session, so its plugins' hooks run as at another tab's sign-in.
+    expect(signIns.toSorted()).toMatchInlineSnapshot(`
+      [
+        "first",
+        "second",
+      ]
+    `)
+  })
+
+  test('returns a saved session that holds while another instance of the session authorizes', async () => {
+    const create = (store: Store.Store) =>
+      Accounts.create({
+        chain: 4217,
+        clientId: 'cli:mercator',
+        plugins: [local()],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const name = 'tempo-id:session:["http://127.0.0.1:9","cli:mercator",4217]'
+    const empty = Store.memory()
+    await create(empty).local.create()
+    await empty.removeItem(name)
+    const saved = Store.memory()
+    await create(saved).local.create()
+    const authorizing = create(empty)
+    const restoring = create(saved)
+    const gate = Promise.withResolvers<void>()
+    const order: string[] = []
+
+    // The first instance holds its authorization until the gate opens.
+    const authorized = authorizing.session
+      .get({
+        reauthorize: async () => {
+          await gate.promise
+          return await authorizing.local.signIn()
+        },
+      })
+      .then(() => void order.push('authorized'))
+    const restored = restoring.session
+      .get({ reauthorize: async () => await restoring.local.signIn() })
+      .then(() => void order.push('restored'))
+    try {
+      await expect.poll(() => order).toEqual(['restored'])
+    } finally {
+      gate.resolve()
+    }
+    await Promise.all([authorized, restored])
+
+    expect(order).toMatchInlineSnapshot(`
+      [
+        "restored",
+        "authorized",
+      ]
+    `)
+  })
+
+  test('authorizes beside another instance of the session whose authorization waits for the user', async () => {
+    const name = 'tempo-id:session:["http://127.0.0.1:9","cli:mercator",4217]'
+    const create = (store: Store.Store) =>
+      Accounts.create({
+        chain: 4217,
+        clientId: 'cli:mercator',
+        plugins: [local()],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const stores = [Store.memory(), Store.memory()] as const
+    for (const store of stores) {
+      await create(store).local.create()
+      await store.removeItem(name)
+    }
+    const waiting = create(stores[0])
+    const restoring = create(stores[1])
+    // The first authorization waits for the user, as at a passkey prompt, until the gate opens.
+    const gate = Promise.withResolvers<void>()
+    const order: string[] = []
+
+    const authorized = waiting.session
+      .get({
+        reauthorize: async () => {
+          await gate.promise
+          return await waiting.local.signIn()
+        },
+      })
+      .then(() => void order.push('authorized'))
+    const restored = restoring.session
+      .get({ reauthorize: async () => await restoring.local.signIn() })
+      .then(() => void order.push('restored'))
+    try {
+      await expect.poll(() => order, { timeout: 8_000 }).toEqual(['restored'])
+    } finally {
+      gate.resolve()
+    }
+    await Promise.all([authorized, restored])
+
+    expect(order).toMatchInlineSnapshot(`
+      [
+        "restored",
+        "authorized",
+      ]
+    `)
+  }, 10_000)
 
   test('reads the stored session once when a plugin reloads it as the instance is created', async () => {
     const name =

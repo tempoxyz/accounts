@@ -11,6 +11,12 @@
   },
   "compatibility_date": "2026-09-21",
   "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "class_name": "DurableStore", "name": "DURABLE_STORE" }]
+  },
+  "exports": {
+    "DurableStore": { "storage": "sqlite", "type": "durable-object" }
+  },
   "kv_namespaces": [
     { "binding": "STORE", "id": "45b778b6db1d468a8d8b342a838fcd39" }
   ],

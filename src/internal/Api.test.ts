@@ -327,6 +327,28 @@ describe('grant', () => {
     `)
   })
 
+  test("returns the audiences outside Tempo ID of a token with only the instance's scopes, without its scopes", () => {
+    expect(
+      Api.grant(
+        auth,
+        token({
+          aud: [
+            'https://mcp.example.com/mcp',
+            'https://id.tempo.xyz/oauth2/userinfo',
+          ],
+          iss: 'https://id.tempo.xyz',
+          scope: 'openid email offline_access',
+        }),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "resource": [
+          "https://mcp.example.com/mcp",
+        ],
+      }
+    `)
+  })
+
   test("returns nothing for a token with only the instance's scopes, or one that does not decode", () => {
     expect([
       Api.grant(

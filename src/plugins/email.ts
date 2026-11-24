@@ -17,8 +17,9 @@ const unlistedTtl = 10 * 60_000
  * Returns the plugin of sign-in with an emailed code, which adds `email.sendCode` and `email.signIn`.
  * An app renders its own form, and Tempo ID emails a 6-digit code to the address. On a page, only a
  * [first-party app](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps) signs
- * in this way, at the origin of one of its redirect URIs. Unless the app holds `tempo-id:sign`, the
- * access key must fit the headless
+ * in this way, at the origin of one of its redirect URIs. The sign-in names the instance's
+ * `redirectUri`, else the root of the page's origin, which the app must then register. Unless the
+ * app holds `tempo-id:sign`, the access key must fit the headless
  * [ceiling](https://github.com/tempoxyz/id/blob/main/docs/permissions.md#headless-ceiling).
  *
  * On an instance with `clientSecret` or `clientAssertion`, the plugin calls the backend's routes
@@ -30,8 +31,13 @@ const unlistedTtl = 10 * 60_000
  * import { Accounts } from 'accounts'
  * import { email } from 'accounts/plugins'
  *
- * // A first-party app's registration ID. A page origin names a third-party app.
- * const accounts = Accounts.create({ clientId: 'example-app', plugins: [email()] })
+ * // A first-party app's registration ID, and one of its redirect URIs on the page's origin. A page
+ * // origin names a third-party app.
+ * const accounts = Accounts.create({
+ *   clientId: 'example-app',
+ *   plugins: [email()],
+ *   redirectUri: 'https://app.example.com/callback',
+ * })
  *
  * await accounts.email.sendCode({ email: 'user@example.com' })
  * const session = await accounts.email.signIn({
@@ -140,7 +146,9 @@ export function email(options: email.Options = {}) {
          * @throws {Accounts.RequestError} When Tempo ID refuses the authorization request. Tempo ID
          *   checks it before the code, so the code stays valid, and `signedIn` is `false`.
          *   - `invalid_origin`: The request came from an origin other than the redirect URI's.
-         *   - `rejected`: Tempo ID refused the app or its request.
+         *   - `rejected`: Tempo ID refused the app or its request, such as a redirect URI that
+         *     the app did not register. Without `redirectUri`, the message names the default
+         *     redirect URI.
          *   - `invalid_chain`, `missing_key`, `missing_permissions`, `invalid_public_key`,
          *     `invalid_expiry`, `expiry_passed`, `empty_limits`, `empty_scopes`, `duplicate_limit`,
          *     `unsupported_token`, `invalid_period`, `scope_without_limit`, `unsupported_call`,
@@ -422,7 +430,8 @@ export declare namespace email {
       challenge?: string | undefined
       /**
        * The 6-digit code that Tempo ID emailed. The call drops each character other than a digit,
-       * such as the spaces of a pasted code.
+       * such as the spaces of a pasted code. It reads a full-width or Arabic-Indic digit, as a
+       * Japanese input method or a Persian keyboard types it, as its ASCII digit.
        */
       code: string
       /** The address that received the code. */

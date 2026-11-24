@@ -149,9 +149,10 @@ export async function signIn(
   target: FrameLocator | Page,
   options: signIn.Options,
 ) {
-  const { email, filled, held = false } = options
+  const { email, filled } = options
 
   await hydrated(target)
+  const held = options.held ?? (await observed(target))
   if (held) await shown(target)
   await target.getByLabel('Email').fill(email)
   const submit = target.getByRole('button', { name: 'Continue with email' })
@@ -180,7 +181,8 @@ export declare namespace signIn {
     filled?: ((submit: Locator) => Promise<void>) | undefined
     /**
      * Whether Tempo ID holds each action until its content shows, as the frame of an app without
-     * `tempo-id:iframe` does. Defaults to `false`.
+     * `tempo-id:iframe` does. Defaults to whether the page reports its visibility, which only such
+     * a frame does.
      */
     held?: boolean | undefined
   }
@@ -199,18 +201,33 @@ async function hydrated(target: FrameLocator | Page) {
 }
 
 /**
- * Waits until Tempo ID's page in `target` reports its content as shown: in view, and covered by
- * nothing for a moment. The frame of an app without `tempo-id:iframe` runs an action only then.
+ * Returns whether Tempo ID's page in `target` reports its visibility, as the frame of an app without
+ * `tempo-id:iframe` does. The frame reports it with its first paints, so two paints pass first. A
+ * trusted frame, a popup, and a redirect report none.
  */
-async function shown(target: FrameLocator | Page) {
-  // The browser reports the visibility with a frame's paint, so two paints pass first.
+async function observed(target: FrameLocator | Page) {
+  await paints(target)
+  return (await target.locator('main[data-in-view]').count()) > 0
+}
+
+/** Waits until Tempo ID's page in `target` paints twice. */
+async function paints(target: FrameLocator | Page) {
   await target
-    .locator('main')
+    .locator('html')
     .evaluate(
       () =>
         new Promise((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(resolve)),
         ),
     )
+}
+
+/**
+ * Waits until Tempo ID's page in `target` reports its content as shown: in view, and covered by
+ * nothing for a moment. The frame of an app without `tempo-id:iframe` runs an action only then.
+ */
+async function shown(target: FrameLocator | Page) {
+  // The browser reports the visibility with a frame's paint, so two paints pass first.
+  await paints(target)
   await expect(target.locator('main[data-visible]')).toHaveCount(1)
 }

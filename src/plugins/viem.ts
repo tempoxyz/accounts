@@ -59,6 +59,7 @@ import * as SignIn from '../internal/SignIn.js'
 import type { Payment } from '../internal/Payment.js'
 import * as AccessKey from '../internal/viem/AccessKey.js'
 import * as Retry from '../internal/viem/Retry.js'
+import * as Settings from '../internal/viem/Settings.js'
 import * as Token from '../internal/viem/Token.js'
 import * as Signer from '../internal/Signer.js'
 import * as Verify from '../internal/viem/Verify.js'
@@ -1019,11 +1020,14 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                   // holds the access key, so its mark goes, and a later fill attaches it again. A
                   // spent limit or a call outside the scopes shows that the chain holds the access
                   // key. The chain checks limits and scopes only for an access key that it holds,
-                  // so its mark stays.
+                  // so its mark stays. A revoked access key never registers again, so its mark
+                  // stays too: Viem's own preparation would attach the authorization, which the
+                  // node refuses as `KeyAlreadyExists`, and the retry would not see the revocation.
                   if (
                     fill &&
                     !refusedWith(error, { name: 'SpendingLimitExceeded' }) &&
-                    !refusedWith(error, { name: 'CallNotAllowed' })
+                    !refusedWith(error, { name: 'CallNotAllowed' }) &&
+                    !refusedWith(error, { name: 'KeyAlreadyRevoked' })
                   )
                     forget(fill)
                   // A fill that carried the authorization of a registered access key, such as one
@@ -1721,7 +1725,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             // shows the code.
             if (!page) {
               const authorization = await deviceRequests.get(config)!({
-                // The new tokens keep an API's scopes that the replaced session's tokens hold.
+                // The new tokens keep the API audiences and the API scopes of the replaced session's
+                // tokens.
                 ...Api.grant(config, before.accessToken),
                 accessKey,
                 funding: funding && {
@@ -2521,7 +2526,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * balance after the retry, a spent limit, an access key that the chain does not hold, or a
        * call outside the access key's scopes. Outside a page, such a refusal rejects with
        * `Actions.account.PageRequiredError`, whose cause is the refusal, except a low balance, which
-       * rejects as it is.
+       * rejects as it is. A transfer that the chain reverts since its fee spent the rest of the
+       * limit counts as a spent limit, once one read of the limit confirms it.
        * Any other failure rejects, since the node may have taken the transaction.
        */
       async function send(
@@ -2569,7 +2575,18 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           const resolvable =
             retry.classify(error) !== undefined ||
             retry.errorName(error) === 'CallNotAllowed'
-          if (!resolvable) throw error
+          // The chain takes a transfer whose fee spends the rest of its limit, and reverts it. Only
+          // a reverted receipt reads the limit that is left, which tells a spent limit from another
+          // revert.
+          const limited =
+            !resolvable &&
+            (await reverted_limit(error, {
+              chainId,
+              client,
+              session: session ?? context.session.get(),
+              transfer,
+            }))
+          if (!resolvable && !limited) throw error
           if (page) return undefined
           // Outside a page, only the node's refusal of the access key, its limit, or its scopes takes
           // the error of a payment above the access key's known limits, since a sign-in for another
@@ -2577,10 +2594,11 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           const name = retry.errorName(error)
           const kind = retry.classify(error)?.kind
           const signIn =
-            name !== undefined &&
-            (name === 'CallNotAllowed' ||
-              kind === 'accessKey' ||
-              kind === 'limit')
+            limited ||
+            (name !== undefined &&
+              (name === 'CallNotAllowed' ||
+                kind === 'accessKey' ||
+                kind === 'limit'))
           if (!signIn) throw error
           throw new AccountActions.PageRequiredError({
             cause: error,
@@ -2623,7 +2641,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         apply: (_, __, args: [viem.Overrides?]) => get(args[0]),
         // The settings key returns the plugin's chains and transports, which the wagmi plugin reads.
         // No client holds the key, so it shadows no member.
-        get: (_, key) => (key === settings ? own : Reflect.get(get(), key)),
+        get: (_, key) => (key === Settings.key ? own : Reflect.get(get(), key)),
         getOwnPropertyDescriptor(_, key) {
           const descriptor = Reflect.getOwnPropertyDescriptor(get(), key)
           return descriptor && { ...descriptor, configurable: true }
@@ -2645,7 +2663,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         deviceRequests.set(instance.config, devices.device.request)
       const namespace = (
         instance as unknown as {
-          viem: viem.Namespace & { [settings]: viem.Settings }
+          viem: viem.Namespace & { [Settings.key]: viem.Settings }
         }
       ).viem
       // A client on the first chain names the actions, since the instance's chain may be one that
@@ -2654,7 +2672,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       const sample = build(
         {
           account: Signer.live(() => undefined),
-          chain: namespace[settings].chains[0],
+          chain: namespace[Settings.key].chains[0],
           transport: custom({ request: () => Promise.resolve(undefined) }),
         },
         {
@@ -2964,7 +2982,7 @@ export declare namespace viem {
     url: string
   }
 
-  /** The chains and transports of the plugin, which `accounts.viem[settings]` returns. */
+  /** The chains and transports of the plugin, which `accounts.viem[Settings.key]` returns. */
   type Settings = {
     /**
      * Returns the chain of `chainId`: its options' `chain`, or Tempo's chain of that ID. Absent when
@@ -3173,12 +3191,6 @@ export declare namespace viem {
    */
   type Namespace = Client & ((overrides?: Overrides) => Client)
 }
-
-/**
- * The key of `accounts.viem` that returns the plugin's {@link viem.Settings}. The entries of the
- * package do not export it, so only the package's own plugins read it.
- */
-export const settings = Symbol('viem.settings')
 
 /**
  * The key of a `viem` plugin that holds the options it was created with. The entries of the package
@@ -3666,6 +3678,52 @@ function accessKeyOn(
   return [session?.accessKey, ...(session?.accessKeys ?? [])].find(
     (entry) => entry && Number(entry.chainId) === options.chainId,
   )
+}
+
+/**
+ * Returns whether `error` is the revert of a transfer of `options.transfer` that the limit left to
+ * the access key of `options.session` no longer holds, such as after its own fee spent the rest. It
+ * reads the limit in one round, only for a reverted receipt. A failed read returns `false`, so
+ * the error stands.
+ */
+async function reverted_limit(error: unknown, options: reverted_limit.Options) {
+  const { chainId, client, session, transfer } = options
+  const seen = new Set<unknown>()
+  let current = error
+  // Several copies of Viem can load, so the error's name identifies it.
+  while (
+    current instanceof Error &&
+    !seen.has(current) &&
+    current.name !== 'TransactionReceiptRevertedError'
+  ) {
+    seen.add(current)
+    current = current.cause
+  }
+  if (!(current instanceof Error) || seen.has(current)) return false
+
+  const accessKey = accessKeyOn(session, { chainId })
+  if (!accessKey?.keyAuthorization.limits) return false
+  const read = await Actions.accessKey
+    .getRemainingLimit(client, {
+      accessKey: accessKey.keyAuthorization.keyId,
+      account: accessKey.account,
+      token: transfer.token,
+    })
+    .catch(() => undefined)
+  return read !== undefined && read.remaining < transfer.amount
+}
+
+declare namespace reverted_limit {
+  type Options = {
+    /** The chain of the transfer. */
+    chainId: number
+    /** The client that sent the transfer, which reads the limit. */
+    client: Client
+    /** The session whose access key sent the transfer. */
+    session: Pick<Session.Any, 'accessKey' | 'accessKeys'> | undefined
+    /** The transfer, in base units, as `Token.payable` returns it. */
+    transfer: Token.payable.ReturnType
+  }
 }
 
 /** The state machines that this module runs. */

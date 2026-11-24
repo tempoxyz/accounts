@@ -523,8 +523,9 @@ export function jkt(token: string) {
 }
 
 /**
- * Returns the `resource` and `scope` of an access token that holds scopes beyond the instance's, such
- * as an API's own, so a new grant requests them again. Returns `{}` for any other token.
+ * Returns the audiences outside Tempo ID of an access token as `resource`, so a new grant requests
+ * them again. Adds the token's `scope` if it holds scopes beyond the instance's, such as an API's
+ * own. Returns `{}` for a token of Tempo ID alone, or one that does not decode.
  */
 export function grant(
   auth: Pick<Accounts.Config, 'scope' | 'url'>,
@@ -538,12 +539,8 @@ export function grant(
       iss?: unknown
       scope?: unknown
     }
-    if (typeof claims.scope !== 'string') return {}
-    const own = new Set(auth.scope.split(' '))
-    if (claims.scope.split(' ').every((entry) => !entry || own.has(entry)))
-      return {}
-    // An API's own scopes need the API as `resource`. The audience also names Tempo ID's userinfo
-    // endpoint, which is no resource, on its public origin (`iss`), which `url` may not match.
+    // The audience also names Tempo ID's userinfo endpoint, which is no resource, on its public
+    // origin (`iss`), which `url` may not match.
     const origin = new URL(
       typeof claims.iss === 'string' ? claims.iss : auth.url,
     ).origin
@@ -554,9 +551,18 @@ export function grant(
           typeof entry === 'string' && new URL(entry).origin !== origin,
       )
     if (resource.length === 0) return {}
+
+    // A grant without its `resource` issues tokens that the API refuses, also without an API's own
+    // scopes. Only scopes beyond the instance's go in `scope`, since the grant adds the instance's.
+    const own = new Set(auth.scope.split(' '))
+    if (
+      typeof claims.scope !== 'string' ||
+      claims.scope.split(' ').every((entry) => !entry || own.has(entry))
+    )
+      return { resource }
     return { resource, scope: claims.scope }
   } catch {
-    // A token that does not decode holds no scopes to request again.
+    // A token that does not decode holds no audience or scopes to request again.
     return {}
   }
 }
@@ -565,7 +571,7 @@ export declare namespace grant {
   type ReturnType = {
     /** The token's audiences outside Tempo ID. */
     resource?: readonly string[] | undefined
-    /** The token's scopes, separated by spaces. */
+    /** The token's scopes, separated by spaces. Absent if the token holds only the instance's. */
     scope?: string | undefined
   }
 }

@@ -1420,12 +1420,53 @@ export function create(options: create.Options): create.ReturnType {
   // The authorizations that run now, each settled to `undefined`, which `settled` waits for.
   const authorizations = new Set<Promise<void>>()
 
+  /**
+   * Runs `fn`, an authorization, while no authorization of another instance on the store runs, such
+   * as another tab's restore of the same Tempo ID session. An authorization that waited reads the
+   * store first, so a session that the other one saved returns with no request, and runs the plugins'
+   * `afterSignIn` hooks. An instance whose saved session holds waits for no lock, and a wait ends
+   * after `authorizeWait`, so a passkey prompt in another tab holds no restore. An uncontended
+   * authorization reads nothing more. Without Web Locks, `fn` runs as it is.
+   */
+  function serialized<value>(fn: () => Promise<value>): Promise<value> {
+    const locks = (globalThis.navigator as { locks?: LockManager } | undefined)
+      ?.locks
+    if (!locks || !writes) return fn()
+    const key = `${name}:authorize`
+    return locks.request(key, { ifAvailable: true }, async (held) => {
+      if (held) return await fn()
+      // A saved session that holds needs no authorization, so its read waits for no other one. The
+      // read is the store's first, which `fn` reads anyway.
+      await hydrate().catch(() => undefined)
+      const current = context().session
+      if (current && !Session.expired(current)) return await fn()
+      // The other authorization can wait for the user, such as at a passkey prompt, so the wait
+      // ends after `authorizeWait`, and `fn` then runs beside it. The signal ends only the wait:
+      // the request rejects with its reason only before the lock is granted.
+      const signal = AbortSignal.timeout(authorizeWait)
+      return await locks
+        .request(key, { signal }, async () => {
+          // The other authorization's session commits nothing here, so its adoption runs the
+          // plugins' `afterSignIn` hooks. A failed read leaves the session that `fn` loads.
+          await reload({ hooks: true }).catch(() => undefined)
+          return await fn()
+        })
+        .catch((error: unknown) => {
+          if (error !== signal.reason) throw error
+          return fn()
+        })
+    })
+  }
+
   return {
     actor,
     async authorize(fn) {
       if (!actor) return await fn()
+      // Only the first authorization of the instance takes the lock. A nested one, or one beside
+      // another, runs as it is, since the one that holds the lock can wait for it.
+      const first = authorizations.size === 0 && context().delegations === 0
       actor.send({ type: 'authorize.start' })
-      const promise = fn()
+      const promise = first ? serialized(fn) : fn()
       const entry = promise.then(
         () => undefined,
         () => undefined,
@@ -2464,6 +2505,12 @@ export type Status<session extends Session.Any = Session.Any> = {
 
 /** The number of rotations that the store keeps. */
 const rotationLimit = 8
+
+/**
+ * The longest wait of an authorization for another instance's authorization of the same session, in
+ * milliseconds, after which it runs beside it.
+ */
+const authorizeWait = 3_000
 
 /** The status of a session that holds nothing, such as a backend's. */
 const signedOut_status: Session.Status<Session.Any> = {

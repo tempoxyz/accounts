@@ -9,8 +9,9 @@ import type * as Accounts from '../Accounts.js'
 import * as AccessToken from '../AccessToken.js'
 import type * as Handler from '../internal/Handler.js'
 import * as RelayHandler from '../internal/handlers/Relay.js'
+import * as Settings from '../internal/viem/Settings.js'
 import * as Plugin from '../Plugin.js'
-import { settings, viem } from './viem.js'
+import { viem } from './viem.js'
 
 /**
  * Returns the plugin of the app's relay route, which adds `accounts.relay`: a handler of the Fetch
@@ -130,7 +131,7 @@ export function relay(options: relay.Options) {
       const added = held ? undefined : viem()
       const client = held ?? (added!.actions!(context) as viem.Namespace)
       const { chain: chainOf, rpc } = client[
-        settings as never
+        Settings.key as never
       ] as unknown as viem.Settings
       // The instance's chain is read at each request, so the route follows `switchChain`.
       const chainId = () => options.chainId ?? instance.config.chainId

@@ -749,6 +749,47 @@ test.describe('useSession', () => {
     })
   })
 
+  test('authorizes once for two tabs that restore the Tempo ID session together', async ({
+    capture,
+    code,
+    context,
+    email,
+    page,
+  }) => {
+    await page.goto(url)
+    await enter(page, { code, email })
+
+    await test.step('restores both tabs with one authorization', async () => {
+      // The app's store holds no session, as after a cleared site storage, so each tab authorizes
+      // the browser's Tempo ID session at its mount.
+      await page.evaluate(async () => {
+        for (const database of await indexedDB.databases())
+          if (database.name) indexedDB.deleteDatabase(database.name)
+      })
+      await page.goto('about:blank')
+      const tab = await context.newPage()
+      const requests = [record(page), record(tab)] as const
+      await Promise.all([page.goto(url), tab.goto(url)])
+
+      await expect(page.locator('#status')).toHaveText('signedIn')
+      await expect(tab.locator('#status')).toHaveText('signedIn')
+      const [first, second] = await Promise.all(
+        [page, tab].map(
+          async (target) =>
+            (await Playwright.run(target, { name: 'Session' })).value,
+        ),
+      )
+      expect(second.key.id).toBe(first.key.id)
+      expect(
+        [...requests[0], ...requests[1]].filter(
+          (request) => request === 'POST /v1/authorize',
+        ),
+      ).toEqual(['POST /v1/authorize'])
+      await capture('first tab restored')
+      await capture('second tab restored', tab)
+    })
+  })
+
   for (const [variant, pageUrl] of [
     ['dialog()', `${url}?`],
     ['the default dialog', `${url}?default=1&`],

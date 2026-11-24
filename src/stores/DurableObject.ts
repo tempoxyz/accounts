@@ -38,6 +38,9 @@ export function create(storage: create.Storage): create.ReturnType {
     if (alarm === null || expiresAt < alarm) await storage.setAlarm(expiresAt)
   }
 
+  // Runs the `takeItem` calls of each key one at a time.
+  const takes = Lock.create()
+
   // The listeners of each key. A `WeakRef` holds no instance that the app dropped, such as one
   // that the object creates for each request.
   const listeners = new Map<string, Set<WeakRef<(message: unknown) => void>>>()
@@ -107,6 +110,19 @@ export function create(storage: create.Storage): create.ReturnType {
       await storage.put(`${expiryPrefix}${key}`, expiresAt)
       await schedule(expiresAt)
     },
+    // The object is the only writer of its storage, and `takes` runs the calls of a key one at a
+    // time, so of concurrent calls, also of several requests, only one reads the value.
+    takeItem(key) {
+      return takes(key, async () => {
+        const entry = await storage.get<Expiry.Entry<unknown>>(
+          `${valuePrefix}${key}`,
+        )
+        if (!entry) return undefined
+        await storage.delete([`${valuePrefix}${key}`, `${expiryPrefix}${key}`])
+        if (Expiry.expired(entry)) return undefined
+        return entry.value
+      })
+    },
   }
 }
 
@@ -131,13 +147,15 @@ export declare namespace create {
     setAlarm: (scheduledTime: number) => Promise<void>
   }
 
-  /** A {@link Store.Store} with `alarm`. */
+  /** A {@link Store.Store} with `alarm` and `takeItem`. */
   type ReturnType = Store.Store & {
     /**
      * Deletes the expired entries, and sets the alarm for the earliest expiry left. An alarm can
      * fire more than once, so a second call deletes nothing new.
      */
     alarm: () => Promise<void>
+    /** Reads the value at `key` and deletes it in one step. Of concurrent calls, one receives it. */
+    takeItem: (key: string) => Promise<unknown>
   }
 }
 

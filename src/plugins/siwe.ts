@@ -22,8 +22,9 @@ import { RequestError } from '../Accounts.js'
 import * as Plugin from '../Plugin.js'
 import * as Api from '../internal/Api.js'
 import * as BackendOperations from '../internal/BackendOperations.js'
+import * as Settings from '../internal/viem/Settings.js'
 import type { backend } from './backend.js'
-import { settings, viem } from './viem.js'
+import { viem } from './viem.js'
 
 /**
  * A sign-in or an approval that does not verify for its challenge and its account. `complete` and
@@ -145,10 +146,10 @@ const wrapperLimit = 2
  * | Sign-in | `start`, `POST /auth/siwe/challenge` | The zero address, or `address`, and `statement` | 10 minutes | `complete`, `POST /auth/siwe` |
  * | Approval | `challenge` | The session's account, the change's statement and resources | 5 minutes | `approve` |
  *
- * `Store.file`, `Store.redis`, and `Store.postgres` spend a challenge with `takeItem`, in one atomic step, so
- * replicas that share the store verify it once too. Durable Objects serve each session ID in one
- * object. A custom store without `takeItem`, shared by several processes, holds single use in each
- * process only. It reads and removes a challenge in two calls, so two concurrent requests on two
+ * `Store.durableObject`, `Store.file`, `Store.redis`, and `Store.postgres` spend a challenge with
+ * `takeItem`, in one atomic step, so replicas that share the store verify it once too. A custom
+ * store without `takeItem`, shared by several processes, holds single use in each process only.
+ * It reads and removes a challenge in two calls, so two concurrent requests on two
  * processes can both verify it. Add `takeItem`, or route the requests of each session ID to one
  * process.
  *
@@ -328,7 +329,7 @@ function server(options: siwe.Options) {
         (instance as { viem?: viem.Namespace }).viem ??
         (viem().actions!(context) as viem.Namespace)
       const { chain: chainOf, rpc } = client[
-        settings as never
+        Settings.key as never
       ] as unknown as viem.Settings
       // A client without an account reads each chain, one for each chain.
       const clients = new Map<number, Client<Transport, Chain>>()
