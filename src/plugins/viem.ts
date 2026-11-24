@@ -178,7 +178,9 @@ export class RetryClosedError extends Error {
  * expiring nonce for each such transaction that attaches no key authorization, since another
  * instance, such as that of another request of a Worker, can send for the session at once.
  * Concurrent requests of a server for one session thus each land, without a request more, once the
- * chain registered the access key.
+ * chain registered the access key. Expiring nonces put no order on transactions, so a transaction
+ * of a fixed `session` that depends on an earlier one waits for that one's receipt, as
+ * `token.transferSync` and the other synchronous actions do.
  *
  * The access key attaches its key authorization to transactions until the chain registers the
  * access key. While a transaction of the instance attaches it, the fill of another that attaches it
