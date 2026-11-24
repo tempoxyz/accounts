@@ -247,6 +247,12 @@ const credentialCreated = Symbol('credentialCreated')
 const turnOf = Symbol('turn')
 
 /**
+ * The property of a {@link LimitError} of the chain's refusal whose read found the access key on the
+ * chain with part of the charge token's limit spent. The retry then reads the chain no more.
+ */
+const limitSpent = Symbol('limitSpent')
+
+/**
  * The property of a request's `init` that marks its second send, after the chain refused the key
  * authorization of the first send for good. Each request sends once more at most.
  */
@@ -517,9 +523,16 @@ export function mpp(options: mpp.Options = {}) {
                     ? error.cause
                     : error,
                 )
-              return failure && kinds.includes(failure.kind) && replayable()
-                ? failure
-                : undefined
+              if (!failure || !kinds.includes(failure.kind) || !replayable())
+                return undefined
+              // The read of the refusal found part of the limit spent, so the fix reads it no more.
+              if (
+                failure.kind === 'limit' &&
+                error instanceof LimitError &&
+                limitSpent in error
+              )
+                return { ...failure, spent: true as const }
+              return failure
             },
             enabled: (kind) => enabled[kind] !== false,
             fix: async (failure, error) => {
@@ -2382,8 +2395,10 @@ function create(options: {
   /**
    * Returns {@link LimitError} for the chain's refusal of a charge within the signed limits that the
    * spent limit does not cover, with the limit that is left. Only a refusal reads the limit, so a
-   * charge that the chain takes sends no more requests. Returns `undefined` for any other error,
-   * and after a failed read.
+   * charge that the chain takes sends no more requests. The read of the access key runs in the same
+   * round, and marks an error whose access key the chain holds with part of the limit spent, so a
+   * retry reads the chain no more. Returns `undefined` for any other error, and after a failed read
+   * of the limit.
    */
   async function spent(
     error: unknown,
@@ -2397,21 +2412,38 @@ function create(options: {
     if (named === null) return undefined
     if (named && !Address.isEqual(named.token, charge.token)) return undefined
 
-    const read = await Actions.accessKey
-      .getRemainingLimit(getClient({ chainId }), {
-        accessKey: account.accessKeyAddress,
-        account: account.address,
-        token: charge.token,
-      })
-      .catch(() => undefined)
+    const client = getClient({ chainId })
+    const parameters = {
+      accessKey: account.accessKeyAddress,
+      account: account.address,
+    }
+    const [metadata, read] = await Promise.all([
+      Actions.accessKey.getMetadata(client, parameters).catch(() => undefined),
+      Actions.accessKey
+        .getRemainingLimit(client, { ...parameters, token: charge.token })
+        .catch(() => undefined),
+    ])
     // A limit that covers the charge refused another spend, such as network fees in the token.
     if (!read || read.remaining >= charge.amount) return undefined
-    return new LimitError({
+    const limited = new LimitError({
       amount: formatUnits(charge.amount, 6),
       cause: error,
       limit: formatUnits(read.remaining, 6),
       token: charge.token,
     })
+    const signed = limits?.find((entry) =>
+      Address.isEqual(entry.token, charge.token),
+    )
+    // The chain registers an access key that it does not hold with its signed limits, so only an
+    // access key that it holds can have spent part of a limit.
+    if (
+      signed &&
+      metadata &&
+      Address.isEqual(metadata.address, account.accessKeyAddress) &&
+      read.remaining < BigInt(signed.limit)
+    )
+      Object.defineProperty(limited, limitSpent, { value: true })
+    return limited
   }
 
   const created: mpp.Payer = {

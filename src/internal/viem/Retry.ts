@@ -39,6 +39,11 @@ export type Failure =
   | {
       /** The access key's spending limit is below the transaction's amount. */
       kind: 'limit'
+      /**
+       * Whether a read of the refusal found the access key on the chain with part of a limit spent,
+       * so the retry reads the chain no more. Absent before a read.
+       */
+      spent?: true | undefined
     }
 
 /** The kind of a failure. */
