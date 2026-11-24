@@ -7,6 +7,7 @@ import { KeyAuthorization } from 'ox/tempo'
 import { RequestError } from '../Accounts.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
+import type * as InternalSession from './Session.js'
 import * as Session from '../Session.js'
 import * as AccessKey from './AccessKey.js'
 import type * as TempoAccount from './TempoAccount.js'
@@ -146,6 +147,63 @@ export type AccountOption<accessKey> =
        */
       account: false
     }
+
+/**
+ * Commits a new guest session of the instance with `options.change`, and returns it. The guest
+ * account's key pair loads from the store, or the call creates and saves one. The call sends no
+ * request. A failure rejects through the change.
+ */
+export async function guest(
+  context: Pick<Plugin.Context, 'config'>,
+  options: guest.Options,
+): Promise<Session.GuestSession> {
+  const { change } = options
+  try {
+    // The guest module loads at the first guest session, so an instance without one bundles none of
+    // its signing.
+    const Guest = await import('../actions/guest.js')
+    const session = await Guest.session(context.config)
+    await change.commit(session)
+    return session
+  } catch (error) {
+    return await change.fail(error)
+  }
+}
+
+export declare namespace guest {
+  type Options = {
+    /** The sign-in's change, which the guest session commits. */
+    change: Pick<InternalSession.Change, 'commit' | 'fail'>
+  }
+}
+
+/**
+ * Returns the guest session that a sign-in of an instance with `guest: 'auto'` starts while it holds
+ * no session, with no screen and no request, else `undefined`. The read of the stored session is
+ * local.
+ */
+export async function guestAuto(
+  context: Pick<Plugin.Context, 'config' | 'session'>,
+): Promise<Session.GuestSession | undefined> {
+  if (context.config.guest !== 'auto') return undefined
+  if (context.session.get() ?? (await context.session.load())) return undefined
+  return await guest(context, { change: context.session.change() })
+}
+
+/**
+ * Returns whether `error` is the refusal of a sign-in whose user selected "Continue as guest", the
+ * reason `guest_selected`, on an instance with `guest`. The sign-in then starts the guest session.
+ */
+export function guestSelected(
+  context: Pick<Plugin.Context, 'config'>,
+  error: unknown,
+): boolean {
+  return (
+    context.config.guest !== undefined &&
+    error instanceof RequestError &&
+    error.reason === 'guest_selected'
+  )
+}
 
 /** Returns the session of a sign-in's result: its tokens, its user, its access key, and its account. */
 export function toSession(

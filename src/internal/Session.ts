@@ -2681,7 +2681,7 @@ function fromSaved(
  * local session's access keys are no order, since a sign-in can add one that expires sooner.
  */
 function order(session: Session.Any) {
-  return Session.local(session) ? session.revision : session.expiresAt
+  return Session.tempoId(session) ? session.expiresAt : session.revision
 }
 
 /**
@@ -3648,8 +3648,8 @@ export namespace machines {
     options: machines.adopts.Options,
   ): machines.adopts.ReturnType {
     const { entries, held, refreshToken, stored } = options
-    // A local session holds no tokens that another context rotates.
-    if (Session.local(held)) return false
+    // A local or guest session holds no tokens that another context rotates.
+    if (!Session.tempoId(held)) return false
     const expiresAt =
       refreshToken === held.refreshToken
         ? held.expiresAt
@@ -4081,8 +4081,8 @@ export namespace machines {
     options: machines.yields.Options,
   ): machines.yields.ReturnType {
     const { kept, overwritten } = options
-    // A local session holds no tokens, so neither yields to the other.
-    if (Session.local(kept) || Session.local(overwritten)) return false
+    // A local or guest session holds no tokens, so neither yields to the other.
+    if (!Session.tempoId(kept) || !Session.tempoId(overwritten)) return false
     // A DPoP key binds each access token, and the instance holds only the key that bound `kept`, so
     // a session that another key binds is of no use to it.
     if (Api.jkt(kept.accessToken) !== Api.jkt(overwritten.accessToken))
@@ -4233,6 +4233,8 @@ export namespace machines {
     options: machines.arranged.Options,
   ): machines.arranged.ReturnType {
     const { chainId, current, stored } = options
+    // A guest session holds no access keys to arrange.
+    if (stored && Session.guest(stored)) return stored
 
     // One public key can act on several chains, so the chain and the key ID identify an entry.
     const id = (entry: NonNullable<Session.Any['accessKey']>) =>
@@ -4521,8 +4523,8 @@ export namespace machines {
     options: machines.rotated.Options,
   ): machines.rotated.ReturnType {
     const { current, lifetime, now, started, startedAt } = options
-    // A local session holds no tokens to refresh.
-    if (Session.local(current)) return false
+    // A local or guest session holds no tokens to refresh.
+    if (!Session.tempoId(current)) return false
     // An instance that held no session when the call started, such as one that has not read the
     // store yet, decides by the time alone.
     if (started && !started.refreshToken) return false
@@ -4726,7 +4728,9 @@ export namespace machines {
       ...(session.accessKeys ?? []),
     ].map((key) => AccessKey.expiry(key) ?? Infinity)
     // Without an access key, the access token's expiry counts too, unless a refresh token renews it.
-    if (!session.accessKey && !Session.local(session))
+    // A guest session's key pair signs as long as the store keeps it.
+    if (Session.guest(session)) return Infinity
+    if (!session.accessKey && Session.tempoId(session))
       times.push(session.refreshToken ? Infinity : session.expiresAt)
     // A session that holds no expiry, such as a local one without an access key, expired already.
     return Math.max(0, ...times)

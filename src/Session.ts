@@ -16,19 +16,58 @@ import type { User } from './internal/User.js'
  */
 export type Session = TempoIdSession
 
-/** Either session that an instance holds: a Tempo ID sign-in's, or the `local` plugin's. */
-export type Any = LocalSession | TempoIdSession
+/**
+ * Any session that an instance holds: a Tempo ID sign-in's, the `local` plugin's, or a guest
+ * session of an instance with `guest`.
+ */
+export type Any = GuestSession | LocalSession | TempoIdSession
 
 /**
  * The session that an instance of `plugins` holds: {@link Session} for plugins whose ids exclude the
- * `local` plugin's, else {@link Any}, such as for a list of any plugins.
+ * `local` plugin's, else {@link Any}, such as for a list of any plugins. With `guest`, the session
+ * can also be a {@link GuestSession}.
  */
-export type Of<plugins extends readonly { id: string }[]> =
-  string extends plugins[number]['id']
-    ? Any
-    : 'local' extends plugins[number]['id']
+export type Of<
+  plugins extends readonly { id: string }[],
+  guest extends 'auto' | 'offer' | undefined = undefined,
+> =
+  | (string extends plugins[number]['id']
       ? Any
-      : Session
+      : 'local' extends plugins[number]['id']
+        ? Any
+        : Session)
+  | (guest extends undefined ? never : GuestSession)
+
+/**
+ * The session of a guest account: a root Tempo Account whose owner is a P256 key pair in the
+ * instance's store, with no Tempo ID sign-in. Tempo ID issues it no tokens and names no user, and it
+ * holds no access key. The owner signs each transaction. The store keeps the key pair under its own
+ * entry, so the session holds only its public key. A sign-out ends the session and keeps the key
+ * pair, so the next guest session holds the same account.
+ */
+export type GuestSession = {
+  accessKey?: undefined
+  accessKeys?: undefined
+  accessToken?: undefined
+  account?: undefined
+  /** The guest account, the address of the key pair's public key. */
+  address: `0x${string}`
+  challengeSignature?: undefined
+  expiresAt?: undefined
+  idToken?: undefined
+  /** Marks a guest session. */
+  kind: 'guest'
+  /** The key pair's public key, serialized, which derives `address`. */
+  publicKey: `0x${string}`
+  receivedAt?: undefined
+  refreshToken?: undefined
+  /**
+   * When the guest session started, in milliseconds, and greater than each earlier revision. Of two
+   * saved copies of one guest session, the greater revision is the later one.
+   */
+  revision: number
+  user?: undefined
+}
 
 /**
  * The session of an account whose owner key the instance holds, which the `local` plugin signs in.
@@ -154,6 +193,22 @@ export function from<const value extends Any>(value: value): value {
 }
 
 /**
+ * Returns whether the session is a {@link GuestSession}, whose key pair in the store signs each
+ * transaction.
+ *
+ * @example
+ * ```ts
+ * import { Session } from 'accounts'
+ *
+ * const session = await accounts.session.get()
+ * if (session && Session.guest(session)) console.log(session.address)
+ * ```
+ */
+export function guest(session: Any): session is GuestSession {
+  return session.kind === 'guest'
+}
+
+/**
  * Returns whether the session is a {@link LocalSession}, which Tempo ID issued no tokens for.
  *
  * @example
@@ -169,8 +224,25 @@ export function local(session: Any): session is LocalSession {
 }
 
 /**
- * Returns who the session belongs to: the user's ID, or `local:` and the lowercase address of a
- * {@link LocalSession}. Two sessions of the same subject belong to the same user.
+ * Returns whether the session is a {@link TempoIdSession}, which holds the tokens that Tempo ID
+ * issued. A {@link GuestSession} and a {@link LocalSession} hold none.
+ *
+ * @example
+ * ```ts
+ * import { Session } from 'accounts'
+ *
+ * const session = await accounts.session.get()
+ * if (session && Session.tempoId(session)) console.log(session.user.email)
+ * ```
+ */
+export function tempoId(session: Any): session is TempoIdSession {
+  return !guest(session) && !local(session)
+}
+
+/**
+ * Returns who the session belongs to: the user's ID, `local:` and the lowercase address of a
+ * {@link LocalSession}, or `guest:` and the lowercase address of a {@link GuestSession}. Two
+ * sessions of the same subject belong to the same user.
  *
  * @example
  * ```ts
@@ -180,6 +252,7 @@ export function local(session: Any): session is LocalSession {
  * ```
  */
 export function subject(session: Any): string {
+  if (guest(session)) return `guest:${session.address.toLowerCase()}`
   if (local(session)) return `local:${session.address.toLowerCase()}`
   return session.user.id
 }
@@ -205,6 +278,7 @@ export function same<session extends Any>(
 /**
  * Returns whether the session can no longer act: its access key expired, and no access key on another
  * chain lives, or, without an access key, its access token expired and it holds no refresh token. A
+ * {@link GuestSession} never expires, since its key pair signs. A
  * session without an access key that holds a refresh token never expires here, since its tokens
  * refresh. An instance's status changes to `signedOut` once its session expires, and
  * `accounts.session.get()` empties such a session.
@@ -217,6 +291,7 @@ export function same<session extends Any>(
  * ```
  */
 export function expired(session: Any): boolean {
+  if (guest(session)) return false
   if (session.accessKey)
     return (
       AccessKey.expired(session.accessKey) &&

@@ -574,6 +574,38 @@ describe('challenge', () => {
   })
 })
 
+describe('guestParameters', () => {
+  test.for([
+    { challenge: undefined, expected: 'offer', guest: 'offer' },
+    { challenge: 'Sign in to app.example', expected: null, guest: 'offer' },
+    { challenge: undefined, expected: null, guest: 'auto' },
+    { challenge: undefined, expected: null, guest: undefined },
+  ] as const)(
+    'adds $expected for guest $guest and challenge $challenge',
+    async (row) => {
+      const auth = Accounts.from({ clientId: 'client_1', guest: row.guest })
+
+      const { url } = await Request.authorizeUrl(auth, {
+        challenge: row.challenge,
+        redirectUri: 'https://app.example/callback',
+      })
+
+      expect(new URL(url).searchParams.get('guest')).toBe(row.expected)
+    },
+  )
+
+  test('adds none to a request whose challenge arrives later', async () => {
+    const auth = Accounts.from({ clientId: 'client_1', guest: 'offer' })
+
+    const { url } = await Request.authorizeUrl(auth, {
+      guest: false,
+      redirectUri: 'https://app.example/callback',
+    })
+
+    expect(new URL(url).searchParams.get('guest')).toMatchInlineSnapshot(`null`)
+  })
+})
+
 describe('permissions', () => {
   test('throws `expiry_passed` with status 0 for an expiry that has passed', () => {
     const error = (() => {

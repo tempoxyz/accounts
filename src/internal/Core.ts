@@ -108,8 +108,8 @@ async function run(
     // Only a call that requests nothing beyond the held session returns it. A challenge, an access
     // key, a passkey, or another account needs a new authorization, which only a sign-in on a page
     // sends, so the call never returns the held session as its result. A local session is no
-    // Tempo ID sign-in, so it never answers the call either.
-    if (held && !Session.local(held) && holds(held, parameters))
+    // Tempo ID sign-in, so it never answers the call either, nor does a guest session.
+    if (held && Session.tempoId(held) && holds(held, parameters))
       return { ...held, upgradeAvailable: false }
     if (!held) {
       // Without a session, the status settles as for an authorization that finds no Tempo ID
@@ -810,7 +810,7 @@ export async function upgradeAccount(
       const latest = await context.session.reload()
       // An account belongs to one chain, so a switch during the upgrade keeps the session's account.
       if (context.chain.get() !== chainId) return
-      if (!Session.same(latest, current)) return
+      if (!Session.same(latest, current) || Session.guest(latest)) return
       const change = context.session.change({ update: true })
       await change.commit({ ...latest, account: upgraded })
     })

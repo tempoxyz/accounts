@@ -14,7 +14,15 @@ import {
   type TypedData,
   type TypedDataDefinition,
 } from 'viem'
-import { type Config, RequestError } from '../Accounts.js'
+import {
+  type ActorRefFrom,
+  assertEvent,
+  assign,
+  createActor,
+  setup,
+  type SnapshotFrom,
+} from 'xstate'
+import { type Config, RequestError, SignedOutError } from '../Accounts.js'
 import * as Api from '../internal/Api.js'
 import * as AccessKey from '../internal/AccessKey.js'
 import * as Callback from '../internal/Callback.js'
@@ -23,6 +31,7 @@ import * as Payment from '../internal/Payment.js'
 import * as Popup from '../internal/Popup.js'
 import type * as Sheet from '../internal/Sheet.js'
 import type { Permissions } from '../Permissions.js'
+import type * as Session from '../Session.js'
 import type { TempoAccount } from '../internal/TempoAccount.js'
 
 /**
@@ -456,7 +465,7 @@ export async function pay<const options extends pay.Options>(
   auth: Config,
   options: options,
 ): Promise<pay.ReturnType<options>> {
-  const { account, attempt, challenge, guest, note, to, token } = options
+  const { account, attempt, challenge, note, to, token } = options
   const amount = Payment.amount(options.amount)
   Payment.to(to)
   // Text goes on the chain as its UTF-8 bytes, and hex as its own bytes.
@@ -471,16 +480,6 @@ export async function pay<const options extends pay.Options>(
   }
   const redirectUri = approvalRedirectUri(auth, options)
   const chainId = options.chainId ?? auth.chainId
-  // The guest account's key pair loads from the store, and signs the guest request, with no
-  // request. The popup opens blank meanwhile, so it still opens within the gesture.
-  const guested = guest
-    ? import('./guest.js').then(async (Guest) => ({
-        Guest,
-        ...(await Guest.request(auth, { chainId, redirectUri })),
-      }))
-    : undefined
-  // A failure rejects the call through `approve`.
-  guested?.catch(() => {})
   // A function's message arrives while the dialog or the popup opens, so the user waits for the
   // slower of the two only. Its signal aborts once the call ends.
   const ending = new AbortController()
@@ -491,20 +490,6 @@ export async function pay<const options extends pay.Options>(
 
   const url = await approve(auth, {
     challenge: issued,
-    guest: guested && {
-      sign: async (transaction) => {
-        const { Guest, keyPair } = await guested
-        const envelope = Guest.check(transaction, {
-          amount,
-          chainId,
-          memo,
-          to,
-          token,
-        })
-        return await Guest.sign(envelope, { keyPair })
-      },
-      value: guested.then((entry) => entry.value),
-    },
     hold: attempt,
     label: 'Pay with Tempo',
     mode: options.mode ?? 'iframe',
@@ -594,15 +579,6 @@ export declare namespace pay {
      */
     challenge?: string | ((signal: AbortSignal) => Promise<string>) | undefined
     /**
-     * Pays from the instance's guest account, a root Tempo Account whose owner is a
-     * non-extractable WebCrypto P256 key pair in the instance's store, with no Tempo ID sign-in. The
-     * first guest payment creates the key pair. The page reads the payment, offers a deposit for a
-     * shortfall, and posts the transfer for the key pair to sign, and Tempo ID's sponsor pays its
-     * fee. The key pair signs only the requested transfer. Tempo ID takes it only from a first-party
-     * or verified app. Absent, the payment page signs the user in.
-     */
-    guest?: true | undefined
-    /**
      * The transfer's memo, which the chain records: text, sent as its UTF-8 bytes, or hex, of 1 to
      * 32 bytes. Hex is `0x` and an even count of hex digits. Any other value is text, such as
      * `0xINV-1042`. Absent, the transfer holds no memo.
@@ -662,6 +638,112 @@ export declare namespace pay {
           /** The account's signature of `challenge`. Present only for a request with one. */
           challengeSignature?: `0x${string}` | undefined
         })
+}
+
+/**
+ * Requests one payment from the guest account of `session` on Tempo ID's payment page: a transfer
+ * of `amount` of `token` to `to`. The page opens with a guest request that the guest account's key
+ * pair signs, reads the payment, and offers a deposit for a shortfall. It then posts the transfer,
+ * which the key pair signs on the app's page, and Tempo ID's sponsor pays its fee. The key pair
+ * signs only the requested transfer, and only one transaction for each payment. Each popup that
+ * the page opens later, such as the deposit's, holds a fresh guest request, and the page renews the
+ * request before it expires. The call sends no request before the page shows.
+ *
+ * @throws {RequestError} As {@link pay} throws it for `amount`, `memo`, and `to`, before any page
+ *   opens, and `access_denied` when the user rejects the payment.
+ * @throws {PageRequiredError} Outside a browser page.
+ * @throws {Accounts.SignedOutError} When the store holds another key pair than the session's.
+ * @throws {OriginError} For a redirect URI on another origin than the page.
+ * @throws {BlockedError} When the browser blocks the popup.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const session = await Actions.guest.session(accounts.config)
+ * const { transaction } = await Actions.account.pay_guest(accounts.config, {
+ *   amount: '12.5',
+ *   session,
+ *   to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+ *   token: 'ousd',
+ * })
+ * ```
+ */
+export async function pay_guest(
+  auth: Config,
+  options: pay_guest.Options,
+): Promise<pay_guest.ReturnType> {
+  const { note, session, to, token } = options
+  const amount = Payment.amount(options.amount)
+  Payment.to(to)
+  const memo =
+    options.memo === undefined ? undefined : Payment.memo(options.memo)
+  if (typeof document === 'undefined')
+    throw new PageRequiredError({ payment: true })
+  const redirectUri = approvalRedirectUri(auth, options)
+  const chainId = options.chainId ?? auth.chainId
+  // The guest module loads at the first guest payment, and signs from the store, with no request.
+  const loading = import('./guest.js')
+  loading.catch(() => {})
+
+  const url = await approve(auth, {
+    guest: {
+      request: async () => {
+        const Guest = await loading
+        const { address, value } = await Guest.request(auth, {
+          chainId,
+          redirectUri,
+        })
+        // A store that lost the session's key pair holds a new guest account, which pays nothing
+        // for this session.
+        if (!Address.isEqual(address, session.address))
+          throw new SignedOutError()
+        return value
+      },
+      sign: async (transaction) => {
+        const Guest = await loading
+        const envelope = Guest.check(transaction, {
+          amount,
+          chainId,
+          memo,
+          to,
+          token,
+        })
+        return await Guest.sign(envelope, {
+          account: Guest.account(auth, { session }),
+        })
+      },
+    },
+    label: 'Pay with Tempo',
+    mode: options.mode ?? 'iframe',
+    noun: 'payment',
+    path: '/pay',
+    query: {
+      amount,
+      chain_id: String(chainId),
+      client_id: auth.clientId,
+      ...(memo !== undefined ? { memo } : {}),
+      ...(note !== undefined ? { note } : {}),
+      redirect_uri: redirectUri,
+      to,
+      token,
+    },
+    signal: options.signal,
+    skeleton: 'payment',
+    text: 'Continue in a Tempo ID window to pay.',
+  })
+  const transaction = transactionOf(url, { redirectUri })
+  if (!transaction) throw transactionOf.missing()
+  return { address: session.address, transaction }
+}
+
+export declare namespace pay_guest {
+  type Options = Omit<pay.Options, 'account' | 'attempt' | 'challenge'> & {
+    /** The guest session whose guest account pays. */
+    session: Pick<Session.GuestSession, 'address' | 'publicKey'>
+  }
+
+  type ReturnType = pay.ReturnType<Omit<Options, 'session'>>
 }
 
 /**
@@ -1465,29 +1547,28 @@ async function approve<held = never>(
     throw new OriginError({ origin: window.location.origin, redirectUri })
 
   const origin = new URL(auth.url).origin
-  // The message of `challenge`, once it resolves. The frame receives it with the lift of its cover,
-  // and a popup in its URL.
-  let message: string | undefined
+  // The values of the page's URL, the guest requests of the payment, and the guest account's one
+  // signature, which the machine holds.
+  const actor = createActor(machines.approval, {
+    input: { challenge: challenge !== undefined, guest: guest !== undefined },
+  }).start()
   challenge?.then(
-    (value) => {
-      message = value
-    },
+    (message) => actor.send({ message, type: 'challenge.resolve' }),
     () => {},
   )
-  // The guest request, once the guest account signs it. The page receives it in its URL.
-  let guestRequest: string | undefined
-  guest?.value.then(
-    (value) => {
-      guestRequest = value
-    },
-    () => {},
-  )
-  // The values that the page's URL waits for: the challenge's message and the guest request.
+  /** Signs a fresh guest request, which the page's URL holds from then on. */
+  const renew = async (fn: () => Promise<string>) => {
+    const value = await fn()
+    actor.send({ type: 'guest.resolve', value })
+    return value
+  }
+  // The first guest request, which the guest account signs from the store, with no request.
+  const requested = guest && renew(guest.request)
+  // The values that the page's URL waits for. Each rejects the call itself, so `pending` only signals.
   const pending =
-    challenge || guest
-      ? Promise.all([challenge, guest?.value]).then(() => undefined)
+    challenge || requested
+      ? Promise.all([challenge, requested]).then(() => undefined)
       : undefined
-  // The challenge and the guest request reject the call themselves, so `pending` only signals.
   pending?.catch(() => {})
   /**
    * Returns the page's URL: in a frame at `/embed` and the path, or in a popup at the path. A popup
@@ -1497,35 +1578,36 @@ async function approve<held = never>(
     display: 'frame' | 'popup',
     method?: Sheet.load.Popup['method'],
   ) => {
+    const values = machines.values(actor.getSnapshot())
     const url = new URL(display === 'frame' ? `/embed${path}` : path, auth.url)
     url.search = new URLSearchParams({
       ...query,
-      ...(display === 'popup' && message !== undefined
-        ? { challenge: message }
+      ...(display === 'popup' && values.message !== undefined
+        ? { challenge: values.message }
         : {}),
-      ...(guestRequest !== undefined ? { guest: guestRequest } : {}),
+      ...(values.guest !== undefined ? { guest: values.guest } : {}),
       ...(display === 'popup' ? { display } : {}),
       ...(method ? { method } : {}),
     }).toString()
     return url.href
   }
   /**
-   * Opens the popup within the gesture: at the page, or blank until the challenge's message
-   * arrives, since a popup blocker accepts `window.open` only within the gesture.
+   * Opens the popup within the gesture: at the page, or blank until the values of its URL arrive,
+   * since a popup blocker accepts `window.open` only within the gesture. A later popup of a guest
+   * payment, such as the frame's deposit, holds a fresh guest request, since the first one expires.
+   * Returns the popup, and the navigation of a blank popup, which rejects as its values do.
    */
-  const open = (method?: Sheet.load.Popup['method']) => {
-    const ready =
-      (!challenge || message !== undefined) &&
-      (!guest || guestRequest !== undefined)
-    if (!pending || ready) return Popup.openPopup(toUrl('popup', method))
+  const open = (entry: approve.Popup = {}) => {
+    const renewal = entry.later && guest ? renew(guest.request) : undefined
+    if (!renewal && machines.ready(actor.getSnapshot()))
+      return { popup: Popup.openPopup(toUrl('popup', entry.method)) }
     const popup = Popup.openPopup('about:blank')
-    pending.then(
-      () => {
-        if (popup && !popup.closed) popup.location.href = toUrl('popup', method)
-      },
-      () => {},
-    )
-    return popup
+    const shown = (renewal ?? pending ?? Promise.resolve()).then(() => {
+      if (popup && !popup.closed)
+        popup.location.href = toUrl('popup', entry.method)
+    })
+    shown.catch(() => {})
+    return { popup, shown }
   }
   const closed = () =>
     new DOMException(`The user closed the ${options.noun}.`, 'AbortError')
@@ -1537,8 +1619,11 @@ async function approve<held = never>(
     return url
   }
 
-  /** Resolves once the page in `popup` returns to the app, or the user closes the popup. */
-  const watch = async (popup: Window) => {
+  /**
+   * Resolves once the page in `popup` returns to the app, or the user closes the popup. `shown` is
+   * the navigation of a blank popup.
+   */
+  const watch = async (popup: Window, shown?: Promise<void>) => {
     let abort: (() => void) | undefined
     let settled = false
     let unblock: (() => void) | undefined
@@ -1560,8 +1645,8 @@ async function approve<held = never>(
         signal?.addEventListener('abort', abort, { once: true })
         // A rejected challenge or guest request closes the blank popup before any page shows. A
         // blank popup sends no `tempo-id:popup.open`, so the watcher misses its close, which the
-        // end of `pending` reads.
-        pending?.then(() => {
+        // end of `shown` reads.
+        shown?.then(() => {
           if (popup.closed) reject(closed())
         }, reject)
         unwatch = Popup.watchPopup(popup, {
@@ -1597,8 +1682,10 @@ async function approve<held = never>(
     }
   }
 
-  // The page posts the guest payment's transaction for the guest account to sign, from Tempo ID's
-  // origin, with its guest request. The check accepts only the requested transfer.
+  // The page posts the guest payment's transaction for the guest account to sign, and asks for a
+  // fresh guest request before the last one expires, from Tempo ID's origin, with a guest request of
+  // this payment. The check accepts only the requested transfer, and the guest account signs one
+  // transaction for each payment, so no second prepared transaction ever lands.
   const listener = (event: MessageEvent) => {
     const data = event.data as {
       guest?: unknown
@@ -1606,32 +1693,71 @@ async function approve<held = never>(
       transaction?: unknown
       type?: unknown
     } | null
-    // The guest request is unique to this payment, so another payment's page never reaches it.
     if (
       !guest ||
       event.origin !== origin ||
-      data?.type !== 'tempo-id:guest.sign' ||
-      guestRequest === undefined ||
-      data.guest !== guestRequest ||
-      !event.source
+      !event.source ||
+      typeof data?.guest !== 'string'
     )
       return
+    // The guest requests are unique to this payment, so another payment's page never reaches it.
+    if (!machines.issued(actor.getSnapshot(), { value: data.guest })) return
     const source = event.source as Window
+    const fault = (error: unknown) =>
+      error instanceof Error ? error.message : 'Signing failed.'
+    if (data.type === 'tempo-id:guest.request') {
+      renew(guest.request).then(
+        (value) =>
+          source.postMessage(
+            { id: data.id, type: 'tempo-id:guest.requested', value },
+            origin,
+          ),
+        (error: unknown) =>
+          source.postMessage(
+            {
+              error: fault(error),
+              id: data.id,
+              type: 'tempo-id:guest.requested',
+            },
+            origin,
+          ),
+      )
+      return
+    }
+    if (data.type !== 'tempo-id:guest.sign') return
+    if (!machines.signs(actor.getSnapshot())) {
+      source.postMessage(
+        {
+          error:
+            'Refused signature: the guest account signs one transaction for each payment. Start the payment again.',
+          id: data.id,
+          type: 'tempo-id:guest.signature',
+        },
+        origin,
+      )
+      return
+    }
+    actor.send({ type: 'sign.start' })
     guest.sign(data.transaction).then(
-      (transaction) =>
+      (transaction) => {
+        actor.send({ type: 'sign.end' })
         source.postMessage(
           { id: data.id, transaction, type: 'tempo-id:guest.signature' },
           origin,
-        ),
-      (error: unknown) =>
+        )
+      },
+      (error: unknown) => {
+        // No signature exists, so the page can post the transaction again.
+        actor.send({ type: 'sign.fail' })
         source.postMessage(
           {
-            error: error instanceof Error ? error.message : 'Signing failed.',
+            error: fault(error),
             id: data.id,
             type: 'tempo-id:guest.signature',
           },
           origin,
-        ),
+        )
+      },
     )
   }
   if (guest) window.addEventListener('message', listener)
@@ -1639,6 +1765,7 @@ async function approve<held = never>(
     return await present()
   } finally {
     if (guest) window.removeEventListener('message', listener)
+    actor.stop()
   }
 
   /** Shows the page in a popup or in the dialog's frame, and resolves with its return. */
@@ -1654,9 +1781,9 @@ async function approve<held = never>(
       const held = hold && (await hold)
       if (held) return held
       if (mode === 'popup' || Popup.activated()) {
-        const popup = open()
+        const { popup, shown } = open()
         if (popup === null) throw new BlockedError()
-        return await watch(popup)
+        return await watch(popup, shown)
       }
     }
     // A send that settled before the frame leaves its page without a cover.
@@ -1664,7 +1791,7 @@ async function approve<held = never>(
 
     const Sheet = await import('../internal/Sheet.js')
     // The guest request is local work, so the frame's URL waits for it with no request.
-    if (guest) await guest.value
+    if (requested) await requested
     // An abort while the dialog's module loads fired before the listener below, so it rejects here.
     signal?.throwIfAborted()
     const sheet = Sheet.load({
@@ -1705,14 +1832,17 @@ async function approve<held = never>(
             onCancel: () => reject(closed()),
             onPopup: (entry) => {
               // The payment page opens the deposit pages at once for a frame's Buy MACH.
-              const popup = open(entry.method)
+              const { popup, shown } = open({
+                later: true,
+                method: entry.method,
+              })
               if (popup === null) {
                 // The offer's Continue is the user's click, so only a blocker refuses it.
                 if (!entry.automatic) reject(new BlockedError())
                 return false
               }
               sheet.close()
-              watch(popup).then(resolve, reject)
+              watch(popup, shown).then(resolve, reject)
               return true
             },
           })
@@ -1736,6 +1866,14 @@ async function approve<held = never>(
 }
 
 declare namespace approve {
+  /** A popup that the approval opens. */
+  type Popup = {
+    /** Whether the frame's page opens the popup, after the page showed. */
+    later?: boolean | undefined
+    /** The method that the frame requests, such as `mach` for Buy MACH. */
+    method?: Sheet.load.Popup['method']
+  }
+
   type Options<held = never> = {
     /**
      * The message that the account signs before the transfer, once it resolves. The frame's page
@@ -1745,16 +1883,16 @@ declare namespace approve {
      */
     challenge?: Promise<string> | undefined
     /**
-     * The guest account of a guest payment: the guest request, once the guest account signs it,
-     * which the page's URL holds, and the signer of the transaction that the page posts. A popup
-     * opens blank until the request arrives. Absent, the page signs the user in.
+     * The guest account of a guest payment: the signer of each guest request, which the page's URL
+     * holds, and of the one transaction that the page posts. A popup opens blank until the request
+     * arrives. Absent, the page signs the user in.
      */
     guest?:
       | {
+          /** Signs a fresh guest request, with no request. */
+          request: () => Promise<string>
           /** Checks and signs the transaction that the page posts, and returns it serialized. */
           sign: (transaction: unknown) => Promise<`0x${string}`>
-          /** The guest request. */
-          value: Promise<string>
         }
       | undefined
     /**
@@ -2009,3 +2147,181 @@ transactionOf.missing = () =>
       'Invalid `transaction` in the return URL: it is not a transaction hash. Check the account on Tempo ID, then try again.',
     status: 0,
   })
+
+export namespace machines {
+  /**
+   * The approval page's readiness and the guest account's signature. The page's URL waits for the
+   * challenge's message and the first guest request, and the guest account signs one transaction
+   * for each payment.
+   *
+   * | State      | Meaning                                                                    |
+   * | ---------- | -------------------------------------------------------------------------- |
+   * | `settling` | Transient. Routes to the status that {@link select} returns.               |
+   * | `waiting`  | The challenge's message or the first guest request has not arrived.        |
+   * | `ready`    | The page's URL holds its values. The guest account signs no transaction.   |
+   * | `signing`  | The guest account signs a transaction, and refuses another.                |
+   * | `signed`   | The guest account signed the payment's transaction, and signs no other.    |
+   */
+  export const approval = setup({
+    actions: {
+      /** Adds the event's guest request, which the page's URL holds from then on. */
+      addRequest: assign({
+        requests: (args) => {
+          assertEvent(args.event, 'guest.resolve')
+          return [...args.context.requests, args.event.value]
+        },
+      }),
+      /** Holds the challenge's message. */
+      setMessage: assign({
+        message: (args) => {
+          assertEvent(args.event, 'challenge.resolve')
+          return args.event.message
+        },
+      }),
+    },
+    guards: {
+      /** Whether {@link select} returns `params.status`. */
+      selects: (args, params: { status: approval.Status }) =>
+        select(args.context) === params.status,
+    },
+    types: {
+      context: {} as approval.Context,
+      events: {} as approval.Event,
+      input: {} as approval.Input,
+    },
+  }).createMachine({
+    context: (args) => ({
+      challenge: args.input.challenge,
+      guest: args.input.guest,
+      message: undefined,
+      requests: [],
+    }),
+    id: 'approval',
+    initial: 'settling',
+    states: {
+      ready: {
+        on: {
+          'guest.resolve': { actions: 'addRequest' },
+          'sign.start': { target: 'signing' },
+        },
+        tags: 'ready',
+      },
+      settling: {
+        always: [
+          {
+            guard: { params: { status: 'ready' }, type: 'selects' },
+            target: 'ready',
+          },
+          { target: 'waiting' },
+        ],
+      },
+      signed: {
+        on: { 'guest.resolve': { actions: 'addRequest' } },
+        tags: 'ready',
+      },
+      signing: {
+        on: {
+          'guest.resolve': { actions: 'addRequest' },
+          'sign.end': { target: 'signed' },
+          // No signature exists, so the page can post a transaction again.
+          'sign.fail': { target: 'ready' },
+        },
+        tags: 'ready',
+      },
+      waiting: {
+        on: {
+          'challenge.resolve': { actions: 'setMessage', target: 'settling' },
+          'guest.resolve': { actions: 'addRequest', target: 'settling' },
+        },
+      },
+    },
+  })
+
+  export declare namespace approval {
+    type Context = {
+      /** Whether the page's URL waits for the challenge's message. */
+      challenge: boolean
+      /** Whether the page's URL waits for a guest request. */
+      guest: boolean
+      /** The challenge's message. Absent until it arrives, and without a challenge. */
+      message: string | undefined
+      /** The guest requests of the payment, in the order of their signatures. Empty without one. */
+      requests: readonly string[]
+    }
+
+    type Event =
+      | {
+          /** The challenge's message. */
+          message: string
+          /** The challenge's message arrived. */
+          type: 'challenge.resolve'
+        }
+      | {
+          /** The guest account signed a fresh guest request. */
+          type: 'guest.resolve'
+          /** The guest request. */
+          value: string
+        }
+      | {
+          /** The guest account signed the transaction. */
+          type: 'sign.end'
+        }
+      | {
+          /** The check or the signature of the transaction failed. */
+          type: 'sign.fail'
+        }
+      | {
+          /** The page posted a transaction for the guest account to sign. */
+          type: 'sign.start'
+        }
+
+    type Input = Pick<Context, 'challenge' | 'guest'>
+
+    /** The readiness of the page's URL. */
+    type Status = 'ready' | 'waiting'
+
+    type Actor = ActorRefFrom<typeof approval>
+
+    type Snapshot = SnapshotFrom<typeof approval>
+  }
+
+  /** Returns whether `snapshot` holds a guest request of the payment that equals `options.value`. */
+  export function issued(
+    snapshot: approval.Snapshot,
+    options: { value: string },
+  ) {
+    return snapshot.context.requests.includes(options.value)
+  }
+
+  /** Returns whether the page's URL holds its values. */
+  export function ready(snapshot: approval.Snapshot) {
+    return snapshot.hasTag('ready')
+  }
+
+  /**
+   * Returns the readiness of the page's URL:
+   *
+   * | Status    | When                                                                   |
+   * | --------- | ---------------------------------------------------------------------- |
+   * | `waiting` | A challenge without its message, or a guest payment without a request. |
+   * | `ready`   | Otherwise.                                                             |
+   */
+  export function select(context: approval.Context): approval.Status {
+    if (context.challenge && context.message === undefined) return 'waiting'
+    if (context.guest && context.requests.length === 0) return 'waiting'
+    return 'ready'
+  }
+
+  /** Returns whether the guest account signs a transaction that the page posts now. */
+  export function signs(snapshot: approval.Snapshot) {
+    return snapshot.can({ type: 'sign.start' })
+  }
+
+  /** Returns the values of the page's URL: the challenge's message, and the latest guest request. */
+  export function values(snapshot: approval.Snapshot) {
+    return {
+      guest: snapshot.context.requests.at(-1),
+      message: snapshot.context.message,
+    }
+  }
+}

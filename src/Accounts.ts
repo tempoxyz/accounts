@@ -42,6 +42,7 @@ import * as Plugin from './Plugin.js'
 import type { backend } from './plugins/backend.js'
 import type * as React from './react/index.js'
 import * as Session from './Session.js'
+import * as SignIn from './internal/SignIn.js'
 import type { Store } from './Store.js'
 import type * as TempoAccount from './internal/TempoAccount.js'
 
@@ -181,6 +182,21 @@ export class EverywhereNotAllowedError extends Error {
   constructor() {
     super(
       "Invalid sign-out: only a first-party app ends the user's Tempo ID session for every app. Sign out without `everywhere`.",
+    )
+  }
+}
+
+/**
+ * Thrown for a call that needs a Tempo ID session, such as `account.get`, `connections`, or a read
+ * of the access token, while the instance holds a guest session, which Tempo ID issued no tokens
+ * for.
+ */
+export class GuestSessionError extends Error {
+  override readonly name = 'Accounts.GuestSessionError'
+
+  constructor() {
+    super(
+      'The session belongs to a guest account, which Tempo ID issued no tokens for. Sign in with Tempo ID for this call.',
     )
   }
 }
@@ -351,6 +367,7 @@ export declare namespace RequestError {
     | 'foreign_account'
     | 'funding_unavailable'
     | 'google_unavailable'
+    | 'guest_selected'
     | 'insufficient_balance'
     | 'invalid_access_key_endpoint'
     | 'invalid_app'
@@ -555,11 +572,14 @@ export type Config = {
    */
   getFn?: TempoAccount.deserialize.Options['getFn']
   /**
-   * Whether `pay` pays from the instance's guest account while no user signs in, with no Tempo ID
-   * sign-in, as `guest` describes. Tempo ID's payment page takes a guest payment only from a
-   * first-party or verified app. Defaults to `false`.
+   * Whether the instance holds a guest session: a root Tempo Account whose owner is a P256 key pair in
+   * the instance's store, with no Tempo ID sign-in. `offer` adds `guest=offer` to each sign-in
+   * request, so Tempo ID's sign-in page offers "Continue as guest". `auto` starts the guest session
+   * at a sign-in without a session, with no screen and no request. With a guest session, `pay`,
+   * transactions, and MPP payments sign with the key pair. Absent, the instance holds no guest
+   * session.
    */
-  guest?: boolean | undefined
+  guest?: 'auto' | 'offer' | undefined
   /**
    * The platform capabilities of the key set that the verifiers of Tempo ID's tokens fetch, such as
    * `AccessToken.create`: a cache that instances share, and a function that keeps background work
@@ -646,8 +666,9 @@ export type Config = {
  */
 export type Accounts<
   plugins extends readonly Plugin.Plugin[] = readonly Plugin.Plugin[],
-> = Plugin.Namespaces<plugins> &
-  Members<plugins> & {
+  guest extends Config['guest'] = undefined,
+> = GuestNamespaces<Plugin.Namespaces<plugins>, guest> &
+  Members<plugins, guest> & {
     /** The user's Tempo Account that Tempo ID selects for the app. */
     account: {
       /**
@@ -1086,17 +1107,28 @@ export type Accounts<
       revokeAccessKey: Connections.attach.ReturnType['revokeAccessKey']
     }
     /**
-     * The instance's guest account: a root Tempo Account whose owner is a non-extractable WebCrypto
-     * P256 key pair in the instance's store. With `guest: true`, `pay` pays from it while no user
-     * signs in, and its first payment creates it.
+     * The instance's guest account: a root Tempo Account whose owner is a P256 key pair in the
+     * instance's store, with no Tempo ID sign-in. With `guest`, a sign-in that selects "Continue as
+     * guest", or a sign-in of `guest: 'auto'` without a session, starts a guest session of it, and
+     * the first guest session creates it. `signOut` ends the guest session, and keeps the key pair,
+     * so the next guest session holds the same account.
+     *
+     * @example
+     * ```ts
+     * import { Accounts } from 'accounts'
+     *
+     * const accounts = Accounts.create({ guest: 'offer' })
+     * const address = await accounts.guest.get()
+     * ```
      */
     guest: {
       /**
-       * Forgets the guest account: removes its key pair from the store. Its funds stay on its
-       * address, and no key signs for it again.
+       * Forgets the guest account: removes its key pair from the store, and signs out a guest
+       * session. Its funds stay on its address, and no key signs for it again. The next guest
+       * session creates a new guest account.
        */
       disconnect: () => Promise<void>
-      /** Returns the guest account's address, or `undefined` before a guest payment creates one. */
+      /** Returns the guest account's address, or `undefined` before a guest session creates one. */
       get: () => Promise<`0x${string}` | undefined>
     }
     /**
@@ -1175,6 +1207,11 @@ export type Accounts<
      * never sends such a payment. The call resolves with `address` and `challengeSignature`
      * beside `transaction`, which the server verifies with `siwe.complete`. A function
      * `challenge` runs at the call, so its request runs while the dialog or the popup opens.
+     *
+     * With a guest session, a payment without `account` and `challenge` opens the payment page
+     * for the guest account, as `Actions.account.pay_guest` describes. The page posts the transfer,
+     * and the guest account's key pair signs it. With `guest: 'auto'`, a call without a session
+     * starts the guest session first, with no request.
      *
      * With the `siwe` plugin's `auth`, a payment without `account`, while the instance holds no
      * session, signs the user in to the app's routes in the same way, and the call
@@ -1402,7 +1439,7 @@ export type Accounts<
        * if (!session) showSignIn()
        * ```
        */
-      get: SessionGet<plugins>
+      get: SessionGet<plugins, guest>
       /**
        * Refreshes the session's tokens with its refresh token, saves them, and returns the session.
        * Returns `undefined` without a session or a refresh token. Overlapping calls on one store,
@@ -1442,7 +1479,7 @@ export type Accounts<
        * const session = await accounts.session.refresh()
        * ```
        */
-      refresh: () => Promise<Session.Of<plugins> | undefined>
+      refresh: () => Promise<Session.Of<plugins, guest> | undefined>
       /**
        * The status of the session, `pending`, `reauthorizing`, `signedIn`, or `signedOut`, with
        * the session to show: `get` returns it, and `subscribe` calls its listener with each new
@@ -1465,7 +1502,7 @@ export type Accounts<
        * })
        * ```
        */
-      status: InternalSession.Status<Session.Of<plugins>>
+      status: InternalSession.Status<Session.Of<plugins, guest>>
       /**
        * Calls `listener` with each new session and the one before it, at each sign-in and
        * sign-out. Returns the function that unsubscribes. An instance without a session never
@@ -1482,8 +1519,8 @@ export type Accounts<
        */
       subscribe: (
         listener: (
-          session: Session.Of<plugins> | undefined,
-          previous: Session.Of<plugins> | undefined,
+          session: Session.Of<plugins, guest> | undefined,
+          previous: Session.Of<plugins, guest> | undefined,
         ) => void,
       ) => () => void
     }
@@ -1780,9 +1817,12 @@ export declare namespace from {
  * await accounts.dialog.signIn()
  * ```
  */
-export function create<const plugins extends readonly Plugin.Option[] = []>(
-  options: create.Options<plugins> = {},
-): Accounts<Plugin.Flatten<plugins>> {
+export function create<
+  const plugins extends readonly Plugin.Option[] = [],
+  const guest extends Config['guest'] = undefined,
+>(
+  options: create.Options<plugins> & { guest?: guest } = {},
+): Accounts<Plugin.Flatten<plugins>, guest> {
   const {
     accessKey: accessKey_option,
     chains,
@@ -2145,7 +2185,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     await context.session.load()
     const current = context.session.get()
     if (!current) return undefined
-    // Tempo ID holds no account of a local session, so a read without its token never reaches it.
+    // Tempo ID holds no account of a local or guest session, so a read without its token never
+    // reaches it.
+    if (Session.guest(current)) throw new GuestSessionError()
     if (Session.local(current)) throw new LocalSessionError()
     if (
       page !== undefined &&
@@ -2180,6 +2222,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     // for the renewed user.
     if (renewing && Session.subject(current) !== Session.subject(renewing))
       throw new SignedOutError()
+    if (Session.guest(current)) throw new GuestSessionError()
     if (Session.local(current)) throw new LocalSessionError()
     const token = await (async () => {
       if (current.expiresAt - 30_000 > Date.now()) return current.accessToken
@@ -2212,6 +2255,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       // context signed in.
       if (Session.subject(latest) !== Session.subject(current))
         throw new SignedOutError()
+      if (Session.guest(latest)) throw new GuestSessionError()
       if (Session.local(latest)) throw new LocalSessionError()
       // A session without a refresh token keeps its access token until its expiry. A token that
       // expires within 5 seconds can expire before the request arrives, so the call sends none.
@@ -2347,15 +2391,18 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       },
     },
     guest: {
-      disconnect: async () =>
-        (await import('./actions/guest.js')).disconnect(config),
+      disconnect: async () => {
+        // The key pair goes first, so no guest session that starts during the sign-out finds it.
+        await (await import('./actions/guest.js')).disconnect(config)
+        const current = context.session.get() ?? (await context.session.load())
+        if (current && Session.guest(current)) await signOut()
+      },
       get: async () => (await import('./actions/guest.js')).get(config),
     },
     pay: async (
       options: AccountActions.pay.Parameters & Pick<Payment.Payment, 'session'>,
     ) => {
-      // Only the guest branch below pays as a guest, so the signed-in paths never install its signer.
-      const { guest, session: fixed, ...parameters } = options
+      const { session: fixed, ...parameters } = options
       // A load of the stored session also loads the stored chain, so the default chain resolves
       // again after it.
       const chainOf = () => parameters.chainId ?? chain.get()
@@ -2375,21 +2422,24 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
           chainId: chainOf(),
           memo,
         })
-      // While no user signs in, the guest account pays on the page. A returning user's session can
-      // still sit in the store, so the call reads it first. The read is local, so the dialog or the
-      // popup opens with no request.
-      if (
-        (guest || config.guest) &&
-        !fixed &&
-        parameters.account === undefined &&
-        !(context.session.get() ?? (await context.session.load()))
-      )
-        return await AccountActions.pay(config, {
-          ...parameters,
-          chainId: chainOf(),
-          guest: true,
-          memo,
-        })
+      // A guest session's account pays on the page, which posts the transfer for its key pair to
+      // sign. With `guest: 'auto'`, a call without a session starts the guest session first. The
+      // reads are local, so the dialog or the popup opens with no request.
+      if (config.guest && !fixed && parameters.account === undefined) {
+        const held =
+          context.session.get() ??
+          (await context.session.load()) ??
+          (await SignIn.guestAuto(context))
+        if (held && Session.guest(held)) {
+          const { attempt: _attempt, ...rest } = parameters
+          return await AccountActions.pay_guest(config, {
+            ...rest,
+            chainId: chainOf(),
+            memo,
+            session: held,
+          })
+        }
+      }
       // A fixed session's access key names the account, so the call reads neither the store nor
       // Tempo ID, whose read would send the instance's own token.
       const named = () => {
@@ -2687,7 +2737,8 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
           session.reload(),
           chain.stored(),
         ])
-        if (!latest || !keeps(latest)) return
+        // A guest session holds its own account, which no read replaces.
+        if (!latest || Session.guest(latest) || !keeps(latest)) return
         if (stored !== chainId) return
         await session.change({ update: true }).commit({ ...latest, account })
       })
@@ -2727,6 +2778,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         const latest = await session.reload()
         if (
           !latest ||
+          Session.guest(latest) ||
           Session.subject(latest) !== Session.subject(moved) ||
           latest.account ||
           latest.accessKey ||
@@ -2762,8 +2814,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         // third-party app has no CORS grant for the read, so the switch sends no read.
         const account =
           held &&
-          // A local session's account is the owner key's on every chain, so Tempo ID reads none.
-          !Session.local(held) &&
+          // A local or guest session's account is the owner key's on every chain, so Tempo ID reads
+          // none.
+          Session.tempoId(held) &&
           !InternalSession.toChain(held, { chainId }).accessKey &&
           !ClientId.thirdParty(config.clientId) &&
           // A session that signed in without a Tempo Account holds none to read.
@@ -2785,8 +2838,10 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         await session
           .exclusive(async () => {
             const latest = await session.reload()
-            if (!latest) return
+            // A guest session's account is the same on every chain.
+            if (!latest || Session.guest(latest)) return
             const moved = InternalSession.toChain(latest, { chainId })
+            if (Session.guest(moved)) return
             // A session without access keys holds no account of another chain, also when the read
             // found none.
             const next = (() => {
@@ -2889,7 +2944,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     Object.defineProperties(instance, Object.getOwnPropertyDescriptors(members))
   }
 
-  return instance as Accounts<Plugin.Flatten<plugins>>
+  return instance as Accounts<Plugin.Flatten<plugins>, guest>
 }
 
 export declare namespace create {
@@ -3010,13 +3065,63 @@ export declare namespace create {
 }
 
 /**
- * The members that `plugins` add to the instance, with `useSession` of the `react` plugin typed by
- * the instance's session: `Session.Any` with the `local` plugin, else `Session.Session`.
+ * The namespaces of an instance's plugins, whose sign-ins return a guest session only with
+ * `guest`. Without it, `device.signIn` and `redirect.signIn` return no guest session. With it,
+ * `dialog.signIn` takes an overload that returns one, before its own.
  */
-export type Members<plugins extends readonly Plugin.Plugin[]> =
+export type GuestNamespaces<namespaces, guest extends Config['guest']> = {
+  [id in keyof namespaces]: id extends 'device' | 'redirect'
+    ? guest extends undefined
+      ? {
+          [name in keyof namespaces[id]]: name extends 'signIn'
+            ? WithoutGuest<namespaces[id][name]>
+            : namespaces[id][name]
+        }
+      : namespaces[id]
+    : id extends 'dialog'
+      ? guest extends undefined
+        ? namespaces[id]
+        : {
+            [name in keyof namespaces[id]]: name extends 'signIn'
+              ? WithGuest<namespaces[id][name]> & namespaces[id][name]
+              : namespaces[id][name]
+          }
+      : namespaces[id]
+}
+
+/** `fn`, whose result holds no guest session. */
+type WithoutGuest<fn> = fn extends (
+  ...parameters: infer parameters
+) => Promise<infer result>
+  ? (
+      ...parameters: parameters
+    ) => Promise<Exclude<result, Session.GuestSession>>
+  : fn
+
+/**
+ * The overload of a page's sign-in `fn` that also returns a guest session. A sign-in through a
+ * backend returns none, so it takes no such overload.
+ */
+type WithGuest<fn> = fn extends (
+  ...parameters: infer parameters
+) => Promise<infer result>
+  ? result extends Session.Session
+    ? (...parameters: parameters) => Promise<result | Session.GuestSession>
+    : unknown
+  : unknown
+
+/**
+ * The members that `plugins` add to the instance, with `useSession` of the `react` plugin typed by
+ * the instance's session: `Session.Any` with the `local` plugin, else `Session.Session`, and
+ * `Session.GuestSession` with `guest`.
+ */
+export type Members<
+  plugins extends readonly Plugin.Plugin[],
+  guest extends Config['guest'] = undefined,
+> =
   Plugin.Members<plugins> extends { useSession(): unknown }
     ? Omit<Plugin.Members<plugins>, 'useSession'> & {
-        useSession(): React.useSession.ReturnType<Session.Of<plugins>>
+        useSession(): React.useSession.ReturnType<Session.Of<plugins, guest>>
       }
     : Plugin.Members<plugins>
 
@@ -3055,13 +3160,15 @@ export type SessionFetch<plugins extends readonly Plugin.Plugin[]> =
  * `session.get` of an instance of `plugins`: the page's, and, with the `backend` plugin, the read
  * of a server request's session.
  */
-export type SessionGet<plugins extends readonly Plugin.Plugin[]> =
-  ('backend' extends plugins[number]['id']
-    ? (request: Request) => Promise<backend.Session | undefined>
-    : unknown) &
-    ((
-      parameters?: Core.getSession.Parameters,
-    ) => Promise<Session.Of<plugins> | undefined>)
+export type SessionGet<
+  plugins extends readonly Plugin.Plugin[],
+  guest extends Config['guest'] = undefined,
+> = ('backend' extends plugins[number]['id']
+  ? (request: Request) => Promise<backend.Session | undefined>
+  : unknown) &
+  ((
+    parameters?: Core.getSession.Parameters,
+  ) => Promise<Session.Of<plugins, guest> | undefined>)
 
 /**
  * Returns the access key of each sign-in of an instance without `accessKey`. A function, since a

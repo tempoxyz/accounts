@@ -7,7 +7,7 @@
  */
 import { Base64, Bytes } from 'ox'
 import type * as Accounts from '../Accounts.js'
-import { LocalSessionError } from '../Accounts.js'
+import { GuestSessionError, LocalSessionError } from '../Accounts.js'
 import * as AccessToken from '../AccessToken.js'
 import type * as AccessToken_ from '../AccessToken.js'
 import type * as Funding from '../internal/Funding.js'
@@ -353,6 +353,7 @@ export function backend(options: backend.Options) {
           // A local session holds no tokens for the backend to keep. Its account signs in through
           // `siwe` instead.
           if (Session_.local(parameters.session)) throw new LocalSessionError()
+          if (Session_.guest(parameters.session)) throw new GuestSessionError()
           const id = parameters.id ?? newId()
           BackendSessions.checkId(id)
           const saved = await sessions.save({ id, session: parameters.session })

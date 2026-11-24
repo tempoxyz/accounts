@@ -1669,6 +1669,7 @@ describe('RequestError', () => {
       'foreign_account',
       'funding_unavailable',
       'google_unavailable',
+      'guest_selected',
       'insufficient_balance',
       'invalid_access_key_endpoint',
       'invalid_app',

@@ -10,6 +10,7 @@ import * as AccessKey from '../internal/AccessKey.js'
 import * as Api from '../internal/Api.js'
 import {
   fundingParameters,
+  guestParameters,
   keyAuthorization,
   resources,
 } from '../internal/Request.js'
@@ -58,6 +59,7 @@ export async function authorize<
     client_id: auth.clientId,
     device: options.device ?? hostname(),
     ...fundingParameters(options.funding),
+    ...guestParameters(auth, { challenge: options.challenge }),
     ...(resolved && accessKey
       ? {
           key_authorization: Base64.fromString(

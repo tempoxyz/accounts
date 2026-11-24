@@ -1,30 +1,100 @@
 /**
- * Guest checkout: a visitor without a Tempo ID sign-in pays from a guest account, a root Tempo
- * Account whose owner is a non-extractable WebCrypto P256 key pair in the instance's store. Tempo
- * ID's payment page reads the payment, funds a shortfall, and sends. The key pair only signs: the
- * guest request that opens the page, and the one transaction that the page posts back.
+ * The guest account: a root Tempo Account whose owner is a P256 key pair in the instance's store,
+ * with no Tempo ID sign-in. A guest session holds its address and public key, and the store keeps
+ * the key pair under its own entry. The key pair signs the guest session's transactions, the guest
+ * request that opens Tempo ID's payment page, and the one transaction that the page posts back.
  * @module
  */
-import { Address, Base64, Bytes, Hex, PublicKey, WebCryptoP256 } from 'ox'
+import {
+  Address,
+  Base64,
+  Bytes,
+  Hash,
+  Hex,
+  P256,
+  PublicKey,
+  WebCryptoP256,
+} from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
+import { Account } from 'viem/tempo'
 import { token as TokenActions } from 'viem/tempo/actions'
-import { type Config, RequestError } from '../Accounts.js'
+import { type Config, RequestError, SignedOutError } from '../Accounts.js'
 import * as DefaultStore from '../internal/DefaultStore.js'
 import * as Permissions from '../Permissions.js'
+import * as Session from '../Session.js'
 import type { Store } from '../Store.js'
 
 /** The time between the guest request's signature and its expiry, in seconds. */
 const lifetime = 4 * 60
 
 /**
+ * The guest account's key pair, as the store keeps it: a non-extractable WebCrypto key pair in a
+ * store that keeps values as they are, such as IndexedDB, or a P256 private key in a private store
+ * of JSON, such as `Store.file`. No store of JSON holds a `CryptoKey`.
+ */
+type Key =
+  | { keyPair: WebCryptoP256.createKeyPair.ReturnType; type: 'webCrypto' }
+  | { privateKey: Hex.Hex; publicKey: PublicKey.PublicKey; type: 'p256' }
+
+/** A P256 private key, as a private store of JSON keeps it. */
+type P256Entry = { privateKey: Hex.Hex; type: 'p256' }
+
+/**
+ * Returns the Viem account of the guest session `session`, a root account whose key pair signs each
+ * transaction, message, and typed data. Each signature reads the key pair from the store, so the
+ * session holds no `CryptoKey`. A WebCrypto key pair signs a P256 envelope with `prehash`, since
+ * WebCrypto hashes the payload with SHA-256 before it signs.
+ *
+ * @throws {SignedOutError} At a signature, when the store holds another key pair or none, such as
+ *   after `guest.disconnect` in another tab.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const account = Actions.guest.account(accounts.config, { session })
+ * ```
+ */
+export function account(
+  auth: Config,
+  options: account.Options,
+): Account.RootAccount {
+  const { session } = options
+  const signer = async () => {
+    const key = await read(storeOf(auth), { key: keyOf(auth) })
+    if (
+      !key ||
+      PublicKey.toHex(publicKeyOf(key)).toLowerCase() !==
+        session.publicKey.toLowerCase()
+    )
+      throw new SignedOutError()
+    return key.type === 'webCrypto'
+      ? Account.fromWebCryptoP256(key.keyPair)
+      : Account.fromP256(key.privateKey)
+  }
+  return Account.from({
+    keyType: 'p256',
+    publicKey: PublicKey.fromHex(session.publicKey),
+    sign: async (parameters) => (await signer()).sign(parameters),
+  })
+}
+
+export declare namespace account {
+  type Options = {
+    /** The guest session. */
+    session: Pick<Session.GuestSession, 'publicKey'>
+  }
+}
+
+/**
  * Returns `value`, a transaction that Tempo ID's page prepared for a guest payment, as a Tempo
- * envelope to sign, if it makes the requested transfer and nothing else, and Tempo ID's sponsor
- * pays its fee. The sender is the account that signs it, so the check reads no sender. The check
- * reads no network.
+ * envelope to sign, if it makes the requested transfer and nothing else. With the sponsor's marker,
+ * Tempo ID's sponsor pays its fee. Without it, the guest account pays its fee. The sender is the
+ * account that signs it, so the check reads no sender. The check reads no network.
  *
  * @throws {RequestError} `invalid_request` with the field `transaction` for any other value, such
  *   as a transaction on another chain, with another call or more calls, with an access key or an
- *   authorization, with a signature, or without the sponsor's marker.
+ *   authorization, with a signature, or with a fee payer's signature.
  *
  * @example
  * ```ts
@@ -96,9 +166,13 @@ export function check(
     throw refused('its call is not the requested transfer.')
   if (envelope.keyAuthorization || envelope.authorizationList?.length)
     throw refused('it changes the account.')
-  // The sponsor's marker, so the guest account pays no fee.
-  if (envelope.feePayerSignature !== null)
-    throw refused('no sponsor pays its fee.')
+  // The sponsor's marker, `null`, or none, where the guest account pays the fee. A fee payer's
+  // signature would name a fee payer that Tempo ID's page did not choose.
+  if (
+    envelope.feePayerSignature !== null &&
+    envelope.feePayerSignature !== undefined
+  )
+    throw refused('it holds a fee payer signature.')
   if (envelope.signature) throw refused('it holds a signature.')
   return envelope
 }
@@ -119,9 +193,9 @@ export declare namespace check {
 }
 
 /**
- * Forgets the instance's guest account: removes its key pair from the store. The next guest payment
+ * Forgets the instance's guest account: removes its key pair from the store. The next guest session
  * creates a new guest account. The funds of the forgotten guest account stay on its address, and no
- * key signs for it again.
+ * key signs for it again. The instance's session stays as it is, so call it after a sign-out.
  *
  * @example
  * ```ts
@@ -138,7 +212,7 @@ export async function disconnect(auth: Config): Promise<void> {
 }
 
 /**
- * Returns the address of the instance's guest account, or `undefined` before a guest payment creates
+ * Returns the address of the instance's guest account, or `undefined` before a guest session creates
  * one. The read creates no guest account.
  *
  * @throws {Error} For a value at the guest account's entry of the store that is no key pair.
@@ -151,8 +225,8 @@ export async function disconnect(auth: Config): Promise<void> {
  * ```
  */
 export async function get(auth: Config): Promise<get.ReturnType> {
-  const keyPair = await read(storeOf(auth), { key: keyOf(auth) })
-  return keyPair && Address.fromPublicKey(keyPair.publicKey, { checksum: true })
+  const key = await read(storeOf(auth), { key: keyOf(auth) })
+  return key && Address.fromPublicKey(publicKeyOf(key), { checksum: true })
 }
 
 export declare namespace get {
@@ -161,27 +235,30 @@ export declare namespace get {
 }
 
 /**
- * Returns the guest account's key pair, which the first call creates and saves, and the guest
- * request that opens Tempo ID's payment page for it: the unpadded URL-safe Base64 of the request's
- * JSON, with the key pair's signature over its message. The request binds the key pair to the app,
- * the redirect URI, and the chain, for 4 minutes. The call reads and writes only the store, and
- * sends no request.
+ * Returns the guest request that opens Tempo ID's payment page for the guest account: the unpadded
+ * URL-safe Base64 of the request's JSON, with the key pair's signature over its message. The request
+ * binds the key pair to the app, the redirect URI, and the chain, for 4 minutes. The first call
+ * creates and saves the key pair. The call reads and writes only the store, and sends no request.
  *
- * @throws {Error} Without a store that keeps a key pair as it is, such as a store with `json`. In a
- *   browser page, also for a store that keeps its values only in the page, such as `Store.memory`,
- *   since a page load would lose the guest account and its funds.
+ * @throws {Error} As {@link session} throws it.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const { value } = await Actions.guest.request(accounts.config, {
+ *   chainId: 4217,
+ *   redirectUri: 'https://example.com/',
+ * })
+ * ```
  */
 export async function request(
   auth: Config,
   options: request.Options,
 ): Promise<request.ReturnType> {
   const { chainId, redirectUri } = options
-  const store = storeOf(auth)
-  if (store.local && typeof document !== 'undefined')
-    throw new Error(
-      'Invalid `store`: it keeps the guest account only in the page, which a page load loses with its funds. Use a store that persists, such as the default IndexedDB store.',
-    )
-  const keyPair = await load(store, { key: keyOf(auth) })
+  const key = await load(auth)
+  const publicKey = publicKeyOf(key)
 
   const expiresAt = Math.floor(Date.now() / 1000) + lifetime
   const message = [
@@ -191,16 +268,21 @@ export async function request(
     `exp=${expiresAt}`,
     `redirect_uri=${redirectUri}`,
   ].join('\n')
-  const signature = await WebCryptoP256.sign({
-    payload: Bytes.fromString(message),
-    privateKey: keyPair.privateKey,
-  })
+  const payload = Bytes.fromString(message)
+  // Both forms sign the SHA-256 hash of the message, as WebCrypto's ECDSA does.
+  const signature =
+    key.type === 'webCrypto'
+      ? await WebCryptoP256.sign({
+          payload,
+          privateKey: key.keyPair.privateKey,
+        })
+      : P256.sign({ payload: Hash.sha256(payload), privateKey: key.privateKey })
   const value = Base64.fromString(
     JSON.stringify({
       chain_id: chainId,
       client_id: auth.clientId,
       exp: expiresAt,
-      public_key: PublicKey.toHex(keyPair.publicKey),
+      public_key: PublicKey.toHex(publicKey),
       redirect_uri: redirectUri,
       signature: Hex.concat(
         Hex.fromNumber(signature.r, { size: 32 }),
@@ -210,8 +292,7 @@ export async function request(
     { pad: false, url: true },
   )
   return {
-    address: Address.fromPublicKey(keyPair.publicKey, { checksum: true }),
-    keyPair,
+    address: Address.fromPublicKey(publicKey, { checksum: true }),
     value,
   }
 }
@@ -227,41 +308,67 @@ export declare namespace request {
   type ReturnType = {
     /** The guest account's address. */
     address: `0x${string}`
-    /** The guest account's key pair. */
-    keyPair: WebCryptoP256.createKeyPair.ReturnType
     /** The guest request, as the page's `guest` parameter takes it. */
     value: string
   }
 }
 
 /**
- * Returns `envelope` signed by the guest account's key pair, serialized with the sponsor's marker
- * that it holds. WebCrypto hashes the signing payload with SHA-256 before it signs, so the P256
- * envelope marks the signature as prehashed.
+ * Returns a new guest session of the instance's guest account, whose key pair the first call creates
+ * and saves. The store keeps the key pair, and the session holds only its address and public key,
+ * so a save of the session as JSON holds no `CryptoKey`. The call reads and writes only the store,
+ * and sends no request.
+ *
+ * @throws {Error} Without a store, for a store that other parties read, such as `Store.postgres`,
+ *   and in a browser page for a store that keeps its values only in the page, such as
+ *   `Store.memory`, since a page load would lose the guest account and its funds. Also without Web
+ *   Locks or the store's `lock` in a page.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const session = await Actions.guest.session(accounts.config)
+ * ```
+ */
+export async function session(auth: Config): Promise<Session.GuestSession> {
+  const publicKey = publicKeyOf(await load(auth))
+  return Session.from({
+    address: Address.fromPublicKey(publicKey, { checksum: true }),
+    kind: 'guest',
+    publicKey: PublicKey.toHex(publicKey),
+    revision: Date.now(),
+  })
+}
+
+/**
+ * Returns `envelope` signed by `account`, the guest session's account, serialized with the sponsor's
+ * marker that it holds, if any.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const signed = await Actions.guest.sign(envelope, { account })
+ * ```
  */
 export async function sign(
   envelope: TxEnvelopeTempo.TxEnvelopeTempo,
   options: sign.Options,
 ): Promise<`0x${string}`> {
-  const { keyPair } = options
-  const signature = await WebCryptoP256.sign({
-    payload: TxEnvelopeTempo.getSignPayload(envelope),
-    privateKey: keyPair.privateKey,
+  const { account } = options
+  const signature = await account.sign({
+    hash: TxEnvelopeTempo.getSignPayload(envelope),
   })
   return TxEnvelopeTempo.serialize(envelope, {
-    signature: SignatureEnvelope.from({
-      prehash: true,
-      publicKey: keyPair.publicKey,
-      signature,
-      type: 'p256',
-    }),
+    signature: SignatureEnvelope.from(signature),
   })
 }
 
 export declare namespace sign {
   type Options = {
-    /** The guest account's key pair. */
-    keyPair: WebCryptoP256.createKeyPair.ReturnType
+    /** The guest session's account, from {@link account}. */
+    account: Account.RootAccount
   }
 }
 
@@ -310,40 +417,74 @@ declare namespace exclusive {
  * `lock`, serialize the calls, so two tabs keep one guest account. A refused read or write throws,
  * so no new key pair replaces a stored one.
  */
-async function load(store: Store, options: load.Options) {
-  return await exclusive(store, options, async () => {
-    const held = await read(store, options)
+async function load(auth: Config): Promise<Key> {
+  const store = storeOf(auth)
+  if (store.local && typeof document !== 'undefined')
+    throw new Error(
+      'Invalid `store`: it keeps the guest account only in the page, which a page load loses with its funds. Use a store that persists, such as the default IndexedDB store.',
+    )
+  const key = keyOf(auth)
+  return await exclusive(store, { key }, async () => {
+    const held = await read(store, { key })
     if (held) return held
+    if (store.json) {
+      const privateKey = P256.randomPrivateKey()
+      const value: P256Entry = { privateKey, type: 'p256' }
+      await store.setItem(key, value)
+      return {
+        privateKey,
+        publicKey: P256.getPublicKey({ privateKey }),
+        type: 'p256',
+      }
+    }
     const keyPair = await WebCryptoP256.createKeyPair()
-    await store.setItem(options.key, keyPair)
-    return keyPair
+    await store.setItem(key, keyPair)
+    return { keyPair, type: 'webCrypto' }
   })
 }
 
-declare namespace load {
-  type Options = {
-    /** The store's entry of the guest account. */
-    key: string
-  }
+/** Returns the public key of `key`. */
+function publicKeyOf(key: Key) {
+  return key.type === 'webCrypto' ? key.keyPair.publicKey : key.publicKey
 }
 
 /**
  * Returns the guest account's key pair from the store, or `undefined` without one. Throws for a
  * value that is no key pair, which the action never replaces.
  */
-async function read(store: Store, options: read.Options) {
+async function read(
+  store: Store,
+  options: read.Options,
+): Promise<Key | undefined> {
   const value = await store.getItem(options.key)
   if (value === undefined || value === null) return undefined
-  const keyPair = value as Partial<WebCryptoP256.createKeyPair.ReturnType>
+  const stored = value as {
+    privateKey?: unknown
+    publicKey?: PublicKey.PublicKey | undefined
+    type?: unknown
+  }
   if (
     typeof CryptoKey !== 'undefined' &&
-    keyPair.privateKey instanceof CryptoKey &&
-    keyPair.publicKey !== undefined &&
-    PublicKey.validate(keyPair.publicKey)
+    stored.privateKey instanceof CryptoKey &&
+    stored.publicKey !== undefined &&
+    PublicKey.validate(stored.publicKey)
   )
-    return keyPair as WebCryptoP256.createKeyPair.ReturnType
+    return {
+      keyPair: stored as WebCryptoP256.createKeyPair.ReturnType,
+      type: 'webCrypto',
+    }
+  if (
+    stored.type === 'p256' &&
+    typeof stored.privateKey === 'string' &&
+    Hex.validate(stored.privateKey, { strict: true })
+  )
+    return {
+      privateKey: stored.privateKey,
+      publicKey: P256.getPublicKey({ privateKey: stored.privateKey }),
+      type: 'p256',
+    }
   throw new Error(
-    'Invalid guest account: its entry of the store holds no key pair. Remove the entry with `guest.disconnect`, then pay again.',
+    'Invalid guest account: its entry of the store holds no key pair. Remove the entry with `guest.disconnect`, then start the guest session again.',
   )
 }
 
@@ -355,8 +496,9 @@ declare namespace read {
 }
 
 /**
- * Returns the instance's store, which keeps the guest account's non-extractable key pair as it is.
- * Throws without one, and for a store that keeps each value as JSON.
+ * Returns the instance's store, which keeps the guest account's key pair: a store that keeps values
+ * as they are, or a private store of JSON, such as `Store.file`. Throws without one, and for a store
+ * that other parties read, such as `Store.postgres`.
  */
 function storeOf(auth: Config): Store {
   const store = DefaultStore.get(auth.store)
@@ -364,9 +506,9 @@ function storeOf(auth: Config): Store {
     throw new Error(
       'Missing `store`: a guest account needs a store that keeps its key pair, such as IndexedDB in a browser. Pass `store` to the instance.',
     )
-  if (store.json)
+  if (store.json && !store.private)
     throw new TypeError(
-      'Invalid `store`: it keeps each value as JSON, which holds no non-extractable key pair. Use a store that keeps values as they are, such as IndexedDB.',
+      'Invalid `store`: other parties read it, so it keeps no key pair of a guest account. Use IndexedDB in a browser, or `Store.file`.',
     )
   return store
 }

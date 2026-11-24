@@ -153,6 +153,11 @@ export function redirect(options: redirect.Options = {}) {
          * redeems the callback, sets the instance's session, and returns it. It returns `undefined`
          * when `open` resolves with no URL, such as for a dismissed browser. The session holds no
          * Tempo Account.
+         *
+         * With `guest: 'offer'`, the request adds `guest=offer`. A return with `guest=1`, after the
+         * user selects "Continue as guest", sets a guest session in place of a redemption: with
+         * `open` in the call, else on the callback's page. With `guest: 'auto'`, a call without a
+         * session sets the guest session, with no navigation and no request.
          * @throws {Accounts.RedirectUriRequiredError} Before any navigation, outside a browser, such
          *   as in React Native, when the instance names no `redirectUri`. Pass it to `Accounts.create`.
          * @throws {Accounts.RequestError} For a refused sign-in:
@@ -252,7 +257,7 @@ export function redirect(options: redirect.Options = {}) {
          */
         async signIn(
           parameters: redirect.signIn.Parameters = {},
-        ): Promise<Session.Session | undefined> {
+        ): Promise<Session.GuestSession | Session.Session | undefined> {
           // Without `open`, the sign-in leaves the page, so outside one, such as in Node, React
           // Native, a Web Worker or Deno with `--location`, it refuses before any read, and the
           // store keeps no PKCE verifier of a redirect that never leaves. An instance without a
@@ -264,6 +269,10 @@ export function redirect(options: redirect.Options = {}) {
             throw new TypeError(
               'Missing `open`: outside a page, a redirect has no page to leave. Pass `open` to the plugin, to show the sign-in URL, such as in a system browser.',
             )
+          }
+          if (context.config.guest === 'auto') {
+            const started = await SignIn.guestAuto(context)
+            if (started) return started
           }
           // The request names the instance's chain, so its access key waits for the stored
           // selection. The reads of the hint and of the sign-out flag need no chain, so they run
@@ -388,9 +397,15 @@ export function redirect(options: redirect.Options = {}) {
               pending,
               url: returned,
             })
-          })().catch(change.fail)
-          const session = SignIn.toSession(result)
-          await change.commit(session)
+          })().catch((error: unknown) => {
+            // The user selected "Continue as guest", which issues no tokens.
+            if (SignIn.guestSelected(context, error)) return undefined
+            return change.fail(error)
+          })
+          const session = result
+            ? SignIn.toSession(result)
+            : await SignIn.guest(context, { change })
+          if (result) await change.commit(session)
           if ((signOuts.get(context.config) ?? 0) !== started) return session
           signingOut.delete(context.config)
           if (!signedOut) return session
@@ -513,9 +528,15 @@ export function redirect(options: redirect.Options = {}) {
                 if (applied.has(error)) return undefined
                 applied.add(error)
               }
+              // The user selected "Continue as guest", which issues no tokens.
+              if (SignIn.guestSelected(context, error)) return 'guest' as const
               return change.fail(error)
             },
           )
+          if (result === 'guest') {
+            await SignIn.guest(context, { change })
+            return
+          }
           // `undefined` means the page is not a callback. The page holds one result for each app and
           // chain, which applies once, so an instance created after a sign-out restores no session.
           if (!result || applied.has(result)) return

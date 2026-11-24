@@ -36,6 +36,7 @@ import { getTransactionReceipt } from 'viem/actions'
 import { tempoModerato } from 'viem/chains'
 import { type Account, Actions, ExecutionError } from 'viem/tempo'
 import * as AccountActions from '../actions/account.js'
+import * as Guest from '../actions/guest.js'
 import * as AccessKey from '../internal/AccessKey.js'
 import * as Api from '../internal/Api.js'
 import * as FeeAllowance from '../internal/FeeAllowance.js'
@@ -701,9 +702,10 @@ export function mpp(options: mpp.Options = {}) {
               Credential.extractPaymentScheme(authorization) !== null
             )
               return request
-            // A local session holds no Tempo ID tokens, so its requests go out without an identity.
+            // A local or guest session holds no Tempo ID tokens, so its requests go out without an
+            // identity.
             const held = context.session.get()
-            if (held && Session.local(held) && !ended()) return request
+            if (held && !Session.tempoId(held) && !ended()) return request
             const accessToken = await read().catch((error: unknown) => {
               // A request with a credential, such as the paid retry of a pushed transfer or a
               // session manager's close, still goes out, without the tokens it can no longer read.
@@ -763,6 +765,28 @@ export function mpp(options: mpp.Options = {}) {
 
         const current = overrides.session ?? context.session.get()
         if (!current) throw new Accounts.SignedOutError()
+        // A guest session's key pair signs each charge as the root account, with no access key and
+        // no identity, since Tempo ID issued it no tokens.
+        const guest = overrides.session ? undefined : context.session.get()
+        if (guest && Session.guest(guest)) {
+          const account = Guest.account(instance.config, { session: guest })
+          return create({
+            ...settings,
+            account,
+            address: account.address,
+            chainId: instance.config.chainId,
+            fees: [],
+            fetch,
+            getClient,
+            identity: undefined,
+            landed: registrations.landed,
+            limits: undefined,
+            pay: undefined,
+            subscribe: undefined,
+            turn: registrations.turn,
+            verify: undefined,
+          })
+        }
         // Only a page shows the payment page, and only for the instance's own session.
         const paged =
           signing.page === true &&
@@ -1857,8 +1881,11 @@ async function assertLimit(options: {
 
 /** Creates the payer of `account`, or of `address` alone, which pays only subscriptions. */
 function create(options: {
-  /** The access key that signs each charge and voucher. Absent, the payer pays only subscriptions. */
-  account: Account.AccessKeyAccount | undefined
+  /**
+   * The access key that signs each charge and voucher, or a guest session's root account. Absent,
+   * the payer pays only subscriptions.
+   */
+  account: Account.AccessKeyAccount | Account.RootAccount | undefined
   /** The Tempo Account that pays. Absent, the payer pays no subscription. */
   address: Address.Address | undefined
   autoSwap: mpp.AutoSwap | undefined
@@ -1934,6 +1961,9 @@ function create(options: {
     turn,
     verify,
   } = options
+  // The access key of `account`, whose registration and limits the chain holds. A guest session's
+  // root account holds none.
+  const keyed = account?.source === 'accessKey' ? account : undefined
   // A payer of the payment page alone holds no access key. `check` pays each of its charges or
   // refuses it, so the method signs nothing.
   const charge =
@@ -2018,7 +2048,7 @@ function create(options: {
       return await remote()
     }
     if (
-      account &&
+      keyed &&
       limits &&
       token &&
       challenge.intent === 'charge' &&
@@ -2032,7 +2062,7 @@ function create(options: {
       if (!entry || amount > BigInt(entry.limit))
         try {
           await assertLimit({
-            account,
+            account: keyed,
             amount,
             client: getClient({ chainId }),
             fee: fee ? BigInt(fee.limit) : undefined,
@@ -2145,7 +2175,7 @@ function create(options: {
       signals.set(payload.challenge.id, signal)
       ;(call.challenges ??= []).push(payload.challenge.id)
     }
-    if (!account || !call) return undefined
+    if (!keyed || !call) return undefined
     const { intent, request } = payload.challenge
     if (intent !== 'charge' || BigInt(String(request.amount ?? 0)) === 0n)
       return undefined
@@ -2153,12 +2183,12 @@ function create(options: {
     if (call.end) return undefined
     call.end = await turn(
       {
-        accessKey: account.accessKeyAddress,
-        address: account.address,
+        accessKey: keyed.accessKeyAddress,
+        address: keyed.address,
         chainId,
       },
       {
-        keyAuthorizationManager: account.keyAuthorizationManager,
+        keyAuthorizationManager: keyed.keyAuthorizationManager,
         signal: signalOf(payload.input, payload.init),
       },
     )
@@ -2214,16 +2244,16 @@ function create(options: {
       type: string
     }>(serialized)
     if (
-      !account ||
+      !keyed ||
       credential.payload.type !== 'transaction' ||
       !credential.payload.signature
     )
       return
-    const { accessKeyAddress } = account
+    const { accessKeyAddress } = keyed
     landed(credential.payload.signature, async () => {
       const metadata = await Actions.accessKey.getMetadata(
         getClient({ chainId }),
-        { accessKey: accessKeyAddress, account: account.address },
+        { accessKey: accessKeyAddress, account: keyed.address },
       )
       return (
         !metadata.isRevoked &&
@@ -2262,16 +2292,16 @@ function create(options: {
    * charge attaches no key authorization. Returns `false` after a failed read.
    */
   async function superseded(serialized: string, receipt: Inclusion) {
-    if (!account) return false
+    if (!keyed) return false
     const signed = transaction(serialized)
     if (!signed?.keyAuthorization) return false
 
     const client = getClient({ chainId })
-    const { accessKeyAddress } = account
+    const { accessKeyAddress } = keyed
     const registered = await Actions.accessKey
       .getMetadata(client, {
         accessKey: accessKeyAddress,
-        account: account.address,
+        account: keyed.address,
       })
       .then(
         (metadata) =>
@@ -2305,15 +2335,15 @@ function create(options: {
     charge: { amount: bigint; token: Address.Address } | undefined,
   ) {
     // Without signed limits, the access key spends any amount, so a revert is not of a limit.
-    if (!account || !charge || !limits) return undefined
+    if (!keyed || !charge || !limits) return undefined
     if (receipt.settled && !failed(receipt.settled)) return undefined
     const client = getClient({ chainId })
     const [settled, read] = await Promise.all([
       receipt.read(),
       Actions.accessKey
         .getRemainingLimit(client, {
-          accessKey: account.accessKeyAddress,
-          account: account.address,
+          accessKey: keyed.accessKeyAddress,
+          account: keyed.address,
           token: charge.token,
         })
         .catch(() => undefined),
@@ -2389,7 +2419,7 @@ function create(options: {
     error: unknown,
     charge: { amount: bigint; token: Address.Address } | undefined,
   ) {
-    if (!account || !charge || !(error instanceof Error)) return undefined
+    if (!keyed || !charge || !(error instanceof Error)) return undefined
     if (ExecutionError.from(error).errorName !== 'SpendingLimitExceeded')
       return undefined
     // A refusal of the fee payment, or of a spend in another token, is not the charge's.
@@ -2399,8 +2429,8 @@ function create(options: {
 
     const read = await Actions.accessKey
       .getRemainingLimit(getClient({ chainId }), {
-        accessKey: account.accessKeyAddress,
-        account: account.address,
+        accessKey: keyed.accessKeyAddress,
+        account: keyed.address,
         token: charge.token,
       })
       .catch(() => undefined)

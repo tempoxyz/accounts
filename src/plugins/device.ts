@@ -265,6 +265,12 @@ export function device(options: device.Options = {}) {
          * further poll, changes no session, and rejects with the signal's reason. A poll in flight
          * finishes, and an approval that it carries signs in.
          *
+         * With `guest: 'offer'`, a request without a challenge adds `guest=offer`, so Tempo ID's
+         * device page offers "Continue as guest". The poll then refuses the code with
+         * `guest_selected`, and the call sets and returns a guest session in place of the refusal.
+         * With `guest: 'auto'`, a call without a session sets the guest session, and requests no
+         * code.
+         *
          * @throws {Accounts.RequestError} When Tempo ID refuses the code request, with one of these
          *   `reason` values, which [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md)
          *   describes:
@@ -323,13 +329,17 @@ export function device(options: device.Options = {}) {
          *
          * @example
          * ```ts
-         * const { user } = await accounts.device.signIn()
+         * const session = await accounts.device.signIn()
          * ```
          */
         async signIn(
           parameters: device.signIn.Parameters = {},
-        ): Promise<Session.Session> {
+        ): Promise<Session.GuestSession | Session.Session> {
           if (!onCode) throw new OnCodeRequiredError()
+          if (context.config.guest === 'auto') {
+            const started = await SignIn.guestAuto(context)
+            if (started) return started
+          }
           // The request names the instance's chain, so the stored selection loads first. The store
           // also holds the session, so after a failed read its save fails too, and the sign-in
           // rejects before the user approves a code. An entry that holds no valid value fails its
@@ -424,8 +434,11 @@ export function device(options: device.Options = {}) {
               // An aborted sign-in received no tokens, and the sign-out that aborted it ended the
               // session already, so it fails without the cleanup of an overtaken change.
               if (controller.signal.aborted) throw new SupersededError()
+              // The user selected "Continue as guest", which issues no tokens.
+              if (SignIn.guestSelected(context, error)) return undefined
               return fail(error)
             })
+            if (!result) return await SignIn.guest(context, { change })
             const session = SignIn.toSession(result)
             await change.commit(session)
             return session
