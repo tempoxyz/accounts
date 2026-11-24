@@ -99,8 +99,13 @@ async function run(
   // The headless authorization names no `resource`, so its tokens are for Tempo ID's origin, which
   // the resource's API refuses. An instance with a resource thus sends none and keeps its session,
   // as the viem retry does, and signs in with a redirect, which names the resource. An empty list
-  // names Tempo ID's origin, as no `resource` does.
-  if (Request.resources(config).length > 0) {
+  // names Tempo ID's origin, as no `resource` does. A session whose sign-in named a resource in its
+  // own call holds tokens for that resource too, also an expired session that a renewal replaces.
+  const scoped = held ?? context.session.renewing()
+  if (
+    Request.resources(config).length > 0 ||
+    (scoped?.accessToken && Api.grant(config, scoped.accessToken).resource)
+  ) {
     // Only a call that requests nothing beyond the held session returns it. A challenge, an access
     // key, a passkey, or another account needs a new authorization, which only a sign-in on a page
     // sends, so the call never returns the held session as its result. A local session is no
@@ -119,7 +124,7 @@ async function run(
       code: 'interaction_required',
       field: 'resource',
       message:
-        'Authorization refused: an instance with `resource` authorizes only through a sign-in on a page. Sign in with a redirect or the dialog.',
+        'Authorization refused: a session or an instance with `resource` authorizes only through a sign-in on a page. Sign in with a redirect or the dialog.',
       status: 0,
     })
   }
@@ -682,8 +687,8 @@ function holds(session: Session.Session, parameters: authorize.Options) {
  * ceremony, has no cause.
  */
 function interactiveRefusal(error: unknown) {
-  // An instance with `resource` authorizes only on a page, so its refusal leaves the visitor signed
-  // out too.
+  // A session or an instance with `resource` authorizes only on a page, so its refusal leaves the
+  // visitor signed out too.
   if (
     error instanceof RequestError &&
     error.code === 'interaction_required' &&

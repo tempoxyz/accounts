@@ -19,6 +19,7 @@ import * as TempoAccount from './TempoAccount.js'
 import * as Api from './Api.js'
 import * as Callback from './Callback.js'
 import { authorizeUrl } from './Request.js'
+import * as Verifier from './Verifier.js'
 
 /**
  * A session of a backend's user from a Tempo ID sign-in, as `get` returns it. The `backend`
@@ -500,6 +501,12 @@ export function create(
           await store.removeItem(pendingKey(id))
           throw new PendingNotFoundError()
         }
+        // Another Tempo ID deployment's redirect in a shared store redeems its code only at that
+        // deployment, so this instance leaves it for that deployment's instance. A redirect of an
+        // earlier version names no deployment, and completes.
+        const { issuer } = pending.pending
+        if (issuer !== undefined && issuer !== Verifier.issuerOf(auth))
+          throw new PendingNotFoundError()
 
         const callback = Callback.url(url)
         Callback.checkState(callback, { state: pending.pending.state })

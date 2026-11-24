@@ -1556,6 +1556,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         const onChain = accessKeyOn(before, { chainId })
         const previous = onChain ?? before?.accessKey ?? before?.accessKeys?.[0]
         if (!before || !previous) throw error
+        // A sign-in that named a resource in its own call holds tokens for that resource, so the new
+        // sign-in names it again, and the resource's API accepts its tokens.
+        const { resource = [] } = Api.grant(config, before.accessToken)
         // An account that holds a live access key on the chain but signs nothing with it, such as
         // another app's access key by its public key, needs no new access key. An expired one renews.
         if (
@@ -1632,16 +1635,17 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         // An expired access key renews through the browser's Tempo ID session with no screen, as a
         // restore at a mount does. A third-party app, a passkey that must sign, another user's
         // session, or no Tempo ID session falls back to the sign-in on Tempo ID's page. The headless
-        // request names no `resource`, so an instance with one renews on that page too. The renewal is
-        // a restore, so a sign-in or a sign-out that completes first overtakes it. A raised limit
-        // never renews with no screen, since only the user approves a higher limit. Only a page
-        // holds the browser's Tempo ID session.
+        // request names no `resource`, so an instance or a session with one renews on that page too.
+        // The renewal is a restore, so a sign-in or a sign-out that completes first overtakes it. A
+        // raised limit never renews with no screen, since only the user approves a higher limit. Only
+        // a page holds the browser's Tempo ID session.
         const renewal =
           page &&
           !raise &&
           onChain &&
           AccessKey_internal.expired(onChain) &&
-          config.resource === undefined
+          config.resource === undefined &&
+          resource.length === 0
             ? context.session.change({ restore: true })
             : undefined
         const request = renewal
@@ -1769,6 +1773,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             return await Dialog.signIn(config, {
               accessKey,
               mode: 'iframe',
+              ...(resource.length > 0 ? { resource } : {}),
               signal,
             }).catch((reason: unknown) => {
               if (
@@ -2777,8 +2782,9 @@ export declare namespace viem {
      * If the session's access key on the client's chain expired, the retry first authorizes the
      * browser's Tempo ID session for the new access key, as `accounts.authorize` does, and shows no
      * screen. If that authorization fails, such as for a third-party app, a passkey that must sign,
-     * or no Tempo ID session of the same user, the sign-in shows. An instance with `resource` shows
-     * the sign-in, since the authorization requests no resource.
+     * or no Tempo ID session of the same user, the sign-in shows. An instance with `resource`, or a
+     * session whose sign-in named a resource, shows the sign-in, since the authorization requests no
+     * resource. The sign-in requests the resources of the session's access token again.
      *
      * The new access key keeps the old one's expiry while it is in the future. An expired access
      * key's replacement takes the expiry of the instance's `accessKey`. Without it, the replacement

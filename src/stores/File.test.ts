@@ -127,6 +127,21 @@ describe('Store.file', () => {
     await Fs.rm(directory, { force: true, recursive: true })
   })
 
+  test('behavior: a stored `String` object that ends with the bigint suffix reads back as its string, and never as a bigint', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const store = File.create(Path.join(directory, 'store.json'))
+    await store.setItem('boxed', { value: new String('5#__bigint') })
+
+    const value = await store.getItem('boxed')
+
+    expect(value).toMatchInlineSnapshot(`
+      {
+        "value": "5#__bigint",
+      }
+    `)
+    await Fs.rm(directory, { force: true, recursive: true })
+  })
+
   test('behavior: a write to a damaged file rejects with the path and the fix, and quotes none of its tokens', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const path = Path.join(directory, 'session.json')

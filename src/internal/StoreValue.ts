@@ -94,10 +94,13 @@ export function stringify(value: unknown): string {
       )
     // Each `bigint` takes ox's form, an integer with the suffix `#__bigint`.
     if (typeof entry === 'bigint') return `${entry}${bigintSuffix}`
+    // JSON writes a `String` object as its string, after the replacer, so the escape reads the
+    // string too.
+    const text = entry instanceof String ? entry.valueOf() : entry
     // A string that ends with the suffix, such as an app's SIWE statement, takes the escape before
     // it, so its read returns the same string, and never a `bigint`.
-    if (typeof entry === 'string' && entry.endsWith(bigintSuffix))
-      return `${entry}${stringEscape}${bigintSuffix}`
+    if (typeof text === 'string' && text.endsWith(bigintSuffix))
+      return `${text}${stringEscape}${bigintSuffix}`
     return entry
   })
 }
