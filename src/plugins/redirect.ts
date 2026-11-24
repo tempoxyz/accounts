@@ -271,7 +271,9 @@ export function redirect(options: redirect.Options = {}) {
             )
           }
           if (context.config.guest === 'auto') {
-            const started = await SignIn.guestAuto(context)
+            const started = await SignIn.guestAuto(context, {
+              challenge: parameters.challenge !== undefined,
+            })
             if (started) return started
           }
           // The request names the instance's chain, so its access key waits for the stored
@@ -402,10 +404,11 @@ export function redirect(options: redirect.Options = {}) {
             if (SignIn.guestSelected(context, error)) return undefined
             return change.fail(error)
           })
-          const session = result
-            ? SignIn.toSession(result)
-            : await SignIn.guest(context, { change })
-          if (result) await change.commit(session)
+          // A guest selection keeps the browser's Tempo ID session, so the signed-out flag stays, and
+          // the next sign-in still sends `prompt=login`.
+          if (!result) return await SignIn.guest(context, { change })
+          const session = SignIn.toSession(result)
+          await change.commit(session)
           if ((signOuts.get(context.config) ?? 0) !== started) return session
           signingOut.delete(context.config)
           if (!signedOut) return session

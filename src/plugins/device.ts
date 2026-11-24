@@ -338,6 +338,7 @@ export function device(options: device.Options = {}) {
           if (!onCode) throw new OnCodeRequiredError()
           if (context.config.guest === 'auto') {
             const started = await SignIn.guestAuto(context, {
+              challenge: parameters.challenge !== undefined,
               signal: parameters.signal,
             })
             if (started) return started
@@ -440,7 +441,7 @@ export function device(options: device.Options = {}) {
               if (SignIn.guestSelected(context, error)) return undefined
               return fail(error)
             })
-            if (!result) return await SignIn.guest(context, { change })
+            if (!result) return await SignIn.guest(context, { change, signal })
             const session = SignIn.toSession(result)
             await change.commit(session)
             return session

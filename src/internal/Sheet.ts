@@ -1036,6 +1036,7 @@ export function load(options: load.Options): load.ReturnType {
     },
     // The offer of a popup replaces the frame, so a frame that offers one shows no page.
     usable: () => state.phase === 'hidden' && element.isConnected,
+    window: () => element.contentWindow,
   }
 }
 
@@ -1119,6 +1120,11 @@ export declare namespace load {
      * its frame offers no popup.
      */
     usable: () => boolean
+    /**
+     * Returns the window of the frame, which keeps its identity across the page's navigations, or
+     * `null` once the dialog is removed.
+     */
+    window: () => Window | null
   }
 }
 

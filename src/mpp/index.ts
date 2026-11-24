@@ -221,6 +221,21 @@ export declare namespace MaxAmountPrecisionError {
 }
 
 /**
+ * A charge of a guest session has no `maxAmount`, so the payer signs nothing. The guest account's key
+ * pair signs as the root account, with no access key limits, so only `maxAmount` bounds a charge. A
+ * proof spends nothing, and needs none.
+ */
+export class MaxAmountRequiredError extends Error {
+  override readonly name = 'mpp.MaxAmountRequiredError'
+
+  constructor() {
+    super(
+      "Missing `maxAmount`: a guest account has no access key limits, so a charge needs a bound. Pass `maxAmount` to the payer, such as `accounts.mpp({ maxAmount: '1' })`.",
+    )
+  }
+}
+
+/**
  * A payer of a named `account` holds no access key, so it pays only subscriptions, which Tempo ID's
  * dialog approves in a page. Its `session()`, and its `fetch` outside a browser, throw before any
  * request.
@@ -1191,6 +1206,13 @@ export function mpp(options: mpp.Options = {}) {
         // its access key.
         const started = ends
         const check = () => {
+          // A guest session's key pair signs as the root account, with no access key, until the
+          // session ends or holds another account.
+          if (held && Session.guest(held)) {
+            if (ends !== started || !Session.same(context.session.get(), held))
+              throw new Accounts.SignedOutError()
+            return
+          }
           if (
             !held ||
             !accessKey ||
@@ -1585,6 +1607,7 @@ export declare namespace mpp {
      * @throws {MaxAmountError} For a charge that costs more than `maxAmount`.
      * @throws {MaxAmountInvalidError} For a `maxAmount` that is no decimal amount of 0 or more.
      * @throws {MaxAmountPrecisionError} For a `maxAmount` of more than 6 decimals.
+     * @throws {MaxAmountRequiredError} For a charge of a guest session without `maxAmount`.
      * @throws {BalanceError} For a subscription whose first period the Tempo Account cannot pay,
      *   when the request cannot send again after the deposit page.
      * @throws {ChainError} For a subscription challenge on another chain than the payer's, before
@@ -1629,6 +1652,7 @@ export declare namespace mpp {
      * @throws {MaxAmountError} For a charge that costs more than `maxAmount`.
      * @throws {MaxAmountInvalidError} For a `maxAmount` that is no decimal amount of 0 or more.
      * @throws {MaxAmountPrecisionError} For a `maxAmount` of more than 6 decimals.
+     * @throws {MaxAmountRequiredError} For a charge of a guest session without `maxAmount`.
      * @throws {SubscriptionOnlyError} For a payer of a named `account`.
      *
      * @example
@@ -2009,6 +2033,13 @@ function create(options: {
     challenge: Challenge.Challenge,
     options: { signal?: AbortSignal | undefined } = {},
   ): Promise<string | undefined> {
+    // Only a guest session's account signs as the root account, with no limits but `maxAmount`.
+    if (
+      maxAmount === undefined &&
+      account?.source === 'root' &&
+      BigInt(String(challenge.request.amount ?? 0)) > 0n
+    )
+      throw new MaxAmountRequiredError()
     if (maxAmount !== undefined) {
       const amount = BigInt(String(challenge.request.amount ?? 0))
       if (amount > parseUnits(maxAmount, 6))

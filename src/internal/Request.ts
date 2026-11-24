@@ -161,7 +161,8 @@ export declare namespace authorizeUrl {
     funding?: Funding.Funding | undefined
     /**
      * Whether the request offers "Continue as guest", as {@link guestParameters} decides. `false`
-     * for a request whose challenge arrives later. Defaults to `true`.
+     * for a request whose challenge arrives later, and for a backend sign-in, which starts no guest
+     * session. Defaults to `true`.
      */
     guest?: boolean | undefined
     /** The address that the sign-in page's email field holds, as OpenID Connect's `login_hint`. */

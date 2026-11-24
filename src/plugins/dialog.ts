@@ -275,6 +275,8 @@ export function dialog<const options extends dialog.Options = {}>(
         // The read of the stored session is local, so a popup still opens within the gesture.
         if (context.config.guest === 'auto') {
           const started = await SignIn.guestAuto(context, {
+            challenge:
+              page.challenge !== undefined || context.challenge() !== undefined,
             signal: page.signal,
           })
           if (started) return started
@@ -326,7 +328,8 @@ export function dialog<const options extends dialog.Options = {}>(
             if (SignIn.guestSelected(context, error)) return undefined
             return change.fail(error)
           })
-          if (!result) return await SignIn.guest(context, { change })
+          if (!result)
+            return await SignIn.guest(context, { change, signal: page.signal })
           const session = SignIn.toSession(result)
           // A refused verification fails the sign-in, and revokes the refresh token that no change
           // saves.

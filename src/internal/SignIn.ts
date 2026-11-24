@@ -182,22 +182,30 @@ export declare namespace guest {
 
 /**
  * Returns the guest session that a sign-in of an instance with `guest: 'auto'` starts while it holds
- * no session, with no screen and no request, else `undefined`. The read of the stored session is
- * local. An abort of `options.signal` before the commit rejects with its reason, and sets no session.
+ * no session, with no screen and no request, else `undefined`. A sign-in with `options.challenge`
+ * starts none, since a guest account signs no challenge. The read of the stored session is local. An
+ * abort of `options.signal` before the commit rejects with its reason, and sets no session.
  */
 export async function guestAuto(
   context: Pick<Plugin.Context, 'config' | 'session'>,
   options: guestAuto.Options = {},
 ): Promise<Session.GuestSession | undefined> {
   const { signal } = options
-  if (context.config.guest !== 'auto') return undefined
+  if (context.config.guest !== 'auto' || options.challenge) return undefined
   throwIfAborted(signal)
+  // The change starts before the read, so a sign-out during the read overtakes it.
+  const change = context.session.change()
   if (context.session.get() ?? (await context.session.load())) return undefined
-  return await guest(context, { change: context.session.change(), signal })
+  return await guest(context, { change, signal })
 }
 
 export declare namespace guestAuto {
   type Options = {
+    /**
+     * Whether the sign-in asks for a challenge, as `challenge` or from a plugin such as `siwe`.
+     * Defaults to `false`.
+     */
+    challenge?: boolean | undefined
     /** The sign-in's signal, whose abort before the commit rejects with its reason. */
     signal?: AbortSignal | undefined
   }

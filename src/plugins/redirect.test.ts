@@ -543,6 +543,60 @@ describe('redirect', () => {
     `)
   })
 
+  test('keeps prompt=login for the next sign-in after a guest selection that follows a sign-out', async () => {
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","example-mobile",42431]'
+    const store = Store.memory()
+    await store.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    const prompts: (string | null)[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'example-mobile',
+      guest: 'offer',
+      plugins: [
+        redirect({
+          // The first sign-in selects "Continue as guest". The second one is dismissed.
+          open(url, options) {
+            const params = new URL(url).searchParams
+            prompts.push(params.get('prompt'))
+            if (prompts.length > 1) return Promise.resolve(undefined)
+            return Promise.resolve(
+              `${options.redirectUri}?guest=1&state=${params.get('state')}`,
+            )
+          },
+        }),
+      ],
+      redirectUri: 'com.example.app:/callback',
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+
+    // Nothing listens at Tempo ID's URL, so the revocation fails, but the sign-out ends the session.
+    await accounts.signOut().catch(() => undefined)
+    const guest = await accounts.redirect.signIn({ accessKey: false })
+    await accounts.redirect.signIn({ accessKey: false })
+
+    expect([guest && Session.guest(guest), prompts]).toMatchInlineSnapshot(`
+      [
+        true,
+        [
+          "login",
+          "login",
+        ],
+      ]
+    `)
+  })
+
   test('signIn throws Store.InvalidFileError before open, for a file that holds no valid JSON', async () => {
     const directory = Fs.mkdtempSync(
       Path.join(Os.tmpdir(), 'accounts-redirect-'),

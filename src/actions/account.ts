@@ -1591,6 +1591,9 @@ async function approve<held = never>(
     }).toString()
     return url.href
   }
+  // The windows of this payment's frame and popups, the only sources of its guest messages, so a
+  // concurrent payment's page never reaches this one's listener.
+  const sources = new Set<Window>()
   /**
    * Opens the popup within the gesture: at the page, or blank until the values of its URL arrive,
    * since a popup blocker accepts `window.open` only within the gesture. A later popup of a guest
@@ -1599,9 +1602,13 @@ async function approve<held = never>(
    */
   const open = (entry: approve.Popup = {}) => {
     const renewal = entry.later && guest ? renew(guest.request) : undefined
-    if (!renewal && machines.ready(actor.getSnapshot()))
-      return { popup: Popup.openPopup(toUrl('popup', entry.method)) }
+    if (!renewal && machines.ready(actor.getSnapshot())) {
+      const popup = Popup.openPopup(toUrl('popup', entry.method))
+      if (popup) sources.add(popup)
+      return { popup }
+    }
     const popup = Popup.openPopup('about:blank')
+    if (popup) sources.add(popup)
     const shown = (renewal ?? pending ?? Promise.resolve()).then(() => {
       if (popup && !popup.closed)
         popup.location.href = toUrl('popup', entry.method)
@@ -1687,18 +1694,15 @@ async function approve<held = never>(
   // this payment. The check accepts only the requested transfer, and the guest account signs one
   // transaction for each payment, so no second prepared transaction ever lands.
   const listener = (event: MessageEvent) => {
+    // Only this payment's own frame or popups post its messages.
+    if (!event.source || !sources.has(event.source as Window)) return
     const data = event.data as {
       guest?: unknown
       id?: unknown
       transaction?: unknown
       type?: unknown
     } | null
-    if (
-      !guest ||
-      event.origin !== origin ||
-      !event.source ||
-      typeof data?.guest !== 'string'
-    )
+    if (!guest || event.origin !== origin || typeof data?.guest !== 'string')
       return
     // The guest requests are unique to this payment, so another payment's page never reaches it.
     if (!machines.issued(actor.getSnapshot(), { value: data.guest })) return
@@ -1815,6 +1819,8 @@ async function approve<held = never>(
       // A covered page shows its own skeleton, measured from its screen, until the cover lifts.
       url: `${toUrl('frame')}${covering ? '&covered=true' : ''}${challenge ? '&deferred=true' : ''}`,
     })
+    const framed = sheet.window()
+    if (framed) sources.add(framed)
     let abort: (() => void) | undefined
     try {
       return await new Promise<URL | held>((resolve, reject) => {

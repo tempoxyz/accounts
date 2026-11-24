@@ -381,9 +381,9 @@ function keyOf(auth: Config) {
 }
 
 /**
- * Runs `fn` while it holds the guest account's lock: a Web Lock, or else the store's `lock`. The
- * creation and the removal of the guest account's key pair hold it, so neither undoes the other.
- * Throws in a browser page without either.
+ * Runs `fn` while it holds the guest account's lock: a Web Lock, the store's `lock`, or both for a
+ * store that other processes share. The creation and the removal of the guest account's key pair
+ * hold it, so neither undoes the other. Throws without Web Locks and without the store's `lock`.
  */
 async function exclusive<value>(
   store: Store,
@@ -394,15 +394,18 @@ async function exclusive<value>(
     ?.locks
   // The lock's name is no entry of the store, so a store that locks each entry never waits for the
   // lock that its caller holds.
-  if (locks) return await locks.request(`${options.key}:exclusive`, fn)
-  if (store.lock) return await store.lock(`${options.key}:exclusive`, fn)
-  // Two pages that create the guest account at once would each save a key pair, and the funds of
-  // the overwritten one would stay with no signer.
-  if (typeof document !== 'undefined')
-    throw new Error(
-      'Invalid `store`: the browser has no Web Locks, and the store has no `lock`, so two pages could create two guest accounts. Use a store with `lock`.',
-    )
-  return await fn()
+  const name = `${options.key}:exclusive`
+  // Web Locks span one browser or one Node process only, so the store's own lock, such as the lock
+  // file of `Store.file`, also serializes other processes. The Web Lock orders the process's runs.
+  if (locks && store.lock && !store.local)
+    return await locks.request(name, () => store.lock!(name, fn))
+  if (locks) return await locks.request(name, fn)
+  if (store.lock) return await store.lock(name, fn)
+  // Two pages or processes that create the guest account at once would each save a key pair, and
+  // the funds of the overwritten one would stay with no signer.
+  throw new Error(
+    'Invalid `store`: the runtime has no Web Locks, and the store has no `lock`, so two callers could create two guest accounts. Use a store with `lock`.',
+  )
 }
 
 declare namespace exclusive {

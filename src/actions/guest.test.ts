@@ -4,6 +4,8 @@
  * store, the signature of its account, and the guest session of an instance with `guest`.
  * @module
  */
+import * as Esbuild from 'esbuild'
+import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs/promises'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
@@ -13,6 +15,7 @@ import { token as TokenActions } from 'viem/tempo/actions'
 import { describe, expect, expectTypeOf, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
 import * as DefaultAccounts from '../internal/DefaultAccounts.js'
+import * as SignIn from '../internal/SignIn.js'
 import { device, dialog, redirect } from '../plugins/index.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
@@ -195,6 +198,121 @@ describe('Actions.guest.session', () => {
   })
 })
 
+describe('Actions.guest.session in other processes', () => {
+  /** Bundles `lines`, a program that imports this folder's modules, for Node to run. */
+  async function bundle(lines: readonly string[]) {
+    const output = await Esbuild.build({
+      bundle: true,
+      format: 'esm',
+      logLevel: 'silent',
+      platform: 'node',
+      stdin: {
+        contents: lines.join('\n'),
+        loader: 'ts',
+        resolveDir: import.meta.dirname,
+      },
+      write: false,
+    })
+    return output.outputFiles[0]!.text
+  }
+
+  /** Runs `program` in Node with `args`, and resolves with its output. */
+  function run(program: string, args: readonly string[] = []) {
+    return new Promise<string>((resolve, reject) => {
+      const child = ChildProcess.spawn(process.execPath, [
+        '--input-type=module',
+        ...args,
+      ])
+      let stderr = ''
+      let stdout = ''
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString()
+      })
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString()
+      })
+      child.on('close', (code) => {
+        if (code === 0) resolve(stdout)
+        else reject(new Error(stderr))
+      })
+      child.stdin.end(program)
+    })
+  }
+
+  test('keeps one guest account for two processes that create it at once on `Store.file`', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    // Each process runs Node with its global `navigator`, whose Web Locks span only that process.
+    // The read of the guest account's entry takes 200 milliseconds, so both reads overlap without
+    // the file's lock. Both processes start once both are ready. The wait ends after 10 seconds.
+    const program = await bundle([
+      "import * as Fs from 'node:fs/promises'",
+      "import * as Path from 'node:path'",
+      "import * as Accounts from '../Accounts.ts'",
+      "import * as Store from '../Store.ts'",
+      "import * as Guest from './guest.ts'",
+      `const path = ${JSON.stringify(path)}`,
+      'const file = Store.file(path)',
+      'const store = Store.from({',
+      '  ...file,',
+      '  async getItem(key) {',
+      '    const value = await file.getItem(key)',
+      "    if (key.startsWith('tempo-id:guest:')) await new Promise((resolve) => setTimeout(resolve, 200))",
+      '    return value',
+      '  },',
+      '})',
+      "await Fs.writeFile(Path.join(Path.dirname(path), 'ready-' + crypto.randomUUID()), '')",
+      'for (let attempt = 0; ; attempt++) {',
+      "  const ready = (await Fs.readdir(Path.dirname(path))).filter((name) => name.startsWith('ready-'))",
+      '  if (ready.length === 2) break',
+      "  if (attempt > 1_000) throw new Error('The other process never started.')",
+      '  await new Promise((resolve) => setTimeout(resolve, 10))',
+      '}',
+      "const session = await Guest.session(Accounts.from({ chain: 4217, clientId: 'cli:guest-example', store, url: 'http://127.0.0.1:9' }))",
+      'console.log(session.address)',
+    ])
+
+    const addresses = await Promise.all([run(program), run(program)])
+    const kept = await Guest.get(config(Store.file(path)))
+    await Fs.rm(directory, { force: true, recursive: true })
+
+    expect([
+      addresses[0]!.trim() === addresses[1]!.trim(),
+      addresses[0]!.trim() === kept,
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        true,
+      ]
+    `)
+  }, 60_000)
+
+  test('refuses to create a guest account in a runtime without Web Locks, on a store without `lock`', async () => {
+    // The program runs in Node without `navigator`, as a runtime without Web Locks. The store has
+    // no `lock`, so nothing serializes two creations of the guest account.
+    const program = await bundle([
+      "import * as Accounts from '../Accounts.ts'",
+      "import * as Store from '../Store.ts'",
+      "import * as Guest from './guest.ts'",
+      'const memory = Store.memory()',
+      'const store = Store.from({ getItem: memory.getItem, json: true, private: true, removeItem: memory.removeItem, setItem: memory.setItem })',
+      "const config = Accounts.from({ chain: 4217, clientId: 'cli:guest-example', store, url: 'http://127.0.0.1:9' })",
+      'const error = await Guest.session(config).catch((error) => error)',
+      'console.log(JSON.stringify({ address: (await Guest.get(config)) ?? null, error: error.message, locks: typeof navigator }))',
+    ])
+
+    const output = await run(program, ['--no-experimental-global-navigator'])
+
+    expect(JSON.parse(output)).toMatchInlineSnapshot(`
+      {
+        "address": null,
+        "error": "Invalid \`store\`: the runtime has no Web Locks, and the store has no \`lock\`, so two callers could create two guest accounts. Use a store with \`lock\`.",
+        "locks": "undefined",
+      }
+    `)
+  }, 60_000)
+})
+
 describe('Actions.guest.account', () => {
   test("signs a transaction as the root account, with a prehashed P256 envelope of the store's key pair", async () => {
     const auth = config()
@@ -371,6 +489,160 @@ describe('Accounts.create with guest', () => {
         [],
       ]
     `)
+  })
+
+  test("`pay` of a new instance reads the stored session first, so a signed-in user's payment takes no guest path", async () => {
+    const store = Store.memory()
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","cli:guest-example",4217]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: 'auto',
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+
+    // Node holds no page, so the payment of the signed-in user rejects. A guest payment would start
+    // the guest session, and create its key pair, first.
+    await accounts.pay(payment).catch(() => undefined)
+
+    expect([
+      (await accounts.session.get())?.user?.id,
+      await accounts.guest.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        "user_1",
+        undefined,
+      ]
+    `)
+  })
+
+  test('`auto` starts no guest session for a sign-in with a challenge, which signs in through Tempo ID', async () => {
+    const { accounts, requests } = create('auto')
+    const shown = DefaultAccounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: 'auto',
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    // Nothing listens at Tempo ID's URL, so the device sign-in rejects after its request. Node holds
+    // no page, so the dialog's sign-in rejects before it opens.
+    const device = await accounts.device
+      .signIn({ challenge: 'Sign in to Example.' })
+      .catch((error: unknown) => error)
+    const dialog = await shown.dialog
+      .signIn({ challenge: 'Sign in to Example.' })
+      .catch((error: unknown) => error)
+
+    expect([
+      device instanceof Error && device.name,
+      requests.map((entry) => entry.split(' ')[0]),
+      dialog instanceof Error && dialog.name,
+      await accounts.session.get(),
+      await shown.session.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        "Accounts.RequestError",
+        [
+          "/device/code",
+        ],
+        "Actions.dialog.PageRequiredError",
+        undefined,
+        undefined,
+      ]
+    `)
+  })
+
+  test('`auto` starts no guest session after a sign-out during the read of the stored session', async () => {
+    const memory = Store.memory()
+    const gate = Promise.withResolvers<void>()
+    const reading = Promise.withResolvers<void>()
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: 'auto',
+      plugins: [device({ onCode: () => {} })],
+      // The first read of the stored session waits for the gate.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (!key.startsWith('tempo-id:guest:')) {
+            reading.resolve()
+            await gate.promise
+          }
+          return await memory.getItem(key)
+        },
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const pending = accounts.device.signIn().catch((error: unknown) => error)
+    await reading.promise
+    const signedOut = accounts.signOut()
+    gate.resolve()
+    await signedOut
+    const error = await pending
+
+    expect([
+      error instanceof Error ? error.name : error,
+      accounts.session.status.get().status,
+      await accounts.session.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        "Accounts.SupersededError",
+        "signedOut",
+        undefined,
+      ]
+    `)
+  })
+
+  test('a guest session aborted during the creation of its key pair rejects with the reason, and commits nothing', async () => {
+    const memory = Store.memory()
+    const controller = new AbortController()
+    const reason = new Error('Cancelled.')
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: 'offer',
+      plugins: [device({ onCode: () => {} })],
+      // The read of the guest account's entry aborts the sign-in.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (key.startsWith('tempo-id:guest:')) controller.abort(reason)
+          return await memory.getItem(key)
+        },
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+
+    const error = await SignIn.guest(
+      { config: accounts.config },
+      {
+        change: {
+          commit: () => Promise.reject(new Error('Committed.')),
+          fail: (error) => Promise.reject(error),
+        },
+        signal: controller.signal,
+      },
+    ).catch((error: unknown) => error)
+
+    expect(error === reason).toMatchInlineSnapshot(`true`)
   })
 
   test.for([

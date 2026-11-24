@@ -24,7 +24,7 @@ import { backend } from '../plugins/backend.js'
 import { viem } from '../plugins/viem.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
-import { ChainError, mpp } from './index.js'
+import { ChainError, MaxAmountRequiredError, mpp } from './index.js'
 
 describe('mpp', () => {
   test.each([
@@ -840,6 +840,60 @@ describe('mpp', () => {
           true,
         ],
       }
+    `)
+  })
+
+  test('refuses a charge of a guest session without `maxAmount` with mpp.MaxAmountRequiredError, before its key pair signs', async () => {
+    const endpoint = server({ amount: '1' })
+    const accounts = instance({ fetch: endpoint.fetch, store: Store.memory() })
+    await accounts.renew.commit(await Guest.session(accounts.config))
+
+    const error = await accounts
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+    // With `maxAmount`, the charge passes the check, and fails at the chain, where nothing listens.
+    const capped = await accounts
+      .mpp({ maxAmount: '1' })
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+
+    expect({
+      capped: capped instanceof MaxAmountRequiredError,
+      credentials: endpoint.credentials,
+      error,
+    }).toMatchInlineSnapshot(`
+      {
+        "capped": false,
+        "credentials": [
+          false,
+          false,
+        ],
+        "error": [mpp.MaxAmountRequiredError: Missing \`maxAmount\`: a guest account has no access key limits, so a charge needs a bound. Pass \`maxAmount\` to the payer, such as \`accounts.mpp({ maxAmount: '1' })\`.],
+      }
+    `)
+  })
+
+  test('sends the requests of a session manager of a guest session, and refuses them with Accounts.SignedOutError after a sign-out', async () => {
+    const accounts = instance({ store: Store.memory() })
+    await accounts.renew.commit(await Guest.session(accounts.config))
+    const manager = accounts.mpp.session()
+
+    // Nothing listens at the URL, so a request that the manager sends rejects with a network error.
+    const sent = await (async () =>
+      manager.fetch('http://127.0.0.1:9/content'))().catch(
+      (error: unknown) => error,
+    )
+    await accounts.signOut()
+    const ended = await (async () =>
+      manager.fetch('http://127.0.0.1:9/content'))().catch(
+      (error: unknown) => error,
+    )
+
+    expect([sent, ended]).toMatchInlineSnapshot(`
+      [
+        [TypeError: fetch failed],
+        [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+      ]
     `)
   })
 
