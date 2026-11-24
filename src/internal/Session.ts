@@ -50,9 +50,10 @@ export type ChangeOptions = {
    */
   sent?: string | undefined
   /**
-   * Whether the store holds the session that the change commits, such as tokens that a refresh read
-   * from the store. The commit then writes nothing, and posts no message. After a failed write, the
-   * commit writes it. Defaults to `false`.
+   * Whether the store holds the session that an update commits, such as tokens that a refresh read
+   * from the store. The commit of an update then writes nothing, and posts no message. A change
+   * without `update`, such as a sign-in, always writes. After a failed write, the commit writes too.
+   * Defaults to `false`.
    */
   stored?: boolean | undefined
   /**
@@ -1743,7 +1744,7 @@ export function create(options: create.Options): create.ReturnType {
           // An update of the session that the store holds writes nothing, so the other instances on
           // the store read no message, and take no lock to read the store again.
           set(kept, {
-            saved: !!options.stored && !writes?.failed(),
+            saved: !!options.update && !!options.stored && !writes?.failed(),
             signIn,
           })
           if (signIn) signedIn = Date.now()
