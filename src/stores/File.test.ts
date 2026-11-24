@@ -509,6 +509,56 @@ describe('Store.file', () => {
     ).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: a sign-out of one instance empties the session of the other instances in the process on the file, of one store or of another store of its path', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
+    await File.create(path).setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 3_600_000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    const create = (store: ReturnType<typeof File.create>) =>
+      Accounts.create({
+        chain: 1337,
+        clientId: 'https://app.example.com',
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const store = File.create(path)
+    const first = create(store)
+    const second = create(store)
+    const third = create(File.create(path))
+    await Promise.all(
+      [first, second, third].map((accounts) => accounts.session.get()),
+    )
+
+    // Nothing listens at Tempo ID's URL, so the revocation fails, but the sign-out empties the store.
+    await first.signOut().catch(() => undefined)
+
+    // Each session reads the sign-out in a later microtask, after the save of the empty session.
+    const read = async () =>
+      (await Promise.all([second.session.get(), third.session.get()])).map(
+        (session) => session?.refreshToken ?? null,
+      )
+    await expect.poll(read, { timeout: 1_000 }).toEqual([null, null])
+
+    expect(await read()).toMatchInlineSnapshot(`
+      [
+        null,
+        null,
+      ]
+    `)
+    await Fs.rm(directory, { force: true, recursive: true })
+  })
+
   test('behavior: takeItem returns a value once across two stores of one file, such as of two processes', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const path = Path.join(directory, 'session.json')

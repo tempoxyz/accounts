@@ -2,6 +2,7 @@
  * A store in one JSON file of the user's, such as a CLI's session, as `Store.file` returns it.
  * @module
  */
+import * as Broadcast from '../internal/Broadcast.js'
 import * as Expiry from '../internal/Expiry.js'
 import * as Node from '../internal/Node.js'
 import * as StoreValue from '../internal/StoreValue.js'
@@ -90,6 +91,9 @@ export class NodeRequiredError extends Error {
  * `<path>.<SHA-256 of the key>.lock`, so the instances of several processes on the file send one
  * refresh. The hold renews the lock file for at most 30 seconds, so a slow refresh keeps it. The
  * lock of a crashed or stalled process goes to the next process 10 seconds after its last renewal.
+ * `connect` delivers each saved change to the other instances of the process on the file, also
+ * through another store of its path, so a sign-out empties their sessions at once. Another process
+ * reads the sign-out only from the file.
  *
  * A path that starts with `~/` starts in the user's home directory. The first write creates the
  * file and its folders. Keep the file in the user's own folder, since it holds a refresh token and
@@ -225,6 +229,15 @@ export function create(path?: string): Store.Store {
   }
 
   return {
+    // The instances of the process on the file hear each saved change of each other, also through
+    // another store of its path, so a sign-out empties their sessions at once.
+    connect(key, listener) {
+      const { Path } = node()
+      const target = Path.resolve(resolve())
+      const connect = connections.get(target) ?? Broadcast.create()
+      connections.set(target, connect)
+      return connect(key, listener)
+    },
     async getItem(key) {
       await pending.catch(() => undefined)
       const entry = (await read())[key]
@@ -483,6 +496,12 @@ async function sweep(target: string) {
 /** The suffix of a temporary file of `Store.file` after the file's name: a UUID and `.tmp`. */
 const temporaryName =
   /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}\.tmp$/
+
+/**
+ * The `connect` of each file of the process, by its absolute path, so the stores of one path share
+ * it. A file belongs to the whole device, and no instance owns it.
+ */
+const connections = new Map<string, NonNullable<Store.Store['connect']>>()
 
 /**
  * Milliseconds that a hold of `lock` renews its lock file, as the lease of `Store.redis`. A hold
