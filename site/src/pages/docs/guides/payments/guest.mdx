@@ -1,4 +1,5 @@
 import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
 import { PageCard } from '../../../../components/PageCard.tsx'
 import { SourceLink } from '../../../../components/SourceLink.tsx'
 
@@ -31,9 +32,13 @@ sequenceDiagram
   ID-->>App: Transaction hash
 ```
 
+The demo pays MACH as a guest, shows the guest account's address, and forgets the guest account. Its default recipient is the initial merchant of MACH, which MACH's transfer policy permits.
+
 :::note
-Guest payments run only on Tempo mainnet, and each purchase is a real Apple Pay or Google Pay charge. So this page holds no demo.
+Guest payments run only on Tempo mainnet, so the demo runs there, unlike the other demos. Each purchase is a real charge of at least $5 to a card, Apple Pay, or Google Pay.
 :::
+
+<Demo name="AcceptGuestPayments" title="Accept a guest payment" />
 
 ## Walkthrough
 

@@ -267,7 +267,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - A walkthrough holds only the steps that the flow needs. A task that is the same on each platform, such as a sign-out, is a use case below the walkthrough.
 - Each web snippet is a React component. No snippet reads the DOM, such as with `document.querySelector`.
 - Each server snippet runs on any JavaScript server: a Fetch handler, such as a Hono app, with secrets from `process.env` and state in a `Store`. No page names a hosting platform or its APIs, also where the example of the flow runs on one.
-- A demo runs in the page against Tempo ID and Tempo testnet. If its flow needs a server, it calls a route of `site/src/server/`, under `/api/<topic>`.
+- A demo runs in the page against Tempo ID and Tempo testnet. Only the guest payment demo runs on Tempo mainnet, the one chain of guest payments. If its flow needs a server, it calls a route of `site/src/server/`, under `/api/<topic>`.
 - The Worker of the site implements the `DurableStore` Durable Object, for the values that a demo takes once. Cloudflare gives a Worker with one no preview URL, so a pull request of the site gets no preview.
 - `site/README.md` describes the sidebar, the elements of a page, the guide pages, and the demos.
 - The API reference is the TSDoc of each export, as **Code Documentation** describes. A page names an export in code, and `SourceLink` links it to its declaration at the commit of the build.
