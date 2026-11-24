@@ -387,17 +387,19 @@ function server(options: siwe.Options) {
         // account's code, so the refusal is local, also inside a wrapper.
         const unwrapped = unwrap(signature)
         if (!unwrapped || preAuthorized(unwrapped)) return false
-        // No WebAuthn envelope exceeds its limit. Viem would parse a larger one again before any
-        // request, so the refusal is local, also inside a wrapper.
-        if (
-          Hex.slice(unwrapped, 0, 1) === '0x02' &&
-          Hex.size(unwrapped) > webAuthnLimit
-        )
-          return false
         const envelope = envelopeOf(unwrapped)
         if (envelope?.type === 'keychain') return false
 
         const client = getClient(chainId)
+        // No WebAuthn envelope exceeds its limit. A Tempo chain's `verifyHash` would parse a larger
+        // one again before any request, so the refusal is local, also inside a wrapper. Another
+        // chain sends the signature to the account's code, whatever its first byte.
+        if (
+          client.chain.verifyHash &&
+          Hex.slice(unwrapped, 0, 1) === '0x02' &&
+          Hex.size(unwrapped) > webAuthnLimit
+        )
+          return false
         // The chain's signature verifier accepts a configurable envelope only for the account's
         // current configuration. A wrapper carries a call that the signer chooses, so the verifier
         // receives the signature without it.
