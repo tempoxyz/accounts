@@ -194,13 +194,17 @@ export declare namespace get {
  * non-extractable WebCrypto P256 key pair that the instance's store keeps, whose address is a root
  * Tempo Account. The guest account pays every later guest payment while the store keeps it.
  *
- * The action reads the guest account's MACH balance through `transport`, beside Tempo ID's
- * preparation of the transfer, whose fee Tempo ID's sponsor pays. A new guest account holds no MACH,
- * so it reads neither. If the balance is below `amount`, Tempo ID's purchase page opens in a popup,
- * and sells the MACH that the account lacks with Apple Pay or Google Pay: at least 5 MACH, and at
- * most 100 MACH. A refusal of the preparation for another reason than the balance throws before the
- * purchase. Outside a user gesture, a dialog offers the popup, and its Continue opens it. Once
- * the balance holds `amount`, the transfer prepares again. The action checks that the prepared
+ * Each payment first asks Tempo ID to prepare the transfer, whose fee Tempo ID's sponsor pays, and
+ * reads the guest account's MACH balance through `transport` beside it. A new guest account holds
+ * no MACH, so it reads no balance. If the balance is below `amount`, Tempo ID's purchase page opens
+ * in a popup, and sells the MACH that the account lacks with Apple Pay or Google Pay: at least 5
+ * MACH, and at most 100 MACH. Only a refusal of the preparation with `insufficient_balance` leads to
+ * the purchase, as {@link machines.purchasable} decides. Any other refusal, such as of the recipient,
+ * the app, or the origin, and a prepared transaction that fails the check, throw before the purchase
+ * page opens, so no card or wallet pays for a payment that Tempo ID refuses. Outside a user gesture,
+ * a dialog offers the popup, and its Continue opens it. The preparation is a request to Tempo ID, so
+ * a gesture that expires while it runs also gets the dialog. Once the balance holds `amount`, the
+ * transfer prepares again. The action checks that the prepared
  * transaction makes the requested transfer and nothing else, signs it with the key pair, and Tempo
  * ID sends it. The action resolves once the chain includes the transfer. A prepared transfer stays
  * valid for about 4 minutes.
@@ -227,7 +231,8 @@ export declare namespace get {
  *   - `payment_reverted`: The chain reverted the transfer.
  *   - `upstream_unavailable`: The chain failed. Retry later.
  * @throws {AccountActions.PageRequiredError} Outside a browser page, when the guest account holds
- *   less than `amount`, since the purchase page opens only from a page.
+ *   less than `amount` and Tempo ID refuses the preparation only for the balance, since the
+ *   purchase page opens only from a page.
  * @throws {AccountActions.OriginError} For a redirect URI on another origin than the page.
  * @throws {AccountActions.BlockedError} When the browser blocks the popup.
  * @throws {TypeError} For a store that keeps each value as JSON, such as `Store.redis`.
@@ -371,20 +376,23 @@ export async function pay(
     return { address, transaction: body.transaction }
   }
 
-  // A new guest account holds no MACH, so it reads no balance. Otherwise the transfer prepares
-  // beside the read, and a balance below the amount discards it.
-  const [held, prepared] = created
-    ? [0n, undefined]
-    : await Promise.all([
-        balance(),
-        prepare().catch((error: unknown) => ({ error })),
-      ])
-  if (prepared && 'error' in prepared) {
-    // A purchase fixes only a refusal for the balance. Any other refusal, such as of the recipient,
-    // or a prepared transaction that fails the check, ends the payment before the card pays.
+  // The dialogs' chunk loads beside the preparation, so a purchase that follows opens its popup with
+  // no further wait, within the gesture where it lasts. `buy` loads it again if this load fails.
+  if (typeof document !== 'undefined')
+    void import('../internal/Sheet.js').catch(() => undefined)
+  // Each payment prepares before any purchase, so Tempo ID refuses the recipient, the app, or the
+  // origin before the card pays. A new guest account holds no MACH, so it reads no balance.
+  // Otherwise the read runs beside the preparation, and a balance below the amount discards it.
+  const [held, prepared] = await Promise.all([
+    created ? 0n : balance(),
+    prepare().catch((error: unknown) => ({ error })),
+  ])
+  if ('error' in prepared) {
+    // A purchase fixes only a refusal for the balance. Any other refusal, or a prepared transaction
+    // that fails the check, ends the payment before the card pays.
     if (held >= required || !machines.purchasable(prepared.error))
       throw prepared.error
-  } else if (prepared && held >= required) return await send(prepared)
+  } else if (held >= required) return await send(prepared)
 
   const shortfall = required - held
   // The purchase page refuses a larger shortfall, so no card pays for a payment that stays short.

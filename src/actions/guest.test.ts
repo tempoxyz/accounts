@@ -1,11 +1,13 @@
 /**
  * Tests guest payments without a server: the refusals before any request, the guest account that
- * the store keeps, the check of each transaction that Tempo ID prepares, and the purchase machine,
- * whose effects each test records.
+ * the store keeps, the preparation before any purchase, which a `fetch` of the test answers, the
+ * check of each transaction that Tempo ID prepares, and the purchase machine, whose effects each
+ * test records.
  * @module
  */
 import { Secp256k1 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
+import { custom } from 'viem'
 import { Actions } from 'viem/tempo'
 import { describe, expect, test } from 'vite-plus/test'
 import { createActor, fromCallback, fromPromise, waitFor } from 'xstate'
@@ -22,8 +24,53 @@ const mach = '0x20c000000000000000000000f37de3740adec032'
 /** The recipient of each payment. */
 const to = '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326'
 
-/** The URL of a Tempo ID that no test reaches, since each call ends before a request. */
+/**
+ * The URL of a Tempo ID that no test reaches, since each call ends before a request, or a `fetch`
+ * of the test answers it.
+ */
 const url = 'http://127.0.0.1:1'
+
+/** A balance of no MACH, as `eth_call` returns it. */
+const empty = `0x${'0'.repeat(64)}`
+
+/**
+ * Returns an instance whose `fetch` answers each request to Tempo ID with `answer`, and the requests
+ * that it receives, by path and the account of their body.
+ */
+function answering(answer: () => Response) {
+  const requests: { account: unknown; path: string }[] = []
+  const fetch: typeof globalThis.fetch = (input, init) => {
+    const body = JSON.parse(String(init?.body)) as { account?: unknown }
+    requests.push({
+      account: body.account,
+      path: new URL(String(input)).pathname,
+    })
+    return Promise.resolve(answer())
+  }
+  const store = Store.memory()
+  const auth = Accounts.from({ clientId: 'client_test', fetch, store, url })
+  return { auth, requests, store }
+}
+
+/** Returns Tempo ID's refusal of a preparation with `reason`. */
+function refusal(reason: Accounts.RequestError.Reason) {
+  return Response.json(
+    { error: 'invalid_request', error_description: 'Refused.', reason },
+    { status: 409 },
+  )
+}
+
+/** Returns a transport that answers each read with `empty`, and the methods that it receives. */
+function reading() {
+  const reads: string[] = []
+  const transport = custom({
+    request: (args: { method: string }) => {
+      reads.push(args.method)
+      return Promise.resolve(empty)
+    },
+  })
+  return { reads, transport }
+}
 
 describe('Actions.guest.pay', () => {
   test('refuses another token, another chain, and invalid fields before any request', async () => {
@@ -79,17 +126,15 @@ describe('Actions.guest.pay', () => {
     expect(await Guest.get(auth)).toBeUndefined()
   })
 
-  test('creates the guest account, which holds no MACH, and opens the purchase page only from a page', async () => {
-    const auth = Accounts.from({
-      clientId: 'client_test',
-      store: Store.memory(),
-      url,
-    })
+  test('creates the guest account, which holds no MACH, prepares, and opens the purchase page only from a page', async () => {
+    const { auth, requests } = answering(() => refusal('insufficient_balance'))
+    const { reads, transport } = reading()
 
     const error = await Guest.pay(auth, {
       amount: '1',
       to,
       token: 'mach',
+      transport,
     }).catch((error: unknown) => error)
 
     expect(error).toBeInstanceOf(AccountActions.PageRequiredError)
@@ -97,14 +142,137 @@ describe('Actions.guest.pay', () => {
       `"No browser window: the purchase page of a guest payment opens only from a page. Pay as a guest from a page, or with a balance that holds the payment."`,
     )
     expect(await Guest.get(auth)).toMatch(/^0x[0-9a-fA-F]{40}$/)
+    // A new guest account holds no MACH, so it reads no balance, and prepares for its address.
+    expect(reads).toEqual([])
+    expect(requests).toEqual([
+      { account: await Guest.get(auth), path: '/v1/guest/pay/prepare' },
+    ])
+  })
+
+  test('prepares before the purchase for a new guest account, and throws each refusal that no purchase fixes before the purchase page', async () => {
+    const transaction = TxEnvelopeTempo.serialize(
+      TxEnvelopeTempo.from({
+        calls: [
+          Actions.token.transfer.call({ amount: 1_000_000n, to, token: mach }),
+        ],
+        chainId: 4217,
+        feePayerSignature: null,
+        gas: 100_000n,
+        maxFeePerGas: 1n,
+        nonceKey: 1n,
+      }),
+    )
+    const rows = [
+      {
+        answer: () => refusal('insufficient_balance'),
+        name: 'insufficient_balance',
+      },
+      // A new guest account holds no MACH, so the purchase discards the prepared transfer.
+      {
+        answer: () => Response.json({ transaction }),
+        name: 'the requested transfer',
+      },
+      {
+        answer: () => refusal('cross_site_request'),
+        name: 'cross_site_request',
+      },
+      { answer: () => refusal('rate_limited'), name: 'rate_limited' },
+      {
+        answer: () => refusal('recipient_not_permitted'),
+        name: 'recipient_not_permitted',
+      },
+      { answer: () => refusal('rejected'), name: 'rejected' },
+      {
+        answer: () => Response.json({ transaction: '0x1234' }),
+        name: 'a transaction that fails the check',
+      },
+    ] as const
+
+    const results = await Promise.all(
+      rows.map(async (row) => {
+        const { auth, requests } = answering(row.answer)
+        const error = await Guest.pay(auth, {
+          amount: '1',
+          to,
+          token: 'mach',
+        }).catch((error: unknown) => error)
+        return {
+          error:
+            error instanceof Accounts.RequestError
+              ? (error.reason ?? error.field)
+              : (error as Error).name,
+          name: row.name,
+          requests: requests.length,
+        }
+      }),
+    )
+
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "error": "Actions.account.PageRequiredError",
+          "name": "insufficient_balance",
+          "requests": 1,
+        },
+        {
+          "error": "Actions.account.PageRequiredError",
+          "name": "the requested transfer",
+          "requests": 1,
+        },
+        {
+          "error": "cross_site_request",
+          "name": "cross_site_request",
+          "requests": 1,
+        },
+        {
+          "error": "rate_limited",
+          "name": "rate_limited",
+          "requests": 1,
+        },
+        {
+          "error": "recipient_not_permitted",
+          "name": "recipient_not_permitted",
+          "requests": 1,
+        },
+        {
+          "error": "rejected",
+          "name": "rejected",
+          "requests": 1,
+        },
+        {
+          "error": "transaction",
+          "name": "a transaction that fails the check",
+          "requests": 1,
+        },
+      ]
+    `)
+  })
+
+  test('throws a refusal that no purchase fixes for a guest account that the store keeps, after a read of its balance', async () => {
+    const { auth, requests } = answering(() =>
+      refusal('recipient_not_permitted'),
+    )
+    const { reads, transport } = reading()
+    const options = { amount: '1', to, token: 'mach', transport } as const
+
+    const created = await Guest.pay(auth, options).catch(
+      (error: Accounts.RequestError) => error.reason,
+    )
+    const kept = await Guest.pay(auth, options).catch(
+      (error: Accounts.RequestError) => error.reason,
+    )
+
+    expect(created).toBe('recipient_not_permitted')
+    expect(kept).toBe('recipient_not_permitted')
+    expect(reads).toEqual(['eth_call'])
+    expect(requests.map((request) => request.path)).toEqual([
+      '/v1/guest/pay/prepare',
+      '/v1/guest/pay/prepare',
+    ])
   })
 
   test('keeps one guest account for each payment, until `disconnect` forgets it', async () => {
-    const auth = Accounts.from({
-      clientId: 'client_test',
-      store: Store.memory(),
-      url,
-    })
+    const { auth } = answering(() => refusal('insufficient_balance'))
     const options = { amount: '1', to, token: 'MACH' } as const
 
     await Guest.pay(auth, options).catch(() => undefined)
@@ -123,13 +291,10 @@ describe('Actions.guest.pay', () => {
   test('refuses a shortfall above the most that one purchase sells, before the purchase page', async () => {
     const results = await Promise.all(
       ['100', '100.000001', '250'].map(async (amount) => {
-        const auth = Accounts.from({
-          clientId: 'client_test',
-          store: Store.memory(),
-          url,
-        })
+        const { auth } = answering(() => refusal('insufficient_balance'))
 
         // A new guest account holds no MACH, so the shortfall is the amount, and no read runs.
+        // Tempo ID refuses the preparation for the balance, so the purchase is the payment's next step.
         const error = await Guest.pay(auth, {
           amount,
           to,
@@ -187,8 +352,7 @@ describe('Actions.guest.pay', () => {
   })
 
   test('keeps a store that only the process holds outside a page, where no purchase page opens', async () => {
-    const store = Store.memory()
-    const auth = Accounts.from({ clientId: 'client_test', store, url })
+    const { auth, store } = answering(() => refusal('insufficient_balance'))
 
     const error = await Guest.pay(auth, {
       amount: '1',

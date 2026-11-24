@@ -816,6 +816,14 @@ describe('pay', () => {
     const accounts = Accounts.create({
       chain: 1337,
       clientId: 'client_1',
+      // Tempo ID refuses each preparation for the balance, so each payment goes on to the purchase.
+      fetch: () =>
+        Promise.resolve(
+          Response.json(
+            { error: 'invalid_request', reason: 'insufficient_balance' },
+            { status: 409 },
+          ),
+        ),
       plugins: [
         viem({
           transport: custom({
@@ -841,10 +849,9 @@ describe('pay', () => {
     const created = await accounts.pay(payment).catch((error: unknown) => error)
     const held = await accounts.pay(payment).catch((error: unknown) => error)
 
+    // Outside a page, the purchase page does not open.
     expect(created).toBeInstanceOf(AccountActions.PageRequiredError)
-    // No Tempo ID answers at the URL, so the preparation beside the read fails, which no purchase
-    // fixes, and the payment rejects before the purchase page.
-    expect(held).toBeInstanceOf(TypeError)
+    expect(held).toBeInstanceOf(AccountActions.PageRequiredError)
     expect(requests).toMatchInlineSnapshot(`
       [
         {
