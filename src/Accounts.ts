@@ -2354,7 +2354,8 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     pay: async (
       options: AccountActions.pay.Parameters & Pick<Payment.Payment, 'session'>,
     ) => {
-      const { session: fixed, ...parameters } = options
+      // Only the guest branch below pays as a guest, so the signed-in paths never install its signer.
+      const { guest, session: fixed, ...parameters } = options
       // A load of the stored session also loads the stored chain, so the default chain resolves
       // again after it.
       const chainOf = () => parameters.chainId ?? chain.get()
@@ -2378,7 +2379,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       // still sit in the store, so the call reads it first. The read is local, so the dialog or the
       // popup opens with no request.
       if (
-        (parameters.guest || config.guest) &&
+        (guest || config.guest) &&
         !fixed &&
         parameters.account === undefined &&
         !(context.session.get() ?? (await context.session.load()))
