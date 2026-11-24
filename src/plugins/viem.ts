@@ -2542,7 +2542,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * balance after the retry, a spent limit, an access key that the chain does not hold, or a
        * call outside the access key's scopes. Outside a page, such a refusal rejects with
        * `Actions.account.PageRequiredError`, whose cause is the refusal, except a low balance, which
-       * rejects as it is. A transfer that the chain reverts since its fee spent the rest of the
+       * rejects as it is, and a revoked access key, which rejects with
+       * `Accounts.AccessKeyRequiredError`, whose cause is the refusal. A transfer that the chain reverts since its fee spent the rest of the
        * limit counts as a spent limit, once one read of the limit confirms it.
        * Any other failure rejects, since the node may have taken the transaction.
        */
@@ -2608,6 +2609,10 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           // the error of a payment above the access key's known limits, since a sign-in for another
           // access key fixes it. A low balance, and the instance's own errors, reject as they are.
           const name = retry.errorName(error)
+          // A revoked access key sends no payment of any amount, such as after a revocation on Tempo
+          // ID's connections page, so the error names the access key, as a charge of `mpp` does.
+          if (name === 'KeyAlreadyRevoked')
+            throw new AccessKeyRequiredError({ cause: error })
           const kind = retry.classify(error)?.kind
           const signIn =
             limited ||

@@ -433,6 +433,8 @@ export declare namespace get {
  * does not send, such as one above its limits or after its expiry, also when the node refuses it,
  * with the refusal as its `cause`. Its message names that fix: a sign-in for an access key that
  * holds the payment, since the payment page has no redirect.
+ * @throws {Accounts.AccessKeyRequiredError} Outside a browser page, when the node refuses the
+ *   payment since it holds the session's access key revoked, with the refusal as its `cause`.
  * @throws {OriginError} For a redirect URI on another origin than the page.
  * @throws {BlockedError} When the browser blocks the popup.
  *
