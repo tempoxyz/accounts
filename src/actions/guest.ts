@@ -276,6 +276,7 @@ function keyOf(auth: Config) {
 /**
  * Runs `fn` while it holds the guest account's lock: a Web Lock, or else the store's `lock`. The
  * creation and the removal of the guest account's key pair hold it, so neither undoes the other.
+ * Throws in a browser page without either.
  */
 async function exclusive<value>(
   store: Store,
@@ -288,6 +289,12 @@ async function exclusive<value>(
   // lock that its caller holds.
   if (locks) return await locks.request(`${options.key}:exclusive`, fn)
   if (store.lock) return await store.lock(`${options.key}:exclusive`, fn)
+  // Two pages that create the guest account at once would each save a key pair, and the funds of
+  // the overwritten one would stay with no signer.
+  if (typeof document !== 'undefined')
+    throw new Error(
+      'Invalid `store`: the browser has no Web Locks, and the store has no `lock`, so two pages could create two guest accounts. Use a store with `lock`.',
+    )
   return await fn()
 }
 

@@ -2374,13 +2374,14 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
           chainId: chainOf(),
           memo,
         })
-      // While no user signs in, the guest account pays on the page. The read is synchronous, so
-      // the dialog or the popup opens with no request.
+      // While no user signs in, the guest account pays on the page. A returning user's session can
+      // still sit in the store, so the call reads it first. The read is local, so the dialog or the
+      // popup opens with no request.
       if (
         (parameters.guest || config.guest) &&
         !fixed &&
         parameters.account === undefined &&
-        !context.session.get()
+        !(context.session.get() ?? (await context.session.load()))
       )
         return await AccountActions.pay(config, {
           ...parameters,

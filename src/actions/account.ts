@@ -1487,6 +1487,8 @@ async function approve<held = never>(
     challenge || guest
       ? Promise.all([challenge, guest?.value]).then(() => undefined)
       : undefined
+  // The challenge and the guest request reject the call themselves, so `pending` only signals.
+  pending?.catch(() => {})
   /**
    * Returns the page's URL: in a frame at `/embed` and the path, or in a popup at the path. A popup
    * keeps the method that the frame requests, such as `mach` for Buy MACH.
@@ -1596,17 +1598,21 @@ async function approve<held = never>(
   }
 
   // The page posts the guest payment's transaction for the guest account to sign, from Tempo ID's
-  // origin. The check accepts only the requested transfer, so the listener needs no window check.
+  // origin, with its guest request. The check accepts only the requested transfer.
   const listener = (event: MessageEvent) => {
     const data = event.data as {
+      guest?: unknown
       id?: unknown
       transaction?: unknown
       type?: unknown
     } | null
+    // The guest request is unique to this payment, so another payment's page never reaches it.
     if (
       !guest ||
       event.origin !== origin ||
       data?.type !== 'tempo-id:guest.sign' ||
+      guestRequest === undefined ||
+      data.guest !== guestRequest ||
       !event.source
     )
       return
