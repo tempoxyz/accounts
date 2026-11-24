@@ -119,7 +119,7 @@ export const accounts = Accounts.create({
 
 ### Start the payment session<StepTag kind="client" />
 
-<SourceLink name="mpp.mcp.session" path="src/mpp/index.ts">`accounts.mpp.session`</SourceLink> returns a session manager, which holds the channel in memory and opens none yet. <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> caps the first deposit, each automatic top-up, and the session's total.
+<SourceLink name="mpp.mcp.session" path="src/mpp/index.ts">`accounts.mpp.session`</SourceLink> returns a session manager, which holds the channel in memory and opens none yet. <SourceLink name="mpp.maxAmount.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> caps the first deposit, each automatic top-up, and the session's total.
 
 :::code-group
 
@@ -184,7 +184,7 @@ export const accounts = Accounts.create({
 
 ### Pay each request<StepTag kind="client" />
 
-The manager's `fetch` pays each request with no prompt. The first opens the channel with the endpoint's suggested deposit, up to <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>, and each later one pays with a voucher.
+The manager's `fetch` pays each request with no prompt. The first opens the channel with the endpoint's suggested deposit, up to <SourceLink name="mpp.maxAmount.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>, and each later one pays with a voucher.
 
 :::code-group
 
@@ -274,7 +274,7 @@ export const accounts = Accounts.create({
 
 :::
 
-A request that needs a voucher above <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> throws before any payment.
+A request that needs a voucher above <SourceLink name="mpp.maxAmount.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> throws before any payment.
 
 ### Close the payment session<StepTag kind="client" />
 
@@ -470,7 +470,7 @@ Each use case sets one option of <SourceLink name="mpp.mcp.session" path="src/mp
 
 ### Top up the channel
 
-A request that needs more than the deposit tops up the channel on its own, up to <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>. Once a request opened the channel, `topUp` adds a deposit ahead of need, such as before a stream. Render `TopUp` beside `Pay`.
+A request that needs more than the deposit tops up the channel on its own, up to <SourceLink name="mpp.maxAmount.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>. Once a request opened the channel, `topUp` adds a deposit ahead of need, such as before a stream. Render `TopUp` beside `Pay`.
 
 ```tsx [TopUp.tsx]
 import type { mpp } from 'accounts/mpp'
@@ -493,11 +493,13 @@ export declare namespace TopUp {
 }
 ```
 
-`topUp` adds its amount as given, so the deposit can exceed <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>. It throws if the amount plus the session's paid total exceeds the cap.
+`topUp` adds its amount as given, so the deposit can exceed <SourceLink name="mpp.maxAmount.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>. It throws if the amount plus the session's paid total exceeds the cap.
 
 ### Cap every session
 
-The plugin's <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> is the default of every payment session of the instance.
+The plugin's <SourceLink name="mpp.maxAmount.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> is the default of every payment session of the instance. A session manager's own `maxDeposit` replaces it, and an absent one keeps it.
+
+A [guest session](/docs/guides/guest-checkout) holds no access key, so only `maxDeposit` caps its deposit. Its session manager without one throws <SourceLink name="MaxDepositRequiredError" path="src/mpp/index.ts">`mpp.MaxDepositRequiredError`</SourceLink>, and a value that is no decimal amount above 0, such as `''`, throws <SourceLink name="MaxDepositInvalidError" path="src/mpp/index.ts">`mpp.MaxDepositInvalidError`</SourceLink>, before any request.
 
 ```ts [tempo.config.ts]
 import { Accounts } from 'accounts'

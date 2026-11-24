@@ -418,6 +418,38 @@ export const accounts = Accounts.create({
 
 :::
 
+### Catch the errors of a guest session
+
+A [guest session](/docs/guides/guest-checkout) holds no Tempo ID tokens. A call that reads Tempo ID as the user, such as `account.get`, throws <SourceLink name="GuestSessionError" path="src/Accounts.ts">`Accounts.GuestSessionError`</SourceLink>. An MPP payment without a cap throws <SourceLink name="MaxAmountRequiredError" path="src/mpp/index.ts">`mpp.MaxAmountRequiredError`</SourceLink> or <SourceLink name="MaxDepositRequiredError" path="src/mpp/index.ts">`mpp.MaxDepositRequiredError`</SourceLink>, and a malformed `maxDeposit` <SourceLink name="MaxDepositInvalidError" path="src/mpp/index.ts">`mpp.MaxDepositInvalidError`</SourceLink>.
+
+:::code-group
+
+```ts [main.ts]
+import { Accounts } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+export async function readAccount() {
+  try {
+    return await accounts.account.get()
+  } catch (error) {
+    // A guest session has no Tempo ID user, so the app reads its address instead.
+    if (error instanceof Accounts.GuestSessionError) return undefined // [!code hl]
+    throw error
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  guest: 'offer',
+})
+```
+
+:::
+
 ## Reasons
 
 The table lists each <SourceLink name="RequestError.reason" path="src/Accounts.ts">`RequestError.Reason`</SourceLink>. Each links Tempo ID's description, which names its <SourceLink name="RequestError.code" path="src/Accounts.ts">`code`</SourceLink>, <SourceLink name="RequestError.field" path="src/Accounts.ts">`field`</SourceLink>, and <SourceLink name="RequestError.meta" path="src/Accounts.ts">`meta`</SourceLink>.
@@ -453,6 +485,7 @@ The error's <SourceLink name="RequestError.uri" path="src/Accounts.ts">`uri`</So
 | [`foreign_account`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#foreign_account)                                       | The user holds no such Tempo Account in the app's realms.                                                                                                                      | Name one of the user's Tempo Accounts.                                                                                                           |
 | [`funding_unavailable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#funding_unavailable)                               | The deployment sells no MACH.                                                                                                                                                  | Choose another deposit method.                                                                                                                   |
 | [`google_unavailable`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#google_unavailable)                                 | The deployment offers no Google sign-in.                                                                                                                                       | Sign in with an emailed code or a passkey.                                                                                                       |
+| [`guest_selected`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#guest_selected)                                         | The user selected Continue as guest at a device code of an instance with `guest`.                                                                                              | None: `device.signIn` returns a guest session.                                                                                                   |
 | [`insufficient_balance`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#insufficient_balance)                             | The Tempo Account cannot pay the network fee to revoke or change an access key.                                                                                                | Add funds.                                                                                                                                       |
 | [`invalid_access_key_endpoint`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_access_key_endpoint)               | An access key endpoint is not an `https` URL on its resource's origin.                                                                                                         | Register such a URL.                                                                                                                             |
 | [`invalid_app`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_app)                                               | An OAuth app value is not valid.                                                                                                                                               | Fix the value that the message names.                                                                                                            |
