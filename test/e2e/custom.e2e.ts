@@ -269,6 +269,58 @@ test.describe('custom', () => {
       })
     })
 
+    test('throws SupersededError with no passkey prompt and no assertion when a sign-out completes during the options request of a passkey sign-in', async ({
+      capture,
+      code,
+      email,
+      page,
+    }) => {
+      const authenticator = await Playwright.authenticator(page)
+      await Web.enroll(page, {
+        authenticator,
+        capture,
+        code,
+        email,
+      })
+      const requests = ceremonies(page)
+      const before = await signed(authenticator)
+      // Holds the options response until the sign-out completes.
+      const held = Promise.withResolvers<void>()
+      await page.route(
+        (url) =>
+          url.origin === TempoId.url &&
+          url.pathname === '/v1/auth/passkey/options',
+        async (route) => {
+          const response = await route.fetch()
+          await held.promise
+          await route.fulfill({ response })
+        },
+      )
+
+      await test.step('rejects the sign-in that the sign-out overtook, before the ceremony', async () => {
+        await Playwright.start(page, { name: 'Sign in with a passkey' })
+        await expect.poll(() => requests.length).toBe(1)
+        await Playwright.run(page, { name: 'Sign out' })
+        held.resolve()
+        const result = await Playwright.outcome(page, {
+          name: 'Sign in with a passkey',
+        })
+
+        expect(result).toMatchObject({
+          state: 'rejected',
+          value: {
+            message:
+              'Another sign-in or a sign-out completed while this sign-in was pending. Sign in again.',
+            name: 'Accounts.SupersededError',
+          },
+        })
+        expect(requests).toEqual(['POST /v1/auth/passkey/options'])
+        expect(await signed(authenticator)).toBe(before)
+        await expect(page.locator('#status')).toHaveText('signedOut')
+        await capture('rejected with no prompt')
+      })
+    })
+
     test('rejects a second passkey on an authenticator that holds the user’s passkey, and keeps the session', async ({
       capture,
       code,
