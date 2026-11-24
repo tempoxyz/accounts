@@ -1019,11 +1019,14 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                   // holds the access key, so its mark goes, and a later fill attaches it again. A
                   // spent limit or a call outside the scopes shows that the chain holds the access
                   // key. The chain checks limits and scopes only for an access key that it holds,
-                  // so its mark stays.
+                  // so its mark stays. A revoked access key never registers again, so its mark
+                  // stays too: Viem's own preparation would attach the authorization, which the
+                  // node refuses as `KeyAlreadyExists`, and the retry would not see the revocation.
                   if (
                     fill &&
                     !refusedWith(error, { name: 'SpendingLimitExceeded' }) &&
-                    !refusedWith(error, { name: 'CallNotAllowed' })
+                    !refusedWith(error, { name: 'CallNotAllowed' }) &&
+                    !refusedWith(error, { name: 'KeyAlreadyRevoked' })
                   )
                     forget(fill)
                   // A fill that carried the authorization of a registered access key, such as one

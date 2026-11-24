@@ -512,6 +512,9 @@ test.describe('siwe', () => {
             await expect(submit).toHaveAttribute('aria-busy', 'true')
             await capture('waiting for the message')
             release()
+            // The message's statement resizes the dialog, so the click waits until it holds still.
+            await expect(submit).toBeEnabled()
+            await Playwright.dialog(page)
           },
         })
         const signedIn = await Playwright.outcome(page, {
