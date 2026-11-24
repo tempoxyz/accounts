@@ -37,10 +37,10 @@ import * as AccountActions from './account.js'
 const chainIds: readonly number[] = [Chains.devIds.localnet, Chains.ids.mainnet]
 
 /**
- * The fee caps and the gas limit of each guest payment. Tempo ID refuses a transaction above
- * `guestMaxFeePerGas`, `guestMaxPriorityFeePerGas`, or `guestGas` of `src/internal/Guest.ts` in
- * `tempoxyz/id`, so these values never exceed them. The gas limit covers `transferWithMemo` of MACH
- * with a margin. Tempo ID's sponsor pays the fee, so the guest account holds only the amount.
+ * The fee caps and the gas limit of each guest payment, the values of `GuestTransaction` in
+ * `src/internal/GuestTransaction.ts` of `tempoxyz/id`. Tempo ID refuses a transaction above them.
+ * The gas limit covers `transferWithMemo` of MACH with a margin. Tempo ID's sponsor pays the fee,
+ * so the guest account holds only the amount.
  */
 const fees = {
   gas: 100_000n,
@@ -55,9 +55,10 @@ const mach = {
 } as const
 
 /**
- * Seconds from the signature to the end of a transaction's validity, its `validBefore`. Tempo ID
- * admits a `validBefore` more than 10 seconds and at most 290 seconds ahead of its clock, so 60
- * seconds leaves 50 seconds of skew on each side, and a send that outlasts it fails.
+ * Seconds from the signature to the end of a transaction's validity, its `validBefore`, as
+ * `GuestTransaction.validity` of Tempo ID. Tempo ID admits a `validBefore` more than 10 seconds
+ * and at most 290 seconds ahead of its clock, so 60 seconds leaves 50 seconds of clock skew on the
+ * near side and 230 seconds on the far side.
  */
 const validity = 60
 
