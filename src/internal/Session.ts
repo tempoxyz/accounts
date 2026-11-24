@@ -408,6 +408,12 @@ export function create(options: create.Options): create.ReturnType {
     writes: ReturnType<typeof queue>,
   ): Promise<Session.Any | undefined> {
     if (hydrating === 'read') return Promise.resolve(undefined)
+    // After a change, such as a sign-in, `hydrate` keeps the instance's newer session, so a read
+    // that starts then sets nothing, and none runs.
+    if (!hydrating && actor.getSnapshot().context.version > 0) {
+      hydrating = 'read'
+      return Promise.resolve(undefined)
+    }
     hydrating ??= (async () => {
       // The stored chain selection loads beside the session, so the session selects the access
       // key of the instance's chain. After a failed read of the selection, the chain can still
