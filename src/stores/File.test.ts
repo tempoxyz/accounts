@@ -529,7 +529,6 @@ describe('Store.file', () => {
       Accounts.create({
         chain: 1337,
         clientId: 'https://app.example.com',
-        fetch: () => Promise.resolve(new Response(null, { status: 200 })),
         store,
         url: 'http://127.0.0.1:9',
       })
@@ -541,7 +540,8 @@ describe('Store.file', () => {
       [first, second, third].map((accounts) => accounts.session.get()),
     )
 
-    await first.signOut()
+    // Nothing listens at Tempo ID's URL, so the revocation fails, but the sign-out empties the store.
+    await first.signOut().catch(() => undefined)
 
     // Each session reads the sign-out in a later microtask, after the save of the empty session.
     const read = async () =>
