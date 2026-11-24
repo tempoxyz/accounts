@@ -359,47 +359,114 @@ describe('Actions.guest.session in other processes', () => {
     })
   }
 
+  /**
+   * Starts `program` in Node with an IPC channel, and returns the messages that it sends, a `send`
+   * to it, and its output once it exits.
+   */
+  function start(program: string) {
+    const child = ChildProcess.spawn(
+      process.execPath,
+      ['--input-type=module'],
+      {
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      },
+    )
+    const messages: string[] = []
+    child.on('message', (message) => messages.push(String(message)))
+    let stderr = ''
+    let stdout = ''
+    child.stderr!.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString()
+    })
+    child.stdout!.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString()
+    })
+    const output = new Promise<string>((resolve, reject) => {
+      child.on('close', (code) => {
+        if (code === 0) resolve(stdout.trim())
+        else reject(new Error(stderr))
+      })
+    })
+    child.stdin!.end(program)
+    return {
+      messages,
+      output,
+      send: (message: string) => child.send(message),
+    }
+  }
+
   test('keeps one guest account for two processes that create it at once on `Store.file`', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const path = Path.join(directory, 'store.json')
     // Each process runs Node with its global `navigator`, whose Web Locks span only that process.
-    // The read of the guest account's entry takes 200 milliseconds, so both reads overlap without
-    // the file's lock. Both processes start once both are ready. The wait ends after 10 seconds.
+    // The parent steps both processes over IPC: each reports `ready` and waits for `go`, reports
+    // `lock` when it asks for the file's lock, and reports `read` after its read of the guest
+    // account's entry, then waits for `continue` before it creates the key pair.
     const program = await bundle([
-      "import * as Fs from 'node:fs/promises'",
-      "import * as Path from 'node:path'",
       "import * as Accounts from '../Accounts.ts'",
       "import * as Store from '../Store.ts'",
       "import * as Guest from './guest.ts'",
-      `const path = ${JSON.stringify(path)}`,
-      'const file = Store.file(path)',
+      'const queue = []',
+      'const waiters = []',
+      "process.on('message', (message) => { const waiter = waiters.shift(); if (waiter) waiter(message); else queue.push(message) })",
+      'const next = () => (queue.length > 0 ? Promise.resolve(queue.shift()) : new Promise((resolve) => waiters.push(resolve)))',
+      `const file = Store.file(${JSON.stringify(path)})`,
       'const store = Store.from({',
       '  ...file,',
       '  async getItem(key) {',
       '    const value = await file.getItem(key)',
-      "    if (key.startsWith('tempo-id:guest:')) await new Promise((resolve) => setTimeout(resolve, 200))",
+      "    if (key.startsWith('tempo-id:guest:')) {",
+      "      process.send('read')",
+      '      await next()',
+      '    }',
       '    return value',
       '  },',
+      '  lock(name, fn) {',
+      "    process.send('lock')",
+      '    return file.lock(name, fn)',
+      '  },',
       '})',
-      "await Fs.writeFile(Path.join(Path.dirname(path), 'ready-' + crypto.randomUUID()), '')",
-      'for (let attempt = 0; ; attempt++) {',
-      "  const ready = (await Fs.readdir(Path.dirname(path))).filter((name) => name.startsWith('ready-'))",
-      '  if (ready.length === 2) break',
-      "  if (attempt > 1_000) throw new Error('The other process never started.')",
-      '  await new Promise((resolve) => setTimeout(resolve, 10))',
-      '}',
+      "process.send('ready')",
+      'await next()',
       "const session = await Guest.session(Accounts.from({ chain: 4217, clientId: 'cli:guest-example', store, url: 'http://127.0.0.1:9' }))",
       'console.log(session.address)',
+      'process.disconnect()',
     ])
+    const options = { timeout: 30_000 }
 
-    const addresses = await Promise.all([run(program), run(program)])
+    const first = start(program)
+    const second = start(program)
+    await expect
+      .poll(
+        () =>
+          first.messages.includes('ready') && second.messages.includes('ready'),
+        options,
+      )
+      .toBe(true)
+    // The first process reads the entry, which holds no key pair, under the file's lock.
+    first.send('go')
+    await expect.poll(() => first.messages.includes('read'), options).toBe(true)
+    // The second process asks for the lock while the first holds it. Without the lock, it reads the
+    // empty entry at once, so both create a key pair.
+    second.send('go')
+    await expect
+      .poll(
+        () =>
+          second.messages.includes('lock') || second.messages.includes('read'),
+        options,
+      )
+      .toBe(true)
+    first.send('continue')
+    await expect
+      .poll(() => second.messages.includes('read'), options)
+      .toBe(true)
+    second.send('continue')
+    const addresses = await Promise.all([first.output, second.output])
     const kept = await Guest.get(config(Store.file(path)))
     await Fs.rm(directory, { force: true, recursive: true })
 
-    expect([
-      addresses[0]!.trim() === addresses[1]!.trim(),
-      addresses[0]!.trim() === kept,
-    ]).toMatchInlineSnapshot(`
+    expect([addresses[0] === addresses[1], addresses[0] === kept])
+      .toMatchInlineSnapshot(`
       [
         true,
         true,
@@ -466,6 +533,7 @@ describe('Accounts.pay of a guest session outside a page', () => {
     options: {
       device?: boolean | undefined
       onCode?: ((code: { userCode: string }) => void) | undefined
+      redirectUri?: string | undefined
     } = {},
   ) {
     const sent: Sent[] = []
@@ -503,6 +571,7 @@ describe('Accounts.pay of a guest session outside a page', () => {
         options.device === false
           ? []
           : [device({ onCode: options.onCode ?? (() => {}) })],
+      ...(options.redirectUri ? { redirectUri: options.redirectUri } : {}),
       store: Store.memory(),
       url: 'http://127.0.0.1:9',
     })
@@ -685,6 +754,59 @@ describe('Accounts.pay of a guest session outside a page', () => {
       expected,
       expected === 'paid' ? 3 : 2,
     ])
+  })
+
+  test("names the unlisted token's exact address in the funding code, whose guest request names no redirect URI, beside the routes' registered one", async () => {
+    const token = '0x20c00000000000000000000000000000000004d2'
+    const { accounts, sent } = scripted(
+      {
+        'GET /i/guest/pay': [
+          { ...short, token },
+          // The checkout paid once the funds arrived.
+          { paid: { transaction: hash }, redirect: '' },
+        ],
+        'POST /device/code': [
+          {
+            device_code: 'device-code',
+            expires_in: 60,
+            interval: 0,
+            user_code: 'ABCD-EFGH',
+            verification_uri: 'http://127.0.0.1:9/device',
+            verification_uri_complete:
+              'http://127.0.0.1:9/device?user_code=ABCD-EFGH',
+          },
+        ],
+      },
+      { redirectUri: 'https://app.example.com/callback' },
+    )
+
+    await accounts.pay({ ...payment, token })
+
+    expect(
+      sent.map((entry) => [
+        entry.route,
+        entry.guest?.redirect_uri,
+        entry.body?.funding_token,
+      ]),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          "GET /i/guest/pay",
+          "https://app.example.com/callback",
+          undefined,
+        ],
+        [
+          "POST /device/code",
+          "",
+          "0x20c00000000000000000000000000000000004d2",
+        ],
+        [
+          "GET /i/guest/pay",
+          "https://app.example.com/callback",
+          undefined,
+        ],
+      ]
+    `)
   })
 
   test('rejects a shortfall without a faucet and without the `device` plugin with `insufficient_balance`', async () => {

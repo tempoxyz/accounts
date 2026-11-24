@@ -293,8 +293,6 @@ type Quoted = {
   faucet: boolean
   /** The network fee. `token`, when present, names the fee token's address. */
   fee: { token?: `0x${string}` | undefined } | null
-  /** Whether the chain lists the token. */
-  listed?: boolean | undefined
   /** Why no transaction pays, other than a shortfall. */
   refusal: Refusal | null
   /** What the guest account lacks. */
@@ -379,14 +377,17 @@ export async function pay(
     if (current && !active({ current: current(), started: session }))
       throw new SignedOutError()
   }
-  /** Signs a fresh guest request of the checkout, which the key pair signs with no request. */
-  const guest = async () => {
+  /**
+   * Signs a fresh guest request of the checkout, which the key pair signs with no request. It names
+   * `target`, which defaults to the redirect URI of the payment's routes.
+   */
+  const guest = async (target = redirectUri) => {
     if (signal?.aborted) throw aborted()
     held()
     const { address, value } = await request(auth, {
       chainId,
       checkout,
-      redirectUri,
+      redirectUri: target,
     })
     if (!Address.isEqual(address, session.address)) throw new SignedOutError()
     return value
@@ -473,15 +474,13 @@ export async function pay(
       throw short(
         `Insufficient balance: the guest account ${session.address} lacks ${read.shortfall.formatted} ${read.shortfall.symbol}, and the chain has no faucet. Add the \`device\` plugin with \`onCode\`, so the payment shows a funding code, or fund the guest account.`,
       )
-    // The funding hint names only a listed token. An unlisted token's shortfall counts every
-    // token of the hint's currency.
+    // The funding hint names the payment's exact token, also an unlisted one, since a deposit of
+    // another token pays nothing. The device form names no redirect URI, so its guest request
+    // names none either.
     const code = await fund({
       chainId,
-      funding: {
-        amount,
-        ...(read.listed === false ? {} : { token: read.token }),
-      },
-      guest: await guest(),
+      funding: { amount, token: read.token },
+      guest: await guest(''),
       signal,
     })
     return await covered({
@@ -581,7 +580,7 @@ export declare namespace pay {
     fund?:
       | ((options: {
           chainId: number
-          funding: { amount: string; token?: string | undefined }
+          funding: { amount: string; token: string }
           guest: string
           signal?: AbortSignal | undefined
         }) => Promise<{ expiresIn: number; interval: number }>)
