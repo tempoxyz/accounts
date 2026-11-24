@@ -3,7 +3,8 @@
  * sends after another context on the store signs out, its abort with React Native's `AbortSignal`,
  * the refresh token of an expired session whose revocation receives no response, the one refresh of
  * two instances on one store without Web Locks, and the refusal of a
- * third-party app's `authorize` before any request, and the reasons of `RequestError`.
+ * third-party app's `authorize` before any request, a guest payment only without a session, and the
+ * reasons of `RequestError`.
  * @module
  */
 import { AbortController as NativeAbortController } from 'abort-controller'
@@ -24,6 +25,7 @@ import {
 import { Account } from 'viem/tempo'
 import { Address, Bytes, Hash, Json, Secp256k1 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
+import * as AccountActions from './actions/account.js'
 import * as Accounts from './Accounts.js'
 import * as DefaultAccounts from './internal/DefaultAccounts.js'
 import * as StoreValue from './internal/StoreValue.js'
@@ -741,6 +743,72 @@ describe('create', () => {
 })
 
 describe('pay', () => {
+  test('pays as a guest without a session, and ignores `guest` with a session', async () => {
+    const store = Store.memory()
+    const owner = Secp256k1.randomPrivateKey()
+    const privateKey = Secp256k1.randomPrivateKey()
+    const authorization = KeyAuthorization.from({
+      address: Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey })),
+      chainId: 4217n,
+      expiry: Math.floor(Date.now() / 1000) + 86_400,
+      type: 'secp256k1',
+    })
+    const signature = Secp256k1.sign({
+      payload: KeyAuthorization.getSignPayload(authorization),
+      privateKey: owner,
+    })
+    const options = {
+      chain: 4217,
+      clientId: 'client_1',
+      store,
+      url: 'http://127.0.0.1:9',
+    } as const
+    const payment = {
+      amount: '1',
+      guest: true,
+      to: '0x0000000000000000000000000000000000000001',
+      token: 'ousd',
+    } as const
+    const guest = Accounts.create(options)
+
+    const refused = await guest
+      .pay(payment)
+      .catch((error: Accounts.RequestError) => error.reason)
+    const address = await guest.guest.get()
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",4217]',
+      {
+        state: {
+          session: Session.from({
+            accessKey: {
+              account: Address.fromPublicKey(
+                Secp256k1.getPublicKey({ privateKey: owner }),
+              ),
+              chainId: 4217,
+              keyAuthorization: KeyAuthorization.toRpc(
+                KeyAuthorization.from(authorization, { signature }),
+              ),
+              privateKey,
+            },
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const signedIn = await Accounts.create(options)
+      .pay(payment)
+      .catch((error: unknown) => error)
+
+    // Only a guest payment refuses a token other than MACH, before any request.
+    expect(refused).toBe('unsupported_token')
+    expect(address).toBeUndefined()
+    // The session pays as without `guest`, and outside a page no plugin sends it.
+    expect(signedIn).toBeInstanceOf(AccountActions.PageRequiredError)
+  })
+
   test("rejects a payment within the access key's limit outside a page, on an instance without a plugin that sends it, with a PageRequiredError that names the missing plugin rather than a sign-in", async () => {
     const store = Store.memory()
     const owner = Secp256k1.randomPrivateKey()

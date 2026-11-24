@@ -7,7 +7,7 @@ import { PageCard } from '../../../components/PageCard.tsx'
 
 A payment is a stablecoin transfer from the user's Tempo Account. The session's [access key](/docs/guides/access-keys) signs it with no prompt, within a limit that the user approves once. If no access key can pay, the account owner signs it on Tempo ID's payment page.
 
-An app sends a payment of its own, such as for an order, in one call. An [MPP](https://mpp.dev) endpoint charges with an HTTP 402 response, which the access key pays.
+An app sends a payment of its own, such as for an order, in one call. An [MPP](https://mpp.dev) endpoint charges with an HTTP 402 response, which the access key pays. A visitor without a sign-in pays as a guest, in MACH that Apple Pay or Google Pay buys.
 
 ## Guides
 
@@ -23,5 +23,11 @@ An app sends a payment of its own, such as for an order, in one call. An [MPP](h
     icon="payment-flow"
     title="Pay MPP charges"
     to="/docs/guides/payments/mpp"
+  />
+  <PageCard
+    description="Charge a visitor without a sign-in in MACH, bought with Apple Pay or Google Pay."
+    icon="user"
+    title="Accept guest payments"
+    to="/docs/guides/payments/guest"
   />
 </Cards>
