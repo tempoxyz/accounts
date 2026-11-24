@@ -44,7 +44,21 @@
   "[!start-pkg]": "",
   "name": "accounts",
   "version": "1.0.0",
-  "description": "Accounts SDK for Tempo Apps",
+  "description": "Accounts SDK for apps on Tempo: sign users in with Tempo ID, keep their session and access key, and pay with stablecoins from browsers, React Native, Node and Workers",
+  "keywords": [
+    "tempo",
+    "tempo-id",
+    "accounts",
+    "wallet",
+    "authentication",
+    "access-keys",
+    "stablecoin",
+    "payments",
+    "mpp",
+    "viem",
+    "wagmi"
+  ],
+  "homepage": "https://accounts.tempo.xyz",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "sideEffects": [
