@@ -19,6 +19,7 @@ import * as TempoAccount from './TempoAccount.js'
 import * as Api from './Api.js'
 import * as Callback from './Callback.js'
 import { authorizeUrl } from './Request.js'
+import * as Verifier from './Verifier.js'
 
 /**
  * A session of a backend's user from a Tempo ID sign-in, as `get` returns it. The `backend`
@@ -503,6 +504,13 @@ export function create(
 
         const callback = Callback.url(url)
         Callback.checkState(callback, { state: pending.pending.state })
+        // Another Tempo ID deployment's redirect in a shared store redeems its code only at that
+        // deployment, so this instance leaves it for that deployment's instance. The check follows
+        // the state's, so a callback of another `state` refuses on `state`, and the handler keeps
+        // that redirect's cookie. A redirect that names no issuer completes.
+        const { issuer } = pending.pending
+        if (issuer !== undefined && issuer !== Verifier.issuerOf(auth))
+          throw new PendingNotFoundError()
         // Consume before any token exchange, including one whose outcome may be unknown. A store
         // with `takeItem` spends it in one step, so of processes that share the store, only one
         // redeems the code.

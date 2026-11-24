@@ -142,7 +142,9 @@ export function backend(options: backend.Options) {
          * also when that exchange fails.
          * @throws {Accounts.PendingNotFoundError} Without a redirect in progress for the session
          *   ID. This happens for a callback that arrives twice, even at the same time, or more than
-         *   10 minutes after `start`, or 20 with `funding`. Start the sign-in again.
+         *   10 minutes after `start`, or 20 with `funding`. Start the sign-in again. Also for the
+         *   callback of a redirect that an instance of another Tempo ID origin started in a shared
+         *   store, which the call keeps.
          * @throws {Accounts.RequestError} With `invalid_request` and the `field` `url`, before any
          *   request, for a URL that is not a valid absolute URL, such as a request's path. Also for
          *   a forged `state` or a refused code, as the errors of `redirect.signIn` list.

@@ -1081,6 +1081,86 @@ describe('backend', () => {
     expect(error).toMatchInlineSnapshot(`"Accounts.PendingNotFoundError"`)
   })
 
+  test("complete redeems no code of another Tempo ID deployment's redirect in a shared store, sends no request, and keeps the redirect for its own instance", async () => {
+    const store = Store.memory()
+    const requests: string[] = []
+    const [own, other] = ['http://127.0.0.1:9', 'http://127.0.0.2:9'].map(
+      (url) =>
+        Accounts.create({
+          clientId: 'https://app.example.com',
+          fetch: (input, init) => {
+            requests.push(new URL(String(input)).origin)
+            return globalThis.fetch(input, init)
+          },
+          plugins: [backend({ store })],
+          url,
+        }),
+    )
+    const { id, url } = await own!.backend.start({
+      accessKey: false,
+      par: false,
+      redirectUri,
+    })
+    const state = new URL(url).searchParams.get('state')
+    const callback = `${redirectUri}?code=1&state=${state}`
+
+    const error = await other!.backend.complete({ id, url: callback }).then(
+      () => undefined,
+      (error: Error) => error.name,
+    )
+    const kept = (await store.getItem(`tempo-id:pending:${id}`)) !== undefined
+
+    expect({ error, kept, requests }).toMatchInlineSnapshot(`
+      {
+        "error": "Accounts.PendingNotFoundError",
+        "kept": true,
+        "requests": [],
+      }
+    `)
+  })
+
+  test('complete redeems the code of a redirect in progress that names no Tempo ID issuer', async () => {
+    const store = Store.memory()
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      clientId: 'https://app.example.com',
+      fetch: (input, init) => {
+        requests.push(new URL(String(input)).pathname)
+        return globalThis.fetch(input, init)
+      },
+      plugins: [backend({ store })],
+      url: 'http://127.0.0.1:9',
+    })
+    const { id, url } = await accounts.backend.start({
+      accessKey: false,
+      par: false,
+      redirectUri,
+    })
+    const state = new URL(url).searchParams.get('state')
+    const stored = (await store.getItem(`tempo-id:pending:${id}`)) as {
+      pending: { issuer?: string | undefined }
+    }
+    delete stored.pending.issuer
+    await store.setItem(`tempo-id:pending:${id}`, stored)
+
+    const error = await accounts.backend
+      .complete({ id, url: `${redirectUri}?code=1&state=${state}` })
+      .then(
+        () => undefined,
+        (error: Error) => error.name,
+      )
+
+    // Nothing listens at the URL, so the redemption rejects without a response.
+    expect({ error, requests }).toMatchInlineSnapshot(`
+      {
+        "error": "Accounts.RequestError",
+        "requests": [
+          "/oauth2/token",
+        ],
+      }
+    `)
+  })
+
   test('complete redeems the code of a redirect in progress once for concurrent callbacks of two processes that share a store', async () => {
     const database = new PGlite()
     // Each process holds its own client of the same table.

@@ -5,7 +5,7 @@
 import * as Fs from 'node:fs/promises'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
-import { WebCryptoP256 } from 'ox'
+import { Base64, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { Account } from 'viem/tempo'
 import { describe, expect, test } from 'vite-plus/test'
@@ -207,6 +207,138 @@ describe('getSession', () => {
     `)
   })
 
+  test("sends no authorization, and returns the stored session, for an instance without `resource` whose session's access token names a resource", async () => {
+    const memory = Store.memory()
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      redirectUri: 'https://app.example/',
+      store: memory,
+      url: 'https://id.invalid',
+    })
+    // A sign-in that named `resource` in its own call holds tokens for that resource.
+    const accessToken = token({
+      aud: ['https://api.example/mcp', 'https://id.invalid/oauth2/userinfo'],
+      iss: 'https://id.invalid',
+    })
+    await memory.setItem(
+      'tempo-id:session:["https://id.invalid","tempo-example-web",42431]',
+      {
+        state: {
+          session: await expired({
+            accessToken,
+            expiresIn: 3_600_000,
+            valid: true,
+          }),
+        },
+        version: 0,
+      },
+    )
+
+    const authorized = await accounts.authorize()
+
+    expect({
+      kept: authorized?.accessToken === accessToken,
+      requests,
+      status: accounts.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "kept": true,
+        "requests": [],
+        "status": "signedIn",
+      }
+    `)
+  })
+
+  test("sends no renewal, and leaves the visitor signed out, for `session.get` with `reauthorize` on an instance without `resource` whose expired session's access token names a resource", async () => {
+    const memory = Store.memory()
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
+      fetch: (input, init) => {
+        const url = new URL(String(input))
+        if (url.pathname.startsWith('/v1/'))
+          requests.push(`${init?.method ?? 'GET'} ${url.pathname}`)
+        return globalThis.fetch(input, init)
+      },
+      redirectUri: 'https://app.example/',
+      store: memory,
+      url: 'https://id.invalid',
+    })
+    // A sign-in that named `resource` in its own call holds tokens for that resource.
+    const accessToken = token({
+      aud: ['https://api.example/mcp', 'https://id.invalid/oauth2/userinfo'],
+      iss: 'https://id.invalid',
+    })
+    await memory.setItem(
+      'tempo-id:session:["https://id.invalid","tempo-example-web",42431]',
+      {
+        state: { session: await expired({ accessToken, expiresIn: -1000 }) },
+        version: 0,
+      },
+    )
+
+    const session = await accounts.session.get({ reauthorize: true })
+
+    expect({
+      requests,
+      session,
+      status: accounts.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [],
+        "session": undefined,
+        "status": "signedOut",
+      }
+    `)
+  })
+
+  test("sends the renewal of an expired session whose access token names only Tempo ID's origin", async () => {
+    const memory = Store.memory()
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'tempo-example-web',
+      fetch: (input, init) => {
+        const url = new URL(String(input))
+        if (url.pathname.startsWith('/v1/'))
+          requests.push(`${init?.method ?? 'GET'} ${url.pathname}`)
+        return globalThis.fetch(input, init)
+      },
+      redirectUri: 'https://app.example/',
+      store: memory,
+      url: 'https://id.invalid',
+    })
+    // Tempo ID's public origin, `iss`, can differ from the instance's `url`.
+    const accessToken = token({
+      aud: ['https://id.example', 'https://id.example/oauth2/userinfo'],
+      iss: 'https://id.example',
+    })
+    await memory.setItem(
+      'tempo-id:session:["https://id.invalid","tempo-example-web",42431]',
+      {
+        state: { session: await expired({ accessToken, expiresIn: -1000 }) },
+        version: 0,
+      },
+    )
+
+    await accounts.session.get({ reauthorize: true }).catch(() => undefined)
+
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        "POST /v1/authorize",
+      ]
+    `)
+  })
+
   test('refuses, sends no authorization, and settles the status, for an instance with `resource` and no stored session', async () => {
     const requests: string[] = []
     const accounts = Accounts.create({
@@ -328,7 +460,7 @@ describe('getSession', () => {
           "accessToken": "a",
           "challengeSignature": "0x01",
           "code": "interaction_required",
-          "message": "Authorization refused: an instance with \`resource\` authorizes only through a sign-in on a page. Sign in with a redirect or the dialog.",
+          "message": "Authorization refused: a session or an instance with \`resource\` authorizes only through a sign-in on a page. Sign in with a redirect or the dialog.",
           "requests": [],
           "status": "signedIn",
         }
@@ -1458,6 +1590,13 @@ function lock() {
 /** Resolves once every run that holds the session's lock, such as a background revocation, ended. */
 function settled(accounts: { lock: Plugin.Context['session']['exclusive'] }) {
   return accounts.lock(() => Promise.resolve())
+}
+
+/** Returns an unsigned access token with `claims`, which only its decode reads. */
+function token(claims: Record<string, unknown>) {
+  const encode = (value: unknown) =>
+    Base64.fromString(JSON.stringify(value), { pad: false, url: true })
+  return `${encode({ alg: 'none' })}.${encode(claims)}.signature`
 }
 
 async function expired(options: {
