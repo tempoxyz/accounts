@@ -55,6 +55,8 @@ import type * as TempoAccount from './internal/TempoAccount.js'
  * - `accounts.viem({ session })` for a session without an access key.
  * - `accounts.pay({ session })` for a session without a live access key on the payment's chain,
  *   unless every access key of the session expired, which throws `Accounts.SignedOutError`.
+ * - A payment of `accounts.pay` outside a page that the chain refuses, since it holds the access key
+ *   revoked, with the chain's refusal as `cause`.
  * - A charge of `accounts.fetch` or of a payer of `accounts.mpp` that the chain refuses, since it holds
  *   the access key revoked, with the chain's refusal as `cause`.
  */
@@ -1165,7 +1167,9 @@ export type Accounts<
      * neither the store nor Tempo ID. Outside a page, a payment that the access key does not send,
      * such as one above its limits, throws `Actions.account.PageRequiredError` once the access key's
      * attempt ends. A payment above what is left of a limit, which only the node knows, throws it
-     * with the node's refusal as its `cause`. On an instance without a plugin that sends a payment,
+     * with the node's refusal as its `cause`. A payment of an access key that the chain holds
+     * revoked, such as after a revocation on Tempo ID's connections page, throws
+     * {@link AccessKeyRequiredError} with the node's refusal as its `cause`. On an instance without a plugin that sends a payment,
      * such as `viem`, it throws at once outside a page, with a message that names the missing plugin.
      * A session whose every access key expired throws {@link SignedOutError} before any request, as
      * its `viem` client and `mpp` payer do. A session without a live access key on the payment's
