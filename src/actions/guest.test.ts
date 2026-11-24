@@ -1002,6 +1002,86 @@ describe('Accounts.create with guest', () => {
     `)
   })
 
+  test('`pay` of `offer` rejects after a sign-out during the read of the stored session, and starts no guest session', async () => {
+    const memory = Store.memory()
+    const gate = Promise.withResolvers<void>()
+    const reading = Promise.withResolvers<void>()
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: 'offer',
+      // The first read of the stored session waits for the gate.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (!key.startsWith('tempo-id:guest:')) {
+            reading.resolve()
+            await gate.promise
+          }
+          return await memory.getItem(key)
+        },
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const pending = accounts.pay(payment).catch((error: unknown) => error)
+    await reading.promise
+    const signedOut = accounts.signOut()
+    gate.resolve()
+    await signedOut
+    const error = await pending
+
+    expect([
+      error instanceof Error ? error.name : error,
+      await accounts.session.get(),
+      await accounts.guest.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        "Accounts.SignedOutError",
+        undefined,
+        undefined,
+      ]
+    `)
+  })
+
+  test('Continue as guest of an offer whose change started before a sign-out rejects with `SupersededError`, and commits no guest session', async () => {
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: 'offer',
+      plugins: [
+        Plugin.from({
+          actions: (context) => ({
+            /** Starts a change, as `pay` of `offer` does before its read of the stored session. */
+            start: () => context.session.change(),
+          }),
+          id: 'offer',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const change = accounts.offer.start()
+    await accounts.session.get()
+    await accounts.signOut()
+
+    // The selection of Continue as guest on the payment page starts the guest session.
+    const error = await SignIn.guest(
+      { config: accounts.config },
+      { change },
+    ).catch((error: unknown) => error)
+
+    expect([
+      error instanceof Error ? error.name : error,
+      await accounts.session.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        "Accounts.SupersededError",
+        undefined,
+      ]
+    `)
+  })
+
   test('`pay` of `auto` starts no guest session after a sign-out during the read of the stored session', async () => {
     const memory = Store.memory()
     const gate = Promise.withResolvers<void>()

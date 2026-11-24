@@ -22,7 +22,12 @@ import {
   setup,
   type SnapshotFrom,
 } from 'xstate'
-import { type Config, RequestError, SignedOutError } from '../Accounts.js'
+import {
+  type Config,
+  RequestError,
+  SignedOutError,
+  SupersededError,
+} from '../Accounts.js'
 import * as Api from '../internal/Api.js'
 import * as AccessKey from '../internal/AccessKey.js'
 import * as Callback from '../internal/Callback.js'
@@ -661,6 +666,8 @@ export declare namespace pay {
  * @throws {RequestError} As {@link pay} throws it for `amount`, `memo`, and `to`, before any page
  *   opens, and `access_denied` when the user rejects the payment.
  * @throws {PageRequiredError} Outside a browser page.
+ * @throws {SupersededError} For a guest offer, when a sign-out since the call started supersedes the
+ *   guest session that Continue as guest starts. The page closes.
  * @throws {Accounts.SignedOutError} When the store holds another key pair than the session's.
  * @throws {OriginError} For a redirect URI on another origin than the page.
  * @throws {BlockedError} When the browser blocks the popup.
@@ -705,11 +712,18 @@ export async function pay_guest(
   // A guest offer starts the guest session once, at the user's selection. A failed start lets the
   // next selection try again, and fails no payment, since the user can still sign in on the page.
   let starting: Promise<Session.GuestSession> | undefined
+  // A sign-out since the payment started supersedes the whole payment, so its guest offer ends the
+  // page, and the call rejects with `SupersededError`.
+  const superseded = new AbortController()
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, superseded.signal])
+    : superseded.signal
   const session = () => {
     const value = options.session
     starting ??= (
       typeof value === 'function' ? value() : Promise.resolve(value)
     ).catch((error: unknown) => {
+      if (error instanceof SupersededError) superseded.abort(error)
       starting = undefined
       throw error
     })
@@ -775,7 +789,7 @@ export async function pay_guest(
       to,
       token,
     },
-    signal: options.signal,
+    signal,
     skeleton: 'payment',
     text: 'Continue in a Tempo ID window to pay.',
   })

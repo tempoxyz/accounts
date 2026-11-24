@@ -2436,12 +2436,19 @@ export function create<
         // sign-out during the read overtakes it, and an aborted payment starts no guest session.
         // A plugin's challenge, such as the `siwe` plugin's, signs the user in with the payment, which
         // a guest account cannot, so the payment starts no guest session.
+        // With `offer`, the guest session's change starts before the read too, so a sign-out during
+        // the read overtakes the whole payment, also a later selection of Continue as guest.
+        const offered =
+          config.guest === 'offer' && context.challenge() === undefined
+            ? context.session.change()
+            : undefined
         const held =
           config.guest === 'auto' && context.challenge() === undefined
             ? ((await SignIn.guestAuto(context, {
                 signal: parameters.signal,
               })) ?? context.session.get())
             : (context.session.get() ?? (await context.session.load()))
+        if (offered?.overtaken()) throw new SupersededError()
         if (held && Session.guest(held)) {
           const { attempt: _attempt, ...rest } = parameters
           // Outside a page, the payment calls the routes of Tempo ID's payment page itself. The
@@ -2476,21 +2483,18 @@ export function create<
         // With `offer`, a page without a session opens the signed-out payment page, which offers
         // Continue as guest. The selection starts the guest session, whose change starts now, so a
         // sign-out during the payment overtakes it.
-        if (
-          config.guest === 'offer' &&
-          !held &&
-          context.challenge() === undefined &&
-          typeof document !== 'undefined'
-        ) {
+        if (offered && !held && typeof document !== 'undefined') {
           const { attempt: _attempt, ...rest } = parameters
-          const change = context.session.change()
           return await AccountActions.pay_guest(config, {
             ...rest,
             chainId: chainOf(),
             current: () => context.session.get(),
             memo,
             session: () =>
-              SignIn.guest(context, { change, signal: parameters.signal }),
+              SignIn.guest(context, {
+                change: offered,
+                signal: parameters.signal,
+              }),
           })
         }
       }

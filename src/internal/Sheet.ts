@@ -91,7 +91,10 @@ const payment = {
  * draws too, so the dialog shows no seam while the frame loads. IntersectionObserver v2 reports the
  * frame not visible under an opacity below 1 or a scale, and `/embed` waits for a visible frame
  * before it acts. So the card's entrance translates without a scale, and its fade takes 120
- * milliseconds of the 320 that the translate takes.
+ * milliseconds of the 320 that the translate takes. The frame takes the height that its page reports,
+ * up to the dialog's maximum: the viewport's height less a 16-pixel margin, or 90% of it for the
+ * bottom sheet. {@link limit} posts the maximum to the page, which fits its content to it, so the
+ * frame never scrolls.
  */
 const css = `
 dialog[${attribute}] {
@@ -102,7 +105,7 @@ dialog[${attribute}] {
   color: CanvasText;
   color-scheme: light dark;
   margin: auto;
-  max-height: min(680px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
   max-width: calc(100vw - 32px);
   overflow: hidden;
   padding: 0;
@@ -436,6 +439,7 @@ export function create(options: create.Options): create.ReturnType {
         resize: ({ event }) => {
           assertEvent(event, 'embed.resize')
           frame.style.height = `${event.height}px`
+          limit(frame, { origin })
         },
         reveal: () => {
           if (dialog.open) return
@@ -443,7 +447,10 @@ export function create(options: create.Options): create.ReturnType {
           dialog.inert = false
           dialog.showModal()
         },
-        unlisten: () => window.removeEventListener('message', listener),
+        unlisten: () => {
+          window.removeEventListener('message', listener)
+          window.removeEventListener('resize', resize)
+        },
       },
       actors: {
         popup: fromCallback<{ type: 'received' }, { url: string }>(
@@ -476,7 +483,11 @@ export function create(options: create.Options): create.ReturnType {
     }),
   ).start()
 
+  // A change of the viewport changes the dialog's maximum height, which the page fits to.
+  const resize = () => limit(frame, { origin })
+
   window.addEventListener('message', listener)
+  window.addEventListener('resize', resize)
 
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault()
@@ -934,9 +945,10 @@ export function load(options: load.Options): load.ReturnType {
     } else if (
       data?.type === 'tempo-id:embed.resize' &&
       typeof data.height === 'number'
-    )
+    ) {
       element.style.height = `${Math.max(0, Math.ceil(data.height))}px`
-    else if (
+      limit(element, { origin })
+    } else if (
       data?.type === 'tempo-id:embed.callback' &&
       typeof data.url === 'string'
     )
@@ -970,7 +982,10 @@ export function load(options: load.Options): load.ReturnType {
     // The frame's close button or Escape, which the frame's page receives in place of the dialog.
     else if (data?.type === 'tempo-id:embed.close') handlers()?.onCancel()
   }
+  // A change of the viewport changes the dialog's maximum height, which the page fits to.
+  const resize = () => limit(element, { origin })
   window.addEventListener('message', listener)
+  window.addEventListener('resize', resize)
 
   // A document without the report `reportDelay` after its `load` shows no page of the frame, such
   // as the sign-in page after the session ends, which Tempo ID refuses to frame.
@@ -1008,6 +1023,7 @@ export function load(options: load.Options): load.ReturnType {
       const open = state.phase === 'shown'
       state = { phase: 'closed' }
       window.removeEventListener('message', listener)
+      window.removeEventListener('resize', resize)
       if (report.phase === 'awaited') clearTimeout(report.timer)
       const remove = () => {
         dialog.close()
@@ -1151,6 +1167,29 @@ function adopt() {
   style.setAttribute(attribute, '')
   style.textContent = css
   document.head.appendChild(style)
+}
+
+/**
+ * Posts `frame`'s maximum height, in CSS pixels, to its page at `options.origin`. The page fits its
+ * content to the maximum, with a compact layout where the content is taller, so the frame never
+ * scrolls. The maximum is the dialog's, which the frame inherits.
+ */
+function limit(frame: HTMLIFrameElement, options: limit.Options) {
+  const height = Number.parseFloat(getComputedStyle(frame).maxHeight)
+  frame.contentWindow?.postMessage(
+    {
+      height: Number.isFinite(height) ? height : window.innerHeight,
+      type: 'tempo-id:embed.viewport',
+    },
+    options.origin,
+  )
+}
+
+declare namespace limit {
+  type Options = {
+    /** Tempo ID's origin, the only one that receives the message. */
+    origin: string
+  }
 }
 
 /**
