@@ -91,7 +91,8 @@ minimumReleaseAgeExclude:
   # ox 0.14.67 splits the WebAuthn data of a signature envelope in linear time (wevm/ox#677).
   - ox@0.14.67
   # Viem 2.58.6 parses a SIWE message in linear time, and rejects a line break in its statement
-  # (wevm/viem#5609).
+  # (wevm/viem#5609). It resolves ox 0.14.67, so its Tempo `verifyHash` parses a WebAuthn envelope
+  # in linear time and refuses one above 2048 bytes.
   - viem@2.58.6
 
 overrides:
