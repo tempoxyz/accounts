@@ -1464,6 +1464,50 @@ describe('refresh', () => {
 })
 
 describe('signIn', () => {
+  test('reads the stored session no more after a sign-in before any read, at `session.get` and at `signOut`', async () => {
+    const memory = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const reads: string[] = []
+    let phase = 'signIn'
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      plugins: [lock()],
+      store: Store.from({
+        getItem(key) {
+          if (key === name) reads.push(phase)
+          return memory.getItem(key)
+        },
+        removeItem: (key) => memory.removeItem(key),
+        setItem: (key, value) => memory.setItem(key, value),
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+    const session = await expired({
+      accessToken: 'access-token',
+      expiresIn: 60_000,
+      valid: true,
+    })
+
+    await accounts.session_.change().commit(session)
+    phase = 'session.get'
+    const held = await accounts.session.get()
+    phase = 'signOut'
+    // Nothing listens at the URL, so the revocation receives no answer, and the sign-out rejects.
+    await accounts.signOut().catch(() => undefined)
+
+    expect(held?.accessToken).toBe('access-token')
+    // The sign-out reads the store once before the lock, and once under it.
+    expect(reads).toMatchInlineSnapshot(`
+      [
+        "signIn",
+        "signOut",
+        "signOut",
+      ]
+    `)
+  })
+
   test('holds no session, and revokes its refresh token, when the store refuses the save of a sign-in', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const revocations: (string | null)[] = []

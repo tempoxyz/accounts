@@ -294,6 +294,67 @@ describe('create', () => {
     `)
   })
 
+  test('empties at once the sessions of the other instances in the process on the shared file, at a sign-out of a `cli:` instance without a store', async () => {
+    await create({ clientId: 'cli:acme-deploy' }).test.commit(session())
+    const first = create({ clientId: 'cli:acme-deploy' })
+    const second = create({ clientId: 'cli:acme-deploy' })
+    // An instance on `Store.file()` holds the same file, so it hears the sign-out too.
+    const third = create({ clientId: 'cli:acme-deploy', store: Store.file() })
+    await Promise.all([
+      first.session.get(),
+      second.session.get(),
+      third.session.get(),
+    ])
+
+    // Nothing listens at the URL, so the revocation rejects with a network error. The other
+    // instances read no file before their next refresh, so only a message tells them of the
+    // sign-out.
+    await first.signOut().catch(() => undefined)
+    await expect
+      .poll(
+        () => [
+          second.session.status.get().status,
+          third.session.status.get().status,
+        ],
+        { timeout: 1_000 },
+      )
+      .toEqual(['signedOut', 'signedOut'])
+
+    expect({
+      second: await second.session.get(),
+      third: await third.session.get(),
+    }).toMatchInlineSnapshot(`
+      {
+        "second": undefined,
+        "third": undefined,
+      }
+    `)
+  })
+
+  test('empties at once the session of an instance on `Store.file()`, at a sign-out of a `cli:` instance without a store, for a `TEMPO_HOME` that starts with `~/`', async () => {
+    const folder = Fs.mkdtempSync(Path.join(Os.homedir(), '.accounts-test-'))
+    process.env.TEMPO_HOME = `~/${Path.relative(Os.homedir(), folder)}`
+    try {
+      await create({ clientId: 'cli:acme-deploy' }).test.commit(session())
+      const first = create({ clientId: 'cli:acme-deploy' })
+      const second = create({
+        clientId: 'cli:acme-deploy',
+        store: Store.file(),
+      })
+      await Promise.all([first.session.get(), second.session.get()])
+
+      // Nothing listens at the URL, so the revocation rejects with a network error.
+      await first.signOut().catch(() => undefined)
+      await expect
+        .poll(() => second.session.status.get().status, { timeout: 1_000 })
+        .toBe('signedOut')
+
+      expect(await second.session.get()).toMatchInlineSnapshot(`undefined`)
+    } finally {
+      Fs.rmSync(folder, { force: true, recursive: true })
+    }
+  })
+
   test('holds no session, and writes no file, for a registered client ID without a store, as a backend creates it', async () => {
     const accounts = create({ clientId: 'client_0123456789abcdef' })
     await accounts.test.commit(session())

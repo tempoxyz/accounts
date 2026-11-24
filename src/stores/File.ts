@@ -2,8 +2,8 @@
  * A store in one JSON file of the user's, such as a CLI's session, as `Store.file` returns it.
  * @module
  */
-import * as Broadcast from '../internal/Broadcast.js'
 import * as Expiry from '../internal/Expiry.js'
+import * as FileConnection from '../internal/FileConnection.js'
 import * as Node from '../internal/Node.js'
 import * as StoreValue from '../internal/StoreValue.js'
 import type * as Store from '../Store.js'
@@ -125,15 +125,8 @@ export class NodeRequiredError extends Error {
 export function create(path?: string): Store.Store {
   // An instance reads a failed store read as no session. A page with this store thus restores no
   // session, and its sign-in fails only at the save, after Tempo ID spent the code.
-  const { Os, Path } = node()
-  // Tempo's own CLIs resolve their folder the same way, so one variable moves each file of theirs.
-  const file =
-    path ??
-    Path.join(
-      Node.env('TEMPO_HOME') ?? Path.join(Os.homedir(), '.tempo'),
-      'id',
-      'store.json',
-    )
+  const modules = node()
+  const file = path ?? Node.file(modules)
 
   // Writes run in order, so a later write never lands before an earlier one.
   let pending: Promise<unknown> = Promise.resolve()
@@ -232,11 +225,7 @@ export function create(path?: string): Store.Store {
     // The instances of the process on the file hear each saved change of each other, also through
     // another store of its path, so a sign-out empties their sessions at once.
     connect(key, listener) {
-      const { Path } = node()
-      const target = Path.resolve(resolve())
-      const connect = connections.get(target) ?? Broadcast.create()
-      connections.set(target, connect)
-      return connect(key, listener)
+      return FileConnection.get(Node.resolve(file, node()))(key, listener)
     },
     async getItem(key) {
       await pending.catch(() => undefined)
@@ -496,12 +485,6 @@ async function sweep(target: string) {
 /** The suffix of a temporary file of `Store.file` after the file's name: a UUID and `.tmp`. */
 const temporaryName =
   /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}\.tmp$/
-
-/**
- * The `connect` of each file of the process, by its absolute path, so the stores of one path share
- * it. A file belongs to the whole device, and no instance owns it.
- */
-const connections = new Map<string, NonNullable<Store.Store['connect']>>()
 
 /**
  * Milliseconds that a hold of `lock` renews its lock file, as the lease of `Store.redis`. A hold
