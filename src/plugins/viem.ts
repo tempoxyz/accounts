@@ -174,8 +174,11 @@ export class RetryClosedError extends Error {
  *
  * A transaction of an access key whose node fills its nonce, and that starts while another
  * transaction of the same account is in flight in the instance, takes an expiring nonce, as Viem's
- * own transactions do within one turn of the event loop. Concurrent requests of a server for one
- * session thus each land, without a request more.
+ * own transactions do within one turn of the event loop. A client of a fixed `session` takes an
+ * expiring nonce for each such transaction that attaches no key authorization, since another
+ * instance, such as that of another request of a Worker, can send for the session at once.
+ * Concurrent requests of a server for one session thus each land, without a request more, once the
+ * chain registered the access key.
  *
  * The access key attaches its key authorization to transactions until the chain registers the
  * access key. While a transaction of the instance attaches it, the fill of another that attaches it
@@ -407,12 +410,18 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
 
       /**
        * Returns `chain`, whose preparation of a transaction of an access key takes an expiring
-       * nonce while another transaction of the same account is in flight in the instance. Both would
-       * otherwise fill the same protocol nonce, and the node keeps one of them. Viem detects only
-       * transactions that start in one turn of the event loop, and a server's requests start in turns
-       * of their own.
+       * nonce while another transaction of the same account is in flight in the instance, or with
+       * `shared`, for each transaction that attaches no key authorization. Both would otherwise fill
+       * the same protocol nonce, and the node keeps one of them. Viem detects only transactions that
+       * start in one turn of the event loop, and a server's requests start in turns of their own. A
+       * client of a fixed session is `shared`, since another instance, such as that of another
+       * request or replica, can send for the session at once.
        */
-      function coordinate(chain: Chain): Chain {
+      function coordinate(
+        chain: Chain,
+        options_coordinate: { shared: boolean },
+      ): Chain {
+        const { shared } = options_coordinate
         const prepare = (chain as TempoChain).prepareTransactionRequest
         if (!Array.isArray(prepare)) return chain
         // Viem types the hook's request by the chain's formatters, which a plain chain does not hold.
@@ -447,14 +456,36 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
               )
                 return fn(request, args)
               const concurrent = startSend(account.address.toLowerCase())
+              const expiring = await (async () => {
+                if (concurrent) return true
+                if (!shared) return false
+                // A transaction that carries the key authorization keeps the protocol nonce. A
+                // concurrent one of another instance that carries it too then fails at its send,
+                // since the node never includes a second registration of the access key.
+                return !(await carries(request))
+              })()
               return fn(
-                concurrent ? { ...request, nonceKey: 'expiring' } : request,
+                expiring ? { ...request, nonceKey: 'expiring' } : request,
                 args,
               )
             },
             options,
           ],
         } as Chain
+      }
+
+      /** Returns whether `request` attaches the key authorization of its access key. */
+      async function carries(request: Prepare.Request) {
+        const { account } = request
+        const chainId = request.chainId ?? request.chain?.id
+        if (!account?.keyAuthorizationManager || chainId === undefined)
+          return false
+        const pending = await account.keyAuthorizationManager.get({
+          accessKey: account.accessKeyAddress as `0x${string}`,
+          address: account.address as `0x${string}`,
+          chainId,
+        })
+        return Boolean(pending)
       }
 
       /**
@@ -2337,7 +2368,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             ...defaults,
             ...clientOptions,
             account,
-            chain: coordinate(chain),
+            chain: coordinate(chain, { shared: Boolean(session) }),
             transport: reads,
           },
           { verifier: tokens },
