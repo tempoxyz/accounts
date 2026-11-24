@@ -12,8 +12,8 @@ import {
   concat,
   custom,
   hashMessage,
-  http,
   hexToBytes,
+  http,
   keccak256,
   type Transport,
 } from 'viem'
