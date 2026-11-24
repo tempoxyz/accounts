@@ -248,7 +248,8 @@ const turnOf = Symbol('turn')
 
 /**
  * The property of a {@link LimitError} of the chain's refusal whose read found the access key on the
- * chain with part of the charge token's limit spent. The retry then reads the chain no more.
+ * chain with part of the charge token's limit spent. It holds the access key's address, so the retry
+ * reads the chain no more for that access key.
  */
 const limitSpent = Symbol('limitSpent')
 
@@ -526,12 +527,14 @@ export function mpp(options: mpp.Options = {}) {
               if (!failure || !kinds.includes(failure.kind) || !replayable())
                 return undefined
               // The read of the refusal found part of the limit spent, so the fix reads it no more.
-              if (
-                failure.kind === 'limit' &&
-                error instanceof LimitError &&
-                limitSpent in error
-              )
-                return { ...failure, spent: true as const }
+              const spent =
+                error instanceof LimitError
+                  ? (error as LimitError & { [limitSpent]?: `0x${string}` })[
+                      limitSpent
+                    ]
+                  : undefined
+              if (failure.kind === 'limit' && spent)
+                return { ...failure, spent }
               return failure
             },
             enabled: (kind) => enabled[kind] !== false,
@@ -767,6 +770,7 @@ export function mpp(options: mpp.Options = {}) {
             identity: undefined,
             landed: registrations.landed,
             limits: undefined,
+            marks: false,
             pay: undefined,
             subscribe: (parameters) => subscribe(parameters, { balance }),
             turn: registrations.turn,
@@ -809,6 +813,7 @@ export function mpp(options: mpp.Options = {}) {
             identity,
             landed: registrations.landed,
             limits: undefined,
+            marks: false,
             pay: (transfer) =>
               pay(transfer, { chainId, signal: signing.signal }),
             subscribe: undefined,
@@ -909,6 +914,13 @@ export function mpp(options: mpp.Options = {}) {
         })
         const { limits } = current.accessKey.keyAuthorization
         const fees = FeeAllowance.of(current.accessKey.keyAuthorization)
+        // Only a charge of the instance's session retries a spent limit, so only its refusal reads
+        // the access key for the retry.
+        const marks = (() => {
+          if (!held) return false
+          const enabled = retries(overrides, chainId)
+          return enabled !== false && enabled.limit !== false
+        })()
         // The payment page pays a charge outside the access key's limits.
         const remote = paged
           ? (transfer: Charge.Transfer) =>
@@ -938,6 +950,7 @@ export function mpp(options: mpp.Options = {}) {
             identity,
             landed: registrations.landed,
             limits,
+            marks,
             pay: remote,
             subscribe: subscriber,
             turn: registrations.turn,
@@ -958,6 +971,7 @@ export function mpp(options: mpp.Options = {}) {
           subscriber !== undefined,
           balance,
           held ? started : null,
+          marks,
           paged,
         ])
         const existing = byAccessKey.get(name)
@@ -974,6 +988,7 @@ export function mpp(options: mpp.Options = {}) {
           identity,
           landed: registrations.landed,
           limits,
+          marks,
           pay: remote,
           subscribe: subscriber,
           turn: registrations.turn,
@@ -1896,6 +1911,11 @@ function create(options: {
    * token, and a payer without an access key pays no charge.
    */
   limits: KeyAuthorization.Rpc['limits']
+  /**
+   * Whether the refusal of a charge for a spent limit reads the access key too, beside its limit,
+   * for a retry of `limit` that then reads the chain no more. An MCP caller never reads it.
+   */
+  marks: boolean
   maxAmount: string | undefined
   maxDeposit: string | undefined
   mode: 'pull' | 'push' | undefined
@@ -1938,6 +1958,7 @@ function create(options: {
     identity,
     landed,
     limits,
+    marks,
     maxAmount,
     maxDeposit,
     mode,
@@ -2395,14 +2416,15 @@ function create(options: {
   /**
    * Returns {@link LimitError} for the chain's refusal of a charge within the signed limits that the
    * spent limit does not cover, with the limit that is left. Only a refusal reads the limit, so a
-   * charge that the chain takes sends no more requests. The read of the access key runs in the same
-   * round, and marks an error whose access key the chain holds with part of the limit spent, so a
-   * retry reads the chain no more. Returns `undefined` for any other error, and after a failed read
-   * of the limit.
+   * charge that the chain takes sends no more requests. With `options.mark`, the read of the access
+   * key runs in the same round, and marks an error whose access key the chain holds with part of the
+   * limit spent, so a retry reads the chain no more. Returns `undefined` for any other error, and
+   * after a failed read of the limit.
    */
   async function spent(
     error: unknown,
     charge: { amount: bigint; token: Address.Address } | undefined,
+    options: { mark: boolean },
   ) {
     if (!account || !charge || !(error instanceof Error)) return undefined
     if (ExecutionError.from(error).errorName !== 'SpendingLimitExceeded')
@@ -2418,7 +2440,11 @@ function create(options: {
       account: account.address,
     }
     const [metadata, read] = await Promise.all([
-      Actions.accessKey.getMetadata(client, parameters).catch(() => undefined),
+      options.mark
+        ? Actions.accessKey
+            .getMetadata(client, parameters)
+            .catch(() => undefined)
+        : undefined,
       Actions.accessKey
         .getRemainingLimit(client, { ...parameters, token: charge.token })
         .catch(() => undefined),
@@ -2442,7 +2468,9 @@ function create(options: {
       Address.isEqual(metadata.address, account.accessKeyAddress) &&
       read.remaining < BigInt(signed.limit)
     )
-      Object.defineProperty(limited, limitSpent, { value: true })
+      Object.defineProperty(limited, limitSpent, {
+        value: account.accessKeyAddress,
+      })
     return limited
   }
 
@@ -2461,7 +2489,7 @@ function create(options: {
           if (!call.sent) call.end?.()
           throw (
             elsewhere(call) ??
-            (await spent(error, call.charge)) ??
+            (await spent(error, call.charge, { mark: marks })) ??
             refusal(error)
           )
         })
@@ -2543,7 +2571,9 @@ function create(options: {
               },
             })
             .catch(async (error: unknown) => {
-              throw (await spent(error, current)) ?? refusal(error)
+              throw (
+                (await spent(error, current, { mark: false })) ?? refusal(error)
+              )
             })
           if (credential && result.receipt?.status === 'success')
             record(credential)
