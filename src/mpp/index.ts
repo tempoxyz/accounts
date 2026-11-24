@@ -2423,9 +2423,14 @@ function create(options: {
    */
   async function spent(
     error: unknown,
-    charge: { amount: bigint; token: Address.Address } | undefined,
-    options: { mark: boolean },
+    options: {
+      /** The amount and token of the refused charge. Absent before the charge's challenge. */
+      charge: { amount: bigint; token: Address.Address } | undefined
+      /** Whether the read of the limit reads the access key too, for a retry of `limit`. */
+      mark: boolean
+    },
   ) {
+    const { charge } = options
     if (!account || !charge || !(error instanceof Error)) return undefined
     if (ExecutionError.from(error).errorName !== 'SpendingLimitExceeded')
       return undefined
@@ -2489,7 +2494,7 @@ function create(options: {
           if (!call.sent) call.end?.()
           throw (
             elsewhere(call) ??
-            (await spent(error, call.charge, { mark: marks })) ??
+            (await spent(error, { charge: call.charge, mark: marks })) ??
             refusal(error)
           )
         })
@@ -2572,7 +2577,8 @@ function create(options: {
             })
             .catch(async (error: unknown) => {
               throw (
-                (await spent(error, current, { mark: false })) ?? refusal(error)
+                (await spent(error, { charge: current, mark: false })) ??
+                refusal(error)
               )
             })
           if (credential && result.receipt?.status === 'success')
