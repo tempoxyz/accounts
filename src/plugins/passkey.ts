@@ -71,6 +71,29 @@ export function passkey(options: passkey.Options = {}) {
         return entry.promise
       }
 
+      // Returns the ceremony of a sign-in, whose first call throws once a sign-out overtakes the
+      // sign-in, also during the prompt. Its commit would throw and revoke the tokens, so an
+      // overtaken sign-in shows no prompt, sends no assertion, and `change.fail` throws
+      // `SupersededError`. The first call is the sign-in's assertion. The session's account keeps
+      // the function for its own signatures, which no later sign-out refuses.
+      function ceremony(
+        change: ReturnType<Plugin.Context['session']['change']>,
+      ): NonNullable<passkey.Options['getFn']> {
+        let call: 'account' | 'assertion' = 'assertion'
+        return async (parameters) => {
+          const checked = call === 'assertion'
+          call = 'account'
+          if (checked && change.overtaken())
+            throw new Accounts.SupersededError()
+          const credential = getFn
+            ? await getFn(parameters)
+            : await navigator.credentials.get(parameters as never)
+          if (checked && change.overtaken())
+            throw new Accounts.SupersededError()
+          return credential as never
+        }
+      }
+
       // Commits the session of a sign-in's result. The email step leaves the session as it is.
       async function finish(
         change: ReturnType<Plugin.Context['session']['change']>,
@@ -374,7 +397,7 @@ export function passkey(options: passkey.Options = {}) {
                 // The realms read of the handle answered already, so the new options need none.
                 prepared = request(await prepared.handle.available)
               const result = await prepared.handle
-                .signIn({ getFn })
+                .signIn({ getFn: ceremony(change) })
                 .catch(change.fail)
               return finish(change, result, resolved.account)
             },
@@ -444,7 +467,9 @@ export function passkey(options: passkey.Options = {}) {
          * @throws {Error} Named `AbortError`, when the user closes the passkey prompt, or
          *   lets it time out. The session does not change.
          * @throws {Accounts.SupersededError} When another sign-in or a sign-out completed while
-         *   this sign-in was pending, also after the email step.
+         *   this sign-in was pending, also after the email step. If a sign-out completes before
+         *   the passkey prompt, the call shows no prompt. If it completes during the prompt, the
+         *   call sends no assertion.
          * @throws {TypeError} On a page, when the instance's `store` has `json`, such as
          *   `Store.redis`, and the call generates an access key. The call throws before any
          *   request.
@@ -470,7 +495,7 @@ export function passkey(options: passkey.Options = {}) {
             chainId: config.chainId,
             challenge: parameters.challenge,
             credentialId: parameters.credentialId,
-            getFn,
+            getFn: ceremony(change),
             mediation: parameters.mediation,
             select: select(parameters),
           }).catch(change.fail)
