@@ -98,7 +98,11 @@ export function backend(options: backend.Options) {
               store: options.store,
             }),
           )
-        return options.sessions({ clientId: config.clientId, url: config.url })
+        return options.sessions({
+          clientId: config.clientId,
+          scope: config.scope,
+          url: config.url,
+        })
       })()
       // The `viem` actions keep their marks of registered access keys in the store, also those that
       // another plugin builds, such as `mpp`. A backend's instance has no `store` of its own.
@@ -746,6 +750,11 @@ export declare namespace backend {
       type Options = {
         /** The client ID of the instance's app. */
         clientId: string
+        /**
+         * The scopes of the instance's tokens, separated by spaces, such as
+         * `openid email offline_access`. A sign-in requests them.
+         */
+        scope: string
         /** Where the instance's Tempo ID runs, such as `https://id.tempo.xyz`. */
         url: string
       }
