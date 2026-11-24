@@ -71,18 +71,25 @@ export function passkey(options: passkey.Options = {}) {
         return entry.promise
       }
 
-      // Returns the ceremony of a sign-in, which throws once a sign-out overtakes the sign-in, also
-      // during the prompt. Its commit would throw and revoke the tokens, so an overtaken sign-in
-      // shows no prompt, sends no assertion, and `change.fail` throws `SupersededError`.
+      // Returns the ceremony of a sign-in, whose first call throws once a sign-out overtakes the
+      // sign-in, also during the prompt. Its commit would throw and revoke the tokens, so an
+      // overtaken sign-in shows no prompt, sends no assertion, and `change.fail` throws
+      // `SupersededError`. The first call is the sign-in's assertion. The session's account keeps
+      // the function for its own signatures, which no later sign-out refuses.
       function ceremony(
         change: ReturnType<Plugin.Context['session']['change']>,
       ): NonNullable<passkey.Options['getFn']> {
+        let call: 'assertion' | 'account' = 'assertion'
         return async (parameters) => {
-          if (change.overtaken()) throw new Accounts.SupersededError()
+          const checked = call === 'assertion'
+          call = 'account'
+          if (checked && change.overtaken())
+            throw new Accounts.SupersededError()
           const credential = getFn
             ? await getFn(parameters)
             : await navigator.credentials.get(parameters as never)
-          if (change.overtaken()) throw new Accounts.SupersededError()
+          if (checked && change.overtaken())
+            throw new Accounts.SupersededError()
           return credential as never
         }
       }
