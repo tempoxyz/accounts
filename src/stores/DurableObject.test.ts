@@ -174,4 +174,38 @@ describe('Store.durableObject', () => {
       }
     `)
   }, 30_000)
+
+  test('behavior: session.refresh that Tempo ID refuses throws after one request', async () => {
+    const { result } = await run([
+      'const requests = []',
+      'const accounts = Accounts.create({',
+      '  chain: 1337,',
+      "  clientId: 'https://app.example.com',",
+      '  async fetch(input, init) {',
+      "    const token = new URLSearchParams(String(init?.body)).get('refresh_token')",
+      "    requests.push(new URL(String(input)).pathname + ' ' + token)",
+      "    return Response.json({ error: 'invalid_grant' }, { status: 400 })",
+      '  },',
+      '  store,',
+      "  url: 'http://127.0.0.1:9',",
+      '})',
+      'await store.setItem(\'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]\', {',
+      "  state: { session: Session.from({ accessToken: 'access-token', expiresAt: Date.now() + 3600000, refreshToken: 'refresh-token', user: { email: 'user@example.com', id: 'user_1' } }) },",
+      '  version: 0,',
+      '})',
+      'await accounts.session.get()',
+      'const error = await accounts.session.refresh().then(() => undefined, (error) => error)',
+      'return Response.json({ error: error?.name + " " + error?.code, requests, status: accounts.session.status.get().status })',
+    ])
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "error": "Accounts.RequestError invalid_grant",
+        "requests": [
+          "/oauth2/token refresh-token",
+        ],
+        "status": "signedOut",
+      }
+    `)
+  }, 30_000)
 })
