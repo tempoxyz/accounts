@@ -1152,6 +1152,48 @@ describe('siwe.approve', () => {
     `)
   })
 
+  test('refuses a long message that names no challenge without parsing it, and keeps the approval', async () => {
+    const { accounts } = instance()
+    const account = privateKeyToAccount(generatePrivateKey())
+    const session = await signIn(accounts, account)
+    const change = { statement: 'Delete note 1.' }
+    const { message } = await accounts.siwe.challenge({
+      ...change,
+      request: new Request(origin),
+      session,
+    })
+    const signature = await account.signMessage({ message })
+
+    const start = performance.now()
+    const refused = await accounts.siwe
+      .approve({
+        ...change,
+        message: 'URI: '.repeat(200_000),
+        request: new Request(origin),
+        session,
+        signature: '0x00',
+      })
+      .then(reason, reason)
+    const elapsed = performance.now() - start
+    const approved = await accounts.siwe
+      .approve({
+        ...change,
+        message,
+        request: new Request(origin),
+        session,
+        signature,
+      })
+      .then(reason, reason)
+
+    expect({ approved, fast: elapsed < 1_000, refused }).toMatchInlineSnapshot(`
+      {
+        "approved": "verified",
+        "fast": true,
+        "refused": "challenge",
+      }
+    `)
+  })
+
   test("refuses an approval's challenge as a sign-in under a session ID that names it", async () => {
     const { accounts } = instance()
     const account = privateKeyToAccount(generatePrivateKey())

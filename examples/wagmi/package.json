@@ -13,7 +13,7 @@
     "accounts": "^1.0.0-alpha.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "viem": "^2.57.19",
+    "viem": "^2.58.6",
     "wagmi": "^3.7.9"
   },
   "devDependencies": {

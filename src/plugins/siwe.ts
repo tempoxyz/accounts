@@ -496,11 +496,18 @@ function server(options: siwe.Options) {
             statement,
           } = parameters
           const url = originOf(request)
-          // The nonce names the challenge, and the challenge's own message is the one to verify.
-          const { domain, nonce, uri } = parseSiweMessage(message)
+          // The caller sends the message, so its fields are read from its lines, and only the
+          // challenge's own message is parsed, once it equals the one sent.
+          const nonce = fieldOf(message, 'Nonce')
           if (!nonce) throw new InvalidError({ reason: 'challenge' })
-          // A message of another origin, such as an alias that shares the store, approves nothing here.
-          if (domain !== url.host || uri !== url.origin)
+          // A message of another origin, such as an alias that shares the store, approves nothing
+          // here, and leaves its challenge to that origin.
+          if (
+            !message.startsWith(
+              `${url.host} wants you to sign in with your Ethereum account:\n`,
+            ) ||
+            fieldOf(message, 'URI') !== url.origin
+          )
             throw new InvalidError({ reason: 'message' })
           const challenge = await sessions.take({
             id: session.id,
@@ -907,6 +914,15 @@ function envelopeOf(signature: `0x${string}`) {
   } catch {
     return undefined
   }
+}
+
+/** The value of the first `name: value` line of a SIWE message after its first line. */
+function fieldOf(message: string, name: string) {
+  const prefix = `\n${name}: `
+  const start = message.indexOf(prefix)
+  if (start === -1) return undefined
+  const end = message.indexOf('\n', start + prefix.length)
+  return message.slice(start + prefix.length, end === -1 ? undefined : end)
 }
 
 /** Returns a new ID: 32 random bytes in unpadded URL-safe Base64. */

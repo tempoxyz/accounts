@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "accounts": "^1.0.0-alpha.2",
-    "viem": "^2.57.19"
+    "viem": "^2.58.6"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
