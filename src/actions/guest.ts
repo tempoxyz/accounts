@@ -110,10 +110,9 @@ export declare namespace get {
  *   which [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md) describes:
  *   - `insufficient_balance`: The guest account holds less MACH than `amount`. The action also throws
  *     it when the purchased MACH does not reach the account within 30 seconds.
- *   - `invalid_field`: A field of the request is malformed, or the signed transaction is not the
- *     prepared transfer.
- *   - `invalid_chain`: Tempo ID sells no MACH on the chain.
- *   - `cross_site_request`: The page is on no origin of the app's registered redirect URIs.
+ *   - `invalid_field`: A field of the request is malformed, such as a chain where Tempo ID sells no
+ *     MACH, or the signed transaction is not the prepared transfer.
+ *   - `cross_site_request`: The request holds no origin of the app's registered redirect URIs.
  *   - `rejected`: Tempo ID knows no app of the instance's client ID, or the app is disabled.
  *   - `recipient_not_permitted`: MACH's transfer policy does not permit `to`.
  *   - `rate_limited`: The page's address or the guest account exceeded the limit of guest payments.
