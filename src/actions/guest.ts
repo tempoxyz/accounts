@@ -237,7 +237,18 @@ export declare namespace get {
 /**
  * Returns the guest request that opens Tempo ID's payment page for the guest account: the unpadded
  * URL-safe Base64 of the request's JSON, with the key pair's signature over its message. The request
- * binds the key pair to the app, the redirect URI, and the chain, for 4 minutes. The first call
+ * binds the key pair to the app, the redirect URI, the chain, and the payment's checkout ID, for 4
+ * minutes. The message holds these lines, in order:
+ *
+ * ```
+ * tempo-id:guest
+ * chain_id=<chain ID>
+ * checkout=<checkout ID>
+ * client_id=<client ID>
+ * exp=<expiry, in Unix seconds>
+ * redirect_uri=<redirect URI>
+ * ```
+ * The first call
  * creates and saves the key pair. The call reads and writes only the store, and sends no request.
  *
  * @throws {Error} As {@link session} throws it.
@@ -248,6 +259,7 @@ export declare namespace get {
  *
  * const { value } = await Actions.guest.request(accounts.config, {
  *   chainId: 4217,
+ *   checkout: crypto.randomUUID(),
  *   redirectUri: 'https://example.com/',
  * })
  * ```
@@ -256,7 +268,12 @@ export async function request(
   auth: Config,
   options: request.Options,
 ): Promise<request.ReturnType> {
-  const { chainId, redirectUri } = options
+  const { chainId, checkout, redirectUri } = options
+  // A line break in the checkout ID would add a line to the signed message.
+  if (!/^[\w-]{1,128}$/.test(checkout))
+    throw new TypeError(
+      'Invalid `checkout`: it holds a character other than a letter, a digit, `-`, or `_`, or more than 128 characters. Pass `crypto.randomUUID()`.',
+    )
   const key = await load(auth)
   const publicKey = publicKeyOf(key)
 
@@ -264,6 +281,7 @@ export async function request(
   const message = [
     'tempo-id:guest',
     `chain_id=${chainId}`,
+    `checkout=${checkout}`,
     `client_id=${auth.clientId}`,
     `exp=${expiresAt}`,
     `redirect_uri=${redirectUri}`,
@@ -280,6 +298,7 @@ export async function request(
   const value = Base64.fromString(
     JSON.stringify({
       chain_id: chainId,
+      checkout,
       client_id: auth.clientId,
       exp: expiresAt,
       public_key: PublicKey.toHex(publicKey),
@@ -293,6 +312,7 @@ export async function request(
   )
   return {
     address: Address.fromPublicKey(publicKey, { checksum: true }),
+    checkout,
     value,
   }
 }
@@ -301,6 +321,11 @@ export declare namespace request {
   type Options = {
     /** The payment's chain. */
     chainId: number
+    /**
+     * The payment's checkout ID, such as `crypto.randomUUID()`: up to 128 letters, digits, `-`, or
+     * `_`. Each guest request of one payment, also a renewal, holds the same one.
+     */
+    checkout: string
     /** The registered redirect URI that the payment page returns to. */
     redirectUri: string
   }
@@ -308,6 +333,8 @@ export declare namespace request {
   type ReturnType = {
     /** The guest account's address. */
     address: `0x${string}`
+    /** The checkout ID that the request signs. */
+    checkout: string
     /** The guest request, as the page's `guest` parameter takes it. */
     value: string
   }

@@ -685,6 +685,9 @@ export async function pay_guest(
   // The guest module loads at the first guest payment, and signs from the store, with no request.
   const loading = import('./guest.js')
   loading.catch(() => {})
+  // The checkout ID names this payment. Each guest request of the payment, also a renewal, signs the
+  // same one, so Tempo ID keeps one record for it, and another payment never shares that record.
+  const checkout = crypto.randomUUID()
 
   const url = await approve(auth, {
     guest: {
@@ -692,6 +695,7 @@ export async function pay_guest(
         const Guest = await loading
         const { address, value } = await Guest.request(auth, {
           chainId,
+          checkout,
           redirectUri,
         })
         // A store that lost the session's key pair holds a new guest account, which pays nothing

@@ -9,7 +9,16 @@ import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs/promises'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
-import { Address, PublicKey } from 'ox'
+import {
+  Address,
+  Base64,
+  Bytes,
+  Hash,
+  Hex,
+  P256,
+  PublicKey,
+  Signature,
+} from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import { token as TokenActions } from 'viem/tempo/actions'
 import { describe, expect, expectTypeOf, test } from 'vite-plus/test'
@@ -197,6 +206,94 @@ describe('Actions.guest.session', () => {
       `[TypeError: Invalid \`store\`: other parties read it, so it keeps no key pair of a guest account. Use IndexedDB in a browser, or \`Store.file\`.]`,
     )
   })
+})
+
+describe('Actions.guest.request', () => {
+  test('signs the checkout ID in the JSON and in the message, after `chain_id`, and keeps it across renewals', async () => {
+    const auth = config()
+    const options = {
+      chainId,
+      checkout: 'c8f2a1d4-3b6e-4f70-9a51-0d2e7c4b9f13',
+      redirectUri: 'https://example.com/',
+    }
+
+    const first = await Guest.request(auth, options)
+    const renewed = await Guest.request(auth, options)
+    const json = JSON.parse(Base64.toString(first.value)) as {
+      chain_id: number
+      checkout: string
+      client_id: string
+      exp: number
+      public_key: `0x${string}`
+      redirect_uri: string
+      signature: `0x${string}`
+    }
+    const message = [
+      'tempo-id:guest',
+      `chain_id=${json.chain_id}`,
+      `checkout=${json.checkout}`,
+      `client_id=${json.client_id}`,
+      `exp=${json.exp}`,
+      `redirect_uri=${json.redirect_uri}`,
+    ].join('\n')
+    const verified = P256.verify({
+      payload: Hash.sha256(Bytes.fromString(message)),
+      publicKey: PublicKey.fromHex(json.public_key),
+      signature: Signature.from({
+        r: Hex.toBigInt(Hex.slice(json.signature, 0, 32)),
+        s: Hex.toBigInt(Hex.slice(json.signature, 32, 64)),
+        yParity: 0,
+      }),
+    })
+    const checkouts = [first, renewed].map(
+      (entry) =>
+        (JSON.parse(Base64.toString(entry.value)) as { checkout: string })
+          .checkout,
+    )
+
+    expect({
+      checkout: first.checkout,
+      checkouts,
+      keys: Object.keys(json),
+      verified,
+    }).toMatchInlineSnapshot(`
+      {
+        "checkout": "c8f2a1d4-3b6e-4f70-9a51-0d2e7c4b9f13",
+        "checkouts": [
+          "c8f2a1d4-3b6e-4f70-9a51-0d2e7c4b9f13",
+          "c8f2a1d4-3b6e-4f70-9a51-0d2e7c4b9f13",
+        ],
+        "keys": [
+          "chain_id",
+          "checkout",
+          "client_id",
+          "exp",
+          "public_key",
+          "redirect_uri",
+          "signature",
+        ],
+        "verified": true,
+      }
+    `)
+  })
+
+  test.for(['', 'a\nexp=0', 'a'.repeat(129)])(
+    'refuses the checkout ID %j, before it signs',
+    async (checkout) => {
+      const store = Store.memory()
+
+      const error = await Guest.request(config(store), {
+        chainId,
+        checkout,
+        redirectUri: 'https://example.com/',
+      }).catch((error: unknown) => error)
+
+      expect([
+        error instanceof TypeError,
+        await Guest.get(config(store)),
+      ]).toEqual([true, undefined])
+    },
+  )
 })
 
 describe('Actions.guest.session in other processes', () => {
