@@ -19,7 +19,8 @@
     "viem": "catalog:",
     "vocs": "catalog:",
     "wagmi": "catalog:",
-    "waku": "catalog:"
+    "waku": "catalog:",
+    "xstate": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
