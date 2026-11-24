@@ -331,6 +331,30 @@ describe('create', () => {
     `)
   })
 
+  test('empties at once the session of an instance on `Store.file()`, at a sign-out of a `cli:` instance without a store, for a `TEMPO_HOME` that starts with `~/`', async () => {
+    const folder = Fs.mkdtempSync(Path.join(Os.homedir(), '.accounts-test-'))
+    process.env.TEMPO_HOME = `~/${Path.relative(Os.homedir(), folder)}`
+    try {
+      await create({ clientId: 'cli:acme-deploy' }).test.commit(session())
+      const first = create({ clientId: 'cli:acme-deploy' })
+      const second = create({
+        clientId: 'cli:acme-deploy',
+        store: Store.file(),
+      })
+      await Promise.all([first.session.get(), second.session.get()])
+
+      // Nothing listens at the URL, so the revocation rejects with a network error.
+      await first.signOut().catch(() => undefined)
+      await expect
+        .poll(() => second.session.status.get().status, { timeout: 1_000 })
+        .toBe('signedOut')
+
+      expect(await second.session.get()).toMatchInlineSnapshot(`undefined`)
+    } finally {
+      Fs.rmSync(folder, { force: true, recursive: true })
+    }
+  })
+
   test('holds no session, and writes no file, for a registered client ID without a store, as a backend creates it', async () => {
     const accounts = create({ clientId: 'client_0123456789abcdef' })
     await accounts.test.commit(session())

@@ -60,3 +60,14 @@ export function modules() {
   if (!loaded.Fs || !loaded.Os || !loaded.Path) return undefined
   return loaded
 }
+
+/**
+ * Returns the absolute form of `path`, with the user's home directory in place of a leading `~/`,
+ * as `Store.file` reads and writes it. Throws when the home directory cannot be read, such as for a
+ * user without a passwd entry and without `HOME`.
+ */
+export function resolve(path: string, node: Pick<Modules, 'Os' | 'Path'>) {
+  const { Os, Path } = node
+  if (!path.startsWith('~/')) return Path.resolve(path)
+  return Path.resolve(Os.homedir(), path.slice(2))
+}

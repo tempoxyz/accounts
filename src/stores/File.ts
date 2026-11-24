@@ -225,8 +225,7 @@ export function create(path?: string): Store.Store {
     // The instances of the process on the file hear each saved change of each other, also through
     // another store of its path, so a sign-out empties their sessions at once.
     connect(key, listener) {
-      const { Path } = node()
-      return FileConnection.get(Path.resolve(resolve()))(key, listener)
+      return FileConnection.get(Node.resolve(file, node()))(key, listener)
     },
     async getItem(key) {
       await pending.catch(() => undefined)

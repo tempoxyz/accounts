@@ -21,8 +21,15 @@ export function get(clientId: string | undefined): Store | undefined {
   const node = Node.modules()
   if (!node) return undefined
   // An instance connects when it is created, before the file store's module loads, so the store
-  // connects through the registry that `Store.file` shares, by the file's absolute path.
-  const connect = FileConnection.get(node.Path.resolve(Node.file(node)))
+  // connects through the registry that `Store.file` shares, by the file's absolute path. A home
+  // directory that cannot be read connects nothing, and the first read of the file store fails.
+  const path = (() => {
+    try {
+      return Node.resolve(Node.file(node), node)
+    } catch {
+      return undefined
+    }
+  })()
 
   let loading: Promise<Store> | undefined
 
@@ -41,7 +48,7 @@ export function get(clientId: string | undefined): Store | undefined {
   return {
     // The instances of the process on the file, also on `Store.file()`, hear each saved change of
     // each other, so a sign-out empties their sessions at once.
-    connect,
+    ...(path ? { connect: FileConnection.get(path) } : {}),
     getItem: async (key) => (await load()).getItem(key),
     // The CLIs of the user share the file, so their refreshes order through its lock.
     lock: async (key, fn) => (await load()).lock!(key, fn),
