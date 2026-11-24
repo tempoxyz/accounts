@@ -1232,7 +1232,7 @@ export function mpp(options: mpp.Options = {}) {
       function guarded(options: {
         /** The caller read the store just before, so the first request reads it no more. */
         loaded?: boolean | undefined
-        /** The payer's `maxDeposit`, of its overrides or the plugin. Absent without one. */
+        // The payer's `maxDeposit`, of its overrides or the plugin. Absent without one.
         maxDeposit: string | undefined
         overrides: mpp.Overrides
         parameters: Parameters<mpp.Payer['session']>[0]

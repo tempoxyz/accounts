@@ -162,7 +162,16 @@ export const accounts = Accounts.create({
 
 :::
 
-A new guest account holds no funds. If the guest account holds less than the payment, the page shows its address for a transfer, and reads the balance again while funds arrive. On a test chain whose faucet drips the token, Add funds and pay requests the faucet first.
+A new guest account holds no funds. If the guest account holds less than the payment, Deposit opens Tempo ID's deposit pages for the guest account, in the payment's frame or its popup, on every chain. The guest request proves the guest account in place of a sign-in.
+
+| Deposit method        | For a guest                                            |
+| --------------------- | ------------------------------------------------------ |
+| Tempo transfer        | Offered on every chain, to the guest account's address |
+| EVM bridge            | Offered on Tempo mainnet, for an OUSD payment          |
+| Buy MACH              | Not offered, since its cards and receipts need a user  |
+| Swap from the balance | Not offered, since the key pair signs only the payment |
+
+Done returns to the payment page with the same checkout, and Pay enables once the funds arrive. On a test chain whose faucet drips the token, Add funds and pay requests the faucet first.
 
 The key pair signs only a transaction that makes exactly the requested transfer, and signs one transaction for each call. The fee follows the rules of every other account: if Tempo ID's relay sponsors it, the sponsor pays, and otherwise the guest account pays it.
 
@@ -297,7 +306,7 @@ export const accounts = Accounts.create({
 
 ### Pay MPP charges
 
-With a guest session, the <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin pays each charge and voucher with the key pair, and sends no Tempo ID identity. No access key limits bound the guest account, so a charge needs <SourceLink name="mpp.maxAmount" path="src/mpp/index.ts">`maxAmount`</SourceLink>, and a payment session <SourceLink name="mpp.maxAmount.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>.
+With a guest session, the <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin pays each charge and voucher with the key pair, and sends no Tempo ID identity. No access key limits bound the guest account, so a charge needs <SourceLink name="mpp.maxAmount" path="src/mpp/index.ts">`maxAmount`</SourceLink>, and a payment session <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>.
 
 | Without the cap          | The error                                                                                                                                                                                                |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -389,7 +398,7 @@ export const accounts = Accounts.create({
 ## Limitations
 
 - Only listed tokens pay on the payment page. A payment that needs a swap shows a shortfall.
-- Funds reach a guest account only by a transfer to its address, or from a test chain's faucet. The deposit pages and Buy MACH need a sign-in.
+- The deposit pages offer a guest no Buy MACH and no swap. The EVM bridge pays only an OUSD payment on Tempo mainnet.
 - A guest session holds no access key, and signs no challenge, so it takes no `accessKey`, `challenge`, or `siwe` sign-in, and pays no MPP subscription.
 - A backend sign-in, through the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, never offers a guest.
 - A guest account has no passkey and no Tempo ID user, and no sign-in turns it into a configurable account.
