@@ -50,6 +50,13 @@ export type ChangeOptions = {
    */
   sent?: string | undefined
   /**
+   * Whether the store holds the session that an update commits, such as tokens that a refresh read
+   * from the store. The commit of an update then writes nothing, and posts no message. A change
+   * without `update`, such as a sign-in, always writes. After a failed write, the commit writes too.
+   * Defaults to `false`.
+   */
+  stored?: boolean | undefined
+  /**
    * Whether the change updates the current session's tokens, such as a refresh, which any other
    * change overtakes, so an update never writes an earlier user's tokens.
    */
@@ -356,10 +363,15 @@ export function create(options: create.Options): create.ReturnType {
   /** Sets the session, and counts the change. */
   function set(
     session: Session.Any | undefined,
-    options: { renewing?: Session.Any | undefined; signIn?: boolean } = {},
+    options: {
+      renewing?: Session.Any | undefined
+      saved?: boolean | undefined
+      signIn?: boolean
+    } = {},
   ) {
     actor?.send({
       renewing: options.renewing,
+      saved: options.saved,
       session,
       signIn: options.signIn,
       type: 'set',
@@ -1735,7 +1747,12 @@ export function create(options: create.Options): create.ReturnType {
           const unread =
             !!kept && kept !== session && !kept.account && !kept.accessKey
           // A restore, such as `authorize`, reads the same Tempo ID session, so it overtakes none.
-          set(kept, { signIn })
+          // An update of the session that the store holds writes nothing, so the other instances on
+          // the store read no message, and take no lock to read the store again.
+          set(kept, {
+            saved: !!options.update && !!options.stored && !writes?.failed(),
+            signIn,
+          })
           if (signIn) signedIn = Date.now()
           // Tempo ID issued the tokens before the commit, so only a logout from now on ends them.
           const issued = context()
@@ -3118,6 +3135,11 @@ export namespace machines {
        */
       nested: (args) =>
         args.context.delegations > 0 && args.context.authorizations === 1,
+      /** Whether the store holds the session that a `set` sets, so no write follows. */
+      saved: (args) => {
+        assertEvent(args.event, 'set')
+        return !!args.event.saved
+      },
       /** Whether the instance holds no session, so no sign-in followed the sign-out. */
       sessionless: (args) => !args.context.session,
       /** Whether {@link select} selects `params.status` for the context. */
@@ -3180,8 +3202,11 @@ export namespace machines {
       'refusal.start': { actions: 'refusing' },
       'renewing.move': { actions: 'move', target: '.settling' },
       save: { actions: 'save' },
-      // The write follows the assignment, so it saves the new session.
-      set: { actions: ['set', 'save'], target: '.settling' },
+      // The write follows the assignment, so it saves the new session, unless the store holds it.
+      set: [
+        { actions: 'set', guard: 'saved', target: '.settling' },
+        { actions: ['set', 'save'], target: '.settling' },
+      ],
       signOut: { actions: ['signOut', 'advance', 'save'], target: '.settling' },
       'signOut.empty': { actions: ['empty', 'save'], target: '.settling' },
       'signOut.finish': { actions: 'finish' },
@@ -3427,6 +3452,8 @@ export namespace machines {
            * this instance renews it, and the status shows it while one runs.
            */
           renewing?: Session.Any | undefined
+          /** Whether the store holds the new session already, so the runner writes nothing. */
+          saved?: boolean | undefined
           /** The new session, or `undefined` to empty it. */
           session: Session.Any | undefined
           /** Whether the change is a sign-in, which overtakes a restore that started before it. */

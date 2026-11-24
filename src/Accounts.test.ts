@@ -210,6 +210,32 @@ describe('create', () => {
       user: { email: 'user@example.com', id: 'user_1' },
     })
 
+  test('saves a sign-in that a plugin commits with `stored`, which applies only to an update', async () => {
+    const store = Store.memory()
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'cli:acme-deploy',
+      plugins: [
+        Plugin.from({
+          actions: (context) => ({
+            commit: (session: Session.Any) =>
+              context.session.change({ stored: true }).commit(session),
+          }),
+          id: 'test',
+        }),
+      ],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+
+    await accounts.test.commit(session())
+
+    expect(
+      ((await store.getItem(name)) as { state: { session: Session.Any } }).state
+        .session.refreshToken,
+    ).toMatchInlineSnapshot(`"refresh-token"`)
+  })
+
   test('keeps the session of a `cli:` client ID without a store in the shared file of `TEMPO_HOME`, which a later instance restores', async () => {
     const first = create({ clientId: 'cli:acme-deploy' })
     await first.test.commit(session())
