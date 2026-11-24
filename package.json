@@ -179,7 +179,7 @@
     "mppx": ">=0.19.0",
     "react": ">=18",
     "react-native-get-random-values": ">=1",
-    "viem": "^2.57.20"
+    "viem": "^2.58.6"
   },
   "peerDependenciesMeta": {
     "@playwright/test": {
