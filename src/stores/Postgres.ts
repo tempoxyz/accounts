@@ -126,18 +126,15 @@ export function create(
       while (true) {
         // A refused `on conflict do update` still locks the row of the holder. If the client of this
         // replica runs inside a transaction, that lock blocks the release of the holder until the
-        // transaction ends. So the insert does nothing on a conflict, and an `update` takes only an
-        // expired lease, since it locks only the rows that match.
-        const inserted = await client.query(
-          `insert into ${table} (key, value, expires_at) values ($1, ${value}, null) on conflict (key) do nothing returning key`,
+        // transaction ends. So the `update` takes only an expired lease, since it locks only the
+        // rows that match, and the insert does nothing on a conflict. One statement runs both, so
+        // each attempt of a waiter is one round trip. The insert runs only if the `update` took no
+        // row.
+        const taken = await client.query(
+          `with updated as (update ${table} set value = ${value}, expires_at = null where key = $1 and coalesce((value::json->>'until')::bigint, 0) <= ${now} returning key), inserted as (insert into ${table} (key, value, expires_at) select $1, ${value}, null where not exists (select 1 from updated) on conflict (key) do nothing returning key) select key from updated union all select key from inserted`,
           [name, token, lease, holdLimit],
         )
-        if (inserted.rows.length > 0) break
-        const updated = await client.query(
-          `update ${table} set value = ${value}, expires_at = null where key = $1 and coalesce((value::json->>'until')::bigint, 0) <= ${now} returning key`,
-          [name, token, lease, holdLimit],
-        )
-        if (updated.rows.length > 0) break
+        if (taken.rows.length > 0) break
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
       // A hold that runs longer than the lease, such as a slow refresh, renews it, so no other replica

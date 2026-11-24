@@ -208,7 +208,9 @@ export class RetryClosedError extends Error {
  * this app holds on the client's chain, and that expired, rejects before the node receives it, with
  * `Accounts.SignedOutError`, or `Accounts.AccessKeyRequiredError` while an access key on another
  * chain keeps the session. The rejection starts a read of the session, which empties an expired
- * session, so the status changes to `signedOut`. Outside a page, an instance with the `device`
+ * session, so the status changes to `signedOut`. Outside a page, a read of the client's account
+ * throws `Accounts.SignedOutError` once the status is `signedOut`, so a standalone Viem action, such as
+ * `Actions.token.transferSync(accounts.viem, …)`, rejects with it too. Outside a page, an instance with the `device`
  * plugin, such as a CLI's, retries a low balance and a spent limit through `device.request`, whose
  * `onCode` shows the code.
  *
@@ -2079,6 +2081,10 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           else if (
             within === false ||
             ((within === undefined || requested) &&
+              !(
+                failure.spent &&
+                Address.isEqual(failure.spent, current.keyAuthorization.keyId)
+              ) &&
               !(await spent(current, {
                 chainId,
                 limits: Retry.counted(current.keyAuthorization, {
@@ -2304,7 +2310,19 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         const account = (() => {
           if (!session)
             return Signer.live(
-              () => (renews ? current_renewing(chainId) : current(chainId)),
+              () => {
+                if (renews) return current_renewing(chainId)
+                const account = current(chainId)
+                if (!account || page) return account
+                if (context.session.status.get().status !== 'signedOut')
+                  return account
+                // Outside a page, no retry renews a held session that expired, so its account reads
+                // as signed out, as the status does. Viem reads the account before it wraps an
+                // action's errors, so a standalone action rejects with `Accounts.SignedOutError`.
+                // The read of the session empties it, as the refusal of a transaction does.
+                void context.session.load().catch(() => undefined)
+                return undefined
+              },
               {
                 // A renewal of an expired session holds no session, and `session.get` returns
                 // its result, as it does in `pending`.
