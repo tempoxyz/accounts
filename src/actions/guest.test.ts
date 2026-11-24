@@ -120,6 +120,87 @@ describe('Actions.guest.pay', () => {
     expect(created).not.toBe(first)
   })
 
+  test('refuses a shortfall above the most that one purchase sells, before the purchase page', async () => {
+    const results = await Promise.all(
+      ['100', '100.000001', '250'].map(async (amount) => {
+        const auth = Accounts.from({
+          clientId: 'client_test',
+          store: Store.memory(),
+          url,
+        })
+
+        // A new guest account holds no MACH, so the shortfall is the amount, and no read runs.
+        const error = await Guest.pay(auth, {
+          amount,
+          to,
+          token: 'mach',
+        }).catch((error: unknown) => error)
+
+        return error instanceof Accounts.RequestError
+          ? {
+              amount,
+              field: error.field,
+              message: error.message,
+              meta: {
+                ...error.meta,
+                // The guest account's address is random, so the result holds whether the meta names it.
+                account: error.meta?.account === (await Guest.get(auth)),
+              },
+              reason: error.reason,
+            }
+          : { amount, error: (error as Error).name }
+      }),
+    )
+
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "amount": "100",
+          "error": "Actions.account.PageRequiredError",
+        },
+        {
+          "amount": "100.000001",
+          "field": "account",
+          "message": "Insufficient balance: the guest account lacks 100.000001 MACH, and one purchase sells at most 100 MACH. Pay at most 100 MACH.",
+          "meta": {
+            "account": true,
+            "amount": "100000001",
+            "symbol": "MACH",
+            "token": "0x20c000000000000000000000f37de3740adec032",
+          },
+          "reason": "insufficient_balance",
+        },
+        {
+          "amount": "250",
+          "field": "account",
+          "message": "Insufficient balance: the guest account lacks 250 MACH, and one purchase sells at most 100 MACH. Pay at most 100 MACH.",
+          "meta": {
+            "account": true,
+            "amount": "250000000",
+            "symbol": "MACH",
+            "token": "0x20c000000000000000000000f37de3740adec032",
+          },
+          "reason": "insufficient_balance",
+        },
+      ]
+    `)
+  })
+
+  test('keeps a store that only the process holds outside a page, where no purchase page opens', async () => {
+    const store = Store.memory()
+    const auth = Accounts.from({ clientId: 'client_test', store, url })
+
+    const error = await Guest.pay(auth, {
+      amount: '1',
+      to,
+      token: 'mach',
+    }).catch((error: unknown) => error)
+
+    expect(store.local).toBe(true)
+    expect(error).toBeInstanceOf(AccountActions.PageRequiredError)
+    expect(await Guest.get(auth)).toMatch(/^0x[0-9a-fA-F]{40}$/)
+  })
+
   test('refuses a store that keeps each value as JSON', async () => {
     const auth = Accounts.from({
       clientId: 'client_test',
@@ -301,6 +382,47 @@ describe('Actions.guest.check', () => {
       })()
 
       expect(result).toBe(row.expected)
+    })
+})
+
+describe('machines.purchasable', () => {
+  /** Returns Tempo ID's refusal of a preparation with `reason`. */
+  const refusal = (reason: Accounts.RequestError.Reason) =>
+    new Accounts.RequestError({
+      code: 'invalid_request',
+      message: 'Refused.',
+      reason,
+      status: 409,
+    })
+
+  /** The failure of the check of a prepared transaction that is no Tempo transaction. */
+  const checked = (() => {
+    try {
+      return Guest.check('0x1234', { amount: 1_000_000n, chainId: 4217, to })
+    } catch (error) {
+      return error
+    }
+  })()
+
+  const rows = [
+    { error: refusal('insufficient_balance'), expected: true },
+    { error: refusal('cross_site_request'), expected: false },
+    { error: refusal('invalid_field'), expected: false },
+    { error: refusal('rate_limited'), expected: false },
+    { error: refusal('recipient_not_permitted'), expected: false },
+    { error: refusal('rejected'), expected: false },
+    { error: refusal('upstream_unavailable'), expected: false },
+    { error: checked, expected: false },
+    {
+      error: new DOMException('The operation was aborted.', 'AbortError'),
+      expected: false,
+    },
+    { error: new TypeError('fetch failed'), expected: false },
+  ] as const
+
+  for (const row of rows)
+    test(`${row.expected ? 'buys' : 'throws'} for ${row.error instanceof Accounts.RequestError ? (row.error.reason ?? row.error.field) : (row.error as Error).name}`, () => {
+      expect(machines.purchasable(row.error)).toBe(row.expected)
     })
 })
 
@@ -501,17 +623,43 @@ describe('machines.purchase', () => {
     `)
   })
 
-  test('ends failed with the error of a read', async () => {
-    const purchase = start({ balances: [] })
+  test('counts a failed read as no MACH yet, and reads again until a read holds the amount', async () => {
+    const purchase = start({
+      balances: [new Error('The read failed.'), 1_000_000n],
+      delays: { pollInterval: 0 },
+    })
 
     purchase.actor.send({ activated: true, type: 'purchase.start' })
     purchase.actor.send({ type: 'popup.return' })
     await waitFor(purchase.actor, (snapshot) => snapshot.status === 'done')
 
-    expect(purchase.actor.getSnapshot().value).toMatchInlineSnapshot(`"failed"`)
+    expect(purchase.actor.getSnapshot().value).toMatchInlineSnapshot(`"funded"`)
+    expect(purchase.actor.getSnapshot().context.error).toBeUndefined()
+    expect(purchase.effects).toMatchInlineSnapshot(`
+      [
+        "popup.start",
+        "popup.stop",
+        "balance.start",
+        "balance.start",
+      ]
+    `)
+  })
+
+  test('ends short, not failed, when each read fails until the timeout', async () => {
+    const purchase = start({
+      balances: [],
+      delays: { pollInterval: 0, pollTimeout: 50 },
+    })
+
+    purchase.actor.send({ activated: true, type: 'purchase.start' })
+    purchase.actor.send({ type: 'popup.return' })
+    await waitFor(purchase.actor, (snapshot) => snapshot.status === 'done')
+
+    expect(purchase.actor.getSnapshot().value).toMatchInlineSnapshot(`"short"`)
+    expect(purchase.actor.getSnapshot().context.error).toBeUndefined()
     expect(
-      (purchase.actor.getSnapshot().context.error as Error).message,
-    ).toMatchInlineSnapshot(`"The read failed."`)
+      purchase.effects.filter((effect) => effect === 'balance.start').length,
+    ).toBeGreaterThan(1)
   })
 
   test('reads the balance again after the interval, until a read holds the amount', async () => {
@@ -681,8 +829,9 @@ describe('machines.purchase', () => {
 
   /**
    * Starts a purchase of 1 MACH, with `delays` in place of its own, and records the start and stop
-   * of each invoked effect, in order. Each read of the balance returns the next of `balances`, and
-   * a read past them fails. With `blocked`, the popup reports that the browser blocked it.
+   * of each invoked effect, in order. Each read of the balance returns the next of `balances`, or
+   * fails with it for an error, and a read past them fails. With `blocked`, the popup reports that
+   * the browser blocked it.
    */
   function start(options: start.Options = {}) {
     const balances = [...(options.balances ?? [])]
@@ -696,8 +845,8 @@ describe('machines.purchase', () => {
               effects.push('balance.stop'),
             )
             const balance = balances.shift()
-            if (balance === undefined)
-              return Promise.reject(new Error('The read failed.'))
+            if (balance === undefined || balance instanceof Error)
+              return Promise.reject(balance ?? new Error('The read failed.'))
             return Promise.resolve(balance)
           }),
           offer: fromCallback(() => {
@@ -738,8 +887,8 @@ describe('machines.purchase', () => {
 
 declare namespace start {
   type Options = {
-    /** The balance of each read, in base units. */
-    balances?: readonly bigint[] | undefined
+    /** The balance of each read, in base units, or the error of a read that fails. */
+    balances?: readonly (bigint | Error)[] | undefined
     /** Whether the browser blocks the popup. */
     blocked?: boolean | undefined
     /** Milliseconds of each delay of the purchase, in place of the module's. */

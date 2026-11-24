@@ -53,6 +53,12 @@ const mach = {
   decimals: 6,
 } as const
 
+/**
+ * The most MACH that one purchase on Tempo ID's purchase page sells, in base units. The page rounds
+ * the shortfall up to the cent, sells at least 5 MACH, and refuses a shortfall above 100 MACH.
+ */
+const purchaseMaximum = 100_000_000n
+
 /** Milliseconds between two reads of the guest account's balance after a purchase. */
 const pollInterval = 1_000
 
@@ -192,7 +198,8 @@ export declare namespace get {
  * preparation of the transfer, whose fee Tempo ID's sponsor pays. A new guest account holds no MACH,
  * so it reads neither. If the balance is below `amount`, Tempo ID's purchase page opens in a popup,
  * and sells the MACH that the account lacks with Apple Pay or Google Pay: at least 5 MACH, and at
- * most 100 MACH. Outside a user gesture, a dialog offers the popup, and its Continue opens it. Once
+ * most 100 MACH. A refusal of the preparation for another reason than the balance throws before the
+ * purchase. Outside a user gesture, a dialog offers the popup, and its Continue opens it. Once
  * the balance holds `amount`, the transfer prepares again. The action checks that the prepared
  * transaction makes the requested transfer and nothing else, signs it with the key pair, and Tempo
  * ID sends it. The action resolves once the chain includes the transfer. A prepared transfer stays
@@ -201,12 +208,15 @@ export declare namespace get {
  * @throws {RequestError} With the reason `invalid_field` for an `amount`, a `to`, or a `memo` that
  *   `Actions.account.pay` refuses, `invalid_chain` for a chain other than Tempo mainnet or a local
  *   Tempo node, and `unsupported_token` for a token other than MACH, each before any request.
- *   `access_denied` for a Cancel on the purchase page. `invalid_request` with the field
- *   `transaction` for a prepared transaction that makes anything but the requested transfer, which
- *   the key pair never signs. When Tempo ID refuses the request, with one of these `reason` values,
+ *   `invalid_request` with the field `store` in a browser page for a store that sets `local`, such
+ *   as `Store.memory`, before the guest account is created, since a page load loses the guest
+ *   account and its MACH. `access_denied` for a Cancel on the purchase page. `invalid_request`
+ *   with the field `transaction` for a prepared transaction that makes anything but the requested
+ *   transfer, which the key pair never signs. When Tempo ID refuses the request, with one of these `reason` values,
  *   which [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md) describes:
  *   - `insufficient_balance`: The guest account holds less MACH than `amount`. The action also throws
- *     it when the purchased MACH does not reach the account within 30 seconds.
+ *     it before the purchase page opens when the guest account lacks more than 100 MACH, and when
+ *     the purchased MACH does not reach the account within 30 seconds.
  *   - `invalid_field`: A field of the request is malformed, such as a chain where Tempo ID sells no
  *     MACH, or the signed transaction is not the prepared transfer.
  *   - `cross_site_request`: The request holds no origin of the app's registered redirect URIs.
@@ -272,6 +282,17 @@ export async function pay(
     })
   signal?.throwIfAborted()
   const store = storeOf(auth)
+  // A page load empties a store that only the page holds, and with it the guest account and the MACH
+  // that a purchase sends to it. Outside a page, no purchase page opens, so such a store only pays
+  // from the balance that the guest account holds.
+  if (store.local && typeof document !== 'undefined')
+    throw new RequestError({
+      code: 'invalid_request',
+      field: 'store',
+      message:
+        'Invalid store: it holds its values only in this page, and a page load loses the guest account and its MACH. Keep the guest account in a store that persists across page loads, such as the default.',
+      status: 0,
+    })
 
   const { created, keyPair } = await load(store, { key: keyOf(auth) })
   const address = Address.fromPublicKey(keyPair.publicKey, { checksum: true })
@@ -358,14 +379,33 @@ export async function pay(
         balance(),
         prepare().catch((error: unknown) => ({ error })),
       ])
-  if (held >= required && prepared) {
-    if ('error' in prepared) throw prepared.error
-    return await send(prepared)
-  }
+  if (prepared && 'error' in prepared) {
+    // A purchase fixes only a refusal for the balance. Any other refusal, such as of the recipient,
+    // or a prepared transaction that fails the check, ends the payment before the card pays.
+    if (held >= required || !machines.purchasable(prepared.error))
+      throw prepared.error
+  } else if (prepared && held >= required) return await send(prepared)
+
+  const shortfall = required - held
+  // The purchase page refuses a larger shortfall, so no card pays for a payment that stays short.
+  if (shortfall > purchaseMaximum)
+    throw new RequestError({
+      code: 'invalid_request',
+      field: 'account',
+      message: `Insufficient balance: the guest account lacks ${formatUnits(shortfall, mach.decimals)} MACH, and one purchase sells at most ${formatUnits(purchaseMaximum, mach.decimals)} MACH. Pay at most ${formatUnits(held + purchaseMaximum, mach.decimals)} MACH.`,
+      meta: {
+        account: address,
+        amount: shortfall.toString(),
+        symbol: 'MACH',
+        token: mach.address,
+      },
+      reason: 'insufficient_balance',
+      status: 0,
+    })
 
   await buy(auth, {
     account: address,
-    amount: formatUnits(required - held, mach.decimals),
+    amount: formatUnits(shortfall, mach.decimals),
     balance,
     chainId,
     redirectUri: options.redirectUri,
@@ -542,7 +582,7 @@ function keyOf(auth: Config) {
  * refused read or write throws, so no new key pair replaces a stored one, and no purchase pays a key
  * pair that the store lost.
  */
-async function load(store: Store, options: { key: string }) {
+async function load(store: Store, options: load.Options) {
   const run = async () => {
     const held = await read(store, options)
     if (held) return { created: false, keyPair: held }
@@ -559,11 +599,18 @@ async function load(store: Store, options: { key: string }) {
   return await run()
 }
 
+declare namespace load {
+  type Options = {
+    /** The store's entry of the guest account. */
+    key: string
+  }
+}
+
 /**
  * Returns the guest account's key pair from the store, or `undefined` without one. Throws for a
  * value that is no key pair, which the action never replaces.
  */
-async function read(store: Store, options: { key: string }) {
+async function read(store: Store, options: read.Options) {
   const value = await store.getItem(options.key)
   if (value === undefined || value === null) return undefined
   const keyPair = value as Partial<WebCryptoP256.createKeyPair.ReturnType>
@@ -577,6 +624,13 @@ async function read(store: Store, options: { key: string }) {
   throw new Error(
     'Invalid guest account: its entry of the store holds no key pair. Remove the entry with `guest.disconnect`, then pay again.',
   )
+}
+
+declare namespace read {
+  type Options = {
+    /** The store's entry of the guest account. */
+    key: string
+  }
 }
 
 /**
@@ -666,12 +720,12 @@ export namespace machines {
    * | `offering`        | Outside a user gesture, a dialog offers the popup.                       |
    * | `watching`        | The popup holds the purchase page, and a dialog names its window.        |
    * | `polling.reading` | The page returned, and a read of the balance runs.                       |
-   * | `polling.waiting` | The last read held less than `required`. The next read follows.          |
+   * | `polling.waiting` | A read failed or held less than `required`. The next read follows.       |
    * | `funded`          | The balance holds `required`.                                            |
    * | `short`           | The balance held less than `required` until `pollTimeout`.               |
    * | `cancelled`       | The user closed the popup, or selected Cancel on a dialog.               |
    * | `blocked`         | The browser blocked the popup.                                           |
-   * | `failed`          | The page refused the purchase, or a read failed. `context.error` holds it. |
+   * | `failed`          | The page refused the purchase. `context.error` holds the refusal.        |
    * | `aborted`         | The signal aborted.                                                      |
    */
   export const purchase = setup({
@@ -762,13 +816,8 @@ export namespace machines {
                 },
                 { target: 'waiting' },
               ],
-              onError: {
-                actions: {
-                  params: (args) => ({ error: args.event.error }),
-                  type: 'fail',
-                },
-                target: '#purchase.failed',
-              },
+              // A read that fails, such as for a rate limit, counts as no MACH yet.
+              onError: { target: 'waiting' },
               src: 'balance',
             },
           },
@@ -855,5 +904,17 @@ export namespace machines {
    */
   export function status(snapshot: purchase.Snapshot) {
     return typeof snapshot.value === 'string' ? snapshot.value : 'polling'
+  }
+
+  /**
+   * Returns whether a purchase can fix `error`, the failure of Tempo ID's preparation of a guest
+   * payment: only Tempo ID's refusal with `insufficient_balance`. Every other failure, such as
+   * `recipient_not_permitted`, `rate_limited`, or a prepared transaction that fails the check,
+   * ends the payment before the purchase page opens.
+   */
+  export function purchasable(error: unknown) {
+    return (
+      error instanceof RequestError && error.reason === 'insufficient_balance'
+    )
   }
 }

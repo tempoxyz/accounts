@@ -842,7 +842,9 @@ describe('pay', () => {
     const held = await accounts.pay(payment).catch((error: unknown) => error)
 
     expect(created).toBeInstanceOf(AccountActions.PageRequiredError)
-    expect(held).toBeInstanceOf(AccountActions.PageRequiredError)
+    // No Tempo ID answers at the URL, so the preparation beside the read fails, which no purchase
+    // fixes, and the payment rejects before the purchase page.
+    expect(held).toBeInstanceOf(TypeError)
     expect(requests).toMatchInlineSnapshot(`
       [
         {
