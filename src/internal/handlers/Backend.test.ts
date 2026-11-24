@@ -294,6 +294,84 @@ describe('fetch', () => {
     `)
   })
 
+  test("GET /callback of one Tempo ID origin's sign-in keeps the sign-in in progress of another origin's instance on the same host and store, whose callback then completes", async () => {
+    const store = Store.memory()
+    const [own, other] = (
+      [
+        ['/accounts', 'http://127.0.0.1:9'],
+        ['/other', 'http://127.0.0.2:9'],
+      ] as const
+    ).map(([basePath, url]) =>
+      Accounts.create({
+        clientId: origin,
+        handler: { basePath },
+        plugins: [backend({ store })],
+        url,
+      }),
+    )
+    // The pending cookies of both instances share their names and path, so each callback carries both.
+    const jar = new Map<string, string>()
+    async function send(accounts: typeof own, path: string) {
+      const cookie = [...jar].map(([name, value]) => `${name}=${value}`)
+      const response = await accounts!.handler.fetch(
+        new Request(`${origin}${path}`, {
+          headers: { cookie: cookie.join('; ') },
+        }),
+      )
+      for (const entry of response.headers.getSetCookie()) {
+        const [pair = ''] = entry.split(';')
+        const index = pair.indexOf('=')
+        const value = pair.slice(index + 1)
+        if (value) jar.set(pair.slice(0, index), value)
+        else jar.delete(pair.slice(0, index))
+      }
+      return response
+    }
+    const states = []
+    for (const [accounts, path] of [
+      [own, '/accounts/auth/login?returnTo=/a'],
+      [other, '/other/auth/login?returnTo=/b'],
+    ] as const) {
+      const login = await send(accounts, path)
+      states.push(
+        new URL(login.headers.get('location')!).searchParams.get('state'),
+      )
+    }
+
+    const first = await send(
+      own,
+      `/accounts/auth/callback?error=access_denied&state=${states[0]}`,
+    )
+    const kept = [...jar.keys()].map((name) =>
+      name.replace(/^(__Host-tempo-id\.pending\.)[\w-]+$/, '$1<id>'),
+    )
+    const second = await send(
+      other,
+      `/other/auth/callback?error=access_denied&state=${states[1]}`,
+    )
+
+    expect({
+      cookies: [...jar.keys()],
+      kept,
+      locations: [first, second].map(
+        (response) => `${response.status} ${response.headers.get('location')}`,
+      ),
+    }).toMatchInlineSnapshot(`
+      {
+        "cookies": [],
+        "kept": [
+          "__Host-tempo-id.pending",
+          "__Host-tempo-id.return",
+          "__Host-tempo-id.pending.<id>",
+        ],
+        "locations": [
+          "302 /a?error=access_denied",
+          "302 /b?error=access_denied",
+        ],
+      }
+    `)
+  })
+
   test('GET /callback completes each of two sign-ins whose GET /login requests two tabs sent at once', async () => {
     const accounts = instance()
 

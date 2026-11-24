@@ -1119,7 +1119,7 @@ describe('backend', () => {
     `)
   })
 
-  test('complete redeems the code of a redirect in progress of an earlier version, which names no Tempo ID deployment', async () => {
+  test('complete redeems the code of a redirect in progress that names no Tempo ID issuer', async () => {
     const store = Store.memory()
     const requests: string[] = []
     const accounts = Accounts.create({

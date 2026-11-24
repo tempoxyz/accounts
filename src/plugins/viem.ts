@@ -1556,9 +1556,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         const onChain = accessKeyOn(before, { chainId })
         const previous = onChain ?? before?.accessKey ?? before?.accessKeys?.[0]
         if (!before || !previous) throw error
-        // A sign-in that named a resource in its own call holds tokens for that resource, so the new
-        // sign-in names it again, and the resource's API accepts its tokens.
-        const { resource = [] } = Api.grant(config, before.accessToken)
+        // A sign-in that named a resource in its own call holds tokens for that resource and its API
+        // scopes, so the new sign-in names them again, and the resource's API accepts its tokens.
+        const grant = Api.grant(config, before.accessToken)
         // An account that holds a live access key on the chain but signs nothing with it, such as
         // another app's access key by its public key, needs no new access key. An expired one renews.
         if (
@@ -1645,7 +1645,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           onChain &&
           AccessKey_internal.expired(onChain) &&
           config.resource === undefined &&
-          resource.length === 0
+          grant.resource === undefined
             ? context.session.change({ restore: true })
             : undefined
         const request = renewal
@@ -1731,7 +1731,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
               const authorization = await deviceRequests.get(config)!({
                 // The new tokens keep the API audiences and the API scopes of the replaced session's
                 // tokens.
-                ...Api.grant(config, before.accessToken),
+                ...grant,
                 accessKey,
                 funding: funding && {
                   amount: formatUnits(funding.amount, 6),
@@ -1773,7 +1773,19 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             return await Dialog.signIn(config, {
               accessKey,
               mode: 'iframe',
-              ...(resource.length > 0 ? { resource } : {}),
+              ...(grant.resource ? { resource: grant.resource } : {}),
+              // The dialog's `scope` replaces the instance's, so it names both, as the device grant
+              // adds the instance's.
+              ...(grant.scope
+                ? {
+                    scope: [
+                      ...new Set([
+                        ...config.scope.split(' '),
+                        ...grant.scope.split(' '),
+                      ]),
+                    ].join(' '),
+                  }
+                : {}),
               signal,
             }).catch((reason: unknown) => {
               if (
@@ -2784,7 +2796,8 @@ export declare namespace viem {
      * screen. If that authorization fails, such as for a third-party app, a passkey that must sign,
      * or no Tempo ID session of the same user, the sign-in shows. An instance with `resource`, or a
      * session whose sign-in named a resource, shows the sign-in, since the authorization requests no
-     * resource. The sign-in requests the resources of the session's access token again.
+     * resource. The sign-in requests the resources and the API scopes of the session's access token
+     * again.
      *
      * The new access key keeps the old one's expiry while it is in the future. An expired access
      * key's replacement takes the expiry of the instance's `accessKey`. Without it, the replacement

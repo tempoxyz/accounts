@@ -101,10 +101,9 @@ async function run(
   // as the viem retry does, and signs in with a redirect, which names the resource. An empty list
   // names Tempo ID's origin, as no `resource` does. A session whose sign-in named a resource in its
   // own call holds tokens for that resource too, also an expired session that a renewal replaces.
-  const scoped = held ?? context.session.renewing()
   if (
     Request.resources(config).length > 0 ||
-    (scoped?.accessToken && Api.grant(config, scoped.accessToken).resource)
+    scoped(held ?? context.session.renewing(), { config })
   ) {
     // Only a call that requests nothing beyond the held session returns it. A challenge, an access
     // key, a passkey, or another account needs a new authorization, which only a sign-in on a page
@@ -678,6 +677,25 @@ function holds(session: Session.Session, parameters: authorize.Options) {
     session.account?.address,
     session.address,
   ].some((entry) => entry !== undefined && Address.isEqual(entry, account))
+}
+
+/**
+ * Returns whether the access token of `session` names a resource outside Tempo ID, as the tokens of
+ * a sign-in that named `resource` in its own call do. `false` without a session or an access token.
+ */
+function scoped(
+  session: Session.Any | undefined,
+  options: scoped.Options,
+): boolean {
+  if (!session?.accessToken) return false
+  return Api.grant(options.config, session.accessToken).resource !== undefined
+}
+
+declare namespace scoped {
+  type Options = {
+    /** The instance's configuration, whose `url` and `scope` read the token. */
+    config: Plugin.Context['config']
+  }
 }
 
 /**
