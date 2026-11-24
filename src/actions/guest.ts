@@ -43,8 +43,8 @@ const chainIds: readonly number[] = [Chains.devIds.localnet, Chains.ids.mainnet]
  * so the guest account holds only the amount.
  */
 const fees = {
-  gas: 100_000n,
-  maxFeePerGas: 40_000_000_000n,
+  gas: 500_000n,
+  maxFeePerGas: 30_000_000_000n,
   maxPriorityFeePerGas: 0n,
 } as const
 
