@@ -13,10 +13,12 @@ import {
   custom,
   hashMessage,
   hexToBytes,
+  http,
   keccak256,
   type Transport,
 } from 'viem'
 import { generatePrivateKey, privateKeyToAccount, sign } from 'viem/accounts'
+import { mainnet } from 'viem/chains'
 import { parseSiweMessage } from 'viem/siwe'
 import { Account } from 'viem/tempo'
 import { describe, expect, test } from 'vite-plus/test'
@@ -703,8 +705,8 @@ describe('siwe.complete', () => {
     `)
   })
 
-  test('refuses a WebAuthn envelope above its size limit before any request, also in a wrapper', async () => {
-    const { sent, transport } = node({ answer: () => one })
+  test('refuses a WebAuthn envelope above its size limit on a Tempo chain before any request, also in a wrapper', async () => {
+    const { sent, transport } = closed()
     const { accounts } = instance({ transport })
     const account = privateKeyToAccount(generatePrivateKey())
     const envelope = `0x02${'11'.repeat(32_000)}` as const
@@ -737,6 +739,44 @@ describe('siwe.complete', () => {
           "signer",
         ],
         "sent": [],
+      }
+    `)
+  })
+
+  test("sends a signature of another chain that starts with the byte of a WebAuthn envelope to the account's code, whatever its size", async () => {
+    const { sent, transport } = closed()
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: origin,
+      plugins: [
+        backend({ store: Store.memory() }),
+        siwe({ chains: [mainnet.id] }),
+        viem({ chain: mainnet, transport }),
+      ],
+      url: 'http://127.0.0.1:9',
+    })
+    const account = privateKeyToAccount(generatePrivateKey())
+    const { id, message } = await accounts.siwe.start({
+      address: account.address,
+      chainId: mainnet.id,
+      request: new Request(`${origin}/api/siwe/challenge`),
+    })
+
+    const result = await accounts.siwe
+      .complete({
+        address: account.address,
+        id,
+        message,
+        signature: `0x02${'11'.repeat(32_000)}`,
+      })
+      .then(reason, reason)
+
+    expect({ result, sent }).toMatchInlineSnapshot(`
+      {
+        "result": "signer",
+        "sent": [
+          "eth_call",
+        ],
       }
     `)
   })
@@ -1320,6 +1360,22 @@ function instance(
     url: 'http://127.0.0.1:9',
   })
   return { accounts, store }
+}
+
+/**
+ * Returns an HTTP transport to a port where no node listens, and the method of each request that it
+ * sends. Each request fails, which a verification reads as a signature that does not verify.
+ */
+function closed() {
+  const sent: string[] = []
+  const transport = http('http://127.0.0.1:9', {
+    async onFetchRequest(request) {
+      const { method } = (await request.clone().json()) as { method: string }
+      sent.push(method)
+    },
+    retryCount: 0,
+  })
+  return { sent, transport }
 }
 
 /**
