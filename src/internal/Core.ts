@@ -595,7 +595,15 @@ export async function getSession(
   context: Plugin.Context,
   options: getSession.Options,
 ): Promise<Session.Any | undefined> {
-  const { delegate = (fn) => fn(), restore } = options
+  const { delegate = (fn) => fn() } = options
+  // A hook that throws, such as for a refused redirect callback, leaves the saved session in the
+  // store, so the read still settles the status. The read takes the restore's own read of the
+  // store, and a failed read keeps the hook's error.
+  const restore = (run: () => Promise<void> = options.restore) =>
+    run().catch(async (error: unknown) => {
+      await context.session.load().catch(() => undefined)
+      throw error
+    })
   // An authorization that runs now, such as `accounts.authorize` beside a sign-in, sets the session
   // that the read returns, so a read without a session waits for it, in place of a second
   // authorization.
@@ -649,7 +657,7 @@ export async function getSession(
   // One authorization spans the restore, so the status shows no sign-out between the two.
   // The callbacks run inside the authorization, so a session read in them waits for none.
   return await context.session.authorize(async () => {
-    await delegate(restore)
+    await restore(() => delegate(options.restore))
     const loaded = await context.session.load()
     if (loaded) return loaded
     // The mark is read after the restore, so a sign-out during a slow hook still applies.

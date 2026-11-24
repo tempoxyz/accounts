@@ -1322,7 +1322,9 @@ export type Accounts<
        * as offline, the store keeps the refresh token, or the instance when the store refuses it,
        * and the next `signOut` revokes it. A call that finds no session while an authorization
        * runs, such as `authorize` beside a sign-in, waits for it and returns its session. Makes no
-       * other request unless a hook does.
+       * other request unless a hook does. If a hook throws, such as for a refused redirect
+       * callback, the call reads the saved session before it rethrows, so `session.status` is
+       * `signedIn` or `signedOut`, not `pending`.
        *
        * With `reauthorize`, a call that finds no session, or an expired one, authorizes the
        * browser's Tempo ID session, as `authorize` does, unless a sign-out without `everywhere`
