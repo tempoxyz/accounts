@@ -163,7 +163,10 @@ export declare namespace check {
  * ```
  */
 export async function disconnect(auth: Config): Promise<void> {
-  await storeOf(auth).removeItem(keyOf(auth))
+  const store = storeOf(auth)
+  const key = keyOf(auth)
+  // The removal waits for a creation in progress, which would otherwise save the key pair after it.
+  await exclusive(store, { key }, () => store.removeItem(key))
 }
 
 /**
@@ -585,6 +588,31 @@ function keyOf(auth: Config) {
 }
 
 /**
+ * Runs `fn` while it holds the guest account's lock: a Web Lock, or else the store's `lock`. The
+ * creation and the removal of the guest account's key pair hold it, so neither undoes the other.
+ */
+async function exclusive<value>(
+  store: Store,
+  options: exclusive.Options,
+  fn: () => Promise<value>,
+): Promise<value> {
+  const locks = (globalThis.navigator as { locks?: LockManager } | undefined)
+    ?.locks
+  // The lock's name is no entry of the store, so a store that locks each entry never waits for the
+  // lock that its caller holds.
+  if (locks) return await locks.request(`${options.key}:exclusive`, fn)
+  if (store.lock) return await store.lock(`${options.key}:exclusive`, fn)
+  return await fn()
+}
+
+declare namespace exclusive {
+  type Options = {
+    /** The store's entry of the guest account. */
+    key: string
+  }
+}
+
+/**
  * Returns the guest account's key pair, or creates and saves one, and whether it created it. Web
  * Locks, or else the store's `lock`, serialize the calls, so two tabs keep one guest account. A
  * refused read or write throws, so no new key pair replaces a stored one, and no purchase pays a key
@@ -598,13 +626,7 @@ async function load(store: Store, options: load.Options) {
     await store.setItem(options.key, keyPair)
     return { created: true, keyPair }
   }
-  const locks = (globalThis.navigator as { locks?: LockManager } | undefined)
-    ?.locks
-  // The lock's name is no entry of the store, so a store that locks each entry never waits for the
-  // lock that its caller holds.
-  if (locks) return await locks.request(`${options.key}:exclusive`, run)
-  if (store.lock) return await store.lock(`${options.key}:exclusive`, run)
-  return await run()
+  return await exclusive(store, options, run)
 }
 
 declare namespace load {
