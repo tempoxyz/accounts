@@ -1,4 +1,5 @@
 import { Cards } from 'vocs'
+import { Demo } from '../../../../components/Demo.tsx'
 import { PageCard } from '../../../../components/PageCard.tsx'
 import { SourceLink } from '../../../../components/SourceLink.tsx'
 
@@ -8,7 +9,7 @@ import { SourceLink } from '../../../../components/SourceLink.tsx'
 
 A guest payment is a MACH transfer from a guest account: a root Tempo Account whose owner is a non-extractable WebCrypto P256 key pair that the app's page keeps in its own store. The visitor signs in nowhere. As a card checkout charges a guest without an account, the app charges the visitor in one call.
 
-<SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> with <SourceLink name="pay.guest" path="src/actions/account.ts">`guest: true`</SourceLink> creates the guest account at the first payment. Each payment first asks Tempo ID to prepare the transfer, so Tempo ID refuses a payment that no purchase fixes, such as to a recipient that MACH's transfer policy does not permit, before the visitor pays. If the guest account holds less MACH than the amount, Tempo ID's purchase page opens in a popup, and sells the MACH that it lacks with Apple Pay or Google Pay. The guest account then signs the transfer, and Tempo ID's sponsor pays the network fee.
+<SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> with <SourceLink name="pay.guest" path="src/actions/account.ts">`guest: true`</SourceLink> creates the guest account at the first payment. Each payment first asks Tempo ID to prepare the transfer, so Tempo ID refuses a payment that no purchase fixes, such as to a recipient that MACH's transfer policy does not permit, before the visitor pays. If the guest account holds less MACH than the amount, Tempo ID's purchase page opens in a popup, and sells the MACH that it lacks with Apple Pay, Google Pay, or a card. The guest account then signs the transfer, and Tempo ID's sponsor pays the network fee.
 
 ```mermaid
 sequenceDiagram
@@ -31,9 +32,13 @@ sequenceDiagram
   ID-->>App: Transaction hash
 ```
 
+The demo pays MACH as a guest, shows the guest account's address, and forgets the guest account. Its default recipient is the initial merchant of MACH, which MACH's transfer policy permits.
+
 :::note
-Guest payments run only on Tempo mainnet, and each purchase is a real Apple Pay or Google Pay charge. So this page holds no demo.
+Guest payments run only on Tempo mainnet, so the demo runs there, unlike the other demos. Each purchase is a real charge of at least $5 to a card, Apple Pay, or Google Pay.
 :::
+
+<Demo name="AcceptGuestPayments" title="Accept a guest payment" />
 
 ## Walkthrough
 
@@ -88,7 +93,7 @@ export function Checkout() {
           const { transaction } = await accounts.pay({
             amount: '12.5',
             guest: true,
-            to: '0x000000000000000000000000000000000000dEaD',
+            to: '0xA74666CD3AAb591a2628e3eFa160530EC13f2f15',
             token: 'mach',
           })
           // [!code hl:end]
@@ -146,7 +151,7 @@ export function pay(order: string) {
     amount: '12.5',
     guest: true,
     memo: order,
-    to: '0x000000000000000000000000000000000000dEaD',
+    to: '0xA74666CD3AAb591a2628e3eFa160530EC13f2f15',
     token: 'mach',
   })
 }
@@ -186,7 +191,7 @@ export function pay() {
   return accounts.pay({
     amount: '12.5',
     guest: true,
-    to: '0x000000000000000000000000000000000000dEaD',
+    to: '0xA74666CD3AAb591a2628e3eFa160530EC13f2f15',
     token: 'mach',
   })
 }

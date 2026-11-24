@@ -862,6 +862,39 @@ test.describe('useSession', () => {
       })
     })
 
+  test('renews a held session whose access key expired, with no reload, and shows reauthorizing with no pending', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    // Tempo ID refuses an expiry that passed, so the expiry leaves time for a slow sign-in.
+    await page.goto(`${url}?expiry=15s`)
+    const before = await enter(page, { code, email })
+
+    await test.step('shows signedOut at the expiry of the access key', async () => {
+      await expect(page.locator('#history')).toHaveText(
+        'pending signedOut signedIn signedOut',
+        { timeout: 30_000 },
+      )
+      expect(Date.now() / 1000).toBeGreaterThan(before.key.expiry)
+      await capture('expired')
+    })
+
+    await test.step('renews the held session with reauthorizing and no pending', async () => {
+      const renewed = (
+        await Playwright.run(page, { name: 'Mount a session reader' })
+      ).value
+
+      await expect(page.locator('#history')).toHaveText(
+        'pending signedOut signedIn signedOut reauthorizing signedIn',
+      )
+      expect(renewed.email).toBe(email)
+      expect(renewed.key.id).not.toBe(before.key.id)
+      await capture('renewed')
+    })
+  })
+
   test('renews a session whose access key expired at a mount, and shows it meanwhile', async ({
     capture,
     code,

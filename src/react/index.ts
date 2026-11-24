@@ -42,7 +42,7 @@ import type * as Session from '../Session.js'
  *   reauthorizing --> signedIn: authorization returns a session
  *   reauthorizing --> signedOut: no Tempo ID session
  *   signedOut --> signedIn: sign-in
- *   signedOut --> reauthorizing: authorize after session.get emptied an expired session
+ *   signedOut --> reauthorizing: authorization of an expired session
  *   signedIn --> signedOut: signOut, or the access key expires
  * ```
  *

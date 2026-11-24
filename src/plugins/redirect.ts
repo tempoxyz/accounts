@@ -256,8 +256,9 @@ export function redirect(options: redirect.Options = {}) {
           // Without `open`, the sign-in leaves the page, so outside one, such as in Node, React
           // Native, a Web Worker or Deno with `--location`, it refuses before any read, and the
           // store keeps no PKCE verifier of a redirect that never leaves. An instance without a
-          // redirect URI has no redirect at all, so that refusal comes first.
-          if (!open && typeof window === 'undefined') {
+          // redirect URI has no redirect at all, so that refusal comes first. React Native sets
+          // `window` to its global object, without a document, so only `document` shows a page.
+          if (!open && typeof document === 'undefined') {
             if (context.config.redirectUri === undefined)
               throw new RedirectUriRequiredError()
             throw new TypeError(

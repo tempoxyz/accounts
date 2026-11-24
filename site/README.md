@@ -350,7 +350,7 @@ The link names the commit of the build, `git rev-parse HEAD`, which `vite.config
 
 ## Demos
 
-A demo is an interactive example that runs the package in the page, against Tempo ID and Tempo testnet. If the flow of a demo needs a server, the demo calls a [route of the site](#server).
+A demo is an interactive example that runs the package in the page, against Tempo ID and Tempo testnet. Only `AcceptGuestPayments` runs on Tempo mainnet, the one chain of guest payments, so each purchase in it is a real charge. If the flow of a demo needs a server, the demo calls a [route of the site](#server).
 
 `src/demos/<Name>.tsx` holds one demo. Its name is the title of its guide in PascalCase, such as `RevokeAccessKeys`, so each name is unique. A module that demos share is in `src/demos/<topic>/`. Its default export is the component, and its `accounts` export is the instance, which the reset control of the frame signs out. The instances of all demos share one stored session, so a demo that holds no session exports no `accounts`.
 
