@@ -79,7 +79,7 @@ export function passkey(options: passkey.Options = {}) {
       function ceremony(
         change: ReturnType<Plugin.Context['session']['change']>,
       ): NonNullable<passkey.Options['getFn']> {
-        let call: 'assertion' | 'account' = 'assertion'
+        let call: 'account' | 'assertion' = 'assertion'
         return async (parameters) => {
           const checked = call === 'assertion'
           call = 'account'
