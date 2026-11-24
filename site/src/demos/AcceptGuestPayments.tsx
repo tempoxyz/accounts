@@ -8,22 +8,7 @@
 
 import { Accounts } from 'accounts'
 import { viem } from 'accounts/plugins'
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useState,
-  useSyncExternalStore,
-} from 'react'
-import {
-  type ActorRefFrom,
-  assertEvent,
-  assign,
-  createActor,
-  fromPromise,
-  setup,
-  type SnapshotFrom,
-} from 'xstate'
+import { type ReactNode, useEffect, useState } from 'react'
 import { DemoButton, DemoStep } from '../components/Demo.tsx'
 import './guest/Guest.css'
 
@@ -43,69 +28,72 @@ const accounts = Accounts.create({
   plugins: [viem()],
 })
 
+/** A control of the demo. */
+type Action = 'forget' | 'pay'
+
+/** The action that runs, or how the last one failed. */
+type Status =
+  | { action: Action; type: 'pending' }
+  | { action: Action; message: string; type: 'failed' }
+  | { type: 'idle' }
+
+/** A payment of the guest account. */
+type Paid = {
+  /** The amount of MACH, as entered. */
+  amount: string
+  /** The hash of the transaction that holds the transfer. */
+  transaction: `0x${string}`
+}
+
 /**
  * Pays the entered amount of MACH to the entered recipient as a guest, shows the guest account's
  * address, and forgets the guest account.
  */
 export default function AcceptGuestPayments() {
-  const [actor, setActor] = useState<machines.guest.Actor>()
+  const [address, setAddress] = useState<`0x${string}`>()
   const [amount, setAmount] = useState('1')
+  const [paid, setPaid] = useState<Paid>()
   const [recipient, setRecipient] = useState<string>(merchant)
+  const [status, setStatus] = useState<Status>({ type: 'idle' })
 
-  // The actor lives only as long as the demo, so a reset or a change of page stops it. Its stop
-  // aborts the signal of the payment, so no purchase page opens after it.
-  useEffect(() => {
-    const actor = createActor(
-      machines.guest.provide({
-        actors: {
-          forget: fromPromise(() => accounts.guest.disconnect()),
-          pay: fromPromise<machines.guest.Paid, machines.guest.Payment>(
-            async (args) => {
-              const { amount, to } = args.input
-              const result = await accounts.pay({
-                amount,
-                guest: true,
-                memo: 'demo-order-1',
-                signal: args.signal,
-                to: to as `0x${string}`,
-                token: 'mach',
-              })
-              return { amount, transaction: result.transaction }
-            },
-          ),
-          read: fromPromise(() => accounts.guest.get()),
-        },
-      }),
-    ).start()
-    setActor(actor)
-    return () => {
-      actor.stop()
-    }
-  }, [])
+  /** Reads the guest account's address. A failed read shows no guest account. */
+  function read() {
+    void accounts.guest.get().then(setAddress, () => setAddress(undefined))
+  }
 
-  const subscribe = useCallback(
-    (onChange: () => void) => {
-      const subscription = actor?.subscribe(onChange)
-      return () => subscription?.unsubscribe()
-    },
-    [actor],
-  )
-  // Before the actor starts, such as in the server render, the demo shows no guest account.
-  const snapshot = useSyncExternalStore(
-    subscribe,
-    () => actor?.getSnapshot(),
-    () => undefined,
-  )
-  const address = snapshot?.context.address
-  const failure = snapshot?.context.failure
-  const paid = snapshot?.context.paid
-  const pending = snapshot && machines.pending(snapshot)
+  useEffect(read, [])
+
+  /** Runs `fn` as `action`, and shows its failure. */
+  function run(action: Action, fn: () => Promise<void>) {
+    setStatus({ action, type: 'pending' })
+    // The failure handler settles each rejection.
+    void fn().then(
+      () => setStatus({ type: 'idle' }),
+      (error: Error) => {
+        // A close of the purchase page ends the payment, so the demo shows no failure.
+        if (error.name === 'AbortError') return setStatus({ type: 'idle' })
+        if (
+          error instanceof Accounts.RequestError &&
+          error.code === 'access_denied'
+        )
+          return setStatus({
+            action,
+            message: 'The purchase was cancelled.',
+            type: 'failed',
+          })
+        setStatus({ action, message: error.message, type: 'failed' })
+      },
+    )
+  }
+
+  const pending = status.type === 'pending' ? status.action : undefined
+  const failed = status.type === 'failed' ? status : undefined
   const explorer = accounts.viem.chain.blockExplorers?.default.url
 
   /** Returns the failure of `action`, or `fallback` without one. */
-  function detail(action: machines.guest.Action, fallback?: ReactNode) {
-    if (failure?.action === action)
-      return <span role="alert">{failure.message}</span>
+  function detail(action: Action, fallback?: ReactNode) {
+    if (failed?.action === action)
+      return <span role="alert">{failed.message}</span>
     return fallback
   }
 
@@ -181,9 +169,22 @@ export default function AcceptGuestPayments() {
         <DemoButton
           disabled={pending !== undefined || !amount || !recipient}
           loading={pending === 'pay'}
-          // The send starts the payment within the click, so the purchase page's popup opens within it.
           onClick={() =>
-            actor?.send({ amount, to: recipient, type: 'pay.start' })
+            // The call starts within the click, so the purchase page's popup opens within it.
+            run('pay', async () => {
+              // The payment creates the guest account before Tempo ID answers, so a refused
+              // payment also shows its address.
+              const result = await accounts
+                .pay({
+                  amount,
+                  guest: true,
+                  memo: 'demo-order-1',
+                  to: recipient as `0x${string}`,
+                  token: 'mach',
+                })
+                .finally(read)
+              setPaid({ amount, transaction: result.transaction })
+            })
           }
         >
           {paid ? 'Pay again' : 'Pay as a guest'}
@@ -208,210 +209,17 @@ export default function AcceptGuestPayments() {
         <DemoButton
           disabled={!address || pending !== undefined}
           loading={pending === 'forget'}
-          onClick={() => actor?.send({ type: 'forget.start' })}
+          onClick={() =>
+            run('forget', async () => {
+              await accounts.guest.disconnect()
+              setAddress(undefined)
+              setPaid(undefined)
+            })
+          }
         >
           Forget guest
         </DemoButton>
       </DemoStep>
     </>
   )
-}
-
-export namespace machines {
-  /**
-   * The demo's guest account: the reads of its address, its payments, and its removal. The runner
-   * provides each effect as an invoked actor, so the exit of its state, or the stop of the actor,
-   * aborts it and discards its result. A payment ends in a read of the address.
-   *
-   * | State        | Meaning                                                                   |
-   * | ------------ | ------------------------------------------------------------------------- |
-   * | `forgetting` | The removal of the guest account's key pair runs.                         |
-   * | `idle`       | No effect runs.                                                           |
-   * | `paying`     | A payment of the guest account runs.                                      |
-   * | `reading`    | A read of the guest account's address runs. A start of an action ends it. |
-   */
-  export const guest = setup({
-    actions: {
-      /** Clears the failure of the last action. */
-      clear: assign({ failure: undefined }),
-      /** Holds the failure of `params.action`, if `params.error` shows one. */
-      fail: assign(
-        (_args, params: { action: guest.Action; error: unknown }) => {
-          const message = machines.message(params.error)
-          return {
-            failure:
-              message === undefined
-                ? undefined
-                : { action: params.action, message },
-          }
-        },
-      ),
-      /** Clears the guest account and its payment. */
-      forget: assign({ address: undefined, paid: undefined }),
-      /** Holds the payment. */
-      pay: assign((_args, params: { paid: guest.Paid }) => ({
-        paid: params.paid,
-      })),
-      /** Holds the guest account's address. */
-      read: assign((_args, params: { address: `0x${string}` | undefined }) => ({
-        address: params.address,
-      })),
-    },
-    actors: {
-      /** Removes the guest account's key pair from the store. The demo provides it. */
-      forget: fromPromise<void>(() => Promise.resolve()),
-      /** Pays as the guest account, and aborts the payment at its stop. The demo provides it. */
-      pay: fromPromise<guest.Paid, guest.Payment>((args) =>
-        Promise.resolve({ amount: args.input.amount, transaction: '0x' }),
-      ),
-      /** Returns the guest account's address, or `undefined` without one. The demo provides it. */
-      read: fromPromise<`0x${string}` | undefined>(() =>
-        Promise.resolve(undefined),
-      ),
-    },
-    types: {
-      context: {} as guest.Context,
-      events: {} as guest.Event,
-    },
-  }).createMachine({
-    context: { address: undefined, failure: undefined, paid: undefined },
-    id: 'guest',
-    initial: 'reading',
-    states: {
-      forgetting: {
-        entry: 'clear',
-        invoke: {
-          onDone: { actions: 'forget', target: 'idle' },
-          onError: {
-            actions: {
-              params: (args) => ({ action: 'forget', error: args.event.error }),
-              type: 'fail',
-            },
-            target: 'idle',
-          },
-          src: 'forget',
-        },
-      },
-      idle: {
-        on: { 'forget.start': 'forgetting', 'pay.start': 'paying' },
-      },
-      paying: {
-        entry: 'clear',
-        invoke: {
-          input: (args) => {
-            assertEvent(args.event, 'pay.start')
-            return { amount: args.event.amount, to: args.event.to }
-          },
-          onDone: {
-            actions: {
-              params: (args) => ({ paid: args.event.output }),
-              type: 'pay',
-            },
-            target: 'reading',
-          },
-          // The payment creates the guest account before Tempo ID answers, so a refused payment
-          // also reads its address.
-          onError: {
-            actions: {
-              params: (args) => ({ action: 'pay', error: args.event.error }),
-              type: 'fail',
-            },
-            target: 'reading',
-          },
-          src: 'pay',
-        },
-      },
-      reading: {
-        invoke: {
-          onDone: {
-            actions: {
-              params: (args) => ({ address: args.event.output }),
-              type: 'read',
-            },
-            target: 'idle',
-          },
-          // A failed read shows no guest account.
-          onError: {
-            actions: { params: { address: undefined }, type: 'read' },
-            target: 'idle',
-          },
-          src: 'read',
-        },
-        on: { 'forget.start': 'forgetting', 'pay.start': 'paying' },
-      },
-    },
-  })
-
-  /** The types of {@link guest}. */
-  export namespace guest {
-    /** A control of the demo. */
-    export type Action = 'forget' | 'pay'
-
-    /** The context of the machine. */
-    export type Context = {
-      /** The guest account's address. Absent before a read finds one, and after a removal. */
-      address: `0x${string}` | undefined
-      /** The failure of the last action, and its message. Absent once an action starts. */
-      failure: { action: Action; message: string } | undefined
-      /** The last payment of the guest account. Absent before one, and after a removal. */
-      paid: Paid | undefined
-    }
-
-    /** An event of the machine. */
-    export type Event =
-      /** The user selected "Forget guest". */
-      | { type: 'forget.start' }
-      /** The user selected "Pay as a guest" or "Pay again". */
-      | {
-          /** The amount of MACH, as entered. */
-          amount: string
-          /** The recipient, as entered. */
-          to: string
-          type: 'pay.start'
-        }
-
-    /** A payment of the guest account. */
-    export type Paid = {
-      /** The amount of MACH, as entered. */
-      amount: string
-      /** The hash of the transaction that holds the transfer. */
-      transaction: `0x${string}`
-    }
-
-    /** The input of a payment. */
-    export type Payment = {
-      /** The amount of MACH, as entered. */
-      amount: string
-      /** The recipient, as entered. */
-      to: string
-    }
-
-    /** A running machine. */
-    export type Actor = ActorRefFrom<typeof guest>
-
-    /** A snapshot of the machine. */
-    export type Snapshot = SnapshotFrom<typeof guest>
-  }
-
-  /**
-   * Returns the message of `error`, the failure of an action, or `undefined` for an `AbortError`.
-   * A close of the purchase page ends the payment with an `AbortError`, so the demo shows no
-   * failure.
-   */
-  export function message(error: unknown) {
-    if (error instanceof Error && error.name === 'AbortError') return undefined
-    if (
-      error instanceof Accounts.RequestError &&
-      error.code === 'access_denied'
-    )
-      return 'The purchase was cancelled.'
-    return error instanceof Error ? error.message : String(error)
-  }
-
-  /** Returns the action that runs, or `undefined` without one. */
-  export function pending(snapshot: guest.Snapshot): guest.Action | undefined {
-    if (snapshot.matches('forgetting')) return 'forget'
-    if (snapshot.matches('paying')) return 'pay'
-    return undefined
-  }
 }
