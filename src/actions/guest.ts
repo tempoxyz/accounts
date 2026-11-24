@@ -15,6 +15,17 @@ import {
   type Transport,
 } from 'viem'
 import { token as TokenActions } from 'viem/tempo/actions'
+import {
+  type ActorRefFrom,
+  assertEvent,
+  assign,
+  createActor,
+  fromCallback,
+  fromPromise,
+  type SnapshotFrom,
+  setup,
+  waitFor,
+} from 'xstate'
 import { type Config, RequestError } from '../Accounts.js'
 import * as Api from '../internal/Api.js'
 import * as Callback from '../internal/Callback.js'
@@ -42,11 +53,96 @@ const mach = {
   decimals: 6,
 } as const
 
-/** The most reads of the guest account's balance after a purchase. */
-const pollAttempts = 30
-
 /** Milliseconds between two reads of the guest account's balance after a purchase. */
 const pollInterval = 1_000
+
+/** Milliseconds that the purchased MACH has to reach the guest account after a purchase. */
+const pollTimeout = 30_000
+
+/**
+ * Returns `value`, a transaction that Tempo ID prepared for a guest payment, as a Tempo envelope to
+ * sign, if it makes the requested transfer of MACH and nothing else, and Tempo ID's sponsor pays its
+ * fee. The sender is the account that signs it, so the check reads no sender. The check reads no
+ * network.
+ *
+ * @throws {RequestError} `invalid_request` with the field `transaction` for any other value, such
+ *   as a transaction on another chain, with another call or more calls, with an access key or an
+ *   authorization, with a signature, or without the sponsor's marker.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const envelope = Actions.guest.check(transaction, {
+ *   amount: 12_500_000n,
+ *   chainId: 4217,
+ *   to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+ * })
+ * ```
+ */
+export function check(
+  value: unknown,
+  options: check.Options,
+): TxEnvelopeTempo.TxEnvelopeTempo {
+  const refused = (fault: string) =>
+    new RequestError({
+      code: 'invalid_request',
+      field: 'transaction',
+      message: `Invalid prepared transaction: ${fault} The guest account signs only the requested transfer. Try again.`,
+      status: 0,
+    })
+  if (
+    typeof value !== 'string' ||
+    !Hex.validate(value) ||
+    !value.startsWith('0x76')
+  )
+    throw refused('it is no Tempo transaction.')
+  const envelope = (() => {
+    try {
+      return TxEnvelopeTempo.deserialize(value as TxEnvelopeTempo.Serialized)
+    } catch {
+      throw refused('it is no Tempo transaction.')
+    }
+  })()
+
+  const expected = TokenActions.transfer.call({
+    amount: options.amount,
+    memo: options.memo,
+    to: options.to,
+    token: mach.address,
+  })
+  const [call, ...rest] = envelope.calls ?? []
+  if (envelope.chainId !== options.chainId)
+    throw refused('it is for another chain.')
+  if (!call || rest.length > 0) throw refused('it makes more than one call.')
+  if (
+    !call.to ||
+    !Address.isEqual(call.to, expected.to) ||
+    (call.value ?? 0n) !== 0n ||
+    call.data?.toLowerCase() !== expected.data.toLowerCase()
+  )
+    throw refused('its call is not the requested transfer.')
+  if (envelope.keyAuthorization || envelope.authorizationList?.length)
+    throw refused('it changes the account.')
+  // The sponsor's marker, so the guest account pays no fee from its MACH.
+  if (envelope.feePayerSignature !== null)
+    throw refused('no sponsor pays its fee.')
+  if (envelope.signature) throw refused('it holds a signature.')
+  return envelope
+}
+
+export declare namespace check {
+  type Options = {
+    /** The amount of the transfer, in base units. */
+    amount: bigint
+    /** The payment's chain. */
+    chainId: number
+    /** The transfer's memo, as hex. Absent for a transfer without one. */
+    memo?: `0x${string}` | undefined
+    /** The recipient's address. */
+    to: `0x${string}`
+  }
+}
 
 /**
  * Forgets the instance's guest account: removes its key pair from the store. The next guest payment
@@ -269,24 +365,12 @@ export async function pay(
   await buy(auth, {
     account: address,
     amount: formatUnits(required - held, mach.decimals),
+    balance,
     chainId,
     redirectUri: options.redirectUri,
+    required,
     signal,
   })
-  // The purchase page returns once the chain holds the purchase, so the first read usually holds
-  // it. A node behind the page's node reads it a block later.
-  for (let attempt = 1; (await balance()) < required; attempt++) {
-    if (attempt >= pollAttempts)
-      throw new RequestError({
-        code: 'invalid_request',
-        field: 'account',
-        message:
-          'Insufficient balance: the purchased MACH did not reach the guest account. Pay again once it arrives.',
-        reason: 'insufficient_balance',
-        status: 0,
-      })
-    await delay(pollInterval, { signal })
-  }
   return await send(await prepare())
 }
 
@@ -311,10 +395,11 @@ export declare namespace pay {
 }
 
 /**
- * Opens Tempo ID's purchase page for the guest account in a popup, and resolves once the page
- * returns the account. The popup opens within the gesture, or else from the Continue of a dialog.
- * Throws the page's refusal or Cancel as `RequestError`, and a close of the popup or the dialog as
- * an `AbortError`.
+ * Buys the MACH that the guest account lacks on Tempo ID's purchase page, and resolves once the
+ * guest account holds `required`. {@link machines.purchase} runs the purchase, and this function
+ * provides its effects: the popup within the gesture, or else from the Continue of a dialog, the
+ * dialog that names the popup's window, and the reads of the balance. Throws the page's refusal or
+ * Cancel as `RequestError`, and a close of the popup or the dialog as an `AbortError`.
  */
 async function buy(auth: Config, options: buy.Options): Promise<void> {
   const { account, signal } = options
@@ -339,29 +424,82 @@ async function buy(auth: Config, options: buy.Options): Promise<void> {
     display: 'popup',
     redirect_uri: redirectUri,
   }).toString()
-  // A popup blocker accepts `window.open` only within the gesture, which the reads before the
-  // purchase can outlast.
-  const popup = Popup.activated()
-    ? Popup.openPopup(url.href)
-    : await offer(url.href, { signal })
-  if (popup === null) throw new AccountActions.BlockedError()
+  // The dialogs' module loads from a chunk of its own, as `funding.open` loads it. It loads before
+  // the purchase starts, so the popup and its dialog open in one step. A gesture that expires
+  // meanwhile gets the dialog that offers the popup.
+  const Sheet = await import('../internal/Sheet.js')
+  const actor = createActor(
+    machines.purchase.provide({
+      actors: {
+        balance: fromPromise(() => options.balance()),
+        offer: fromCallback<machines.purchase.Event>((args) =>
+          Sheet.prompt({
+            label: 'Buy MACH with Tempo',
+            onCancel: () => args.sendBack({ type: 'offer.cancel' }),
+            // The machine opens the popup in the transition of this event, within the click.
+            onContinue: () => args.sendBack({ type: 'offer.continue' }),
+            text: 'Continue in a Tempo ID window to buy MACH.',
+          }),
+        ),
+        popup: fromCallback<machines.purchase.Event>((args) => {
+          const popup = Popup.openPopup(url.href)
+          if (popup === null) {
+            args.sendBack({ type: 'popup.blocked' })
+            return undefined
+          }
+          const unblock = Sheet.waiting({
+            onCancel: () => args.sendBack({ type: 'dialog.cancel' }),
+            popup,
+          })
+          const unwatch = Popup.watchPopup(popup, {
+            onCallback: (value) =>
+              args.sendBack(returned(value, { account, redirectUri })),
+            onClose: () => args.sendBack({ type: 'popup.close' }),
+            // The page takes input again once the popup closes, while a late return can still arrive.
+            onClosed: unblock,
+            origin: new URL(auth.url).origin,
+          })
+          return () => {
+            unblock()
+            unwatch()
+            popup.close()
+          }
+        }),
+      },
+    }),
+    { input: { required: options.required } },
+  ).start()
+  const abort = () => actor.send({ type: 'purchase.abort' })
+  signal?.addEventListener('abort', abort, { once: true })
 
-  const returned = await watch(auth, { popup, signal })
-  const refusal = Callback.error(returned, { redirectUri })
-  if (refusal) throw refusal
-  const value = Callback.parameter(returned, { name: 'account', redirectUri })
-  if (
-    value === undefined ||
-    !Address.validate(value, { strict: false }) ||
-    !Address.isEqual(value, account)
-  )
-    throw new RequestError({
-      code: 'invalid_request',
-      field: 'account',
-      message:
-        'Invalid `account` in the return URL: it is missing, or names another account than the guest account. Try again.',
-      status: 0,
-    })
+  try {
+    // An abort event never repeats for a later listener, so a signal that aborted before, such as
+    // during the creation of the key pair, ends the purchase before the popup opens.
+    if (signal?.aborted) abort()
+    else actor.send({ activated: Popup.activated(), type: 'purchase.start' })
+    const snapshot = await waitFor(
+      actor,
+      (snapshot) => snapshot.status === 'done',
+    )
+    const status = machines.status(snapshot)
+    if (status === 'funded') return
+    if (status === 'aborted') throw signal?.reason
+    if (status === 'blocked') throw new AccountActions.BlockedError()
+    if (status === 'cancelled') throw closed()
+    if (status === 'short')
+      throw new RequestError({
+        code: 'invalid_request',
+        field: 'account',
+        message:
+          'Insufficient balance: the purchased MACH did not reach the guest account. Pay again once it arrives.',
+        reason: 'insufficient_balance',
+        status: 0,
+      })
+    throw snapshot.context.error
+  } finally {
+    signal?.removeEventListener('abort', abort)
+    actor.stop()
+  }
 }
 
 declare namespace buy {
@@ -370,104 +508,22 @@ declare namespace buy {
     account: `0x${string}`
     /** The MACH that the guest account lacks, as a decimal string in whole units. */
     amount: string
+    /** Returns the guest account's MACH balance, in base units. */
+    balance: () => Promise<bigint>
     /** The payment's chain. */
     chainId: number
     /** The registered redirect URI that the page returns to. Defaults to the instance's. */
     redirectUri: string | undefined
+    /** The MACH balance that ends the purchase, in base units. */
+    required: bigint
     /** Rejects with the signal's reason, and closes the popup or the dialog. */
     signal: AbortSignal | undefined
-  }
-}
-
-/**
- * Returns `value`, a transaction that Tempo ID prepared, as a Tempo envelope to sign, if it makes
- * the requested transfer of MACH and nothing else, and Tempo ID's sponsor pays its fee. The sender
- * is the account that signs it, so the check reads no sender.
- */
-function check(
-  value: unknown,
-  options: check.Options,
-): TxEnvelopeTempo.TxEnvelopeTempo {
-  const refused = (fault: string) =>
-    new RequestError({
-      code: 'invalid_request',
-      field: 'transaction',
-      message: `Invalid prepared transaction: ${fault} The guest account signs only the requested transfer. Try again.`,
-      status: 0,
-    })
-  if (
-    typeof value !== 'string' ||
-    !Hex.validate(value) ||
-    !value.startsWith('0x76')
-  )
-    throw refused('it is no Tempo transaction.')
-  const envelope = (() => {
-    try {
-      return TxEnvelopeTempo.deserialize(value as TxEnvelopeTempo.Serialized)
-    } catch {
-      throw refused('it is no Tempo transaction.')
-    }
-  })()
-
-  const expected = TokenActions.transfer.call({
-    amount: options.amount,
-    memo: options.memo,
-    to: options.to,
-    token: mach.address,
-  })
-  const [call, ...rest] = envelope.calls ?? []
-  if (envelope.chainId !== options.chainId)
-    throw refused('it is for another chain.')
-  if (!call || rest.length > 0) throw refused('it makes more than one call.')
-  if (
-    !call.to ||
-    !Address.isEqual(call.to, expected.to) ||
-    (call.value ?? 0n) !== 0n ||
-    call.data?.toLowerCase() !== expected.data.toLowerCase()
-  )
-    throw refused('its call is not the requested transfer.')
-  if (envelope.keyAuthorization || envelope.authorizationList?.length)
-    throw refused('it changes the account.')
-  // The sponsor's marker, so the guest account pays no fee from its MACH.
-  if (envelope.feePayerSignature !== null)
-    throw refused('no sponsor pays its fee.')
-  if (envelope.signature) throw refused('it holds a signature.')
-  return envelope
-}
-
-declare namespace check {
-  type Options = {
-    /** The amount of the transfer, in base units. */
-    amount: bigint
-    /** The payment's chain. */
-    chainId: number
-    /** The transfer's memo, as hex. Absent for a transfer without one. */
-    memo: `0x${string}` | undefined
-    /** The recipient's address. */
-    to: `0x${string}`
   }
 }
 
 /** Returns the error of a close of the purchase page or of its dialog. */
 function closed() {
   return new DOMException('The user closed the purchase.', 'AbortError')
-}
-
-/** Resolves after `ms` milliseconds, or rejects with the signal's reason once it aborts. */
-function delay(ms: number, options: { signal: AbortSignal | undefined }) {
-  const { signal } = options
-  return new Promise<void>((resolve, reject) => {
-    signal?.throwIfAborted()
-    const abort = () => {
-      clearTimeout(timeout)
-      reject(signal?.reason)
-    }
-    const timeout = setTimeout(() => {
-      signal?.removeEventListener('abort', abort)
-      resolve()
-    }, ms)
-    signal?.addEventListener('abort', abort, { once: true })
-  })
 }
 
 /**
@@ -502,40 +558,6 @@ async function load(store: Store, options: { key: string }) {
 }
 
 /**
- * Offers the popup in a dialog, for a call outside a user gesture, and resolves with the popup that
- * the Continue of the dialog opens, or `null` when the browser blocks it.
- */
-async function offer(
-  url: string,
-  options: { signal: AbortSignal | undefined },
-) {
-  const { signal } = options
-  const Sheet = await import('../internal/Sheet.js')
-  signal?.throwIfAborted()
-  return await new Promise<Window | null>((resolve, reject) => {
-    const abort = () => {
-      close()
-      reject(signal?.reason)
-    }
-    const close = Sheet.prompt({
-      label: 'Buy MACH with Tempo',
-      onCancel: () => {
-        close()
-        signal?.removeEventListener('abort', abort)
-        reject(closed())
-      },
-      onContinue: () => {
-        close()
-        signal?.removeEventListener('abort', abort)
-        resolve(Popup.openPopup(url))
-      },
-      text: 'Continue in a Tempo ID window to buy MACH.',
-    })
-    signal?.addEventListener('abort', abort, { once: true })
-  })
-}
-
-/**
  * Returns the guest account's key pair from the store, or `undefined` without one. Throws for a
  * value that is no key pair, which the action never replaces.
  */
@@ -556,6 +578,62 @@ async function read(store: Store, options: { key: string }) {
 }
 
 /**
+ * Returns the event of `value`, the message that the purchase page posts: `popup.return` for a
+ * return URL that names the guest account, or `popup.refuse` with the error of any other message.
+ */
+function returned(
+  value: Callback.Received,
+  options: returned.Options,
+): machines.purchase.Event {
+  const { account, redirectUri } = options
+  const error = (() => {
+    // The purchase page posts only its return URL, so any other message ends the purchase.
+    if (!('url' in value))
+      return new RequestError({
+        code: 'invalid_request',
+        message:
+          'Invalid return: the purchase page posted no return URL. Try again.',
+        status: 0,
+      })
+    try {
+      const url = Callback.url(value.url)
+      const refusal = Callback.error(url, { redirectUri })
+      if (refusal) return refusal
+      const parameter = Callback.parameter(url, {
+        name: 'account',
+        redirectUri,
+      })
+      if (
+        parameter !== undefined &&
+        Address.validate(parameter, { strict: false }) &&
+        Address.isEqual(parameter, account)
+      )
+        return undefined
+      return new RequestError({
+        code: 'invalid_request',
+        field: 'account',
+        message:
+          'Invalid `account` in the return URL: it is missing, or names another account than the guest account. Try again.',
+        status: 0,
+      })
+    } catch (error) {
+      return error
+    }
+  })()
+  if (error === undefined) return { type: 'popup.return' }
+  return { error, type: 'popup.refuse' }
+}
+
+declare namespace returned {
+  type Options = {
+    /** The guest account's address. */
+    account: `0x${string}`
+    /** The registered redirect URI that the page returns to. */
+    redirectUri: string
+  }
+}
+
+/**
  * Returns the instance's store, which keeps the guest account's non-extractable key pair as it is.
  * Throws without one, and for a store that keeps each value as JSON.
  */
@@ -572,65 +650,208 @@ function storeOf(auth: Config): Store {
   return store
 }
 
-/**
- * Resolves with the return URL that the purchase page in `options.popup` posts, and closes the
- * popup. While the popup is open, a dialog on the page names the window.
- */
-async function watch(auth: Config, options: watch.Options): Promise<URL> {
-  const { popup, signal } = options
-  let abort: (() => void) | undefined
-  let settled = false
-  let unblock: (() => void) | undefined
-  let unwatch: (() => void) | undefined
-  try {
-    return await new Promise<URL>((resolve, reject) => {
-      // The dialog's module loads from a chunk of its own, as `funding.open` loads it.
-      void import('../internal/Sheet.js').then(
-        (Sheet) => {
-          if (settled) return
-          unblock = Sheet.waiting({ onCancel: () => reject(closed()), popup })
+/** The state machines that this module runs. */
+export namespace machines {
+  /**
+   * The purchase of the MACH that the guest account lacks. The runner provides each effect as an
+   * invoked actor, so the exit of its state ends it: `offer` closes the dialog that offers the popup,
+   * `popup` closes the popup and the dialog that names its window, and `balance` aborts its read.
+   * `purchase.abort` ends the purchase in each state, also before its start.
+   *
+   * | State             | Meaning                                                                  |
+   * | ----------------- | ------------------------------------------------------------------------ |
+   * | `idle`            | The purchase waits for its start. No effect runs.                        |
+   * | `offering`        | Outside a user gesture, a dialog offers the popup.                       |
+   * | `watching`        | The popup holds the purchase page, and a dialog names its window.        |
+   * | `polling.reading` | The page returned, and a read of the balance runs.                       |
+   * | `polling.waiting` | The last read held less than `required`. The next read follows.          |
+   * | `funded`          | The balance holds `required`.                                            |
+   * | `short`           | The balance held less than `required` until `pollTimeout`.               |
+   * | `cancelled`       | The user closed the popup, or selected Cancel on a dialog.               |
+   * | `blocked`         | The browser blocked the popup.                                           |
+   * | `failed`          | The page refused the purchase, or a read failed. `context.error` holds it. |
+   * | `aborted`         | The signal aborted.                                                      |
+   */
+  export const purchase = setup({
+    actions: {
+      /** Holds the error that ends the purchase. */
+      fail: assign((_args, params: { error: unknown }) => ({
+        error: params.error,
+      })),
+    },
+    actors: {
+      /** Returns the guest account's MACH balance, in base units. `guest.ts` provides it. */
+      balance: fromPromise<bigint>(() => Promise.resolve(0n)),
+      /**
+       * Shows the dialog that offers the popup, and sends `offer.continue` or `offer.cancel`. Its
+       * stop closes the dialog. `guest.ts` provides it.
+       */
+      offer: fromCallback<purchase.Event>(() => {}),
+      /**
+       * Opens the popup and the dialog that names its window, and sends what the popup and the
+       * dialog report, or `popup.blocked`. Its stop closes both. `guest.ts` provides it.
+       */
+      popup: fromCallback<purchase.Event>(() => {}),
+    },
+    delays: {
+      /** The wait between two reads of the balance. */
+      pollInterval,
+      /** The time that the purchased MACH has to reach the guest account. */
+      pollTimeout,
+    },
+    guards: {
+      /** Whether the page holds a user gesture, so the popup opens at once. */
+      activated: (args) => {
+        assertEvent(args.event, 'purchase.start')
+        return args.event.activated
+      },
+      /** Whether `params.balance` holds the required MACH. */
+      funded: (args, params: { balance: bigint }) =>
+        params.balance >= args.context.required,
+    },
+    types: {
+      context: {} as purchase.Context,
+      events: {} as purchase.Event,
+      input: {} as purchase.Input,
+    },
+  }).createMachine({
+    context: (args) => ({ error: undefined, required: args.input.required }),
+    id: 'purchase',
+    initial: 'idle',
+    on: { 'purchase.abort': '.aborted' },
+    states: {
+      aborted: { type: 'final' },
+      blocked: { type: 'final' },
+      cancelled: { type: 'final' },
+      failed: { type: 'final' },
+      funded: { type: 'final' },
+      idle: {
+        on: {
+          'purchase.start': [
+            { guard: 'activated', target: 'watching' },
+            { target: 'offering' },
+          ],
         },
-        () => undefined,
-      )
-      abort = () => reject(signal?.reason)
-      signal?.addEventListener('abort', abort, { once: true })
-      unwatch = Popup.watchPopup(popup, {
-        onCallback: (value) => {
-          // The purchase page posts only its return URL, so any other message ends the call.
-          if (!('url' in value))
-            return reject(
-              new RequestError({
-                code: 'invalid_request',
-                message:
-                  'Invalid return: the purchase page posted no return URL. Try again.',
-                status: 0,
-              }),
-            )
-          try {
-            resolve(Callback.url(value.url))
-          } catch (error) {
-            reject(error)
-          }
+      },
+      offering: {
+        invoke: { src: 'offer' },
+        on: {
+          'offer.cancel': 'cancelled',
+          // The popup opens in this transition, within the click on Continue.
+          'offer.continue': 'watching',
         },
-        onClose: () => reject(closed()),
-        onClosed: () => unblock?.(),
-        origin: new URL(auth.url).origin,
-      })
-    })
-  } finally {
-    settled = true
-    if (abort) signal?.removeEventListener('abort', abort)
-    unblock?.()
-    unwatch?.()
-    popup.close()
-  }
-}
+      },
+      // The purchase page returns once the chain holds the purchase, so the first read usually holds
+      // it. A node behind the page's node reads it a block later.
+      polling: {
+        after: { pollTimeout: 'short' },
+        initial: 'reading',
+        states: {
+          reading: {
+            invoke: {
+              id: 'balance',
+              onDone: [
+                {
+                  guard: {
+                    params: (args) => ({ balance: args.event.output }),
+                    type: 'funded',
+                  },
+                  target: '#purchase.funded',
+                },
+                { target: 'waiting' },
+              ],
+              onError: {
+                actions: {
+                  params: (args) => ({ error: args.event.error }),
+                  type: 'fail',
+                },
+                target: '#purchase.failed',
+              },
+              src: 'balance',
+            },
+          },
+          waiting: {
+            after: { pollInterval: 'reading' },
+          },
+        },
+      },
+      short: { type: 'final' },
+      watching: {
+        invoke: { src: 'popup' },
+        on: {
+          'dialog.cancel': 'cancelled',
+          'popup.blocked': 'blocked',
+          'popup.close': 'cancelled',
+          'popup.refuse': {
+            actions: {
+              params: (args) => ({ error: args.event.error }),
+              type: 'fail',
+            },
+            target: 'failed',
+          },
+          'popup.return': 'polling',
+        },
+      },
+    },
+  })
 
-declare namespace watch {
-  type Options = {
-    /** The popup that holds the purchase page. */
-    popup: Window
-    /** Rejects with the signal's reason, and closes the popup. */
-    signal: AbortSignal | undefined
+  /** The types of {@link purchase}. */
+  export namespace purchase {
+    /** The context of the machine. */
+    export type Context = {
+      /** The error that ends the purchase in `failed`. Absent in every other state. */
+      error: unknown
+      /** The MACH balance that ends the purchase, in base units. */
+      required: bigint
+    }
+
+    /** An event of the machine. */
+    export type Event =
+      /** The user selected Cancel on the dialog that names the popup's window, or pressed Escape. */
+      | { type: 'dialog.cancel' }
+      /** The user selected Cancel on the dialog that offers the popup, or pressed Escape. */
+      | { type: 'offer.cancel' }
+      /** The user selected Continue on the dialog that offers the popup. */
+      | { type: 'offer.continue' }
+      /** The browser blocked the popup. */
+      | { type: 'popup.blocked' }
+      /** The user closed the popup without a return. */
+      | { type: 'popup.close' }
+      /** The purchase page posted a refusal, or a return that names no guest account. */
+      | {
+          /** The error that ends the purchase. */
+          error: unknown
+          type: 'popup.refuse'
+        }
+      /** The purchase page returned the guest account. */
+      | { type: 'popup.return' }
+      /** The signal aborted. */
+      | { type: 'purchase.abort' }
+      /** The purchase starts. */
+      | {
+          /** Whether the page holds a user gesture, within which a popup blocker accepts the popup. */
+          activated: boolean
+          type: 'purchase.start'
+        }
+
+    /** The input of the machine. */
+    export type Input = {
+      /** The MACH balance that ends the purchase, in base units. */
+      required: bigint
+    }
+
+    /** A running purchase. */
+    export type Actor = ActorRefFrom<typeof purchase>
+
+    /** A snapshot of the purchase. */
+    export type Snapshot = SnapshotFrom<typeof purchase>
+  }
+
+  /**
+   * Returns the status of a purchase: the name of its state, and `polling` for each state of the
+   * reads of the balance.
+   */
+  export function status(snapshot: purchase.Snapshot) {
+    return typeof snapshot.value === 'string' ? snapshot.value : 'polling'
   }
 }
