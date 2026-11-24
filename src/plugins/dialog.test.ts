@@ -14,7 +14,7 @@ import { machines } from './dialog.js'
 import { dialog } from './index.js'
 
 describe('dialog', () => {
-  test('refuses signIn and signMessage outside a page, such as in Node, with `Actions.dialog.PageRequiredError`', async () => {
+  test('refuses signIn and signMessage outside a page, such as in Node, also with `backend`, with `Actions.dialog.PageRequiredError`', async () => {
     const options = {
       accessKey: { expiry: '1d', limits: [{ limit: '10', token: 'ousd' }] },
       chain: 42431,
@@ -33,10 +33,12 @@ describe('dialog', () => {
       accounts.dialog.signIn().catch(message),
       accounts.dialog.signMessage({ message: 'Approve' }).catch(message),
       backend.dialog.signIn().catch(message),
+      backend.dialog.signMessage({ message: 'Approve' }).catch(message),
     ])
 
     expect(errors).toMatchInlineSnapshot(`
       [
+        "Actions.dialog.PageRequiredError: No browser page: the sign-in shows in a frame or a popup, which only a page opens. Outside a page, sign in with the \`device\` plugin.",
         "Actions.dialog.PageRequiredError: No browser page: the sign-in shows in a frame or a popup, which only a page opens. Outside a page, sign in with the \`device\` plugin.",
         "Actions.dialog.PageRequiredError: No browser page: the sign-in shows in a frame or a popup, which only a page opens. Outside a page, sign in with the \`device\` plugin.",
         "Actions.dialog.PageRequiredError: No browser page: the sign-in shows in a frame or a popup, which only a page opens. Outside a page, sign in with the \`device\` plugin.",

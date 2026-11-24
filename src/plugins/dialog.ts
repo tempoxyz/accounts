@@ -138,10 +138,13 @@ export function dialog<const options extends dialog.Options = {}>(
   const preloads = () => !popup && preload && typeof document !== 'undefined'
   /**
    * Returns the redirect URI of a sign-in through `backend`, the backend's callback route, or
-   * `undefined` without `backend`.
+   * `undefined` without `backend`. Outside a page, the route has no origin, so it returns
+   * `undefined`, and the action throws its `PageRequiredError`.
    */
   const backendRedirectUri = (config: Plugin.Context['config']) => {
     if (backend === undefined) return undefined
+    if (config.redirectUri === undefined && typeof document === 'undefined')
+      return undefined
     const basePath = backend === true ? Handler.basePath : backend
     return (
       config.redirectUri ??
