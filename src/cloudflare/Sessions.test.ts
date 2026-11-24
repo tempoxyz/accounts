@@ -10,9 +10,13 @@ import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 /**
  * Runs `contents` in the `fetch` of a Worker, with `accounts`, an instance whose `backend`
  * keeps its sessions in the Worker's Durable Objects, and `names`, the object names that it
- * reached. Returns the JSON that it returns.
+ * reached. Returns the JSON that it returns. `config` is the source of the objects' configuration.
  */
-async function run(contents: readonly string[]) {
+async function run(
+  contents: readonly string[],
+  options: { config?: string | undefined } = {},
+) {
+  const { config = "() => ({ clientSecret: 'secret' })" } = options
   const output = await Esbuild.build({
     bundle: true,
     conditions: ['workerd', 'worker', 'browser'],
@@ -25,7 +29,7 @@ async function run(contents: readonly string[]) {
         "import * as Accounts from '../Accounts.ts'",
         "import { backend } from '../plugins/backend.ts'",
         "import { DurableObject, Sessions } from './index.ts'",
-        "export const SESSIONS = DurableObject.sessions(() => ({ clientSecret: 'secret' }))",
+        `export const SESSIONS = DurableObject.sessions(${config})`,
         'export default {',
         '  async fetch(request, env) {',
         '    const names = []',
@@ -126,5 +130,39 @@ describe('Sessions.durableObject', () => {
     expect(result).toMatchInlineSnapshot(
       `"openid email offline_access api:read"`,
     )
+  })
+
+  test("behavior: a sign-in requests the scope of `config`, or the Worker's instance's for a `config` that names it as `undefined`", async () => {
+    const contents = [
+      'const scoped = Accounts.create({',
+      '  chain: 42431,',
+      "  clientId: 'app',",
+      "  clientSecret: 'secret',",
+      '  plugins: [backend({ sessions: Sessions.durableObject(namespace) })],',
+      "  redirectUri: 'https://app.example.com/callback',",
+      "  scope: 'offline_access api:read',",
+      "  url: 'http://127.0.0.1:9',",
+      '})',
+      'const { url } = await scoped.backend.start({ par: false })',
+      "return Response.json(new URL(url).searchParams.get('scope'))",
+    ]
+
+    const result = await Promise.all([
+      run(contents, {
+        config:
+          "() => ({ clientSecret: 'secret', scope: 'offline_access api:write' })",
+      }),
+      run(contents, {
+        config:
+          "() => ({ clientSecret: 'secret', scope: undefined, url: undefined })",
+      }),
+    ])
+
+    expect(result).toMatchInlineSnapshot(`
+      [
+        "openid email offline_access api:write",
+        "openid email offline_access api:read",
+      ]
+    `)
   })
 })

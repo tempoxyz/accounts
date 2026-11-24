@@ -439,12 +439,15 @@ export function sessions<env>(
       const { scope, tempoIdUrl } = call
       const instance = (async () => {
         const { clientId } = Rpc.parseName(this.ctx.id.name)
+        const configured = await config(this.env, { clientId })
+        // A `config` can name `scope` or `url` as `undefined`, such as from an unset binding, so
+        // each falls back to the Worker's instance.
         return BackendSessions.create(
           Accounts.create({
-            ...(scope ? { scope } : {}),
-            ...(tempoIdUrl ? { url: tempoIdUrl } : {}),
-            ...(await config(this.env, { clientId })),
+            ...configured,
             clientId,
+            scope: configured.scope ?? scope,
+            url: configured.url ?? tempoIdUrl,
           }).config,
           { store: this.#store },
         )
