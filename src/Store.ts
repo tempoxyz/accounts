@@ -37,7 +37,8 @@ export type Store = {
    */
   json?: boolean | undefined
   /**
-   * Whether only the process that created the store holds its values, as `Store.memory` does.
+   * Whether only the process that created the store holds its values, as `Store.memory` does, or
+   * only one Durable Object, as `Store.durableObject` of `accounts/cloudflare` does.
    * In a browser, a page load empties such a store, so `redirect.signIn` without `open` refuses
    * it before any request. An instance's `session.refresh` with such a store reads a refusal of its refresh token as final where a
    * lock spans the process, Web Locks or the store's `lock`, since no other process can rotate the token. Defaults to `false`.
