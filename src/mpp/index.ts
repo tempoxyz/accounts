@@ -235,6 +235,24 @@ export class MaxAmountRequiredError extends Error {
   }
 }
 
+/** `maxDeposit` is not a decimal amount above 0, such as `''` or `'0'`, so the manager opens no channel. */
+export class MaxDepositInvalidError extends Error {
+  override readonly name = 'mpp.MaxDepositInvalidError'
+
+  constructor(options: MaxDepositInvalidError.Options) {
+    super(
+      `Invalid \`maxDeposit\`: "${String(options.maxDeposit)}" is not a decimal amount above 0 with at most 6 decimals. Pass a decimal string, such as \`'1'\`.`,
+    )
+  }
+}
+
+export declare namespace MaxDepositInvalidError {
+  type Options = {
+    /** The most that a channel holds, as the payer received it. */
+    maxDeposit: string
+  }
+}
+
 /**
  * A session manager of a guest session has no `maxDeposit`, so it opens no channel. The guest
  * account's key pair signs as the root account, with no access key limits, so only `maxDeposit`
@@ -1227,11 +1245,10 @@ export function mpp(options: mpp.Options = {}) {
         const accessKey = held?.accessKey
         // A guest account has no access key limits, so only `maxDeposit` bounds the deposit of its
         // channel.
-        if (
-          held &&
-          Session.guest(held) &&
-          (parameters?.maxDeposit ?? options.maxDeposit) === undefined
-        )
+        const maxDeposit = maxDepositOf(parameters, {
+          fallback: options.maxDeposit,
+        })
+        if (held && Session.guest(held) && maxDeposit === undefined)
           throw new MaxDepositRequiredError()
         // A sign-out ends the manager for good, so a later sign-in of the same user does not resume
         // its access key.
@@ -1454,8 +1471,9 @@ export declare namespace mpp {
     /**
      * The most that a session's channel holds, in the units of its token, such as `'0.05'`. It
      * caps the deposit that an endpoint suggests and each automatic top-up. A manager's own
-     * `topUp(amount)` adds `amount` as given, so the app bounds it. Defaults to the deposit that
-     * the endpoint suggests, within the access key's token limits.
+     * `topUp(amount)` adds `amount` as given, so the app bounds it. A decimal amount above 0, which
+     * a manager of a guest session needs. Defaults to the deposit that the endpoint suggests,
+     * within the access key's token limits.
      */
     maxDeposit?: string | undefined
     /**
@@ -1741,6 +1759,7 @@ export declare namespace mpp {
      * @throws {ChainError} For a session challenge on another chain than the payer's, except during `close()`.
      * @throws {RangeError} If `allowedChainIds` excludes the payer's chain.
      * @throws {TypeError} If every session offer names a malformed chain ID.
+     * @throws {MaxDepositInvalidError} For a `maxDeposit` that is no decimal amount above 0, before any request.
      * @throws {MaxDepositRequiredError} For a guest session without `maxDeposit`, before any request.
      * @throws {SubscriptionOnlyError} For a payer of a named `account`, before any request.
      * @throws {Error} For a retry of the manager's `topUp(amount)`, when a request of the manager
@@ -1907,6 +1926,39 @@ function assertMaxAmount(maxAmount: string) {
   // The fraction holds only digits, so a nonzero digit after the sixth decimal is a finer one.
   if (/[1-9]/.test(fraction.slice(6)))
     throw new MaxAmountPrecisionError({ maxAmount })
+}
+
+/**
+ * Returns the `maxDeposit` of a session manager: the one of `parameters`, else `options.fallback`,
+ * the payer's own. Returns `undefined` without either.
+ *
+ * @throws {MaxDepositInvalidError} For a value that is no decimal amount above 0 with at most 6
+ * decimals, such as `''`.
+ */
+function maxDepositOf(
+  parameters: { maxDeposit?: string | undefined } | undefined,
+  options: maxDepositOf.Options,
+) {
+  const value =
+    parameters?.maxDeposit !== undefined
+      ? parameters.maxDeposit
+      : options.fallback
+  if (value === undefined) return undefined
+  if (
+    typeof value !== 'string' ||
+    !/^(\d+(\.\d*)?|\.\d+)$/.test(value) ||
+    /[1-9]/.test(value.split('.')[1]?.slice(6) ?? '') ||
+    parseUnits(value, 6) === 0n
+  )
+    throw new MaxDepositInvalidError({ maxDeposit: value })
+  return value
+}
+
+declare namespace maxDepositOf {
+  type Options = {
+    /** The payer's `maxDeposit`, of its overrides or the plugin. */
+    fallback: string | undefined
+  }
 }
 
 /**
@@ -2645,6 +2697,7 @@ function create(options: {
         throw new RangeError(
           `The session excludes payer chain ${chainId}. Include chain ${chainId} in allowedChainIds.`,
         )
+      const deposit = maxDepositOf(parameters, { fallback: maxDeposit })
       const order: NonNullable<
         Mppx.create.Config<
           readonly [ReturnType<typeof tempo.session>]
@@ -2711,8 +2764,10 @@ function create(options: {
         ...(autoSwap !== undefined ? { autoSwap } : {}),
         // The manager inherits the identity provers of the payer's mppx fetch.
         ...(identity ? { fetch: mppx.fetch } : fetch ? { fetch } : {}),
-        ...(maxDeposit ? { maxDeposit } : {}),
         ...parameters,
+        // An absent `maxDeposit` of the call keeps the payer's, so the manager holds the value
+        // that a guest session's check read.
+        ...(deposit !== undefined ? { maxDeposit: deposit } : {}),
         account,
         allowedChainIds: [chainId],
         getClient,

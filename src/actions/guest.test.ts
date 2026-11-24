@@ -17,6 +17,7 @@ import * as Accounts from '../Accounts.js'
 import * as DefaultAccounts from '../internal/DefaultAccounts.js'
 import * as SignIn from '../internal/SignIn.js'
 import { device, dialog, redirect } from '../plugins/index.js'
+import * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
 import * as Guest from './guest.js'
@@ -548,6 +549,43 @@ describe('Accounts.create with guest', () => {
         undefined,
         undefined,
         [],
+      ]
+    `)
+  })
+
+  test("`pay` of `auto` starts no guest session when a plugin's challenge signs the user in with the payment", async () => {
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: 'auto',
+      // A challenge hook, as the `siwe` plugin's in a page, whose message the app's routes issue.
+      plugins: [
+        Plugin.from({
+          hooks: {
+            challenge: () => ({
+              message: () => Promise.resolve('Sign in to Example.'),
+              settle: () => Promise.resolve({}),
+            }),
+          },
+          id: 'challenge',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    // Node holds no page, so the payment with the challenge rejects before it opens.
+    const error = await accounts.pay(payment).catch((error: unknown) => error)
+
+    expect([
+      error instanceof Error && error.name,
+      await accounts.session.get(),
+      await accounts.guest.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        "Actions.account.PageRequiredError",
+        undefined,
+        undefined,
       ]
     `)
   })

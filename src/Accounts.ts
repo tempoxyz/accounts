@@ -2428,8 +2428,10 @@ export function create<
       if (config.guest && !fixed && parameters.account === undefined) {
         // With `auto`, the guest session's change starts before the read of the stored session, so a
         // sign-out during the read overtakes it, and an aborted payment starts no guest session.
+        // A plugin's challenge, such as the `siwe` plugin's, signs the user in with the payment, which
+        // a guest account cannot, so the payment starts no guest session.
         const held =
-          config.guest === 'auto'
+          config.guest === 'auto' && context.challenge() === undefined
             ? ((await SignIn.guestAuto(context, {
                 signal: parameters.signal,
               })) ?? context.session.get())

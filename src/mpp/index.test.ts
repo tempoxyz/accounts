@@ -908,6 +908,75 @@ describe('mpp', () => {
     `)
   })
 
+  test.for([
+    [
+      "`maxDeposit: ''`",
+      { maxDeposit: '' },
+      undefined,
+      'mpp.MaxDepositInvalidError',
+    ],
+    [
+      "`maxDeposit: '0'`",
+      { maxDeposit: '0' },
+      undefined,
+      'mpp.MaxDepositInvalidError',
+    ],
+    [
+      '`maxDeposit` of 7 decimals',
+      { maxDeposit: '0.0000001' },
+      undefined,
+      'mpp.MaxDepositInvalidError',
+    ],
+    [
+      "a call's `maxDeposit: ''`",
+      { maxDeposit: '1' },
+      { maxDeposit: '' },
+      'mpp.MaxDepositInvalidError',
+    ],
+    [
+      "a call's absent `maxDeposit`, which keeps the payer's",
+      { maxDeposit: '1' },
+      { maxDeposit: undefined },
+      'TypeError',
+    ],
+  ] as const)(
+    'resolves the `maxDeposit` of a guest session manager with %s',
+    async ([, overrides, parameters, expected]) => {
+      const accounts = instance({ store: Store.memory() })
+      await accounts.renew.commit(await Guest.session(accounts.config))
+
+      // Nothing listens at the URL, so a request of a manager that its check accepts rejects with
+      // a network error, a `TypeError`.
+      const error = await (async () =>
+        accounts
+          .mpp(overrides)
+          .session(parameters)
+          .fetch('http://127.0.0.1:9/content'))().catch(
+        (error: unknown) => error,
+      )
+
+      expect(error instanceof Error && error.name).toBe(expected)
+    },
+  )
+
+  test("refuses a charge of a guest session with `maxAmount: ''` with mpp.MaxAmountInvalidError, before any request", async () => {
+    const endpoint = server({ amount: '1' })
+    const accounts = instance({ fetch: endpoint.fetch, store: Store.memory() })
+    await accounts.renew.commit(await Guest.session(accounts.config))
+
+    const error = await accounts
+      .mpp({ maxAmount: '' })
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+
+    expect({ credentials: endpoint.credentials, error }).toMatchInlineSnapshot(`
+      {
+        "credentials": [],
+        "error": [mpp.MaxAmountInvalidError: Invalid \`maxAmount\`: "" is not a decimal amount of 0 or more. Pass a decimal string, such as \`'0.1'\`.],
+      }
+    `)
+  })
+
   test('refuses a charge with Accounts.SignedOutError, before the access key signs, once the same user signs in again after a sign-out during the request', async () => {
     const store = Store.memory()
     const gate = Promise.withResolvers<void>()
