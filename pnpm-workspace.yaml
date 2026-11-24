@@ -63,7 +63,7 @@ catalog:
   testcontainers: 12.2.1
   tsx: 4.23.15
   typescript: 7.0.2
-  viem: 2.57.19
+  viem: 2.58.6
   # Vite+ plugins and `vp dev` need Vite+'s core in place of Vite, as Void's Vite+ template sets.
   vite: npm:@voidzero-dev/vite-plus-core@1.3.0
   vite-plus: 1.6.0
@@ -90,11 +90,9 @@ minimumReleaseAgeExclude:
   - mppx@0.19.0
   # ox 0.14.67 splits the WebAuthn data of a signature envelope in linear time (wevm/ox#677).
   - ox@0.14.67
-  # Viem 2.57.19 refuses a retired root key's signature in the Tempo `verifyHash`, returns the zero
-  # commitment from `Actions.accounts.getConfigCommitment` on a chain without the configurable
-  # account precompile (both wevm/viem#5498), and answers 413 from `Relay.create(...).fetch` for a
-  # body over 16 MiB (wevm/viem#5496).
-  - viem@2.57.19
+  # Viem 2.58.6 parses a SIWE message in linear time, and rejects a line break in its statement
+  # (wevm/viem#5609).
+  - viem@2.58.6
 
 overrides:
   # The examples name published ranges, so a copy installs as it is. In the workspace, each resolves to the
