@@ -3,9 +3,8 @@
  * sends after another context on the store signs out, its abort with React Native's `AbortSignal`,
  * the refresh token of an expired session whose revocation receives no response, the one refresh of
  * two instances on one store without Web Locks, and the refusal of a
- * third-party app's `authorize` before any request, a guest payment only without a session, the read
- * of the guest account's balance through the `viem` plugin's transport, and the reasons of
- * `RequestError`.
+ * third-party app's `authorize` before any request, a guest payment only without a session, the one
+ * request of a guest payment with no read of the chain, and the reasons of `RequestError`.
  * @module
  */
 import { AbortController as NativeAbortController } from 'abort-controller'
@@ -811,25 +810,23 @@ describe('pay', () => {
     expect(signedIn).toBeInstanceOf(AccountActions.PageRequiredError)
   })
 
-  test("reads the guest account's balance through the `viem` plugin's transport of the chain", async () => {
-    const requests: { method: string; to: unknown }[] = []
+  test('sends a guest payment in one request to Tempo ID, with no read of the chain', async () => {
+    const reads: string[] = []
+    const requests: string[] = []
     const accounts = Accounts.create({
       chain: 1337,
       clientId: 'client_1',
-      // Tempo ID refuses each preparation for the balance, so each payment goes on to the purchase.
-      fetch: () =>
-        Promise.resolve(
-          Response.json(
-            { error: 'invalid_request', reason: 'insufficient_balance' },
-            { status: 409 },
-          ),
-        ),
+      fetch: (input) => {
+        requests.push(new URL(String(input)).pathname)
+        return Promise.resolve(
+          Response.json({ transaction: `0x${'ab'.repeat(32)}` }),
+        )
+      },
       plugins: [
         viem({
           transport: custom({
-            request: (args: { method: string; params?: unknown }) => {
-              const [call] = (args.params ?? []) as [{ to?: unknown }?]
-              requests.push({ method: args.method, to: call?.to })
+            request: (args: { method: string }) => {
+              reads.push(args.method)
               return Promise.resolve(`0x${'0'.repeat(64)}`)
             },
           }),
@@ -845,21 +842,21 @@ describe('pay', () => {
       token: 'mach',
     } as const
 
-    // A new guest account holds no MACH, so the first payment reads no balance.
+    // A new guest account pays on the purchase page, which opens only from a page.
     const created = await accounts.pay(payment).catch((error: unknown) => error)
-    const held = await accounts.pay(payment).catch((error: unknown) => error)
+    const held = await accounts.pay(payment)
 
-    // Outside a page, the purchase page does not open.
     expect(created).toBeInstanceOf(AccountActions.PageRequiredError)
-    expect(held).toBeInstanceOf(AccountActions.PageRequiredError)
+    expect(held).toEqual({
+      address: await accounts.guest.get(),
+      transaction: `0x${'ab'.repeat(32)}`,
+    })
     expect(requests).toMatchInlineSnapshot(`
       [
-        {
-          "method": "eth_call",
-          "to": "0x20c000000000000000000000f37de3740adec032",
-        },
+        "/v1/guest/pay",
       ]
     `)
+    expect(reads).toEqual([])
   })
 
   test("rejects a payment within the access key's limit outside a page, on an instance without a plugin that sends it, with a PageRequiredError that names the missing plugin rather than a sign-in", async () => {

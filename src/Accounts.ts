@@ -36,13 +36,11 @@ import * as DefaultStore from './internal/DefaultStore.js'
 import * as Hint from './internal/Hint.js'
 import * as InstanceChain from './internal/InstanceChain.js'
 import * as InternalSession from './internal/Session.js'
-import * as Settings from './internal/viem/Settings.js'
 import type * as KeySet from './internal/KeySet.js'
 import * as Payment from './internal/Payment.js'
 import type { Permissions } from './Permissions.js'
 import * as Plugin from './Plugin.js'
 import type { backend } from './plugins/backend.js'
-import type { viem } from './plugins/viem.js'
 import type * as React from './react/index.js'
 import * as Session from './Session.js'
 import type { Store } from './Store.js'
@@ -1219,14 +1217,12 @@ export type Accounts<
      *
      * With `guest: true`, a visitor without a session pays as a guest, in MACH on Tempo mainnet, from
      * the instance's guest account, which the first guest payment creates, as `guest` describes.
-     * If the guest account holds less than `amount`, Tempo ID's purchase page opens in a popup and
-     * sells the MACH that it lacks with Apple Pay or Google Pay. The guest account then signs the
-     * transfer, and Tempo ID's sponsor pays its fee. The call ignores `account`, and throws
-     * {@link RequestError} with the reason `unsupported_token` for a token other than MACH, and
-     * `invalid_chain` for another chain. It throws the errors of `Actions.guest.pay`. The guest
-     * account's balance reads through the `viem` plugin's transport of the chain, or without the
-     * plugin, through Tempo's own RPC. With a session, `challenge`, or `session`, the call ignores
-     * `guest`.
+     * The guest account signs the transfer, and Tempo ID's sponsor pays its fee, in one request. A
+     * new guest account, or one that holds less than `amount`, pays on Tempo ID's purchase page in a
+     * popup instead, which sells the MACH that it lacks with Apple Pay, Google Pay, or a card. The
+     * call ignores `account`, and throws {@link RequestError} with the reason `unsupported_token`
+     * for a token other than MACH, and `invalid_chain` for another chain. It throws the errors of
+     * `Actions.guest.pay`. With a session, `challenge`, or `session`, the call ignores `guest`.
      *
      * @example
      * ```ts
@@ -2411,28 +2407,16 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         !fixed &&
         !(context.session.get() ?? (await context.session.load()))
       ) {
-        const chainId = chainOf()
-        // The guest account's balance reads through the `viem` plugin's transport of the chain, so
-        // it reads the node that the instance's clients read. The transport receives the plugin's
-        // chain, whose RPC URL a transport without one, such as `http()`, reads.
-        const settings = (
-          instance.viem as Record<symbol, viem.Settings> | undefined
-        )?.[Settings.key]
-        const rpc = settings?.rpc(chainId)
-        const chain = settings?.chain(chainId)
         return await (
           await import('./actions/guest.js')
         ).pay(config, {
           amount: parameters.amount,
-          chainId,
+          chainId: chainOf(),
           memo: parameters.memo,
           redirectUri: parameters.redirectUri,
           signal: parameters.signal,
           to: parameters.to,
           token: parameters.token,
-          transport:
-            rpc &&
-            ((options) => rpc({ ...options, chain: options.chain ?? chain })),
         })
       }
       // Only the account's owner signs a challenge, on the page, so no plugin sends the payment. The

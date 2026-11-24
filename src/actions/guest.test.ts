@@ -1,16 +1,15 @@
 /**
  * Tests guest payments without a server: the refusals before any request, the guest account that
- * the store keeps, the preparation before any purchase, which a `fetch` of the test answers, the
- * check of each transaction that Tempo ID prepares, and the purchase machine, whose effects each
- * test records.
+ * the store keeps, the one signed request of a guest account that the store keeps, which a `fetch`
+ * of the test answers, the refusals that lead to the purchase page, and the purchase machine, whose
+ * effects each test records.
  * @module
  */
-import { Secp256k1 } from 'ox'
-import { KeyAuthorization, SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
-import { custom } from 'viem'
-import { Actions } from 'viem/tempo'
+import { Address, PublicKey } from 'ox'
+import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
+import { maxUint256 } from 'viem'
 import { describe, expect, test } from 'vite-plus/test'
-import { createActor, fromCallback, fromPromise, waitFor } from 'xstate'
+import { createActor, fromCallback } from 'xstate'
 import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
 import * as Store from '../Store.js'
@@ -18,11 +17,11 @@ import * as AccountActions from './account.js'
 import * as Guest from './guest.js'
 import { machines } from './guest.js'
 
-/** MACH on Tempo mainnet. */
-const mach = '0x20c000000000000000000000f37de3740adec032'
-
 /** The recipient of each payment. */
 const to = '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326'
+
+/** The hash that Tempo ID returns for each sent transfer. */
+const hash = `0x${'ab'.repeat(32)}` as const
 
 /**
  * The URL of a Tempo ID that no test reaches, since each call ends before a request, or a `fetch`
@@ -30,19 +29,15 @@ const to = '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326'
  */
 const url = 'http://127.0.0.1:1'
 
-/** A balance of no MACH, as `eth_call` returns it. */
-const empty = `0x${'0'.repeat(64)}`
-
 /**
  * Returns an instance whose `fetch` answers each request to Tempo ID with `answer`, and the requests
- * that it receives, by path and the account of their body.
+ * that it receives, by path and body.
  */
 function answering(answer: () => Response) {
-  const requests: { account: unknown; path: string }[] = []
+  const requests: { body: Record<string, unknown>; path: string }[] = []
   const fetch: typeof globalThis.fetch = (input, init) => {
-    const body = JSON.parse(String(init?.body)) as { account?: unknown }
     requests.push({
-      account: body.account,
+      body: JSON.parse(String(init?.body)) as Record<string, unknown>,
       path: new URL(String(input)).pathname,
     })
     return Promise.resolve(answer())
@@ -52,7 +47,7 @@ function answering(answer: () => Response) {
   return { auth, requests, store }
 }
 
-/** Returns Tempo ID's refusal of a preparation with `reason`. */
+/** Returns Tempo ID's refusal of a send with `reason`. */
 function refusal(reason: Accounts.RequestError.Reason) {
   return Response.json(
     { error: 'invalid_request', error_description: 'Refused.', reason },
@@ -60,25 +55,9 @@ function refusal(reason: Accounts.RequestError.Reason) {
   )
 }
 
-/** Returns a transport that answers each read with `empty`, and the methods that it receives. */
-function reading() {
-  const reads: string[] = []
-  const transport = custom({
-    request: (args: { method: string }) => {
-      reads.push(args.method)
-      return Promise.resolve(empty)
-    },
-  })
-  return { reads, transport }
-}
-
 describe('Actions.guest.pay', () => {
   test('refuses another token, another chain, and invalid fields before any request', async () => {
-    const auth = Accounts.from({
-      clientId: 'client_test',
-      store: Store.memory(),
-      url,
-    })
+    const { auth, requests } = answering(() => Response.json({}))
     const options = { amount: '1', to, token: 'mach' } as const
 
     const errors = await Promise.all(
@@ -88,6 +67,7 @@ describe('Actions.guest.pay', () => {
         { ...options, chainId: 42431 },
         { ...options, amount: '0' },
         { ...options, to: '0x123' as const },
+        { ...options, memo: '' },
       ].map((entry) =>
         Guest.pay(auth, entry).then(
           () => undefined,
@@ -121,20 +101,25 @@ describe('Actions.guest.pay', () => {
           "field": "to",
           "reason": "invalid_field",
         },
+        {
+          "field": "memo",
+          "reason": undefined,
+        },
       ]
     `)
+    expect(requests).toEqual([])
     expect(await Guest.get(auth)).toBeUndefined()
   })
 
-  test('creates the guest account, which holds no MACH, prepares, and opens the purchase page only from a page', async () => {
-    const { auth, requests } = answering(() => refusal('insufficient_balance'))
-    const { reads, transport } = reading()
+  test('creates the guest account, and opens the purchase page only from a page, with no request', async () => {
+    const { auth, requests } = answering(() =>
+      Response.json({ transaction: hash }),
+    )
 
     const error = await Guest.pay(auth, {
       amount: '1',
       to,
       token: 'mach',
-      transport,
     }).catch((error: unknown) => error)
 
     expect(error).toBeInstanceOf(AccountActions.PageRequiredError)
@@ -142,40 +127,99 @@ describe('Actions.guest.pay', () => {
       `"No browser window: the purchase page of a guest payment opens only from a page. Pay as a guest from a page, or with a balance that holds the payment."`,
     )
     expect(await Guest.get(auth)).toMatch(/^0x[0-9a-fA-F]{40}$/)
-    // A new guest account holds no MACH, so it reads no balance, and prepares for its address.
-    expect(reads).toEqual([])
-    expect(requests).toEqual([
-      { account: await Guest.get(auth), path: '/v1/guest/pay/prepare' },
-    ])
+    // A new guest account holds no MACH, so it sends nothing before the purchase page.
+    expect(requests).toEqual([])
   })
 
-  test('prepares before the purchase for a new guest account, and throws each refusal that no purchase fixes before the purchase page', async () => {
-    const transaction = TxEnvelopeTempo.serialize(
-      TxEnvelopeTempo.from({
-        calls: [
-          Actions.token.transfer.call({ amount: 1_000_000n, to, token: mach }),
-        ],
-        chainId: 4217,
-        feePayerSignature: null,
-        gas: 100_000n,
-        maxFeePerGas: 1n,
-        nonceKey: 1n,
-      }),
+  test('signs the transfer of a guest account that the store keeps, and sends it in one request', async () => {
+    const { auth, requests } = answering(() =>
+      Response.json({ transaction: hash }),
     )
+    await Guest.pay(auth, { amount: '1', to, token: 'mach' }).catch(
+      () => undefined,
+    )
+    const address = await Guest.get(auth)
+
+    const before = Math.floor(Date.now() / 1000)
+    const paid = await Guest.pay(auth, {
+      amount: '12.5',
+      memo: 'order-123',
+      to,
+      token: 'MACH',
+    })
+    const after = Math.floor(Date.now() / 1000)
+
+    const [request] = requests
+    const envelope = TxEnvelopeTempo.deserialize(
+      request!.body.transaction as TxEnvelopeTempo.Serialized,
+    )
+    const signature = envelope.signature as SignatureEnvelope.P256
+    expect(paid).toEqual({ address, transaction: hash })
+    expect(requests.length).toBe(1)
+    expect(request!.path).toBe('/v1/guest/pay')
+    expect(Object.keys(request!.body).sort()).toMatchInlineSnapshot(`
+      [
+        "chain_id",
+        "client_id",
+        "transaction",
+      ]
+    `)
+    expect(request!.body.chain_id).toBe(4217)
+    expect(request!.body.client_id).toBe('client_test')
+    expect(envelope.calls).toMatchInlineSnapshot(`
+      [
+        {
+          "data": "0x95777d590000000000000000000000001f9090aae28b8a3dceadf281b0f12828e676c3260000000000000000000000000000000000000000000000000000000000bebc2000000000000000000000000000000000000000000000006f726465722d313233",
+          "to": "0x20c000000000000000000000f37de3740adec032",
+        },
+      ]
+    `)
+    expect({
+      chainId: envelope.chainId,
+      feePayerSignature: envelope.feePayerSignature,
+      feeToken: envelope.feeToken,
+      gas: envelope.gas,
+      keyAuthorization: envelope.keyAuthorization,
+      maxFeePerGas: envelope.maxFeePerGas,
+      maxPriorityFeePerGas: envelope.maxPriorityFeePerGas,
+      nonce: envelope.nonce,
+      nonceKey: envelope.nonceKey === maxUint256,
+      validAfter: envelope.validAfter,
+    }).toMatchInlineSnapshot(`
+      {
+        "chainId": 4217,
+        "feePayerSignature": null,
+        "feeToken": undefined,
+        "gas": 100000n,
+        "keyAuthorization": undefined,
+        "maxFeePerGas": 40000000000n,
+        "maxPriorityFeePerGas": undefined,
+        "nonce": 0n,
+        "nonceKey": true,
+        "validAfter": undefined,
+      }
+    `)
+    expect(envelope.validBefore! - before).toBeGreaterThanOrEqual(60)
+    expect(envelope.validBefore! - after).toBeLessThanOrEqual(60)
+    expect(signature.prehash).toBe(true)
+    expect(Address.fromPublicKey(signature.publicKey, { checksum: true })).toBe(
+      address,
+    )
+    expect(PublicKey.validate(signature.publicKey)).toBe(true)
+  })
+
+  test('opens the purchase page only for a refusal of the balance, and throws each other refusal', async () => {
     const rows = [
       {
         answer: () => refusal('insufficient_balance'),
         name: 'insufficient_balance',
       },
-      // A new guest account holds no MACH, so the purchase discards the prepared transfer.
-      {
-        answer: () => Response.json({ transaction }),
-        name: 'the requested transfer',
-      },
       {
         answer: () => refusal('cross_site_request'),
         name: 'cross_site_request',
       },
+      { answer: () => refusal('payment_pending'), name: 'payment_pending' },
+      { answer: () => refusal('payment_reverted'), name: 'payment_reverted' },
       { answer: () => refusal('rate_limited'), name: 'rate_limited' },
       {
         answer: () => refusal('recipient_not_permitted'),
@@ -184,22 +228,24 @@ describe('Actions.guest.pay', () => {
       { answer: () => refusal('rejected'), name: 'rejected' },
       {
         answer: () => Response.json({ transaction: '0x1234' }),
-        name: 'a transaction that fails the check',
+        name: 'a response without a transaction hash',
       },
     ] as const
 
     const results = await Promise.all(
       rows.map(async (row) => {
         const { auth, requests } = answering(row.answer)
-        const error = await Guest.pay(auth, {
-          amount: '1',
-          to,
-          token: 'mach',
-        }).catch((error: unknown) => error)
+        const options = { amount: '1', to, token: 'mach' } as const
+        await Guest.pay(auth, options).catch(() => undefined)
+
+        const error = await Guest.pay(auth, options).catch(
+          (error: unknown) => error,
+        )
+
         return {
           error:
             error instanceof Accounts.RequestError
-              ? (error.reason ?? error.field)
+              ? (error.reason ?? `${error.code}: ${error.field}`)
               : (error as Error).name,
           name: row.name,
           requests: requests.length,
@@ -215,13 +261,18 @@ describe('Actions.guest.pay', () => {
           "requests": 1,
         },
         {
-          "error": "Actions.account.PageRequiredError",
-          "name": "the requested transfer",
+          "error": "cross_site_request",
+          "name": "cross_site_request",
           "requests": 1,
         },
         {
-          "error": "cross_site_request",
-          "name": "cross_site_request",
+          "error": "payment_pending",
+          "name": "payment_pending",
+          "requests": 1,
+        },
+        {
+          "error": "payment_reverted",
+          "name": "payment_reverted",
           "requests": 1,
         },
         {
@@ -240,35 +291,12 @@ describe('Actions.guest.pay', () => {
           "requests": 1,
         },
         {
-          "error": "transaction",
-          "name": "a transaction that fails the check",
+          "error": "server_error: transaction",
+          "name": "a response without a transaction hash",
           "requests": 1,
         },
       ]
     `)
-  })
-
-  test('throws a refusal that no purchase fixes for a guest account that the store keeps, after a read of its balance', async () => {
-    const { auth, requests } = answering(() =>
-      refusal('recipient_not_permitted'),
-    )
-    const { reads, transport } = reading()
-    const options = { amount: '1', to, token: 'mach', transport } as const
-
-    const created = await Guest.pay(auth, options).catch(
-      (error: Accounts.RequestError) => error.reason,
-    )
-    const kept = await Guest.pay(auth, options).catch(
-      (error: Accounts.RequestError) => error.reason,
-    )
-
-    expect(created).toBe('recipient_not_permitted')
-    expect(kept).toBe('recipient_not_permitted')
-    expect(reads).toEqual(['eth_call'])
-    expect(requests.map((request) => request.path)).toEqual([
-      '/v1/guest/pay/prepare',
-      '/v1/guest/pay/prepare',
-    ])
   })
 
   test('keeps one guest account for each payment, until `disconnect` forgets it', async () => {
@@ -277,78 +305,18 @@ describe('Actions.guest.pay', () => {
 
     await Guest.pay(auth, options).catch(() => undefined)
     const first = await Guest.get(auth)
+    await Guest.pay(auth, options).catch(() => undefined)
+    const kept = await Guest.get(auth)
     await Guest.disconnect(auth)
     const forgotten = await Guest.get(auth)
     await Guest.pay(auth, options).catch(() => undefined)
     const created = await Guest.get(auth)
 
     expect(first).toMatch(/^0x[0-9a-fA-F]{40}$/)
+    expect(kept).toBe(first)
     expect(forgotten).toBeUndefined()
     expect(created).toMatch(/^0x[0-9a-fA-F]{40}$/)
     expect(created).not.toBe(first)
-  })
-
-  test('refuses a shortfall above the most that one purchase sells, before the purchase page', async () => {
-    const results = await Promise.all(
-      ['100', '100.000001', '250'].map(async (amount) => {
-        const { auth } = answering(() => refusal('insufficient_balance'))
-
-        // A new guest account holds no MACH, so the shortfall is the amount, and no read runs.
-        // Tempo ID refuses the preparation for the balance, so the purchase is the payment's next step.
-        const error = await Guest.pay(auth, {
-          amount,
-          to,
-          token: 'mach',
-        }).catch((error: unknown) => error)
-
-        return error instanceof Accounts.RequestError
-          ? {
-              amount,
-              field: error.field,
-              message: error.message,
-              meta: {
-                ...error.meta,
-                // The guest account's address is random, so the result holds whether the meta names it.
-                account: error.meta?.account === (await Guest.get(auth)),
-              },
-              reason: error.reason,
-            }
-          : { amount, error: (error as Error).name }
-      }),
-    )
-
-    expect(results).toMatchInlineSnapshot(`
-      [
-        {
-          "amount": "100",
-          "error": "Actions.account.PageRequiredError",
-        },
-        {
-          "amount": "100.000001",
-          "field": "account",
-          "message": "Insufficient balance: the guest account lacks 100.000001 MACH, and one purchase sells at most 100 MACH. Pay at most 100 MACH.",
-          "meta": {
-            "account": true,
-            "amount": "100000001",
-            "symbol": "MACH",
-            "token": "0x20c000000000000000000000f37de3740adec032",
-          },
-          "reason": "insufficient_balance",
-        },
-        {
-          "amount": "250",
-          "field": "account",
-          "message": "Insufficient balance: the guest account lacks 250 MACH, and one purchase sells at most 100 MACH. Pay at most 100 MACH.",
-          "meta": {
-            "account": true,
-            "amount": "250000000",
-            "symbol": "MACH",
-            "token": "0x20c000000000000000000000f37de3740adec032",
-          },
-          "reason": "insufficient_balance",
-        },
-      ]
-    `)
   })
 
   test('keeps a store that only the process holds outside a page, where no purchase page opens', async () => {
@@ -382,230 +350,21 @@ describe('Actions.guest.pay', () => {
   })
 })
 
-describe('Actions.guest.check', () => {
-  /** The private key of the signature of a transaction that arrives signed. */
-  const privateKey =
-    '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
-
-  /** Returns the call of a MACH transfer, with the requested fields unless `options` names others. */
-  const transfer = (options: transfer.Options = {}) =>
-    Actions.token.transfer.call({
-      amount: options.amount ?? 1_000_000n,
-      memo: options.memo,
-      to: options.to ?? to,
-      token: options.token ?? mach,
-    })
-
-  /** The transaction that Tempo ID prepares for the requested transfer. */
-  const envelope = TxEnvelopeTempo.from({
-    calls: [transfer()],
-    chainId: 4217,
-    feePayerSignature: null,
-    gas: 100_000n,
-    maxFeePerGas: 1n,
-    nonceKey: 1n,
-  })
-
-  /** The memo of the transfers with a memo, as hex. */
-  const memo = '0x6f726465722d313233'
-
-  const rows = [
-    {
-      expected: 'signs',
-      name: 'signs the requested transfer',
-      transaction: TxEnvelopeTempo.serialize(envelope),
-    },
-    {
-      expected: 'signs',
-      memo,
-      name: 'signs the requested transfer with a memo',
-      transaction: TxEnvelopeTempo.serialize({
-        ...envelope,
-        calls: [transfer({ memo })],
-      }),
-    },
-    {
-      expected: 'it is no Tempo transaction.',
-      name: 'refuses a value that is no Tempo transaction',
-      transaction: '0x1234',
-    },
-    {
-      expected: 'its call is not the requested transfer.',
-      name: 'refuses a transfer of another token',
-      transaction: TxEnvelopeTempo.serialize({
-        ...envelope,
-        calls: [
-          transfer({ token: '0x20c0000000000000000000000000000000000000' }),
-        ],
-      }),
-    },
-    {
-      expected: 'its call is not the requested transfer.',
-      name: 'refuses a transfer of another amount',
-      transaction: TxEnvelopeTempo.serialize({
-        ...envelope,
-        calls: [transfer({ amount: 2_000_000n })],
-      }),
-    },
-    {
-      expected: 'its call is not the requested transfer.',
-      name: 'refuses a transfer to another recipient',
-      transaction: TxEnvelopeTempo.serialize({
-        ...envelope,
-        calls: [transfer({ to: mach })],
-      }),
-    },
-    {
-      expected: 'its call is not the requested transfer.',
-      memo,
-      name: 'refuses a transfer without the requested memo',
-      transaction: TxEnvelopeTempo.serialize(envelope),
-    },
-    {
-      expected: 'its call is not the requested transfer.',
-      name: 'refuses a transfer that sends value',
-      transaction: TxEnvelopeTempo.serialize({
-        ...envelope,
-        calls: [{ ...transfer(), value: 1n }],
-      }),
-    },
-    {
-      expected: 'it makes more than one call.',
-      name: 'refuses an extra call',
-      transaction: TxEnvelopeTempo.serialize({
-        ...envelope,
-        calls: [transfer(), transfer()],
-      }),
-    },
-    {
-      expected: 'it changes the account.',
-      name: 'refuses a key authorization',
-      transaction: TxEnvelopeTempo.serialize({
-        ...envelope,
-        keyAuthorization: KeyAuthorization.from({
-          address: '0xbe95c3f554e9fc85ec51be69a3d807a0d55bcf2c',
-          chainId: 4217n,
-          expiry: 1234567890,
-          limits: [{ limit: 10_000_000n, token: mach }],
-          signature: SignatureEnvelope.from(
-            Secp256k1.sign({ payload: '0x01', privateKey }),
-          ),
-          type: 'secp256k1',
-        }),
-      }),
-    },
-    {
-      expected: 'it holds a signature.',
-      name: 'refuses a transaction that is already signed',
-      transaction: TxEnvelopeTempo.serialize(envelope, {
-        signature: SignatureEnvelope.from(
-          Secp256k1.sign({
-            payload: TxEnvelopeTempo.getSignPayload(envelope),
-            privateKey,
-          }),
-        ),
-      }),
-    },
-    {
-      expected: 'no sponsor pays its fee.',
-      name: "refuses a transaction without the sponsor's marker",
-      transaction: TxEnvelopeTempo.serialize({
-        ...envelope,
-        feePayerSignature: undefined,
-      }),
-    },
-    {
-      expected: 'it is for another chain.',
-      name: 'refuses a transaction on another chain',
-      transaction: TxEnvelopeTempo.serialize({ ...envelope, chainId: 42431 }),
-    },
-  ] as const
-
-  for (const row of rows)
-    test(row.name, () => {
-      const result = (() => {
-        try {
-          Guest.check(row.transaction, {
-            amount: 1_000_000n,
-            chainId: 4217,
-            memo: 'memo' in row ? row.memo : undefined,
-            to,
-          })
-          return 'signs'
-        } catch (error) {
-          const { field, message } = error as Accounts.RequestError
-          return field === 'transaction'
-            ? message
-                .replace('Invalid prepared transaction: ', '')
-                .replace(
-                  ' The guest account signs only the requested transfer. Try again.',
-                  '',
-                )
-            : message
-        }
-      })()
-
-      expect(result).toBe(row.expected)
-    })
-})
-
-describe('machines.purchasable', () => {
-  /** Returns Tempo ID's refusal of a preparation with `reason`. */
-  const refusal = (reason: Accounts.RequestError.Reason) =>
-    new Accounts.RequestError({
-      code: 'invalid_request',
-      message: 'Refused.',
-      reason,
-      status: 409,
-    })
-
-  /** The failure of the check of a prepared transaction that is no Tempo transaction. */
-  const checked = (() => {
-    try {
-      return Guest.check('0x1234', { amount: 1_000_000n, chainId: 4217, to })
-    } catch (error) {
-      return error
-    }
-  })()
-
-  const rows = [
-    { error: refusal('insufficient_balance'), expected: true },
-    { error: refusal('cross_site_request'), expected: false },
-    { error: refusal('invalid_field'), expected: false },
-    { error: refusal('rate_limited'), expected: false },
-    { error: refusal('recipient_not_permitted'), expected: false },
-    { error: refusal('rejected'), expected: false },
-    { error: refusal('upstream_unavailable'), expected: false },
-    { error: checked, expected: false },
-    {
-      error: new DOMException('The operation was aborted.', 'AbortError'),
-      expected: false,
-    },
-    { error: new TypeError('fetch failed'), expected: false },
-  ] as const
-
-  for (const row of rows)
-    test(`${row.expected ? 'buys' : 'throws'} for ${row.error instanceof Accounts.RequestError ? (row.error.reason ?? row.error.field) : (row.error as Error).name}`, () => {
-      expect(machines.purchasable(row.error)).toBe(row.expected)
-    })
-})
-
 describe('machines.purchase', () => {
-  test('opens the popup at once within a gesture, and ends funded once a read holds the amount', async () => {
-    const purchase = start({ balances: [1_000_000n] })
+  test('opens the popup at once within a gesture, and ends paid with the hash that the page returns', () => {
+    const purchase = start()
 
     purchase.actor.send({ activated: true, type: 'purchase.start' })
     const watching = purchase.actor.getSnapshot().value
-    purchase.actor.send({ type: 'popup.return' })
-    await waitFor(purchase.actor, (snapshot) => snapshot.status === 'done')
+    purchase.actor.send({ transaction: hash, type: 'popup.return' })
 
     expect(watching).toMatchInlineSnapshot(`"watching"`)
-    expect(purchase.actor.getSnapshot().value).toMatchInlineSnapshot(`"funded"`)
+    expect(purchase.actor.getSnapshot().value).toMatchInlineSnapshot(`"paid"`)
+    expect(purchase.actor.getSnapshot().context.transaction).toBe(hash)
     expect(purchase.effects).toMatchInlineSnapshot(`
       [
         "popup.start",
         "popup.stop",
-        "balance.start",
       ]
     `)
   })
@@ -692,26 +451,13 @@ describe('machines.purchase', () => {
     expect(purchase.effects).toMatchInlineSnapshot(`[]`)
   })
 
-  test('ends aborted at an abort in each state, and closes the effect of the state', async () => {
+  test('ends aborted at an abort in each state, and closes the effect of the state', () => {
     const offering = start()
     offering.actor.send({ activated: false, type: 'purchase.start' })
     const watching = start()
     watching.actor.send({ activated: true, type: 'purchase.start' })
-    const reading = start({ balances: [0n] })
-    reading.actor.send({ activated: true, type: 'purchase.start' })
-    reading.actor.send({ type: 'popup.return' })
-    const synchronous = [offering, watching, reading].map(abort)
-    const waiting = start({
-      balances: [0n],
-      delays: { pollInterval: 60_000 },
-    })
-    waiting.actor.send({ activated: true, type: 'purchase.start' })
-    waiting.actor.send({ type: 'popup.return' })
-    await waitFor(waiting.actor, (snapshot) =>
-      snapshot.matches({ polling: 'waiting' }),
-    )
 
-    const results = [...synchronous, abort(waiting)]
+    const results = [offering, watching].map(abort)
 
     expect(results).toMatchInlineSnapshot(`
       [
@@ -729,25 +475,6 @@ describe('machines.purchase', () => {
             "popup.stop",
           ],
           "from": "watching",
-          "status": "aborted",
-        },
-        {
-          "effects": [
-            "popup.start",
-            "popup.stop",
-            "balance.start",
-            "balance.stop",
-          ],
-          "from": "polling.reading",
-          "status": "aborted",
-        },
-        {
-          "effects": [
-            "popup.start",
-            "popup.stop",
-            "balance.start",
-          ],
-          "from": "polling.waiting",
           "status": "aborted",
         },
       ]
@@ -787,93 +514,12 @@ describe('machines.purchase', () => {
     `)
   })
 
-  test('counts a failed read as no MACH yet, and reads again until a read holds the amount', async () => {
-    const purchase = start({
-      balances: [new Error('The read failed.'), 1_000_000n],
-      delays: { pollInterval: 0 },
-    })
-
-    purchase.actor.send({ activated: true, type: 'purchase.start' })
-    purchase.actor.send({ type: 'popup.return' })
-    await waitFor(purchase.actor, (snapshot) => snapshot.status === 'done')
-
-    expect(purchase.actor.getSnapshot().value).toMatchInlineSnapshot(`"funded"`)
-    expect(purchase.actor.getSnapshot().context.error).toBeUndefined()
-    expect(purchase.effects).toMatchInlineSnapshot(`
-      [
-        "popup.start",
-        "popup.stop",
-        "balance.start",
-        "balance.start",
-      ]
-    `)
-  })
-
-  test('ends short, not failed, when each read fails until the timeout', async () => {
-    const purchase = start({
-      balances: [],
-      delays: { pollInterval: 0, pollTimeout: 50 },
-    })
-
-    purchase.actor.send({ activated: true, type: 'purchase.start' })
-    purchase.actor.send({ type: 'popup.return' })
-    await waitFor(purchase.actor, (snapshot) => snapshot.status === 'done')
-
-    expect(purchase.actor.getSnapshot().value).toMatchInlineSnapshot(`"short"`)
-    expect(purchase.actor.getSnapshot().context.error).toBeUndefined()
-    expect(
-      purchase.effects.filter((effect) => effect === 'balance.start').length,
-    ).toBeGreaterThan(1)
-  })
-
-  test('reads the balance again after the interval, until a read holds the amount', async () => {
-    const purchase = start({
-      balances: [0n, 999_999n, 1_000_000n],
-      delays: { pollInterval: 0 },
-    })
-
-    purchase.actor.send({ activated: true, type: 'purchase.start' })
-    purchase.actor.send({ type: 'popup.return' })
-    await waitFor(purchase.actor, (snapshot) => snapshot.status === 'done')
-
-    expect(purchase.actor.getSnapshot().value).toMatchInlineSnapshot(`"funded"`)
-    expect(purchase.effects).toMatchInlineSnapshot(`
-      [
-        "popup.start",
-        "popup.stop",
-        "balance.start",
-        "balance.start",
-        "balance.start",
-      ]
-    `)
-  })
-
-  test('ends short once the timeout passes without a read that holds the amount', async () => {
-    const purchase = start({
-      balances: [0n],
-      delays: { pollInterval: 60_000, pollTimeout: 0 },
-    })
-
-    purchase.actor.send({ activated: true, type: 'purchase.start' })
-    purchase.actor.send({ type: 'popup.return' })
-    await waitFor(purchase.actor, (snapshot) => snapshot.status === 'done')
-
-    expect(purchase.actor.getSnapshot().value).toMatchInlineSnapshot(`"short"`)
-    expect(purchase.effects).toMatchInlineSnapshot(`
-      [
-        "popup.start",
-        "popup.stop",
-        "balance.start",
-      ]
-    `)
-  })
-
   test('reaches every state along its shortest paths, handles every event type, and ends with a context that agrees with its state', () => {
     const snapshots = getShortestPaths(machines.purchase, traversal).map(
       (path) => path.state,
     )
 
-    const reached = new Set(snapshots.map(name))
+    const reached = new Set(snapshots.map(machines.status))
     const handled = new Set(
       snapshots.flatMap((snapshot) =>
         traversal
@@ -882,11 +528,13 @@ describe('machines.purchase', () => {
           .map((event) => event.type),
       ),
     )
-    // Only `failed` holds an error.
+    // Only `failed` holds an error, and only `paid` a transaction.
     const disagreeing = snapshots.filter(
       (snapshot) =>
         (machines.status(snapshot) === 'failed') !==
-        (snapshot.context.error !== undefined),
+          (snapshot.context.error !== undefined) ||
+        (machines.status(snapshot) === 'paid') !==
+          (snapshot.context.transaction !== undefined),
     )
 
     expect([...reached].sort()).toMatchInlineSnapshot(`
@@ -895,12 +543,9 @@ describe('machines.purchase', () => {
         "blocked",
         "cancelled",
         "failed",
-        "funded",
         "idle",
         "offering",
-        "polling.reading",
-        "polling.waiting",
-        "short",
+        "paid",
         "watching",
       ]
     `)
@@ -908,35 +553,11 @@ describe('machines.purchase', () => {
     expect(disagreeing).toEqual([])
   })
 
-  /** The events of the machine's timers and of its read of the balance. */
-  const internal = {
-    done: (output: bigint) => ({
-      output,
-      type: 'xstate.done.actor.balance' as const,
-    }),
-    error: {
-      error: new Error('The read failed.'),
-      type: 'xstate.error.actor.balance',
-    },
-    pollInterval: {
-      type: 'xstate.after.pollInterval.purchase.polling.waiting',
-    },
-    pollTimeout: { type: 'xstate.after.pollTimeout.purchase.polling' },
-  } as const
-
-  /** A machine event, or the event of a timer or of the read. */
-  type Step =
-    | machines.purchase.Event
-    | ReturnType<typeof internal.done>
-    | typeof internal.error
-    | typeof internal.pollInterval
-    | typeof internal.pollTimeout
-
-  /** The events of each type that the runner, a timer, or the read sends from a snapshot. */
+  /** The events of each type that the runner sends from a snapshot. */
   const events: {
-    [type in Step['type']]: (
+    [type in machines.purchase.Event['type']]: (
       snapshot: machines.purchase.Snapshot,
-    ) => readonly Step[]
+    ) => readonly machines.purchase.Event[]
   } = {
     'dialog.cancel': (snapshot) =>
       snapshot.matches('watching') ? [{ type: 'dialog.cancel' }] : [],
@@ -953,8 +574,11 @@ describe('machines.purchase', () => {
         ? [{ error: new Error('Refused.'), type: 'popup.refuse' }]
         : [],
     'popup.return': (snapshot) =>
-      snapshot.matches('watching') ? [{ type: 'popup.return' }] : [],
-    'purchase.abort': () => [{ type: 'purchase.abort' }],
+      snapshot.matches('watching')
+        ? [{ transaction: hash, type: 'popup.return' }]
+        : [],
+    'purchase.abort': (snapshot) =>
+      snapshot.status === 'active' ? [{ type: 'purchase.abort' }] : [],
     'purchase.start': (snapshot) =>
       snapshot.matches('idle')
         ? [
@@ -962,57 +586,25 @@ describe('machines.purchase', () => {
             { activated: true, type: 'purchase.start' },
           ]
         : [],
-    'xstate.after.pollInterval.purchase.polling.waiting': (snapshot) =>
-      snapshot.matches({ polling: 'waiting' }) ? [internal.pollInterval] : [],
-    'xstate.after.pollTimeout.purchase.polling': (snapshot) =>
-      snapshot.matches('polling') ? [internal.pollTimeout] : [],
-    'xstate.done.actor.balance': (snapshot) =>
-      snapshot.matches({ polling: 'reading' })
-        ? [internal.done(0n), internal.done(1_000_000n)]
-        : [],
-    'xstate.error.actor.balance': (snapshot) =>
-      snapshot.matches({ polling: 'reading' }) ? [internal.error] : [],
   }
 
   /** The traversal of the machine's graph. */
   const traversal = {
-    // The traversal's type names only `Event`, though the machine handles every `Step`.
     events: (snapshot: machines.purchase.Snapshot) =>
-      Object.values(events).flatMap((fn) =>
-        fn(snapshot),
-      ) as readonly machines.purchase.Event[],
-    input: { required: 1_000_000n },
-    // JSON holds no bigint, so the output of a read serializes as its decimal string.
-    serializeEvent: (event: machines.purchase.Event) =>
-      JSON.stringify(event, (_key, value: unknown) =>
-        typeof value === 'bigint' ? value.toString() : value,
-      ),
+      Object.values(events).flatMap((fn) => fn(snapshot)),
     serializeState: (snapshot: machines.purchase.Snapshot) =>
       JSON.stringify(snapshot.value),
   }
 
   /**
-   * Starts a purchase of 1 MACH, with `delays` in place of its own, and records the start and stop
-   * of each invoked effect, in order. Each read of the balance returns the next of `balances`, or
-   * fails with it for an error, and a read past them fails. With `blocked`, the popup reports that
-   * the browser blocked it.
+   * Starts a purchase, and records the start and stop of each invoked effect, in order. With
+   * `blocked`, the popup reports that the browser blocked it.
    */
   function start(options: start.Options = {}) {
-    const balances = [...(options.balances ?? [])]
     const effects: string[] = []
     const actor = createActor(
       machines.purchase.provide({
         actors: {
-          balance: fromPromise((args) => {
-            effects.push('balance.start')
-            args.signal.addEventListener('abort', () =>
-              effects.push('balance.stop'),
-            )
-            const balance = balances.shift()
-            if (balance === undefined || balance instanceof Error)
-              return Promise.reject(balance ?? new Error('The read failed.'))
-            return Promise.resolve(balance)
-          }),
           offer: fromCallback(() => {
             effects.push('offer.start')
             return () => effects.push('offer.stop')
@@ -1023,9 +615,7 @@ describe('machines.purchase', () => {
             return () => effects.push('popup.stop')
           }),
         },
-        delays: options.delays ?? {},
       }),
-      { input: { required: 1_000_000n } },
     ).start()
 
     return { actor, effects }
@@ -1033,7 +623,7 @@ describe('machines.purchase', () => {
 
   /** Sends `purchase.abort` to `purchase`, and returns its state before, its status, and its effects. */
   function abort(purchase: ReturnType<typeof start>) {
-    const from = name(purchase.actor.getSnapshot())
+    const from = machines.status(purchase.actor.getSnapshot())
     purchase.actor.send({ type: 'purchase.abort' })
     return {
       effects: purchase.effects,
@@ -1041,41 +631,11 @@ describe('machines.purchase', () => {
       status: machines.status(purchase.actor.getSnapshot()),
     }
   }
-
-  /** Returns the name of the state of `snapshot`, with the substate of `polling`. */
-  function name(snapshot: machines.purchase.Snapshot) {
-    const { value } = snapshot
-    return typeof value === 'string' ? value : `polling.${value.polling}`
-  }
 })
 
 declare namespace start {
   type Options = {
-    /** The balance of each read, in base units, or the error of a read that fails. */
-    balances?: readonly (bigint | Error)[] | undefined
     /** Whether the browser blocks the popup. */
     blocked?: boolean | undefined
-    /** Milliseconds of each delay of the purchase, in place of the module's. */
-    delays?:
-      | {
-          /** The wait between two reads. */
-          pollInterval?: number
-          /** The time that the purchased MACH has to arrive. */
-          pollTimeout?: number
-        }
-      | undefined
-  }
-}
-
-declare namespace transfer {
-  type Options = {
-    /** The amount, in base units. Defaults to 1 MACH. */
-    amount?: bigint | undefined
-    /** The memo, as hex. Absent for a transfer without one. */
-    memo?: `0x${string}` | undefined
-    /** The recipient. Defaults to the requested recipient. */
-    to?: `0x${string}` | undefined
-    /** The token. Defaults to MACH. */
-    token?: `0x${string}` | undefined
   }
 }

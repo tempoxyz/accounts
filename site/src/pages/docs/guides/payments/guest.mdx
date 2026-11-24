@@ -9,28 +9,38 @@ import { SourceLink } from '../../../../components/SourceLink.tsx'
 
 A guest payment is a MACH transfer from a guest account: a root Tempo Account whose owner is a non-extractable WebCrypto P256 key pair that the app's page keeps in its own store. The visitor signs in nowhere. As a card checkout charges a guest without an account, the app charges the visitor in one call.
 
-<SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> with <SourceLink name="pay.guest" path="src/actions/account.ts">`guest: true`</SourceLink> creates the guest account at the first payment. Each payment first asks Tempo ID to prepare the transfer, so Tempo ID refuses a payment that no purchase fixes, such as to a recipient that MACH's transfer policy does not permit, before the visitor pays. If the guest account holds less MACH than the amount, Tempo ID's purchase page opens in a popup, and sells the MACH that it lacks with Apple Pay, Google Pay, or a card. The guest account then signs the transfer, and Tempo ID's sponsor pays the network fee.
+<SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> with <SourceLink name="pay.guest" path="src/actions/account.ts">`guest: true`</SourceLink> creates the guest account at the first payment. A guest account that the store keeps signs the transfer on the page, with no read of the chain, and sends it to Tempo ID in one request. Tempo ID checks it, and its sponsor pays the network fee.
+
+A new guest account, or one that holds less MACH than the amount, pays on Tempo ID's purchase page in a popup. The page receives the key pair in a message, as a non-extractable `CryptoKey`. The page checks the payment, sells the MACH that the guest account lacks with Apple Pay, Google Pay, or a card, then signs and sends the transfer.
 
 ```mermaid
 sequenceDiagram
   participant App as App's page
   participant ID as Tempo ID
   participant Chain as Tempo mainnet
-  par Before any purchase
-    App->>ID: POST /v1/guest/pay/prepare
-    ID-->>App: Sponsored transfer, or a refusal
-  and Not for a new guest account
-    App->>Chain: Read the guest account's MACH balance
+  opt A guest account that the store keeps
+    App->>App: Sign the transfer
+    App->>ID: POST /v1/guest/pay
+    ID->>Chain: Send with the sponsor's signature
+    ID-->>App: Transaction hash, or insufficient_balance
   end
-  App->>ID: Open the purchase page, if the balance is low
-  ID-->>App: Return once the MACH arrives
-  App->>ID: POST /v1/guest/pay/prepare, after a purchase
-  ID-->>App: Sponsored transfer, not signed
-  App->>App: Check the transfer, and sign it
-  App->>ID: POST /v1/guest/pay/send
-  ID->>Chain: Send with the sponsor's signature
-  ID-->>App: Transaction hash
+  opt A new guest account, or insufficient_balance
+    App->>ID: Open the purchase page in a popup
+    ID->>App: Ask for the key pair
+    App->>ID: Post the key pair
+    ID->>ID: Buy the MACH, and sign the transfer
+    ID->>Chain: Send with the sponsor's signature
+    ID-->>App: Transaction hash
+  end
 ```
+
+The page sends at most one request to Tempo ID for each payment, and reads nothing from the chain:
+
+| The guest account                   | Requests of the page                   | Purchase page |
+| ----------------------------------- | -------------------------------------- | ------------- |
+| Kept by the store, holds the amount | 1, `POST /v1/guest/pay`                | No            |
+| Kept by the store, holds less       | 1, refused with `insufficient_balance` | Yes           |
+| New                                 | 0                                      | Yes           |
 
 The demo pays MACH as a guest, shows the guest account's address, and forgets the guest account. Its default recipient is the initial merchant of MACH, which MACH's transfer policy permits.
 
@@ -74,7 +84,7 @@ export const accounts = Accounts.create()
 
 ### Charge the visitor
 
-Call <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> in a click handler, so the purchase page's popup opens within the click. The preparation and the read before the purchase are requests, so if they outlast the click's user activation, a dialog offers the popup, and its Continue opens it. The call resolves with the guest account's <SourceLink name="pay.address" path="src/actions/guest.ts">`address`</SourceLink> and the <SourceLink name="pay.transaction" path="src/actions/guest.ts">`transaction`</SourceLink> hash, once the chain includes the transfer.
+Call <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> in a click handler, so the purchase page's popup opens within the click. The send before a purchase is a request, so if it outlasts the click's user activation, a dialog offers the popup, and its Continue opens it. The call resolves with the guest account's <SourceLink name="pay.address" path="src/actions/guest.ts">`address`</SourceLink> and the <SourceLink name="pay.transaction" path="src/actions/guest.ts">`transaction`</SourceLink> hash, once the chain includes the transfer.
 
 :::code-group
 
@@ -117,19 +127,18 @@ export const accounts = Accounts.create()
 
 :::
 
-The purchase page buys the larger of 5 MACH and the shortfall, rounded up to the cent, at most 100 MACH. The guest account keeps the rest for the next payment. If Tempo ID refuses the payment for another reason than the balance, such as the recipient, the app, the page's origin, or a rate limit, the call fails before the purchase page opens, also for a new guest account. The guest account signs only a transfer of the requested amount of MACH to <SourceLink name="pay.to" path="src/actions/account.ts">`to`</SourceLink>, and refuses any other transaction that Tempo ID returns.
+The purchase page buys the larger of 5 MACH and the shortfall, rounded up to the cent, at most 100 MACH. The guest account keeps the rest for the next payment. Before any purchase, the page refuses a payment that Tempo ID does not accept for another reason than the balance, such as the recipient, the app, or an amount that one purchase cannot cover. Each transaction of the guest account makes one transfer of the requested amount of MACH to <SourceLink name="pay.to" path="src/actions/account.ts">`to`</SourceLink>, and stays valid for 60 seconds.
 
 A call fails in these cases, and the transfer does not send:
 
-| The case                                                                                                                                  | The error                                                                                                                                                          |
-| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A token other than MACH                                                                                                                   | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the reason `unsupported_token`, before any request                |
-| A chain other than Tempo mainnet                                                                                                          | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the reason `invalid_chain`, before any request                    |
-| A shortfall above 100 MACH                                                                                                                | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the reason `insufficient_balance`, before the purchase page opens |
-| A store that holds its values only in the page, such as <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the field `store`, before the guest account is created            |
-| The visitor selects **Cancel** on the page                                                                                                | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the code `access_denied`                                          |
-| The visitor closes the popup or the dialog                                                                                                | A `DOMException` with the name `AbortError`                                                                                                                        |
-| The browser blocks the popup                                                                                                              | <SourceLink name="BlockedError" path="src/actions/account.ts">`Actions.account.BlockedError`</SourceLink>                                                          |
+| The case                                                                                                                                  | The error                                                                                                                                               |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A token other than MACH                                                                                                                   | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the reason `unsupported_token`, before any request     |
+| A chain other than Tempo mainnet                                                                                                          | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the reason `invalid_chain`, before any request         |
+| A store that holds its values only in the page, such as <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the field `store`, before the guest account is created |
+| The visitor selects **Cancel** on the page                                                                                                | <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with the code `access_denied`                               |
+| The visitor closes the popup or the dialog                                                                                                | A `DOMException` with the name `AbortError`                                                                                                             |
+| The browser blocks the popup                                                                                                              | <SourceLink name="BlockedError" path="src/actions/account.ts">`Actions.account.BlockedError`</SourceLink>                                               |
 
 <SourceLink name="pay" path="src/actions/guest.ts">`Actions.guest.pay`</SourceLink> lists each refusal of Tempo ID.
 
