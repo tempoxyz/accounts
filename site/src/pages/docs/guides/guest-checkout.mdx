@@ -239,7 +239,7 @@ With `guest: 'offer'`, each sign-in of a page or a CLI offers Continue as guest,
 | <SourceLink name="signIn" path="src/plugins/redirect.ts">`redirect.signIn`</SourceLink>                    | The redirect URI with `guest=1`, which the next load of the page completes             |
 | <SourceLink name="signIn" path="src/plugins/device.ts">`device.signIn`</SourceLink>                        | The refusal `guest_selected` of the next poll, which the plugin turns into the session |
 
-A sign-in with a challenge offers no guest. Outside a browser, the instance needs a <SourceLink name="create" path="src/stores/File.ts">`Store.file`</SourceLink>, which keeps the key pair as a P256 private key in a `0600` file. A store that other parties read, such as `Store.postgres`, refuses it, and so does `Store.memory` in a page, whose reload would lose the funds.
+A sign-in with a challenge offers no guest. Outside a browser, the instance needs a <SourceLink name="create" path="src/stores/File.ts">`Store.file`</SourceLink>, which keeps the key pair as a P256 private key in a `0600` file. The `expo` preset's secure store keeps it as a P256 private key in the device's secure store. A store that other parties read, such as `Store.postgres`, refuses it, and so does `Store.memory` in a page, whose reload would lose the funds.
 
 ```ts [tempo.config.ts]
 import { Accounts, Store } from 'accounts'

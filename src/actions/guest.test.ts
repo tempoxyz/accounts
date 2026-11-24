@@ -4,6 +4,7 @@
  * store, the signature of its account, and the guest session of an instance with `guest`.
  * @module
  */
+import { PGlite } from '@electric-sql/pglite'
 import * as Esbuild from 'esbuild'
 import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs/promises'
@@ -21,14 +22,22 @@ import {
 } from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import { token as TokenActions } from 'viem/tempo/actions'
-import { describe, expect, expectTypeOf, test } from 'vite-plus/test'
+import {
+  describe,
+  expect,
+  expectTypeOf,
+  onTestFinished,
+  test,
+} from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
 import * as DefaultAccounts from '../internal/DefaultAccounts.js'
+import * as DeviceStore from '../internal/DeviceStore.js'
 import * as SignIn from '../internal/SignIn.js'
 import { device, dialog, redirect } from '../plugins/index.js'
 import * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
+import * as Postgres from '../stores/Postgres.js'
 import * as Guest from './guest.js'
 
 /** Tempo mainnet's chain ID. */
@@ -107,6 +116,45 @@ describe('Actions.guest.check', () => {
       transaction({ feePayerSignature: { r: 1n, s: 1n, yParity: 0 } }),
     ],
   ] as const
+
+  test.for([
+    [
+      'accepts a guest-paid fee in the quoted fee token',
+      { feePayerSignature: undefined, feeToken: ousd },
+      ousd,
+      true,
+    ],
+    [
+      'refuses a guest-paid fee in another fee token than the quoted one',
+      {
+        feePayerSignature: undefined,
+        feeToken: '0x20c0000000000000000000000000000000000001',
+      },
+      ousd,
+      false,
+    ],
+    [
+      'refuses a guest-paid fee in a token that is no TIP-20 token, without a quoted fee token',
+      {
+        feePayerSignature: undefined,
+        feeToken: '0x000000000000000000000000000000000000dEaD',
+      },
+      undefined,
+      false,
+    ],
+    [
+      'accepts a sponsored fee in any fee token, which the guest account never pays',
+      { feeToken: '0x20c0000000000000000000000000000000000001' },
+      ousd,
+      true,
+    ],
+  ] as const)('%s', ([, fields, feeToken, accepted]) => {
+    const check = () =>
+      Guest.check(transaction(fields as never), { ...payment, feeToken })
+
+    if (accepted) expect(check().calls).toHaveLength(1)
+    else expect(check).toThrow('its fee token is not the quoted one.')
+  })
 
   test("names the fee payer's signature that it refuses", () => {
     const value = transaction({
@@ -227,6 +275,100 @@ describe('Actions.guest.session', () => {
     expect(error).toMatchInlineSnapshot(
       `[TypeError: Invalid \`store\`: other parties read it, so it keeps no key pair of a guest account. Use IndexedDB in a browser, or \`Store.file\`.]`,
     )
+  })
+})
+
+describe('Actions.guest.session on each store preset', () => {
+  /** Returns the platform capability of `expo-secure-store` on a device: strings at keys. */
+  function secureStore() {
+    const values = new Map<string, string>()
+    return {
+      deleteItemAsync(key: string) {
+        values.delete(key)
+        return Promise.resolve()
+      },
+      getItemAsync: (key: string) => Promise.resolve(values.get(key) ?? null),
+      setItemAsync(key: string, value: string) {
+        values.set(key, value)
+        return Promise.resolve()
+      },
+    } satisfies DeviceStore.create.SecureStore
+  }
+
+  test.for([
+    // A store that keeps values as they are keeps a non-extractable WebCrypto key pair, as the
+    // default IndexedDB store of a page does.
+    ['Store.memory', () => ({ store: Store.memory() }), 'webCrypto'],
+    [
+      'Store.file',
+      () => {
+        const path = Path.join(
+          Os.tmpdir(),
+          `accounts-${crypto.randomUUID()}`,
+          'store.json',
+        )
+        return { store: Store.file(path) }
+      },
+      'p256',
+    ],
+    [
+      "the `expo` preset's secure store",
+      () => {
+        const device = secureStore()
+        // Another store on the same secure store reads the key pair back from its JSON.
+        return {
+          again: DeviceStore.create(device),
+          store: DeviceStore.create(device),
+        }
+      },
+      'p256',
+    ],
+  ] as const)(
+    'creates a guest account that signs and persists on %s',
+    async ([, create, type]) => {
+      const { again, store } = create() as {
+        again?: Store.Store
+        store: Store.Store
+      }
+
+      const session = await Guest.session(config(store))
+      const restored = await Guest.session(config(again ?? store))
+      const signature = await Guest.account(config(again ?? store), {
+        session,
+      }).sign({ hash: `0x${'11'.repeat(32)}` })
+      const stored = (await store.getItem(
+        'tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]',
+      )) as { privateKey?: unknown; type?: unknown } | undefined
+
+      expect([
+        restored.address === session.address,
+        typeof signature,
+        stored?.type === 'p256' ? 'p256' : 'webCrypto',
+      ]).toEqual([true, 'string', type])
+    },
+  )
+
+  test('refuses a shared store of JSON, such as `Store.postgres`, before any query', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const queries: string[] = []
+    const store = Postgres.create({
+      async query(text, values) {
+        queries.push(text)
+        return await database.query(text, [...values])
+      },
+    })
+
+    const error = await Guest.session(config(store)).catch(
+      (error: Error) => error.message,
+    )
+
+    expect([error, queries]).toMatchInlineSnapshot(`
+      [
+        "Invalid \`store\`: other parties read it, so it keeps no key pair of a guest account. Use IndexedDB in a browser, or \`Store.file\`.",
+        [],
+      ]
+    `)
   })
 })
 
@@ -498,424 +640,6 @@ describe('Actions.guest.session in other processes', () => {
       }
     `)
   }, 60_000)
-})
-
-describe('Accounts.pay of a guest session outside a page', () => {
-  /** The hash of the transaction that paid. */
-  const hash = `0x${'ab'.repeat(32)}` as const
-
-  /** The page of a payment that the guest account covers. */
-  const page = {
-    faucet: false,
-    fee: null,
-    refusal: null,
-    shortfall: null,
-    sponsored: true,
-    token: ousd,
-  }
-
-  /** The page of a payment that the guest account lacks funds for. */
-  const short = { ...page, shortfall: { formatted: '12.5', symbol: 'OUSD' } }
-
-  /** A request that the payment sent, with its guest request decoded. */
-  type Sent = {
-    body: Record<string, unknown> | undefined
-    guest: Record<string, unknown> | undefined
-    route: string
-  }
-
-  /**
-   * Returns an instance whose Tempo ID answers each route with the next answer of `script`, and the
-   * requests that it receives. An answer of `null` drops the response, as a lost connection does.
-   */
-  function scripted(
-    script: Record<string, unknown[]>,
-    options: {
-      device?: boolean | undefined
-      onCode?: ((code: { userCode: string }) => void) | undefined
-      redirectUri?: string | undefined
-    } = {},
-  ) {
-    const sent: Sent[] = []
-    const accounts = Accounts.create({
-      chain: 4217,
-      clientId: 'cli:guest-example',
-      fetch: async (input, init) => {
-        const url = new URL(String(input))
-        const route = `${init?.method ?? 'GET'} ${url.pathname}`
-        const body = (() => {
-          if (typeof init?.body === 'string') return JSON.parse(init.body)
-          if (init?.body instanceof URLSearchParams)
-            return Object.fromEntries(init.body)
-          return undefined
-        })() as Record<string, unknown> | undefined
-        const value =
-          url.searchParams.get('guest') ?? body?.guest ?? body?.guest_request
-        sent.push({
-          body,
-          guest:
-            typeof value === 'string'
-              ? JSON.parse(Bytes.toString(Base64.toBytes(value)))
-              : undefined,
-          route,
-        })
-        const answer = script[route]?.shift()
-        if (answer === null) throw new TypeError('fetch failed')
-        if (typeof answer === 'function') return Response.json(await answer())
-        return Response.json(answer ?? { error: 'not_found' }, {
-          status: answer === undefined ? 404 : 200,
-        })
-      },
-      guest: 'auto',
-      plugins:
-        options.device === false
-          ? []
-          : [device({ onCode: options.onCode ?? (() => {}) })],
-      ...(options.redirectUri ? { redirectUri: options.redirectUri } : {}),
-      store: Store.memory(),
-      url: 'http://127.0.0.1:9',
-    })
-    return { accounts, sent }
-  }
-
-  /** Returns the prepared transaction and its tag. */
-  const prepared = (fields: Partial<TxEnvelopeTempo.TxEnvelopeTempo> = {}) => ({
-    tag: 'tag-1',
-    transaction: transaction(fields),
-  })
-
-  test('pays with funds: reads the payment, prepares it, and sends the transfer that the key pair signed, with one checkout ID', async () => {
-    const { accounts, sent } = scripted({
-      'GET /i/guest/pay': [page],
-      'POST /i/guest/pay': [prepared()],
-      'POST /i/guest/pay/send': [{ paid: { transaction: hash }, redirect: '' }],
-    })
-
-    const result = await accounts.pay(payment)
-    const signed = TxEnvelopeTempo.deserialize(
-      sent.at(-1)!.body!.transaction as TxEnvelopeTempo.Serialized,
-    )
-
-    expect({
-      address: result.address === (await accounts.guest.get()),
-      checkouts: new Set(sent.map((entry) => entry.guest?.checkout)).size,
-      redirectUris: sent.map((entry) => entry.guest?.redirect_uri),
-      routes: sent.map((entry) => entry.route),
-      send: { ...sent.at(-1)!.body, guest: undefined, transaction: undefined },
-      signature: signed.signature?.type,
-      transaction: result.transaction,
-    }).toMatchInlineSnapshot(`
-      {
-        "address": true,
-        "checkouts": 1,
-        "redirectUris": [
-          "",
-          "",
-          "",
-        ],
-        "routes": [
-          "GET /i/guest/pay",
-          "POST /i/guest/pay",
-          "POST /i/guest/pay/send",
-        ],
-        "send": {
-          "chain_id": 4217,
-          "client_id": "cli:guest-example",
-          "guest": undefined,
-          "redirect_uri": "",
-          "tag": "tag-1",
-          "transaction": undefined,
-        },
-        "signature": "p256",
-        "transaction": "0xabababababababababababababababababababababababababababababababab",
-      }
-    `)
-  })
-
-  test("funds a shortfall from the chain's faucet, then pays", async () => {
-    const { accounts, sent } = scripted({
-      'GET /i/guest/pay': [{ ...short, faucet: true }, page],
-      'POST /i/guest/fund': [{ transactions: [hash] }],
-      'POST /i/guest/pay': [prepared()],
-      'POST /i/guest/pay/send': [{ paid: { transaction: hash }, redirect: '' }],
-    })
-
-    const result = await accounts.pay(payment)
-
-    expect({
-      fund: { ...sent[1]!.body, guest: undefined },
-      routes: sent.map((entry) => entry.route),
-      transaction: result.transaction,
-    }).toMatchInlineSnapshot(`
-      {
-        "fund": {
-          "chain_id": 4217,
-          "client_id": "cli:guest-example",
-          "guest": undefined,
-          "redirect_uri": "",
-        },
-        "routes": [
-          "GET /i/guest/pay",
-          "POST /i/guest/fund",
-          "GET /i/guest/pay",
-          "POST /i/guest/pay",
-          "POST /i/guest/pay/send",
-        ],
-        "transaction": "0xabababababababababababababababababababababababababababababababab",
-      }
-    `)
-  })
-
-  test("shows a funding code through the `device` plugin's `onCode` without a faucet, waits for the funds, then pays", async () => {
-    const codes: string[] = []
-    const { accounts, sent } = scripted(
-      {
-        'GET /i/guest/pay': [short, short, page],
-        'POST /device/code': [
-          {
-            device_code: 'device-code',
-            expires_in: 60,
-            interval: 0,
-            user_code: 'ABCD-EFGH',
-            verification_uri: 'http://127.0.0.1:9/device',
-            verification_uri_complete:
-              'http://127.0.0.1:9/device?user_code=ABCD-EFGH',
-          },
-        ],
-        'POST /i/guest/pay': [prepared()],
-        'POST /i/guest/pay/send': [
-          { paid: { transaction: hash }, redirect: '' },
-        ],
-      },
-      { onCode: (code) => codes.push(code.userCode) },
-    )
-
-    const result = await accounts.pay(payment)
-
-    expect({
-      code: { ...sent[1]!.body, device: undefined, guest_request: undefined },
-      codeGuest: sent[1]!.guest?.redirect_uri,
-      codes,
-      routes: sent.map((entry) => entry.route),
-      transaction: result.transaction,
-    }).toMatchInlineSnapshot(`
-      {
-        "code": {
-          "chain_id": "4217",
-          "client_id": "cli:guest-example",
-          "device": undefined,
-          "funding_hint": "12.5",
-          "funding_token": "0x20c0000000000000000000006a37da5c996874be",
-          "guest_request": undefined,
-        },
-        "codeGuest": "",
-        "codes": [
-          "ABCD-EFGH",
-        ],
-        "routes": [
-          "GET /i/guest/pay",
-          "POST /device/code",
-          "GET /i/guest/pay",
-          "GET /i/guest/pay",
-          "POST /i/guest/pay",
-          "POST /i/guest/pay/send",
-        ],
-        "transaction": "0xabababababababababababababababababababababababababababababababab",
-      }
-    `)
-  })
-
-  test.for([
-    ['signs a guest-paid fee in the quoted fee token', ousd, 'paid'],
-    [
-      'refuses a guest-paid fee in another fee token than the quoted one',
-      '0x20c0000000000000000000000000000000000001',
-      'refused',
-    ],
-  ] as const)('%s', async ([, feeToken, expected]) => {
-    const { accounts, sent } = scripted({
-      'GET /i/guest/pay': [{ ...page, fee: { token: ousd }, sponsored: false }],
-      // Without the sponsor's marker, the guest account pays the fee.
-      'POST /i/guest/pay': [
-        prepared({ feePayerSignature: undefined, feeToken }),
-      ],
-      'POST /i/guest/pay/send': [{ paid: { transaction: hash }, redirect: '' }],
-    })
-
-    const result = await accounts.pay(payment).then(
-      () => 'paid',
-      (error: Error) =>
-        error.message.includes('fee token is not the quoted one')
-          ? 'refused'
-          : error.message,
-    )
-
-    expect([result, sent.length]).toEqual([
-      expected,
-      expected === 'paid' ? 3 : 2,
-    ])
-  })
-
-  test("names the unlisted token's exact address in the funding code, whose guest request names no redirect URI, beside the routes' registered one", async () => {
-    const token = '0x20c00000000000000000000000000000000004d2'
-    const { accounts, sent } = scripted(
-      {
-        'GET /i/guest/pay': [
-          { ...short, token },
-          // The checkout paid once the funds arrived.
-          { paid: { transaction: hash }, redirect: '' },
-        ],
-        'POST /device/code': [
-          {
-            device_code: 'device-code',
-            expires_in: 60,
-            interval: 0,
-            user_code: 'ABCD-EFGH',
-            verification_uri: 'http://127.0.0.1:9/device',
-            verification_uri_complete:
-              'http://127.0.0.1:9/device?user_code=ABCD-EFGH',
-          },
-        ],
-      },
-      { redirectUri: 'https://app.example.com/callback' },
-    )
-
-    await accounts.pay({ ...payment, token })
-
-    expect(
-      sent.map((entry) => [
-        entry.route,
-        entry.guest?.redirect_uri,
-        entry.body?.funding_token,
-      ]),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          "GET /i/guest/pay",
-          "https://app.example.com/callback",
-          undefined,
-        ],
-        [
-          "POST /device/code",
-          "",
-          "0x20c00000000000000000000000000000000004d2",
-        ],
-        [
-          "GET /i/guest/pay",
-          "https://app.example.com/callback",
-          undefined,
-        ],
-      ]
-    `)
-  })
-
-  test('rejects a shortfall without a faucet and without the `device` plugin with `insufficient_balance`', async () => {
-    const { accounts, sent } = scripted(
-      { 'GET /i/guest/pay': [short] },
-      { device: false },
-    )
-
-    const error = await accounts.pay(payment).catch((error: unknown) => error)
-
-    expect([
-      (error as Accounts.RequestError).reason,
-      sent.map((entry) => entry.route),
-    ]).toMatchInlineSnapshot(`
-      [
-        "insufficient_balance",
-        [
-          "GET /i/guest/pay",
-        ],
-      ]
-    `)
-  })
-
-  test('refuses a prepared transaction of another amount, and signs and sends nothing', async () => {
-    const { accounts, sent } = scripted({
-      'GET /i/guest/pay': [page],
-      'POST /i/guest/pay': [
-        prepared({
-          calls: [
-            TokenActions.transfer.call({
-              amount: 12_500_001n,
-              to,
-              token: ousd,
-            }),
-          ],
-        }),
-      ],
-    })
-
-    const error = await accounts.pay(payment).catch((error: unknown) => error)
-
-    expect([error, sent.map((entry) => entry.route)]).toMatchInlineSnapshot(`
-      [
-        [Accounts.RequestError: Invalid prepared transaction: its call is not the requested transfer. The guest account signs only the requested transfer. Try again.],
-        [
-          "GET /i/guest/pay",
-          "POST /i/guest/pay",
-        ],
-      ]
-    `)
-  })
-
-  test('sends the same signed transaction of the same checkout again after a send without a response', async () => {
-    const { accounts, sent } = scripted({
-      'GET /i/guest/pay': [page],
-      'POST /i/guest/pay': [prepared()],
-      'POST /i/guest/pay/send': [
-        null,
-        { paid: { transaction: hash }, redirect: '' },
-      ],
-    })
-
-    const result = await accounts.pay(payment)
-    const sends = sent.filter(
-      (entry) => entry.route === 'POST /i/guest/pay/send',
-    )
-
-    expect({
-      checkouts: new Set(sent.map((entry) => entry.guest?.checkout)).size,
-      same:
-        sends[0]!.body!.transaction === sends[1]!.body!.transaction &&
-        sends[0]!.body!.tag === sends[1]!.body!.tag,
-      sends: sends.length,
-      transaction: result.transaction,
-    }).toMatchInlineSnapshot(`
-      {
-        "checkouts": 1,
-        "same": true,
-        "sends": 2,
-        "transaction": "0xabababababababababababababababababababababababababababababababab",
-      }
-    `)
-  })
-
-  test('signs nothing after a sign-out during the payment, and rejects with `SignedOutError`', async () => {
-    let instance: Accounts.Accounts | undefined
-    const { accounts, sent } = scripted({
-      'GET /i/guest/pay': [page],
-      'POST /i/guest/pay': [
-        async () => {
-          await instance!.signOut()
-          return prepared()
-        },
-      ],
-    })
-    instance = accounts as never
-
-    const error = await accounts.pay(payment).catch((error: unknown) => error)
-
-    expect([error, sent.map((entry) => entry.route)]).toMatchInlineSnapshot(`
-      [
-        [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
-        [
-          "GET /i/guest/pay",
-          "POST /i/guest/pay",
-        ],
-      ]
-    `)
-  })
 })
 
 describe('Actions.guest.active', () => {

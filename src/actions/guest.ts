@@ -224,6 +224,23 @@ export function check(
   )
     throw refused('it holds a fee payer signature.')
   if (envelope.signature) throw refused('it holds a signature.')
+  // Without the sponsor's marker, the guest account pays the fee, in the fee token that Tempo ID
+  // quoted, or else in a TIP-20 token.
+  if (envelope.feePayerSignature === undefined) {
+    const expected = options.feeToken
+    const valid = (() => {
+      if (envelope.feeToken === undefined) return expected === undefined
+      try {
+        const feeToken = TokenId.toAddress(envelope.feeToken)
+        // A token ID always names a TIP-20 address, and an address must hold the TIP-20 prefix.
+        TokenId.fromAddress(feeToken)
+        return expected === undefined || Address.isEqual(feeToken, expected)
+      } catch {
+        return false
+      }
+    })()
+    if (!valid) throw refused('its fee token is not the quoted one.')
+  }
   return envelope
 }
 
@@ -233,6 +250,11 @@ export declare namespace check {
     amount: string
     /** The payment's chain. */
     chainId: number
+    /**
+     * The fee token that Tempo ID quoted. A transaction without the sponsor's marker, whose fee the
+     * guest account pays, must name it. Absent, such a transaction names any TIP-20 fee token.
+     */
+    feeToken?: `0x${string}` | undefined
     /** The transfer's memo, as hex. Absent for a transfer without one. */
     memo?: `0x${string}` | undefined
     /** The recipient's address. */
@@ -500,34 +522,11 @@ export async function pay(
   const envelope = check(prepared.transaction, {
     amount,
     chainId,
+    feeToken: quoted.fee?.token,
     memo,
     to,
     token,
   })
-  // Without the sponsor's marker, the guest account pays the fee, so the fee token is the one that
-  // Tempo ID quoted, or else a TIP-20 token.
-  if (envelope.feePayerSignature === undefined) {
-    const expected = quoted.fee?.token
-    const valid = (() => {
-      if (envelope.feeToken === undefined) return expected === undefined
-      try {
-        const feeToken = TokenId.toAddress(envelope.feeToken)
-        // A token ID always names a TIP-20 address, and an address must hold the TIP-20 prefix.
-        TokenId.fromAddress(feeToken)
-        return expected === undefined || Address.isEqual(feeToken, expected)
-      } catch {
-        return false
-      }
-    })()
-    if (!valid)
-      throw new RequestError({
-        code: 'invalid_request',
-        field: 'transaction',
-        message:
-          'Invalid prepared transaction: its fee token is not the quoted one. The guest account signs only the requested transfer. Try again.',
-        status: 0,
-      })
-  }
   held()
   const transaction = await sign(envelope, {
     account: account(auth, { session }),
