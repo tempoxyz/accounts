@@ -138,10 +138,13 @@ export function dialog<const options extends dialog.Options = {}>(
   const preloads = () => !popup && preload && typeof document !== 'undefined'
   /**
    * Returns the redirect URI of a sign-in through `backend`, the backend's callback route, or
-   * `undefined` without `backend`.
+   * `undefined` without `backend`. Outside a page, the route has no origin, so it returns
+   * `undefined`, and the action throws its `PageRequiredError`.
    */
   const backendRedirectUri = (config: Plugin.Context['config']) => {
     if (backend === undefined) return undefined
+    if (config.redirectUri === undefined && typeof document === 'undefined')
+      return undefined
     const basePath = backend === true ? Handler.basePath : backend
     return (
       config.redirectUri ??
@@ -560,6 +563,8 @@ export function dialog<const options extends dialog.Options = {}>(
          *   ran outside a user gesture.
          * @throws {Actions.dialog.OriginError} When the redirect URI is on another origin than the
          *   page.
+         * @throws {Actions.dialog.PageRequiredError} Outside a browser page, such as in Node or
+         *   React Native, before any request or store write.
          * @throws {Accounts.SupersededError} When another sign-in or a sign-out completed while
          *   this sign-in was pending. A sign-out here or in another tab rejects the sign-in once
          *   the sign-out completes, after its revocation and logout requests, and closes its dialog
