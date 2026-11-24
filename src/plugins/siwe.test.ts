@@ -703,6 +703,44 @@ describe('siwe.complete', () => {
     `)
   })
 
+  test('refuses a WebAuthn envelope above its size limit before any request, also in a wrapper', async () => {
+    const { sent, transport } = node({ answer: () => one })
+    const { accounts } = instance({ transport })
+    const account = privateKeyToAccount(generatePrivateKey())
+    const envelope = `0x02${'11'.repeat(32_000)}` as const
+    const attempt = async (signature: `0x${string}`) => {
+      const { id, message } = await start(accounts, {
+        address: account.address,
+      })
+      return accounts.siwe
+        .complete({ address: account.address, id, message, signature })
+        .then(reason, reason)
+    }
+
+    const results = [
+      await attempt(`0x02${'11'.repeat(2049)}`),
+      await attempt(envelope),
+      await attempt(
+        SignatureErc6492.wrap({
+          data: '0x',
+          signature: envelope,
+          to: '0x0000000000000000000000000000000000000001',
+        }),
+      ),
+    ]
+
+    expect({ results, sent }).toMatchInlineSnapshot(`
+      {
+        "results": [
+          "signer",
+          "signer",
+          "signer",
+        ],
+        "sent": [],
+      }
+    `)
+  })
+
   test('refuses a signature in more than two wrappers before any request', async () => {
     const { sent, transport } = node({ answer: () => one })
     const { accounts } = instance({ transport })

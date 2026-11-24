@@ -110,6 +110,9 @@ const unknownAddress = '0x0000000000000000000000000000000000000000'
 /** The most wrappers of a signature: one of ERC-6492 and one of ERC-8010. */
 const wrapperLimit = 2
 
+/** The largest WebAuthn envelope, in bytes: its type and at most 2048 bytes of data. */
+const webAuthnLimit = 1 + 2048
+
 /**
  * Returns the plugin of Sign-In with Ethereum
  * ([EIP-4361](https://eips.ethereum.org/EIPS/eip-4361)) on a backend, which adds `accounts.siwe`
@@ -384,6 +387,13 @@ function server(options: siwe.Options) {
         // account's code, so the refusal is local, also inside a wrapper.
         const unwrapped = unwrap(signature)
         if (!unwrapped || preAuthorized(unwrapped)) return false
+        // No WebAuthn envelope exceeds its limit. Viem would parse a larger one again before any
+        // request, so the refusal is local, also inside a wrapper.
+        if (
+          Hex.slice(unwrapped, 0, 1) === '0x02' &&
+          Hex.size(unwrapped) > webAuthnLimit
+        )
+          return false
         const envelope = envelopeOf(unwrapped)
         if (envelope?.type === 'keychain') return false
 
