@@ -433,6 +433,363 @@ describe('Actions.guest.session in other processes', () => {
   }, 60_000)
 })
 
+describe('Accounts.pay of a guest session outside a page', () => {
+  /** The hash of the transaction that paid. */
+  const hash = `0x${'ab'.repeat(32)}` as const
+
+  /** The page of a payment that the guest account covers. */
+  const page = {
+    faucet: false,
+    fee: null,
+    refusal: null,
+    shortfall: null,
+    sponsored: true,
+    token: ousd,
+  }
+
+  /** The page of a payment that the guest account lacks funds for. */
+  const short = { ...page, shortfall: { formatted: '12.5', symbol: 'OUSD' } }
+
+  /** A request that the payment sent, with its guest request decoded. */
+  type Sent = {
+    body: Record<string, unknown> | undefined
+    guest: Record<string, unknown> | undefined
+    route: string
+  }
+
+  /**
+   * Returns an instance whose Tempo ID answers each route with the next answer of `script`, and the
+   * requests that it receives. An answer of `null` drops the response, as a lost connection does.
+   */
+  function scripted(
+    script: Record<string, unknown[]>,
+    options: {
+      device?: boolean | undefined
+      onCode?: ((code: { userCode: string }) => void) | undefined
+    } = {},
+  ) {
+    const sent: Sent[] = []
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      fetch: async (input, init) => {
+        const url = new URL(String(input))
+        const route = `${init?.method ?? 'GET'} ${url.pathname}`
+        const body = (() => {
+          if (typeof init?.body === 'string') return JSON.parse(init.body)
+          if (init?.body instanceof URLSearchParams)
+            return Object.fromEntries(init.body)
+          return undefined
+        })() as Record<string, unknown> | undefined
+        const value = url.searchParams.get('guest') ?? body?.guest
+        sent.push({
+          body,
+          guest:
+            typeof value === 'string'
+              ? JSON.parse(Bytes.toString(Base64.toBytes(value)))
+              : undefined,
+          route,
+        })
+        const answer = script[route]?.shift()
+        if (answer === null) throw new TypeError('fetch failed')
+        if (typeof answer === 'function') return Response.json(await answer())
+        return Response.json(answer ?? { error: 'not_found' }, {
+          status: answer === undefined ? 404 : 200,
+        })
+      },
+      guest: 'auto',
+      plugins:
+        options.device === false
+          ? []
+          : [device({ onCode: options.onCode ?? (() => {}) })],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    return { accounts, sent }
+  }
+
+  /** Returns the prepared transaction and its tag. */
+  const prepared = (fields: Partial<TxEnvelopeTempo.TxEnvelopeTempo> = {}) => ({
+    tag: 'tag-1',
+    transaction: transaction(fields),
+  })
+
+  test('pays with funds: reads the payment, prepares it, and sends the transfer that the key pair signed, with one checkout ID', async () => {
+    const { accounts, sent } = scripted({
+      'GET /i/guest/pay': [page],
+      'POST /i/guest/pay': [prepared()],
+      'POST /i/guest/pay/send': [{ paid: { transaction: hash }, redirect: '' }],
+    })
+
+    const result = await accounts.pay(payment)
+    const signed = TxEnvelopeTempo.deserialize(
+      sent.at(-1)!.body!.transaction as TxEnvelopeTempo.Serialized,
+    )
+
+    expect({
+      address: result.address === (await accounts.guest.get()),
+      checkouts: new Set(sent.map((entry) => entry.guest?.checkout)).size,
+      redirectUris: sent.map((entry) => entry.guest?.redirect_uri),
+      routes: sent.map((entry) => entry.route),
+      send: { ...sent.at(-1)!.body, guest: undefined, transaction: undefined },
+      signature: signed.signature?.type,
+      transaction: result.transaction,
+    }).toMatchInlineSnapshot(`
+      {
+        "address": true,
+        "checkouts": 1,
+        "redirectUris": [
+          "",
+          "",
+          "",
+        ],
+        "routes": [
+          "GET /i/guest/pay",
+          "POST /i/guest/pay",
+          "POST /i/guest/pay/send",
+        ],
+        "send": {
+          "chain_id": 4217,
+          "client_id": "cli:guest-example",
+          "guest": undefined,
+          "redirect_uri": "",
+          "tag": "tag-1",
+          "transaction": undefined,
+        },
+        "signature": "p256",
+        "transaction": "0xabababababababababababababababababababababababababababababababab",
+      }
+    `)
+  })
+
+  test("funds a shortfall from the chain's faucet, then pays", async () => {
+    const { accounts, sent } = scripted({
+      'GET /i/guest/pay': [{ ...short, faucet: true }, page],
+      'POST /i/guest/fund': [{ transactions: [hash] }],
+      'POST /i/guest/pay': [prepared()],
+      'POST /i/guest/pay/send': [{ paid: { transaction: hash }, redirect: '' }],
+    })
+
+    const result = await accounts.pay(payment)
+
+    expect({
+      fund: { ...sent[1]!.body, guest: undefined },
+      routes: sent.map((entry) => entry.route),
+      transaction: result.transaction,
+    }).toMatchInlineSnapshot(`
+      {
+        "fund": {
+          "chain_id": 4217,
+          "client_id": "cli:guest-example",
+          "guest": undefined,
+          "redirect_uri": "",
+        },
+        "routes": [
+          "GET /i/guest/pay",
+          "POST /i/guest/fund",
+          "GET /i/guest/pay",
+          "POST /i/guest/pay",
+          "POST /i/guest/pay/send",
+        ],
+        "transaction": "0xabababababababababababababababababababababababababababababababab",
+      }
+    `)
+  })
+
+  test("shows a funding code through the `device` plugin's `onCode` without a faucet, waits for the funds, then pays", async () => {
+    const codes: string[] = []
+    const { accounts, sent } = scripted(
+      {
+        'GET /i/guest/pay': [short, short, page],
+        'POST /device/code': [
+          {
+            device_code: 'device-code',
+            expires_in: 60,
+            interval: 0,
+            user_code: 'ABCD-EFGH',
+            verification_uri: 'http://127.0.0.1:9/device',
+            verification_uri_complete:
+              'http://127.0.0.1:9/device?user_code=ABCD-EFGH',
+          },
+        ],
+        'POST /i/guest/pay': [prepared()],
+        'POST /i/guest/pay/send': [
+          { paid: { transaction: hash }, redirect: '' },
+        ],
+      },
+      { onCode: (code) => codes.push(code.userCode) },
+    )
+
+    const result = await accounts.pay(payment)
+
+    expect({
+      code: { ...sent[1]!.body, device: undefined, guest: undefined },
+      codes,
+      routes: sent.map((entry) => entry.route),
+      transaction: result.transaction,
+    }).toMatchInlineSnapshot(`
+      {
+        "code": {
+          "client_id": "cli:guest-example",
+          "device": undefined,
+          "funding_hint": "12.5",
+          "funding_token": "0x20c0000000000000000000006a37da5c996874be",
+          "guest": undefined,
+        },
+        "codes": [
+          "ABCD-EFGH",
+        ],
+        "routes": [
+          "GET /i/guest/pay",
+          "POST /device/code",
+          "GET /i/guest/pay",
+          "GET /i/guest/pay",
+          "POST /i/guest/pay",
+          "POST /i/guest/pay/send",
+        ],
+        "transaction": "0xabababababababababababababababababababababababababababababababab",
+      }
+    `)
+  })
+
+  test('rejects a shortfall without a faucet and without the `device` plugin with `insufficient_balance`', async () => {
+    const { accounts, sent } = scripted(
+      { 'GET /i/guest/pay': [short] },
+      { device: false },
+    )
+
+    const error = await accounts.pay(payment).catch((error: unknown) => error)
+
+    expect([
+      (error as Accounts.RequestError).reason,
+      sent.map((entry) => entry.route),
+    ]).toMatchInlineSnapshot(`
+      [
+        "insufficient_balance",
+        [
+          "GET /i/guest/pay",
+        ],
+      ]
+    `)
+  })
+
+  test('refuses a prepared transaction of another amount, and signs and sends nothing', async () => {
+    const { accounts, sent } = scripted({
+      'GET /i/guest/pay': [page],
+      'POST /i/guest/pay': [
+        prepared({
+          calls: [
+            TokenActions.transfer.call({
+              amount: 12_500_001n,
+              to,
+              token: ousd,
+            }),
+          ],
+        }),
+      ],
+    })
+
+    const error = await accounts.pay(payment).catch((error: unknown) => error)
+
+    expect([error, sent.map((entry) => entry.route)]).toMatchInlineSnapshot(`
+      [
+        [Accounts.RequestError: Invalid prepared transaction: its call is not the requested transfer. The guest account signs only the requested transfer. Try again.],
+        [
+          "GET /i/guest/pay",
+          "POST /i/guest/pay",
+        ],
+      ]
+    `)
+  })
+
+  test('sends the same signed transaction of the same checkout again after a send without a response', async () => {
+    const { accounts, sent } = scripted({
+      'GET /i/guest/pay': [page],
+      'POST /i/guest/pay': [prepared()],
+      'POST /i/guest/pay/send': [
+        null,
+        { paid: { transaction: hash }, redirect: '' },
+      ],
+    })
+
+    const result = await accounts.pay(payment)
+    const sends = sent.filter(
+      (entry) => entry.route === 'POST /i/guest/pay/send',
+    )
+
+    expect({
+      checkouts: new Set(sent.map((entry) => entry.guest?.checkout)).size,
+      same:
+        sends[0]!.body!.transaction === sends[1]!.body!.transaction &&
+        sends[0]!.body!.tag === sends[1]!.body!.tag,
+      sends: sends.length,
+      transaction: result.transaction,
+    }).toMatchInlineSnapshot(`
+      {
+        "checkouts": 1,
+        "same": true,
+        "sends": 2,
+        "transaction": "0xabababababababababababababababababababababababababababababababab",
+      }
+    `)
+  })
+
+  test('signs nothing after a sign-out during the payment, and rejects with `SignedOutError`', async () => {
+    let instance: Accounts.Accounts | undefined
+    const { accounts, sent } = scripted({
+      'GET /i/guest/pay': [page],
+      'POST /i/guest/pay': [
+        async () => {
+          await instance!.signOut()
+          return prepared()
+        },
+      ],
+    })
+    instance = accounts as never
+
+    const error = await accounts.pay(payment).catch((error: unknown) => error)
+
+    expect([error, sent.map((entry) => entry.route)]).toMatchInlineSnapshot(`
+      [
+        [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        [
+          "GET /i/guest/pay",
+          "POST /i/guest/pay",
+        ],
+      ]
+    `)
+  })
+})
+
+describe('Actions.guest.active', () => {
+  const started = Session.from({
+    address: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+    kind: 'guest',
+    publicKey: '0x04',
+    revision: 1,
+  })
+
+  test.for([
+    ['the same guest session', started, true],
+    ['no session, after a sign-out', undefined, false],
+    [
+      'another start of the same guest account, after a sign-out and a sign-in',
+      { ...started, revision: 2 },
+      false,
+    ],
+    [
+      'another guest account',
+      {
+        ...started,
+        address: '0x000000000000000000000000000000000000dEaD',
+      },
+      false,
+    ],
+  ] as const)('returns for %s', ([, current, expected]) => {
+    expect(Guest.active({ current, started })).toBe(expected)
+  })
+})
+
 describe('Actions.guest.account', () => {
   test("signs a transaction as the root account, with a prehashed P256 envelope of the store's key pair", async () => {
     const auth = config()

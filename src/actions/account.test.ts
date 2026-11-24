@@ -329,6 +329,23 @@ describe('machines.payer', () => {
   ] as const)('returns the payer of %s', ([, account, expected]) => {
     expect(machines.payer({ account })).toBe(expected)
   })
+
+  const held = '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326'
+
+  test.for([
+    ['a return URL without `account`', undefined, held],
+    ['a return URL that names the guest account', held.toLowerCase(), held],
+    [
+      'a return URL that names another account',
+      '0x000000000000000000000000000000000000dead',
+      undefined,
+    ],
+  ] as const)(
+    'returns the payer of a held guest session with %s',
+    ([, account, expected]) => {
+      expect(machines.payer({ account, held })).toBe(expected)
+    },
+  )
 })
 
 describe('machines.select', () => {

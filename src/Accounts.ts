@@ -21,6 +21,7 @@ import type * as ClientAssertion from './internal/ClientAssertion.js'
 import type * as BackendHandler from './internal/handlers/Backend.js'
 import * as BackendOperations from './internal/BackendOperations.js'
 import * as AccountActions from './actions/account.js'
+import type * as GuestActions from './actions/guest.js'
 import * as AccessKey_internal from './internal/AccessKey.js'
 import * as Actions from './internal/Actions.js'
 import type * as Connections from './internal/Connections.js'
@@ -2443,9 +2444,31 @@ export function create<
             : (context.session.get() ?? (await context.session.load()))
         if (held && Session.guest(held)) {
           const { attempt: _attempt, ...rest } = parameters
+          // Outside a page, the payment calls the routes of Tempo ID's payment page itself. The
+          // `device` plugin shows the funding code of a shortfall without a faucet.
+          if (typeof document === 'undefined') {
+            const device = (
+              instance as {
+                device?: { fundGuest?: GuestActions.pay.Options['fund'] }
+              }
+            ).device
+            const Guest = await import('./actions/guest.js')
+            return await Guest.pay(config, {
+              amount: parameters.amount,
+              chainId: chainOf(),
+              current: () => context.session.get(),
+              fund: device?.fundGuest,
+              memo,
+              session: held,
+              signal: parameters.signal,
+              to: parameters.to,
+              token: parameters.token,
+            })
+          }
           return await AccountActions.pay_guest(config, {
             ...rest,
             chainId: chainOf(),
+            current: () => context.session.get(),
             memo,
             session: held,
           })
@@ -2464,6 +2487,7 @@ export function create<
           return await AccountActions.pay_guest(config, {
             ...rest,
             chainId: chainOf(),
+            current: () => context.session.get(),
             memo,
             session: () =>
               SignIn.guest(context, { change, signal: parameters.signal }),

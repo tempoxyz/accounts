@@ -278,6 +278,82 @@ export declare namespace authorize {
 }
 
 /**
+ * Starts the funding code of a guest account, for a guest payment outside a page. The user enters
+ * `userCode` at `verificationUri` in any browser, and Tempo ID's deposit pages fund the guest
+ * account that `guest` proves, with no sign-in. The code needs no poll of the token endpoint: the
+ * payment reads the guest account's balance until the funds arrive or the code expires.
+ *
+ * @throws {RequestError} When Tempo ID refuses the code request, or with `server_error` and status 0
+ *   when it receives no response. A malformed `funding` throws `invalid_field` with status 0, before
+ *   any request.
+ *
+ * @example
+ * ```ts
+ * const { value } = await Actions.guest.request(auth, { chainId, checkout, redirectUri: '' })
+ * const code = await Actions.device.fund(auth, {
+ *   funding: { amount: '5', token: '0x20c0000000000000000000006a37da5c996874be' },
+ *   guest: value,
+ * })
+ * console.log(`Open ${code.verificationUriComplete}`)
+ * ```
+ */
+export async function fund(
+  auth: Config,
+  options: fund.Options,
+): Promise<fund.ReturnType> {
+  const body = new URLSearchParams({
+    client_id: auth.clientId,
+    device: hostname(),
+    ...fundingParameters(options.funding),
+    guest: options.guest,
+  })
+  const code = await Api.json<{
+    expires_in: number
+    interval: number
+    user_code: string
+    verification_uri: string
+    verification_uri_complete: string
+  }>(
+    await (auth.fetch ?? fetch)(new URL('/device/code', auth.url), {
+      body,
+      method: 'POST',
+      // A redirect would post the request to another origin.
+      redirect: 'manual',
+      signal: options.signal ?? null,
+    }).catch((error: unknown) => {
+      if (options.signal?.aborted) throw options.signal.reason
+      throw new RequestError({
+        cause: error,
+        code: 'server_error',
+        message:
+          'The funding code request received no response. Check the connection, and request a new code.',
+        status: 0,
+      })
+    }),
+  )
+  return {
+    expiresIn: code.expires_in,
+    interval: code.interval,
+    userCode: code.user_code,
+    verificationUri: code.verification_uri,
+    verificationUriComplete: code.verification_uri_complete,
+  }
+}
+
+export declare namespace fund {
+  type Options = {
+    /** The amount and token that the guest account needs. */
+    funding: Funding.Funding
+    /** The guest request that proves the guest account, from `Actions.guest.request`. */
+    guest: string
+    /** Rejects the request with the signal's reason. */
+    signal?: AbortSignal | undefined
+  }
+
+  type ReturnType = Omit<authorize.ReturnType, 'deviceCode' | 'wait'>
+}
+
+/**
  * Sends one poll of a device code that {@link authorize} started, for a program that polls across
  * processes or requests, such as a server that keeps `deviceCode` in its database. It returns
  * `pending` until the user decides, with `slowDown` when the poll came before the interval, and

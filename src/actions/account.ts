@@ -704,9 +704,7 @@ export async function pay_guest(
       : undefined
   // A guest offer starts the guest session once, at the user's selection. A failed start lets the
   // next selection try again, and fails no payment, since the user can still sign in on the page.
-  let starting:
-    | Promise<Pick<Session.GuestSession, 'address' | 'publicKey'>>
-    | undefined
+  let starting: Promise<Session.GuestSession> | undefined
   const session = () => {
     const value = options.session
     starting ??= (
@@ -718,10 +716,24 @@ export async function pay_guest(
     return starting
   }
 
+  /**
+   * Returns the guest session and the guest module, or throws `SignedOutError` once the instance's
+   * session no longer holds the guest session, such as after a sign-out, which keeps the key pair.
+   */
+  const holding = async () => {
+    const [Guest, held] = await Promise.all([loading, session()])
+    if (
+      options.current &&
+      !Guest.active({ current: options.current(), started: held })
+    )
+      throw new SignedOutError()
+    return [Guest, held] as const
+  }
+
   const url = await approve(auth, {
     guest: {
       request: async () => {
-        const [Guest, held] = await Promise.all([loading, session()])
+        const [Guest, held] = await holding()
         const { address, value } = await Guest.request(auth, {
           chainId,
           checkout,
@@ -733,7 +745,7 @@ export async function pay_guest(
         return value
       },
       sign: async (transaction) => {
-        const [Guest, held] = await Promise.all([loading, session()])
+        const [Guest, held] = await holding()
         const envelope = Guest.check(transaction, {
           amount,
           chainId,
@@ -771,6 +783,10 @@ export async function pay_guest(
   if (!transaction) throw transactionOf.missing()
   const address = machines.payer({
     account: Callback.parameter(url, { name: 'account', redirectUri }),
+    held:
+      typeof options.session === 'function'
+        ? undefined
+        : options.session.address,
   })
   if (!address) throw missing('account')
   return { address, transaction }
@@ -779,13 +795,17 @@ export async function pay_guest(
 export declare namespace pay_guest {
   type Options = Omit<pay.Options, 'account' | 'attempt' | 'challenge'> & {
     /**
+     * Returns the instance's session. Once it no longer holds the guest session, as
+     * `Actions.guest.active` decides, the guest account signs no transfer and no renewal of the guest
+     * request, and the page receives the refusal. Absent, only the stored key pair counts.
+     */
+    current?: (() => Session.Any | undefined) | undefined
+    /**
      * The guest session whose guest account pays, or a function that starts it, for a guest offer
      * on the signed-out payment page. The function runs once, when the user selects Continue as
      * guest.
      */
-    session:
-      | Pick<Session.GuestSession, 'address' | 'publicKey'>
-      | (() => Promise<Pick<Session.GuestSession, 'address' | 'publicKey'>>)
+    session: Session.GuestSession | (() => Promise<Session.GuestSession>)
   }
 
   type ReturnType = pay.ReturnType<Omit<Options, 'session'>>
@@ -2376,25 +2396,31 @@ export namespace machines {
   }
 
   /**
-   * Returns the account that paid a guest payment, which the return URL names as `account`: the
-   * guest account after its transfer landed, or the account of a user that signed in on the page.
-   * A signature of the guest account proves no payment, since its transfer can fail to land, and the
-   * relay's fee payer signature changes the hash of a sponsored transfer. Returns `undefined` for a
-   * missing or malformed `account`.
+   * Returns the account that paid a guest payment. A payment of a held guest session returns its
+   * guest account, also when the return URL names no `account`, and `undefined` for an `account`
+   * that names another address. A guest offer's payment returns the account that the return URL
+   * names as `account`: the guest account after its transfer landed, or the account of a user that
+   * signed in on the page. A signature of the guest account proves no payment there, since its
+   * transfer can fail to land, and the relay's fee payer signature changes the hash of a sponsored
+   * transfer. Returns `undefined` for a missing or malformed `account` of a guest offer.
    */
   export function payer(options: payer.Options): `0x${string}` | undefined {
-    if (
-      options.account === undefined ||
-      !Address.validate(options.account, { strict: false })
-    )
-      return undefined
-    return Address.checksum(options.account)
+    const { account, held } = options
+    const named =
+      account !== undefined && Address.validate(account, { strict: false })
+        ? Address.checksum(account)
+        : undefined
+    if (held === undefined) return named
+    if (account === undefined) return held
+    return named && Address.isEqual(named, held) ? held : undefined
   }
 
   export declare namespace payer {
     type Options = {
       /** The `account` parameter of the return URL. Absent when the page returned none. */
       account: string | undefined
+      /** The guest account of a held guest session. Absent for a guest offer. */
+      held?: `0x${string}` | undefined
     }
   }
 

@@ -262,6 +262,61 @@ export const accounts = Accounts.create({
 })
 ```
 
+### Pay from a CLI
+
+Outside a page, <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> with a guest session pays through Tempo ID's routes of the payment page, with no page. The call reads the payment, has Tempo ID prepare the transfer, checks that the prepared transaction makes exactly the requested transfer, signs it with the key pair, and sends it. The guest request names an empty redirect URI, as a device client has none. Each call keeps one checkout ID, so a send that loses its response sends the same transaction again and pays once.
+
+| Guest account           | What `pay` does                                                                                                                                |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Holds the payment       | Pays at once                                                                                                                                   |
+| Short, on a test chain  | Requests the chain's faucet, then pays                                                                                                         |
+| Short, on another chain | Passes a funding code to the `device` plugin's `onCode`, waits for the funds on Tempo ID's deposit pages until the code expires, then pays     |
+| Short, without `device` | Rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> and the reason `insufficient_balance` |
+
+:::code-group
+
+```ts [index.ts]
+import { Session } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+const session = (await accounts.session.get()) ?? (await accounts.device.signIn())
+if (Session.guest(session)) console.log(`Paying as guest ${session.address}.`)
+
+// [!code hl:start]
+const { transaction } = await accounts.pay({
+  amount: '5',
+  to: '0x000000000000000000000000000000000000dEaD',
+  token: 'ousd',
+})
+// [!code hl:end]
+console.log(`Paid in ${transaction}.`)
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { device } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'cli:acme-example',
+  guest: 'offer',
+  plugins: [
+    device({
+      // Shows the sign-in code, and the funding code of a short guest account.
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+  ],
+  store: Store.file('~/.acme/accounts.json'),
+})
+```
+
+:::
+
+A sign-out during the payment ends it: the key pair signs nothing more, and the call rejects with <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink>. `signal` stops the requests and the wait for funds.
+
 ### Send a transaction with Viem
 
 The <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin's client signs each transaction of a guest session with the key pair, as the root account, with no access key. It pays fees as it does for any session, so the plugin's <SourceLink name="viem.relay" path="src/plugins/viem.ts">`relay`</SourceLink> sends through the app's relay route, whose fee payer decides whether to pay. [Viem](/docs/guides/viem) covers the client.
@@ -406,7 +461,7 @@ export const accounts = Accounts.create({
 - A guest session holds no access key, and signs no challenge, so it takes no `accessKey`, `challenge`, or `siwe` sign-in, and pays no MPP subscription.
 - A backend sign-in, through the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, never offers a guest.
 - A guest account has no passkey and no Tempo ID user, and no sign-in turns it into a configurable account.
-- `pay` needs a page. Outside one, a guest session sends with Viem and MPP only.
+- Outside a page, a short guest account on a chain without a faucet needs the `device` plugin's `onCode` to show its funding code.
 
 ## Next steps
 

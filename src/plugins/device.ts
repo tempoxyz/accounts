@@ -188,6 +188,39 @@ export function device(options: device.Options = {}) {
           }
         },
         /**
+         * Starts the funding code of the guest account that `guest` proves, and passes the code to
+         * `onCode`, as `Actions.device.fund` describes. A guest payment outside a page, such as a
+         * CLI's `pay`, calls it for a guest account that holds less than the payment on a chain
+         * without a faucet, then waits for the funds. An aborted call shows no code.
+         *
+         * @throws {Accounts.RequestError} As `Actions.device.fund` throws it.
+         * @throws {Plugins.device.OnCodeRequiredError} Without the plugin's `onCode`, before any
+         *   request.
+         *
+         * @example
+         * ```ts
+         * const code = await accounts.device.fundGuest({
+         *   funding: { amount: '5', token: 'ousd' },
+         *   guest,
+         * })
+         * ```
+         */
+        async fundGuest(
+          parameters: device.fundGuest.Parameters,
+        ): Promise<device.fundGuest.ReturnType> {
+          if (!onCode) throw new OnCodeRequiredError()
+          const { signal } = parameters
+          const code = await DeviceActions.fund(context.config, parameters)
+          if (signal?.aborted) throw signal.reason
+          await onCode({
+            expiresIn: code.expiresIn,
+            userCode: code.userCode,
+            verificationUri: code.verificationUri,
+            verificationUriComplete: code.verificationUriComplete,
+          })
+          return code
+        },
+        /**
          * Sends one poll of a device code that `authorize` started, as `Actions.device.poll` does.
          * Returns `pending` until the user decides, with `slowDown` when the poll came before the
          * interval, and `approved` with the authorization once. Sets no session.
@@ -504,6 +537,12 @@ export declare namespace device {
     }
 
     type ReturnType = Omit<DeviceActions.authorize.ReturnType, 'wait'>
+  }
+
+  namespace fundGuest {
+    type Parameters = DeviceActions.fund.Options
+
+    type ReturnType = DeviceActions.fund.ReturnType
   }
 
   namespace poll {
