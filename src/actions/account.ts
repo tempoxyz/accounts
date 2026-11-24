@@ -703,7 +703,9 @@ export async function pay_guest(
   loading.catch(() => {})
   // The checkout ID names this payment. Each guest request of the payment, also a renewal, signs the
   // same one, so Tempo ID keeps one record for it, and another payment never shares that record.
-  const checkout = crypto.randomUUID()
+  // `Bytes.random` needs only `crypto.getRandomValues`, which React Native polyfills, and the
+  // URL-safe Base64 holds only letters, digits, `-`, and `_`.
+  const checkout = Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
   // A guest offer binds the page's selection of Continue as guest to this payment.
   const state =
     typeof options.session === 'function'

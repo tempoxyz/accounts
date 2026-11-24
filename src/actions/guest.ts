@@ -377,7 +377,9 @@ export async function pay(
     options.memo === undefined ? undefined : Payment.memo(options.memo)
   const chainId = options.chainId ?? auth.chainId
   // One checkout ID for the call, so each retry pays the same checkout, and Tempo ID pays it once.
-  const checkout = crypto.randomUUID()
+  // `Bytes.random` needs only `crypto.getRandomValues`, which React Native polyfills, and the
+  // URL-safe Base64 holds only letters, digits, `-`, and `_`.
+  const checkout = Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
   const redirectUri = auth.redirectUri ?? ''
   const terms = {
     amount,
@@ -629,7 +631,7 @@ export declare namespace pay {
  *
  * const { value } = await Actions.guest.request(accounts.config, {
  *   chainId: 4217,
- *   checkout: crypto.randomUUID(),
+ *   checkout: Base64.fromBytes(Bytes.random(16), { pad: false, url: true }),
  *   redirectUri: 'https://example.com/',
  * })
  * ```
@@ -642,7 +644,7 @@ export async function request(
   // A line break in the checkout ID would add a line to the signed message.
   if (!/^[\w-]{1,128}$/.test(checkout))
     throw new TypeError(
-      'Invalid `checkout`: it holds a character other than a letter, a digit, `-`, or `_`, or more than 128 characters. Pass `crypto.randomUUID()`.',
+      'Invalid `checkout`: it holds a character other than a letter, a digit, `-`, or `_`, or more than 128 characters. Pass 16 random bytes as unpadded URL-safe Base64.',
     )
   const key = await load(auth)
   const publicKey = publicKeyOf(key)
@@ -692,7 +694,7 @@ export declare namespace request {
     /** The payment's chain. */
     chainId: number
     /**
-     * The payment's checkout ID, such as `crypto.randomUUID()`: up to 128 letters, digits, `-`, or
+     * The payment's checkout ID, such as 16 random bytes as unpadded URL-safe Base64: up to 128 letters, digits, `-`, or
      * `_`. Each guest request of one payment, also a renewal, holds the same one.
      */
     checkout: string

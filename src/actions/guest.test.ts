@@ -19,6 +19,7 @@ import {
   P256,
   PublicKey,
   Signature,
+  WebCryptoP256,
 } from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import { token as TokenActions } from 'viem/tempo/actions'
@@ -32,6 +33,7 @@ import {
 import * as Accounts from '../Accounts.js'
 import * as DefaultAccounts from '../internal/DefaultAccounts.js'
 import * as DeviceStore from '../internal/DeviceStore.js'
+import * as StoreValue from '../internal/StoreValue.js'
 import * as SignIn from '../internal/SignIn.js'
 import { device, dialog, redirect } from '../plugins/index.js'
 import * as Plugin from '../Plugin.js'
@@ -279,22 +281,6 @@ describe('Actions.guest.session', () => {
 })
 
 describe('Actions.guest.session on each store preset', () => {
-  /** Returns the platform capability of `expo-secure-store` on a device: strings at keys. */
-  function secureStore() {
-    const values = new Map<string, string>()
-    return {
-      deleteItemAsync(key: string) {
-        values.delete(key)
-        return Promise.resolve()
-      },
-      getItemAsync: (key: string) => Promise.resolve(values.get(key) ?? null),
-      setItemAsync(key: string, value: string) {
-        values.set(key, value)
-        return Promise.resolve()
-      },
-    } satisfies DeviceStore.create.SecureStore
-  }
-
   test.for([
     // A store that keeps values as they are keeps a non-extractable WebCrypto key pair, as the
     // default IndexedDB store of a page does.
@@ -311,29 +297,14 @@ describe('Actions.guest.session on each store preset', () => {
       },
       'p256',
     ],
-    [
-      "the `expo` preset's secure store",
-      () => {
-        const device = secureStore()
-        // Another store on the same secure store reads the key pair back from its JSON.
-        return {
-          again: DeviceStore.create(device),
-          store: DeviceStore.create(device),
-        }
-      },
-      'p256',
-    ],
   ] as const)(
     'creates a guest account that signs and persists on %s',
     async ([, create, type]) => {
-      const { again, store } = create() as {
-        again?: Store.Store
-        store: Store.Store
-      }
+      const { store } = create()
 
       const session = await Guest.session(config(store))
-      const restored = await Guest.session(config(again ?? store))
-      const signature = await Guest.account(config(again ?? store), {
+      const restored = await Guest.session(config(store))
+      const signature = await Guest.account(config(store), {
         session,
       }).sign({ hash: `0x${'11'.repeat(32)}` })
       const stored = (await store.getItem(
@@ -347,6 +318,27 @@ describe('Actions.guest.session on each store preset', () => {
       ]).toEqual([true, 'string', type])
     },
   )
+
+  test("selects the P256 key path on the `expo` preset's store, whose JSON keeps the key pair and no `CryptoKey`", async () => {
+    // The store's flags select the key path, so the secure store's functions never run.
+    const unused = () => Promise.reject(new Error('Not called.'))
+    const store = DeviceStore.create({
+      deleteItemAsync: unused,
+      getItemAsync: unused,
+      setItemAsync: unused,
+    })
+    const privateKey = P256.randomPrivateKey()
+    const keyPair = await WebCryptoP256.createKeyPair()
+
+    const restored = StoreValue.parse(
+      StoreValue.stringify({ privateKey, type: 'p256' }),
+    )
+
+    expect([store.json, store.private]).toEqual([true, true])
+    expect(restored).toEqual({ privateKey, type: 'p256' })
+    // A non-extractable WebCrypto key pair has no JSON form, so the store could not keep it.
+    expect(() => StoreValue.stringify(keyPair)).toThrow()
+  })
 
   test('refuses a shared store of JSON, such as `Store.postgres`, before any query', async () => {
     const database = new PGlite()
