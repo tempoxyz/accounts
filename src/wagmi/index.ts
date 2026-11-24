@@ -52,8 +52,9 @@ import * as ClientId from '../internal/ClientId.js'
 import * as DefaultDialog from '../internal/DefaultDialog.js'
 import * as InternalSession from '../internal/Session.js'
 import type * as SignIn from '../internal/SignIn.js'
+import * as Settings from '../internal/viem/Settings.js'
 import * as Plugin from '../Plugin.js'
-import { pluginOptions, settings, viem } from '../plugins/viem.js'
+import { pluginOptions, viem } from '../plugins/viem.js'
 import * as Session from '../Session.js'
 
 /**
@@ -512,7 +513,7 @@ export function wagmi(options: wagmi.Options = {}) {
       const added = held ? undefined : viem()
       const client = held ?? (added!.actions!(context) as viem.Namespace)
       const { chains, transport } = client[
-        settings as never
+        Settings.key as never
       ] as unknown as viem.Settings
       const { chainId } = instance.config
       const chain = chains.find((entry) => entry.id === chainId)
