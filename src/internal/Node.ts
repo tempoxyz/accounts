@@ -17,6 +17,23 @@ export function env(name: string) {
 }
 
 /**
+ * Returns the path of the file that every CLI of the user shares: `id/store.json` in the folder that
+ * the `TEMPO_HOME` environment variable names, or else in `~/.tempo`. Tempo's own CLIs resolve
+ * their folder the same way, so one variable moves each file of theirs.
+ */
+export function file(node: Pick<Modules, 'Os' | 'Path'>) {
+  const { Os, Path } = node
+  return Path.join(
+    env('TEMPO_HOME') ?? Path.join(Os.homedir(), '.tempo'),
+    'id',
+    'store.json',
+  )
+}
+
+/** The Node modules that `Store.file` uses. */
+type Modules = NonNullable<ReturnType<typeof modules>>
+
+/**
  * Returns the Node modules that `Store.file` uses, or `undefined` in a runtime without them, such
  * as a browser or React Native, and in a Cloudflare Worker. `getBuiltinModule` loads them at first
  * use with no import, so a bundler never resolves a `node:` module, and a browser bundle builds

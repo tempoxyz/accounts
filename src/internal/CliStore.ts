@@ -5,11 +5,12 @@
  */
 import type { Store } from '../Store.js'
 import * as ClientId from './ClientId.js'
+import * as FileConnection from './FileConnection.js'
 import * as Node from './Node.js'
 
 /**
  * Returns the store of `Store.file()` for a `cli:` client ID, whose module loads on the first read
- * or write. Returns `undefined` for another client ID, since only a `cli:` one names a program of
+ * or write. Its `connect` is the file's, so it needs no load. Returns `undefined` for another client ID, since only a `cli:` one names a program of
  * one user. A registered client ID can also name a backend, which serves many users and holds no
  * session. Returns `undefined` too in a browser, which keeps IndexedDB, and in a runtime without
  * Node's file system modules, where `Store.file` throws.
@@ -17,7 +18,11 @@ import * as Node from './Node.js'
 export function get(clientId: string | undefined): Store | undefined {
   if (!clientId || !ClientId.cli(clientId)) return undefined
   if (typeof indexedDB !== 'undefined') return undefined
-  if (!Node.modules()) return undefined
+  const node = Node.modules()
+  if (!node) return undefined
+  // An instance connects when it is created, before the file store's module loads, so the store
+  // connects through the registry that `Store.file` shares, by the file's absolute path.
+  const connect = FileConnection.get(node.Path.resolve(Node.file(node)))
 
   let loading: Promise<Store> | undefined
 
@@ -34,6 +39,9 @@ export function get(clientId: string | undefined): Store | undefined {
 
   // Each call waits for the one load, so the calls reach the file store in their order.
   return {
+    // The instances of the process on the file, also on `Store.file()`, hear each saved change of
+    // each other, so a sign-out empties their sessions at once.
+    connect,
     getItem: async (key) => (await load()).getItem(key),
     // The CLIs of the user share the file, so their refreshes order through its lock.
     lock: async (key, fn) => (await load()).lock!(key, fn),
