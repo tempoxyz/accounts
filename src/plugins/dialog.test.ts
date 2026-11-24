@@ -7,8 +7,43 @@
 import { createActor, fromPromise, waitFor } from 'xstate'
 import { getShortestPaths } from 'xstate/graph'
 import { describe, expect, test } from 'vite-plus/test'
+import * as Accounts from '../Accounts.js'
 import type { PageSession } from '../internal/handlers/Backend.js'
+import * as Store from '../Store.js'
 import { machines } from './dialog.js'
+import { dialog } from './index.js'
+
+describe('dialog', () => {
+  test('refuses signIn and signMessage outside a page, such as in Node, with `Actions.dialog.PageRequiredError`', async () => {
+    const options = {
+      accessKey: { expiry: '1d', limits: [{ limit: '10', token: 'ousd' }] },
+      chain: 42431,
+      clientId: 'https://app.example',
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    } as const
+    const accounts = Accounts.create({ ...options, plugins: [dialog()] })
+    const backend = Accounts.create({
+      ...options,
+      plugins: [dialog({ backend: true })],
+    })
+    const message = (error: Error) => `${error.name}: ${error.message}`
+
+    const errors = await Promise.all([
+      accounts.dialog.signIn().catch(message),
+      accounts.dialog.signMessage({ message: 'Approve' }).catch(message),
+      backend.dialog.signIn().catch(message),
+    ])
+
+    expect(errors).toMatchInlineSnapshot(`
+      [
+        "Actions.dialog.PageRequiredError: No browser page: the sign-in shows in a frame or a popup, which only a page opens. Outside a page, sign in with the \`device\` plugin.",
+        "Actions.dialog.PageRequiredError: No browser page: the sign-in shows in a frame or a popup, which only a page opens. Outside a page, sign in with the \`device\` plugin.",
+        "Actions.dialog.PageRequiredError: No browser page: the sign-in shows in a frame or a popup, which only a page opens. Outside a page, sign in with the \`device\` plugin.",
+      ]
+    `)
+  })
+})
 
 describe('machines.preload', () => {
   describe('machine', () => {

@@ -560,6 +560,8 @@ export function dialog<const options extends dialog.Options = {}>(
          *   ran outside a user gesture.
          * @throws {Actions.dialog.OriginError} When the redirect URI is on another origin than the
          *   page.
+         * @throws {Actions.dialog.PageRequiredError} Outside a browser page, such as in Node or
+         *   React Native, before any request or store write.
          * @throws {Accounts.SupersededError} When another sign-in or a sign-out completed while
          *   this sign-in was pending. A sign-out here or in another tab rejects the sign-in once
          *   the sign-out completes, after its revocation and logout requests, and closes its dialog

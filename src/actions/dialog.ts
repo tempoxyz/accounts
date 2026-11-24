@@ -85,6 +85,20 @@ export declare namespace OriginError {
 }
 
 /**
+ * No browser page holds the dialog or the popup, such as in Node, a Worker, or React Native.
+ * `dialog.signIn` and `dialog.signMessage` throw it before any request or store write.
+ */
+export class PageRequiredError extends Error {
+  override readonly name = 'Actions.dialog.PageRequiredError'
+
+  constructor() {
+    super(
+      'No browser page: the sign-in shows in a frame or a popup, which only a page opens. Outside a page, sign in with the `device` plugin.',
+    )
+  }
+}
+
+/**
  * Posts the callback to the page that opened the popup, and closes the popup. Returns `true` on the
  * callback of a {@link signIn}, and `false` on any other page load, such as a redirect's callback.
  * Tempo ID's page in the popup posts the callback to the opening page itself, so only an app whose
@@ -221,6 +235,8 @@ export declare namespace preload {
  * code and sets the session cookie. The call resolves with the session that the page reads, and the
  * page holds no token.
  *
+ * @throws {PageRequiredError} Outside a browser page, such as in Node or React Native.
+ *
  * @example
  * ```ts
  * button.onclick = async () => {
@@ -250,6 +266,8 @@ export async function signIn(
   auth: Config,
   options: signIn.Options | signIn.BackendOptions = {},
 ): Promise<unknown> {
+  // React Native defines `window` without `location`, so the check reads `document`.
+  if (typeof document === 'undefined') throw new PageRequiredError()
   if ('backend' in options) {
     const { crossOriginOpenerPolicy, mode, signal, timeout } = options
     // The sign-in routes sit under `/auth` of the handler's path.
@@ -350,6 +368,8 @@ async function signInPage(
  * token, and the call keeps no token. A function that returns the message runs after the dialog or
  * the popup opens, so a popup opens within the gesture also when the message comes from a request.
  *
+ * @throws {PageRequiredError} Outside a browser page, such as in Node or React Native.
+ *
  * @example
  * ```ts
  * button.onclick = async () => {
@@ -363,6 +383,7 @@ export async function signMessage(
   auth: Config,
   options: signMessage.Options,
 ): Promise<signMessage.ReturnType> {
+  if (typeof document === 'undefined') throw new PageRequiredError()
   return sign(auth, options)
 }
 
