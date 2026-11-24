@@ -204,6 +204,8 @@ const webAuthnLimit = 1 + 2048
  * ```
  * @throws {Error} When `plugins` lacks the `backend` plugin, at `Accounts.create`.
  * @throws {Error} When `accessTokens.clientIds` is `'any'`.
+ * @throws {Error} When neither `origin`, `redirectUri`, nor `clientId` names an `http` or `https`
+ *   origin, at `Accounts.create`.
  *
  * @example
  * ```ts
