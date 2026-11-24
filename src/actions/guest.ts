@@ -15,7 +15,8 @@ import {
   PublicKey,
   WebCryptoP256,
 } from 'ox'
-import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
+import { SignatureEnvelope, TokenId, TxEnvelopeTempo } from 'ox/tempo'
+import { parseUnits } from 'viem'
 import { Account } from 'viem/tempo'
 import { token as TokenActions } from 'viem/tempo/actions'
 import { type Config, RequestError, SignedOutError } from '../Accounts.js'
@@ -133,20 +134,35 @@ export function check(
     }
   })()
 
-  // The token's symbol becomes its address on the chain, and the amount its base units.
-  const [limit] =
-    Permissions.resolve(
-      {
-        limits: [
-          {
-            limit: options.amount as `${number}`,
-            token: options.token as Permissions.Token,
-          },
-        ],
-      },
-      { chainId: options.chainId },
-    ).limits ?? []
-  if (!limit) throw refused('its token is unknown.')
+  // The token's symbol becomes its address on the chain, and the amount its base units. A token's
+  // address needs no listing: each TIP-20 token has 6 decimals.
+  const limit = (() => {
+    if (Address.validate(options.token, { strict: false })) {
+      try {
+        TokenId.fromAddress(options.token)
+      } catch {
+        throw refused('its token is no TIP-20 token.')
+      }
+      return {
+        limit: parseUnits(options.amount, 6),
+        token: options.token,
+      }
+    }
+    const [resolved] =
+      Permissions.resolve(
+        {
+          limits: [
+            {
+              limit: options.amount as `${number}`,
+              token: options.token as Permissions.Token,
+            },
+          ],
+        },
+        { chainId: options.chainId },
+      ).limits ?? []
+    if (!resolved) throw refused('its token is unknown.')
+    return resolved
+  })()
   const expected = TokenActions.transfer.call({
     amount: limit.limit,
     ...(options.memo ? { memo: options.memo } : {}),
@@ -187,7 +203,10 @@ export declare namespace check {
     memo?: `0x${string}` | undefined
     /** The recipient's address. */
     to: `0x${string}`
-    /** The token: its symbol on the chain, such as `ousd`, or its address. */
+    /**
+     * The token: its symbol that the chain lists, such as `ousd`, or the address of any TIP-20
+     * token.
+     */
     token: string
   }
 }

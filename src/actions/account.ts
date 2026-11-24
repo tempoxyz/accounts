@@ -5,7 +5,7 @@
  * in a dialog, or a popup.
  * @module
  */
-import { Address, Base64, Hex } from 'ox'
+import { Address, Base64, Bytes, Hex } from 'ox'
 import { Authentication, type Types } from 'ox/webauthn'
 import {
   formatTransactionReceipt,
@@ -649,6 +649,13 @@ export declare namespace pay {
  * the page opens later, such as the deposit's, holds a fresh guest request, and the page renews the
  * request before it expires. The call sends no request before the page shows.
  *
+ * With `session` as a function, the call makes a guest offer: the page opens as the signed-out
+ * payment page with `guest=offer` and a random `state`, and signs the user in. If the user selects
+ * Continue as guest, the page posts `tempo-id:guest.request` with the `state`. The call then runs
+ * the function, which starts the guest session, and answers with the first guest request, so the
+ * same page pays from the guest account. If the user signs in instead, the page pays from the
+ * user's account, and the call returns that account as `address`.
+ *
  * @throws {RequestError} As {@link pay} throws it for `amount`, `memo`, and `to`, before any page
  *   opens, and `access_denied` when the user rejects the payment.
  * @throws {PageRequiredError} Outside a browser page.
@@ -673,7 +680,7 @@ export async function pay_guest(
   auth: Config,
   options: pay_guest.Options,
 ): Promise<pay_guest.ReturnType> {
-  const { note, session, to, token } = options
+  const { note, to, token } = options
   const amount = Payment.amount(options.amount)
   Payment.to(to)
   const memo =
@@ -688,11 +695,25 @@ export async function pay_guest(
   // The checkout ID names this payment. Each guest request of the payment, also a renewal, signs the
   // same one, so Tempo ID keeps one record for it, and another payment never shares that record.
   const checkout = crypto.randomUUID()
+  // A guest offer binds the page's selection of Continue as guest to this payment.
+  const state =
+    typeof options.session === 'function'
+      ? Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
+      : undefined
+  // A guest offer starts the guest session once, at the user's selection.
+  let starting:
+    | Promise<Pick<Session.GuestSession, 'address' | 'publicKey'>>
+    | undefined
+  const session = () => {
+    const value = options.session
+    starting ??= typeof value === 'function' ? value() : Promise.resolve(value)
+    return starting
+  }
 
   const url = await approve(auth, {
     guest: {
       request: async () => {
-        const Guest = await loading
+        const [Guest, held] = await Promise.all([loading, session()])
         const { address, value } = await Guest.request(auth, {
           chainId,
           checkout,
@@ -700,12 +721,11 @@ export async function pay_guest(
         })
         // A store that lost the session's key pair holds a new guest account, which pays nothing
         // for this session.
-        if (!Address.isEqual(address, session.address))
-          throw new SignedOutError()
+        if (!Address.isEqual(address, held.address)) throw new SignedOutError()
         return value
       },
       sign: async (transaction) => {
-        const Guest = await loading
+        const [Guest, held] = await Promise.all([loading, session()])
         const envelope = Guest.check(transaction, {
           amount,
           chainId,
@@ -714,9 +734,10 @@ export async function pay_guest(
           token,
         })
         return await Guest.sign(envelope, {
-          account: Guest.account(auth, { session }),
+          account: Guest.account(auth, { session: held }),
         })
       },
+      state,
     },
     label: 'Pay with Tempo',
     mode: options.mode ?? 'iframe',
@@ -726,9 +747,11 @@ export async function pay_guest(
       amount,
       chain_id: String(chainId),
       client_id: auth.clientId,
+      ...(state !== undefined ? { guest: 'offer' } : {}),
       ...(memo !== undefined ? { memo } : {}),
       ...(note !== undefined ? { note } : {}),
       redirect_uri: redirectUri,
+      ...(state !== undefined ? { state } : {}),
       to,
       token,
     },
@@ -738,13 +761,25 @@ export async function pay_guest(
   })
   const transaction = transactionOf(url, { redirectUri })
   if (!transaction) throw transactionOf.missing()
-  return { address: session.address, transaction }
+  // The guest account paid once the user selected Continue as guest. Otherwise the user signed in
+  // on the page, which names the account that paid.
+  if (starting) return { address: (await starting).address, transaction }
+  const value = Callback.parameter(url, { name: 'account', redirectUri })
+  if (value === undefined || !Address.validate(value, { strict: false }))
+    throw missing('account')
+  return { address: Address.checksum(value), transaction }
 }
 
 export declare namespace pay_guest {
   type Options = Omit<pay.Options, 'account' | 'attempt' | 'challenge'> & {
-    /** The guest session whose guest account pays. */
-    session: Pick<Session.GuestSession, 'address' | 'publicKey'>
+    /**
+     * The guest session whose guest account pays, or a function that starts it, for a guest offer
+     * on the signed-out payment page. The function runs once, when the user selects Continue as
+     * guest.
+     */
+    session:
+      | Pick<Session.GuestSession, 'address' | 'publicKey'>
+      | (() => Promise<Pick<Session.GuestSession, 'address' | 'publicKey'>>)
   }
 
   type ReturnType = pay.ReturnType<Omit<Options, 'session'>>
@@ -1553,8 +1588,13 @@ async function approve<held = never>(
   const origin = new URL(auth.url).origin
   // The values of the page's URL, the guest requests of the payment, and the guest account's one
   // signature, which the machine holds.
+  // A guest offer opens the signed-out page, whose URL waits for no guest request. The guest
+  // request arrives once the user selects Continue as guest.
   const actor = createActor(machines.approval, {
-    input: { challenge: challenge !== undefined, guest: guest !== undefined },
+    input: {
+      challenge: challenge !== undefined,
+      guest: guest !== undefined && guest.state === undefined,
+    },
   }).start()
   challenge?.then(
     (message) => actor.send({ message, type: 'challenge.resolve' }),
@@ -1566,8 +1606,9 @@ async function approve<held = never>(
     actor.send({ type: 'guest.resolve', value })
     return value
   }
-  // The first guest request, which the guest account signs from the store, with no request.
-  const requested = guest && renew(guest.request)
+  // The first guest request, which the guest account signs from the store, with no request. A
+  // guest offer signs none until the user selects Continue as guest.
+  const requested = guest && guest.state === undefined && renew(guest.request)
   // The values that the page's URL waits for. Each rejects the call itself, so `pending` only signals.
   const pending =
     challenge || requested
@@ -1605,7 +1646,11 @@ async function approve<held = never>(
    * Returns the popup, and the navigation of a blank popup, which rejects as its values do.
    */
   const open = (entry: approve.Popup = {}) => {
-    const renewal = entry.later && guest ? renew(guest.request) : undefined
+    // A guest offer that the user has not taken signs no guest request for a later popup.
+    const renewal =
+      entry.later && guest && machines.values(actor.getSnapshot()).guest
+        ? renew(guest.request)
+        : undefined
     if (!renewal && machines.ready(actor.getSnapshot())) {
       const popup = Popup.openPopup(toUrl('popup', entry.method))
       if (popup) sources.add(popup)
@@ -1703,13 +1748,24 @@ async function approve<held = never>(
     const data = event.data as {
       guest?: unknown
       id?: unknown
+      state?: unknown
       transaction?: unknown
       type?: unknown
     } | null
-    if (!guest || event.origin !== origin || typeof data?.guest !== 'string')
+    if (!guest || event.origin !== origin) return
+    // The guest requests are unique to this payment, so another payment's page never reaches it. A
+    // guest offer's selection names the offer's `state` in place of a guest request, and asks for
+    // the first one.
+    const offered =
+      guest.state !== undefined &&
+      data?.type === 'tempo-id:guest.request' &&
+      data.state === guest.state
+    if (
+      !offered &&
+      (typeof data?.guest !== 'string' ||
+        !machines.issued(actor.getSnapshot(), { value: data.guest }))
+    )
       return
-    // The guest requests are unique to this payment, so another payment's page never reaches it.
-    if (!machines.issued(actor.getSnapshot(), { value: data.guest })) return
     const source = event.source as Window
     const fault = (error: unknown) =>
       error instanceof Error ? error.message : 'Signing failed.'
@@ -1899,10 +1955,20 @@ declare namespace approve {
      */
     guest?:
       | {
-          /** Signs a fresh guest request, with no request. */
+          /**
+           * Signs a fresh guest request, with no request. Of a guest offer, the first call starts
+           * the guest session.
+           */
           request: () => Promise<string>
           /** Checks and signs the transaction that the page posts, and returns it serialized. */
           sign: (transaction: unknown) => Promise<`0x${string}`>
+          /**
+           * The `state` of a guest offer, which the signed-out page's URL holds beside
+           * `guest=offer`. The page's `tempo-id:guest.request` names it once the user selects
+           * Continue as guest, and the answer holds the first guest request. Absent, the page's URL
+           * holds the first guest request.
+           */
+          state?: string | undefined
         }
       | undefined
     /**

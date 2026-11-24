@@ -248,6 +248,38 @@ describe('machines.approval', () => {
     `)
   })
 
+  test("opens a guest offer's page at once, holds the first guest request once the user selects Continue as guest, and signs one transaction", () => {
+    // A guest offer's URL waits for no guest request, so the input names none.
+    const actor = createActor(machines.approval, {
+      input: { challenge: false, guest: false },
+    }).start()
+    const opened = machines.ready(actor.getSnapshot())
+    const before = machines.values(actor.getSnapshot()).guest
+
+    actor.send({ type: 'guest.resolve', value: 'first' })
+    const selected = actor.getSnapshot()
+    actor.send({ type: 'sign.start' })
+    actor.send({ type: 'sign.end' })
+
+    expect([
+      opened,
+      before,
+      machines.values(selected).guest,
+      machines.issued(selected, { value: 'first' }),
+      actor.getSnapshot().value,
+      machines.signs(actor.getSnapshot()),
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        undefined,
+        "first",
+        true,
+        "signed",
+        false,
+      ]
+    `)
+  })
+
   test('signs one transaction for each payment, and another after a failed signature', () => {
     const actor = createActor(machines.approval, {
       input: { challenge: false, guest: true },

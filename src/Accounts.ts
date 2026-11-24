@@ -577,7 +577,8 @@ export type Config = {
    * request, so Tempo ID's sign-in page offers "Continue as guest". `auto` starts the guest session
    * at a sign-in without a session, with no screen and no request. With a guest session, `pay`,
    * transactions, and MPP payments sign with the key pair. Absent, the instance holds no guest
-   * session.
+   * session, and reads a stored guest session as signed out. The guest account's key pair stays in
+   * the store.
    */
   guest?: 'auto' | 'offer' | undefined
   /**
@@ -1211,7 +1212,10 @@ export type Accounts<
      * With a guest session, a payment without `account` and `challenge` opens the payment page
      * for the guest account, as `Actions.account.pay_guest` describes. The page posts the transfer,
      * and the guest account's key pair signs it. With `guest: 'auto'`, a call without a session
-     * starts the guest session first, with no request.
+     * starts the guest session first, with no request. With `guest: 'offer'`, a page's call without a
+     * session and without a challenge opens the signed-out payment page, which offers "Continue as
+     * guest". That selection starts the guest session, and the same page pays from the guest
+     * account. A sign-in on the page pays from the user's account, as without `guest`.
      *
      * With the `siwe` plugin's `auth`, a payment without `account`, while the instance holds no
      * session, signs the user in to the app's routes in the same way, and the call
@@ -1957,6 +1961,7 @@ export function create<
     chainId: chain.get,
     enabled,
     getFn: config.getFn,
+    guest: config.guest !== undefined,
     loadChain: chain.load,
     name,
     onMoved: readMoved,
@@ -2443,6 +2448,25 @@ export function create<
             chainId: chainOf(),
             memo,
             session: held,
+          })
+        }
+        // With `offer`, a page without a session opens the signed-out payment page, which offers
+        // Continue as guest. The selection starts the guest session, whose change starts now, so a
+        // sign-out during the payment overtakes it.
+        if (
+          config.guest === 'offer' &&
+          !held &&
+          context.challenge() === undefined &&
+          typeof document !== 'undefined'
+        ) {
+          const { attempt: _attempt, ...rest } = parameters
+          const change = context.session.change()
+          return await AccountActions.pay_guest(config, {
+            ...rest,
+            chainId: chainOf(),
+            memo,
+            session: () =>
+              SignIn.guest(context, { change, signal: parameters.signal }),
           })
         }
       }

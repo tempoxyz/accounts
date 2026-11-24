@@ -116,6 +116,10 @@ The session holds the guest account's address and public key. The store keeps th
 
 With a guest session, <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> opens Tempo ID's payment page for the guest account, in a frame in a dialog. The visitor selects Pay, the page prepares the transfer, and the key pair signs it in the app's page. A call with `account` or `challenge` pays as for a Tempo ID session instead. The call resolves with <SourceLink name="pay.transaction" path="src/actions/account.ts">`transaction`</SourceLink> and the guest account's <SourceLink name="pay.address" path="src/actions/account.ts">`address`</SourceLink>.
 
+The token is a symbol that the chain lists, such as `ousd`, or the address of any TIP-20 token. The key pair signs only the requested transfer of that token.
+
+With `guest: 'offer'` and no session, `accounts.pay` in a page opens the signed-out payment page, which offers Continue as guest beside the sign-in. If the visitor selects it, the page asks the app for a guest request, the call starts the guest session, and the same page continues as the guest's payment page, with no second popup. If the visitor signs in instead, the page pays from the user's account. A call with `challenge`, or an instance with a plugin's challenge such as `siwe`, offers no guest.
+
 :::code-group
 
 ```tsx [Checkout.tsx]
@@ -397,7 +401,7 @@ export const accounts = Accounts.create({
 
 ## Limitations
 
-- Only listed tokens pay on the payment page. A payment that needs a swap shows a shortfall.
+- A guest pays only in the payment's token. A payment that needs a swap shows a shortfall.
 - The deposit pages offer a guest no Buy MACH and no swap. The EVM bridge pays only an OUSD payment on Tempo mainnet.
 - A guest session holds no access key, and signs no challenge, so it takes no `accessKey`, `challenge`, or `siwe` sign-in, and pays no MPP subscription.
 - A backend sign-in, through the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin, never offers a guest.

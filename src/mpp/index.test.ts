@@ -18,6 +18,7 @@ import { describe, expect, onTestFinished, test, vi } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
 import * as Guest from '../actions/guest.js'
 import * as AccessKey from '../internal/AccessKey.js'
+import * as DefaultAccounts from '../internal/DefaultAccounts.js'
 import * as Dpop from '../internal/Dpop.js'
 import * as Plugin from '../Plugin.js'
 import { backend } from '../plugins/backend.js'
@@ -908,6 +909,47 @@ describe('mpp', () => {
     `)
   })
 
+  test("refuses the requests of the default plugin's session manager of a guest session with Accounts.SignedOutError after a sign-out and another guest session", async () => {
+    const store = Store.memory()
+    // Without an `mpp` plugin, the instance's default plugin loads `accounts/mpp` at the first request.
+    const accounts = DefaultAccounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      guest: 'offer',
+      plugins: [viem({ transport: http('http://127.0.0.1:9') }), renew()],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    const first = await Guest.session(accounts.config)
+    await accounts.renew.commit(first)
+    const manager = accounts.mpp({ maxDeposit: '1' }).session()
+
+    await accounts.signOut()
+    await Guest.disconnect(accounts.config)
+    const second = await Guest.session(accounts.config)
+    await accounts.renew.commit(second)
+    const error = await (async () =>
+      manager.fetch('http://127.0.0.1:9/content'))().catch(
+      (error: unknown) => error,
+    )
+    // A manager created under the second guest session sends its request, which rejects with a
+    // network error, since nothing listens at the URL.
+    const current = await (async () =>
+      accounts
+        .mpp({ maxDeposit: '1' })
+        .session()
+        .fetch('http://127.0.0.1:9/content'))().catch((error: unknown) => error)
+
+    expect([first.address === second.address, error, current])
+      .toMatchInlineSnapshot(`
+        [
+          false,
+          [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+          [TypeError: fetch failed],
+        ]
+      `)
+  })
+
   test.for([
     [
       "`maxDeposit: ''`",
@@ -1660,6 +1702,7 @@ function instance(
     chain: options.chain ?? 42431,
     clientId: 'https://app.example.com',
     ...(options.dpop ? { dpop: options.dpop } : {}),
+    guest: 'offer',
     ...(options.store ? { store: options.store } : {}),
     plugins: [
       viem({ transport: options.transport ?? http('http://127.0.0.1:9') }),

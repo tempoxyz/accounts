@@ -157,7 +157,9 @@ export function create(options: create.Options): create.ReturnType {
     store,
   } = options
 
-  const writes = store ? queue(store, { getFn: options.getFn }) : undefined
+  const writes = store
+    ? queue(store, { getFn: options.getFn, guest: options.guest === true })
+    : undefined
   // The lock of `exclusive` without Web Locks, for a store without a `lock` of its own.
   // The store's `lock` runs with the store as its receiver, as its other members do.
   const lock: NonNullable<Store['lock']> = store?.lock
@@ -2313,6 +2315,11 @@ export declare namespace create {
      */
     getFn?: TempoAccount.deserialize.Options['getFn']
     /**
+     * Whether the instance holds guest sessions. Without it, a stored guest session reads as signed
+     * out, and stays in the store, so an instance with `guest` restores it.
+     */
+    guest?: boolean | undefined
+    /**
      * Reads the stored chain selection, which the first read of the session awaits, so a restored
      * session selects the access key of the instance's chain. Absent, the chain is the configured one.
      */
@@ -2740,7 +2747,7 @@ function settle(promise: Promise<unknown> | undefined) {
  * a non-extractable `CryptoKey`. Writes run in order, and `flush` resolves when every earlier write
  * completed.
  */
-function queue(store: Store, options: TempoAccount.deserialize.Options = {}) {
+function queue(store: Store, options: queue.Options = {}) {
   let pending: Promise<void> = Promise.resolve()
   // Whether the last write failed, which leaves an earlier copy in the store.
   let failed = false
@@ -2774,7 +2781,12 @@ function queue(store: Store, options: TempoAccount.deserialize.Options = {}) {
     /** Decodes a value that `read` returns. Throws for a record that holds no valid session. */
     decode(value: Saved | null | undefined) {
       if (value == null) return undefined
-      return { session: fromSaved(value.state?.session, options) }
+      const session = fromSaved(value.state?.session, options)
+      // An instance without `guest` reads a guest session that another configuration saved as
+      // signed out, so its session never holds a kind that its type excludes.
+      if (session && Session.guest(session) && !options.guest)
+        return { session: undefined }
+      return { session }
     },
     /** Reads the stored session. A custom store may return `null` for a missing item. */
     async getItem(name: string) {
@@ -2811,6 +2823,13 @@ function queue(store: Store, options: TempoAccount.deserialize.Options = {}) {
         session,
       ),
     storage,
+  }
+}
+
+declare namespace queue {
+  type Options = TempoAccount.deserialize.Options & {
+    /** Whether the instance holds guest sessions. Without it, a stored guest session reads as signed out. */
+    guest?: boolean | undefined
   }
 }
 

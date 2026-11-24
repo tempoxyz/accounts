@@ -124,6 +124,28 @@ describe('Actions.guest.check', () => {
         'Invalid prepared transaction',
       )
     })
+
+  test('accepts a transfer of a TIP-20 token that no chain lists, by its address', () => {
+    const token = '0x20c00000000000000000000000000000000004d2'
+    const value = transaction({
+      calls: [TokenActions.transfer.call({ amount: 1_500_000n, to, token })],
+    })
+
+    const envelope = Guest.check(value, { ...payment, amount: '1.5', token })
+
+    expect(envelope.calls).toHaveLength(1)
+  })
+
+  test('refuses a token address that is no TIP-20 token', () => {
+    const token = '0x000000000000000000000000000000000000dEaD'
+    const value = transaction({
+      calls: [TokenActions.transfer.call({ amount: 1_500_000n, to, token })],
+    })
+
+    expect(() =>
+      Guest.check(value, { ...payment, amount: '1.5', token }),
+    ).toThrow('its token is no TIP-20 token.')
+  })
 })
 
 /** Returns the configuration of an app whose Tempo ID never answers, with `store`. */
@@ -518,6 +540,61 @@ describe('Accounts.create with guest', () => {
         false,
       ]
     `)
+  })
+
+  test('an instance without `guest` reads a stored guest session as signed out, and keeps it for an instance with `guest`', async () => {
+    const store = Store.memory()
+    const options = {
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      plugins: [device({ onCode: () => {} })],
+      store,
+      url: 'http://127.0.0.1:9',
+    } as const
+    const plain = Accounts.create(options)
+    await plain.session.get()
+
+    const session = await Accounts.create({
+      ...options,
+      guest: 'auto',
+    }).device.signIn()
+    // The instance on the same store hears the saved change, and reads the store again.
+    const adopted = await plain.session.get()
+    const hydrated = await Accounts.create(options).session.get()
+    const restored = await Accounts.create({
+      ...options,
+      guest: 'auto',
+    }).session.get()
+
+    expect([
+      adopted,
+      plain.session.status.get().status,
+      hydrated,
+      restored?.address === session.address,
+    ]).toMatchInlineSnapshot(`
+      [
+        undefined,
+        "signedOut",
+        undefined,
+        true,
+      ]
+    `)
+  })
+
+  test('`pay` of `offer` without a session outside a page rejects with `SignedOutError`, and starts no guest session', async () => {
+    const { accounts, requests } = create('offer')
+
+    // Only a page shows the signed-out payment page, which offers Continue as guest.
+    const error = await accounts.pay(payment).catch((error: unknown) => error)
+
+    expect([error, await accounts.guest.get(), requests])
+      .toMatchInlineSnapshot(`
+        [
+          [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+          undefined,
+          [],
+        ]
+      `)
   })
 
   test('`offer` adds `guest=offer` to the code request', async () => {
