@@ -11,8 +11,9 @@ import type * as Accounts from '../Accounts.js'
 import * as Challenge from '../Challenge.js'
 import * as IdToken from '../internal/IdToken.js'
 import type { User } from '../internal/User.js'
+import * as Settings from '../internal/viem/Settings.js'
 import * as Plugin from '../Plugin.js'
-import { settings, viem } from './viem.js'
+import { viem } from './viem.js'
 
 /**
  * Returns the plugin of a server that verifies what Tempo ID issues to its app, which adds
@@ -82,7 +83,7 @@ export function tokens(options: tokens.Options = {}) {
           (instance as { viem?: viem.Namespace }).viem ??
           (viem().actions!(context) as viem.Namespace)
         const { chain: chainOf, rpc } = namespace[
-          settings as never
+          Settings.key as never
         ] as unknown as viem.Settings
         const chain = chainOf(chainId)
         if (!chain)
