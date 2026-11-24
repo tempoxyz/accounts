@@ -107,4 +107,24 @@ describe('Sessions.durableObject', () => {
       ]
     `)
   })
+
+  test("behavior: a sign-in requests the scope of the Worker's instance", async () => {
+    const result = await run([
+      'const scoped = Accounts.create({',
+      '  chain: 42431,',
+      "  clientId: 'app',",
+      "  clientSecret: 'secret',",
+      '  plugins: [backend({ sessions: Sessions.durableObject(namespace) })],',
+      "  redirectUri: 'https://app.example.com/callback',",
+      "  scope: 'offline_access api:read',",
+      "  url: 'http://127.0.0.1:9',",
+      '})',
+      'const { url } = await scoped.backend.start({ par: false })',
+      "return Response.json(new URL(url).searchParams.get('scope'))",
+    ])
+
+    expect(result).toMatchInlineSnapshot(
+      `"openid email offline_access api:read"`,
+    )
+  })
 })

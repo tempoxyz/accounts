@@ -20,9 +20,10 @@ const maxNameSize = 1024
  * `namespace` that its session ID names, whose class `DurableObject.sessions` returns. An object's
  * name holds the app's client ID beside the session ID, so one namespace serves several apps.
  *
- * The plugin calls the returned function once with the instance's `clientId`. It returns the
- * operations of the sessions, each of which calls the RPC method of the same name on the object of
- * its session ID. `close`, `link`, and `unlink` call the object of the session's `sid`, which holds the
+ * The plugin calls the returned function once with the instance's `clientId`, `scope`, and `url`.
+ * It returns the operations of the sessions, each of which calls the RPC method of the same name on
+ * the object of its session ID, with the instance's `scope` and `url`. The object uses each of the
+ * two that its `config` does not name. `close`, `link`, and `unlink` call the object of the session's `sid`, which holds the
  * index of its session IDs. `end` with `sid` calls `endSid`, and `end` with `revoke: false` calls
  * `discard`. Its `store` keeps each entry in the object that the entry's key names, so every
  * request's instance shares the `viem` plugin's marks of registered access keys. An object of an
@@ -69,7 +70,7 @@ export function durableObject(
 ): backend.Sessions.Adapter {
   return (app) => {
     // Each object that holds a session uses the instance's Tempo ID, unless its `config` names one.
-    const { url: tempoIdUrl } = app
+    const { scope, url: tempoIdUrl } = app
     const stub = (id: string) =>
       namespace.getByName(Rpc.name({ clientId: app.clientId, id }))
     const index = (sid: string) =>
@@ -84,7 +85,11 @@ export function durableObject(
         return current(
           Rpc.fromWire(
             Rpc.unwrap(
-              await stub(options.id).complete({ ...options, tempoIdUrl }),
+              await stub(options.id).complete({
+                ...options,
+                scope,
+                tempoIdUrl,
+              }),
             ),
           ),
           options.id,
@@ -98,38 +103,47 @@ export function durableObject(
         // and a logout token's retry ends the session.
         if (sid !== undefined)
           Rpc.unwrap(
-            await stub(id).endSid({ id, issuedAt, revoke, sid, tempoIdUrl }),
+            await stub(id).endSid({
+              id,
+              issuedAt,
+              revoke,
+              scope,
+              sid,
+              tempoIdUrl,
+            }),
           )
         // An object of an earlier release reads only `id` from `end`, and would revoke. It has no
         // `discard`, so the call throws instead.
         else if (revoke === false)
-          Rpc.unwrap(await stub(id).discard({ id, tempoIdUrl }))
-        else Rpc.unwrap(await stub(id).end({ id, tempoIdUrl }))
+          Rpc.unwrap(await stub(id).discard({ id, scope, tempoIdUrl }))
+        else Rpc.unwrap(await stub(id).end({ id, scope, tempoIdUrl }))
       },
       async get(options) {
         if (!named(options.id)) return undefined
         const wire = Rpc.unwrap(
-          await stub(options.id).get({ ...options, tempoIdUrl }),
+          await stub(options.id).get({ ...options, scope, tempoIdUrl }),
         )
         return wire && current(Rpc.fromWire(wire), options.id)
       },
       async headers(options) {
         if (!named(options.id)) return undefined
         return Rpc.unwrap(
-          await stub(options.id).headers({ ...options, tempoIdUrl }),
+          await stub(options.id).headers({ ...options, scope, tempoIdUrl }),
         )
       },
       async issue(options) {
-        Rpc.unwrap(await stub(options.id).issue({ ...options, tempoIdUrl }))
+        Rpc.unwrap(
+          await stub(options.id).issue({ ...options, scope, tempoIdUrl }),
+        )
       },
       async close(options) {
         return Rpc.unwrap(
-          await index(options.sid).close({ ...options, tempoIdUrl }),
+          await index(options.sid).close({ ...options, scope, tempoIdUrl }),
         )
       },
       async link(options) {
         return Rpc.unwrap(
-          await index(options.sid).link({ ...options, tempoIdUrl }),
+          await index(options.sid).link({ ...options, scope, tempoIdUrl }),
         )
       },
       async save(options) {
@@ -137,6 +151,7 @@ export function durableObject(
         const saved = Rpc.unwrap(
           await stub(options.id).save({
             id: options.id,
+            scope,
             session: Rpc.toWire(session),
             tempoIdUrl,
           }),
@@ -151,7 +166,7 @@ export function durableObject(
       },
       async start(options) {
         return Rpc.unwrap(
-          await stub(options.id).start({ ...options, tempoIdUrl }),
+          await stub(options.id).start({ ...options, scope, tempoIdUrl }),
         )
       },
       // Each entry, such as a mark of a registered access key, lives in the object that its key
@@ -171,11 +186,13 @@ export function durableObject(
       async take(options) {
         if (!named(options.id)) return undefined
         return Rpc.unwrap(
-          await stub(options.id).take({ ...options, tempoIdUrl }),
+          await stub(options.id).take({ ...options, scope, tempoIdUrl }),
         )
       },
       async unlink(options) {
-        Rpc.unwrap(await index(options.sid).unlink({ ...options, tempoIdUrl }))
+        Rpc.unwrap(
+          await index(options.sid).unlink({ ...options, scope, tempoIdUrl }),
+        )
       },
     }
   }

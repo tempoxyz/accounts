@@ -312,15 +312,13 @@ export function sessions<env>(
 
     complete(options: sessions.Call<{ id: string; url: string }>) {
       return Rpc.wrap(async () =>
-        Rpc.toWire(
-          await (await this.#sessions(options.tempoIdUrl)).complete(options),
-        ),
+        Rpc.toWire(await (await this.#sessions(options)).complete(options)),
       )
     }
 
     discard(options: sessions.Call<{ id: string }>) {
       return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).end({
+        (await this.#sessions(options)).end({
           id: options.id,
           revoke: false,
         }),
@@ -329,7 +327,7 @@ export function sessions<env>(
 
     end(options: sessions.Call<{ id: string }>) {
       return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).end({ id: options.id }),
+        (await this.#sessions(options)).end({ id: options.id }),
       )
     }
 
@@ -341,16 +339,12 @@ export function sessions<env>(
         sid: string
       }>,
     ) {
-      return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).end(options),
-      )
+      return Rpc.wrap(async () => (await this.#sessions(options)).end(options))
     }
 
     get(options: sessions.Call<{ id: string }>) {
       return Rpc.wrap(async () => {
-        const session = await (
-          await this.#sessions(options.tempoIdUrl)
-        ).get(options)
+        const session = await (await this.#sessions(options)).get(options)
         return session && Rpc.toWire(session)
       })
     }
@@ -363,26 +357,24 @@ export function sessions<env>(
       options: sessions.Call<{ id: string; method: string; url: string }>,
     ) {
       return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).headers(options),
+        (await this.#sessions(options)).headers(options),
       )
     }
 
     issue(options: sessions.Call<BackendSessions.issue.Options>) {
       return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).issue(options),
+        (await this.#sessions(options)).issue(options),
       )
     }
 
     close(options: sessions.Call<BackendSessions.close.Options>) {
       return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).close(options),
+        (await this.#sessions(options)).close(options),
       )
     }
 
     link(options: sessions.Call<BackendSessions.link.Options>) {
-      return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).link(options),
-      )
+      return Rpc.wrap(async () => (await this.#sessions(options)).link(options))
     }
 
     removeItem(options: { key: string }) {
@@ -396,7 +388,7 @@ export function sessions<env>(
       }>,
     ) {
       return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).save({
+        (await this.#sessions(options)).save({
           id: options.id,
           session: Rpc.fromWire(options.session),
         }),
@@ -422,33 +414,34 @@ export function sessions<env>(
       options: sessions.Call<BackendSessions.start.Options & { id: string }>,
     ) {
       return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).start(options),
+        (await this.#sessions(options)).start(options),
       )
     }
 
     take(options: sessions.Call<BackendSessions.take.Options>) {
-      return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).take(options),
-      )
+      return Rpc.wrap(async () => (await this.#sessions(options)).take(options))
     }
 
     unlink(options: sessions.Call<BackendSessions.unlink.Options>) {
       return Rpc.wrap(async () =>
-        (await this.#sessions(options.tempoIdUrl)).unlink(options),
+        (await this.#sessions(options)).unlink(options),
       )
     }
 
     /**
      * Returns the sessions of the app that the object's name holds. Without a `url` of `config`,
-     * the sessions use `tempoIdUrl`, the Tempo ID of the Worker's instance. A configuration that
-     * rejects leaves no instance, so the next call reads it again.
+     * the sessions use `tempoIdUrl`, the Tempo ID of the Worker's instance, and without a `scope`
+     * of `config`, the `scope` of the Worker's instance. A configuration that rejects leaves no
+     * instance, so the next call reads it again.
      */
-    #sessions(tempoIdUrl: string | undefined) {
+    #sessions(call: sessions.Call<object>) {
       if (this.#instance) return this.#instance
+      const { scope, tempoIdUrl } = call
       const instance = (async () => {
         const { clientId } = Rpc.parseName(this.ctx.id.name)
         return BackendSessions.create(
           Accounts.create({
+            ...(scope ? { scope } : {}),
             ...(tempoIdUrl ? { url: tempoIdUrl } : {}),
             ...(await config(this.env, { clientId })),
             clientId,
@@ -582,10 +575,16 @@ export declare namespace sessions {
   }
 
   /**
-   * The options of a session's RPC method, with the Tempo ID of the Worker's instance, which
-   * `Sessions.durableObject` sends with each call.
+   * The options of a session's RPC method, with the Tempo ID and the scopes of the Worker's
+   * instance, which `Sessions.durableObject` sends with each call.
    */
   type Call<options> = options & {
+    /**
+     * The `scope` of the Worker's instance. The object's sessions use it without a `scope` of
+     * `config`, so a sign-in requests the scopes of the Worker's instance. Absent from a Worker of
+     * an earlier release.
+     */
+    scope?: string | undefined
     /**
      * The `url` of the Worker's instance. The object's sessions use it without a `url` of
      * `config`. Absent from a Worker of an earlier release.
@@ -595,7 +594,7 @@ export declare namespace sessions {
 
   /**
    * The app's configuration: the client authentication that only a backend holds, and its URLs.
-   * Without `url`, the object uses the `url` of the Worker's instance.
+   * Without `url` or `scope`, the object uses the `url` or the `scope` of the Worker's instance.
    */
   type Config = Pick<
     Accounts.create.Options,
