@@ -248,6 +248,32 @@ describe('machines.session', () => {
       expect(actor.getSnapshot().context.renewing).toBeUndefined()
     })
 
+    test('holds reauthorizing with the held session whose access key expired, from the start of the authorization that renews it', () => {
+      const actor = createActor(machines.session).start()
+      const seen: unknown[] = []
+
+      actor.send({ type: 'load' })
+      actor.send({ session: expired, type: 'set' })
+      actor.send(expiry)
+      seen.push(machines.status(actor.getSnapshot()))
+      actor.send({ type: 'authorize.start' })
+      seen.push(machines.status(actor.getSnapshot()))
+      actor.send({ renewing: expired, session: undefined, type: 'set' })
+      seen.push(machines.status(actor.getSnapshot()))
+      actor.send({ session: renewed, type: 'set' })
+      actor.send({ type: 'authorize.end' })
+      seen.push(machines.status(actor.getSnapshot()))
+
+      expect(seen.map((entry) => JSON.stringify(entry))).toMatchInlineSnapshot(`
+        [
+          "{"status":"signedOut"}",
+          "{"session":{"accessToken":"expired","expiresAt":1,"refreshToken":"expired","user":{"email":"tempo-id-test+session@example.org","id":"user_1"}},"status":"reauthorizing"}",
+          "{"session":{"accessToken":"expired","expiresAt":1,"refreshToken":"expired","user":{"email":"tempo-id-test+session@example.org","id":"user_1"}},"status":"reauthorizing"}",
+          "{"session":{"accessToken":"renewed","expiresAt":2,"refreshToken":"renewed","user":{"email":"tempo-id-test+session@example.org","id":"user_1"}},"status":"signedIn"}",
+        ]
+      `)
+    })
+
     test('keeps the expired session that load emptied outside an authorization, so the next authorization renews it, until a sign-out', () => {
       const actor = createActor(machines.session).start()
       const seen: unknown[] = []

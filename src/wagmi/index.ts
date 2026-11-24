@@ -1011,6 +1011,9 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           status.status !== 'signedIn' &&
           addressOf(previous.session)
         ) {
+          // A renewal that ends before a read empties the held expired session leaves the expiry's
+          // end of wagmi's connection as it is, so that read ends nothing again.
+          if (snapshot && InternalSession.machines.expired(snapshot)) return
           // The expiry ended wagmi's connection already, so a failed renewal ends nothing again.
           if (machines.expired(disconnects.getSnapshot()))
             return disconnects.send({ type: 'session.change' })

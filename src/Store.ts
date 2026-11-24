@@ -18,7 +18,7 @@ export type Store = {
    * microtask. The store holds no listener of an instance that the app dropped. An instance's
    * session posts each saved change through it where no page's `BroadcastChannel` exists, such as in
    * React Native or Node, so another instance's sign-out empties its session at once.
-   * `Store.file`, `Store.memory`, `Store.durableObject` of `accounts/cloudflare`, and the store of `accounts/expo` set it. Absent, an instance outside a page reads another's sign-out only from
+   * `Store.file`, `Store.memory`, `Store.redis`, `Store.durableObject` of `accounts/cloudflare`, and the store of `accounts/expo` set it. Absent, an instance outside a page reads another's sign-out only from
    * the store.
    */
   connect?:
