@@ -12,6 +12,7 @@ import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import { token as TokenActions } from 'viem/tempo/actions'
 import { describe, expect, expectTypeOf, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
+import * as DefaultAccounts from '../internal/DefaultAccounts.js'
 import { device, dialog, redirect } from '../plugins/index.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
@@ -332,18 +333,70 @@ describe('Accounts.create with guest', () => {
     expectTypeOf<
       Awaited<ReturnType<typeof plain.redirect.signIn>>
     >().toEqualTypeOf<Session.Session | undefined>()
-    expectTypeOf(
-      plain.dialog.signIn(),
-    ).resolves.not.toExtend<Session.GuestSession>()
+    // The calls are never made, so their types alone are read.
+    const plainSignIn = () => plain.dialog.signIn()
+    const guestSignIn = () => guest.dialog.signIn()
+    expectTypeOf<
+      Awaited<ReturnType<typeof plainSignIn>>
+    >().not.toExtend<Session.GuestSession>()
     expectTypeOf<
       Awaited<ReturnType<typeof guest.device.signIn>>
     >().toEqualTypeOf<Session.GuestSession | Session.Session>()
-    expectTypeOf(guest.dialog.signIn()).resolves.toExtend<
+    expectTypeOf<Awaited<ReturnType<typeof guestSignIn>>>().toExtend<
       Session.GuestSession | Session.Session
     >()
-    const signIn = () => guest.dialog.signIn()
     expectTypeOf<Session.GuestSession>().toExtend<
-      Awaited<ReturnType<typeof signIn>>
+      Awaited<ReturnType<typeof guestSignIn>>
     >()
   })
+
+  test('`auto` honors an aborted signal, and starts no guest session', async () => {
+    const { accounts, requests } = create('auto')
+    const reason = new Error('Cancelled.')
+
+    const error = await accounts.device
+      .signIn({ signal: AbortSignal.abort(reason) })
+      .catch((error: unknown) => error)
+
+    expect([
+      error === reason,
+      await accounts.session.get(),
+      await accounts.guest.get(),
+      requests,
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        undefined,
+        undefined,
+        [],
+      ]
+    `)
+  })
+
+  test.for([
+    ['the default dialog', []],
+    ['dialog()', [dialog()]],
+  ] as const)(
+    '`dialog.session` of %s returns no guest session',
+    async ([, plugins]) => {
+      const accounts = DefaultAccounts.create({
+        chain: 4217,
+        clientId: 'cli:guest-example',
+        guest: 'auto',
+        plugins,
+        store: Store.memory(),
+        url: 'http://127.0.0.1:9',
+      })
+      const session = await accounts.dialog.signIn()
+
+      const shown = await accounts.dialog.session()
+
+      expect([Session.guest(session), shown]).toMatchInlineSnapshot(`
+        [
+          true,
+          null,
+        ]
+      `)
+    },
+  )
 })

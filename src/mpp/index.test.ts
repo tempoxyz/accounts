@@ -16,6 +16,7 @@ import { KeyAuthorization, TempoAddress } from 'ox/tempo'
 import { createClient, http, type Transport } from 'viem'
 import { describe, expect, onTestFinished, test, vi } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
+import * as Guest from '../actions/guest.js'
 import * as AccessKey from '../internal/AccessKey.js'
 import * as Dpop from '../internal/Dpop.js'
 import * as Plugin from '../Plugin.js'
@@ -800,6 +801,44 @@ describe('mpp', () => {
           false,
         ],
         "error": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+      }
+    `)
+  })
+
+  test("signs a charge with a guest session's key pair, and refuses it with Accounts.SignedOutError once a sign-out during the request ends the session", async () => {
+    const store = Store.memory()
+    const endpoint = server()
+    const accounts = instance({ fetch: endpoint.fetch, store })
+    await accounts.renew.commit(await Guest.session(accounts.config))
+    const gate = Promise.withResolvers<void>()
+    const held = server({ hold: gate.promise })
+    const later = instance({ fetch: held.fetch, store })
+    await later.session.get()
+
+    // The endpoint's chain never answers, so it refuses the signed credential.
+    await accounts.fetch('http://mpp.test/proof').catch(() => undefined)
+    const pending = later
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+    await expect.poll(() => held.credentials).toEqual([false])
+    await later.signOut()
+    gate.resolve()
+    const error = await pending
+
+    expect({
+      error,
+      held: held.credentials,
+      signed: endpoint.credentials,
+    }).toMatchInlineSnapshot(`
+      {
+        "error": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "held": [
+          false,
+        ],
+        "signed": [
+          false,
+          true,
+        ],
       }
     `)
   })

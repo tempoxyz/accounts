@@ -151,7 +151,7 @@ export type AccountOption<accessKey> =
 /**
  * Commits a new guest session of the instance with `options.change`, and returns it. The guest
  * account's key pair loads from the store, or the call creates and saves one. The call sends no
- * request. A failure rejects through the change.
+ * request. A failure, or an abort of `options.signal` before the commit, rejects through the change.
  */
 export async function guest(
   context: Pick<Plugin.Context, 'config'>,
@@ -163,6 +163,7 @@ export async function guest(
     // its signing.
     const Guest = await import('../actions/guest.js')
     const session = await Guest.session(context.config)
+    throwIfAborted(options.signal)
     await change.commit(session)
     return session
   } catch (error) {
@@ -174,20 +175,32 @@ export declare namespace guest {
   type Options = {
     /** The sign-in's change, which the guest session commits. */
     change: Pick<InternalSession.Change, 'commit' | 'fail'>
+    /** The sign-in's signal, whose abort before the commit rejects with its reason. */
+    signal?: AbortSignal | undefined
   }
 }
 
 /**
  * Returns the guest session that a sign-in of an instance with `guest: 'auto'` starts while it holds
  * no session, with no screen and no request, else `undefined`. The read of the stored session is
- * local.
+ * local. An abort of `options.signal` before the commit rejects with its reason, and sets no session.
  */
 export async function guestAuto(
   context: Pick<Plugin.Context, 'config' | 'session'>,
+  options: guestAuto.Options = {},
 ): Promise<Session.GuestSession | undefined> {
+  const { signal } = options
   if (context.config.guest !== 'auto') return undefined
+  throwIfAborted(signal)
   if (context.session.get() ?? (await context.session.load())) return undefined
-  return await guest(context, { change: context.session.change() })
+  return await guest(context, { change: context.session.change(), signal })
+}
+
+export declare namespace guestAuto {
+  type Options = {
+    /** The sign-in's signal, whose abort before the commit rejects with its reason. */
+    signal?: AbortSignal | undefined
+  }
 }
 
 /**
@@ -203,6 +216,19 @@ export function guestSelected(
     error instanceof RequestError &&
     error.reason === 'guest_selected'
   )
+}
+
+/**
+ * Throws the reason of `signal` once it aborted. React Native's `AbortSignal` has no reason, so an
+ * abort without one throws an `AbortError`.
+ */
+function throwIfAborted(signal: AbortSignal | undefined) {
+  if (!signal?.aborted) return
+  throw signal.reason !== undefined
+    ? signal.reason
+    : Object.assign(new Error('The sign-in was aborted.'), {
+        name: 'AbortError',
+      })
 }
 
 /** Returns the session of a sign-in's result: its tokens, its user, its access key, and its account. */

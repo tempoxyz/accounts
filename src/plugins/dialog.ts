@@ -274,7 +274,9 @@ export function dialog<const options extends dialog.Options = {}>(
         const page: dialog.signIn.WithPage = parameters
         // The read of the stored session is local, so a popup still opens within the gesture.
         if (context.config.guest === 'auto') {
-          const started = await SignIn.guestAuto(context)
+          const started = await SignIn.guestAuto(context, {
+            signal: page.signal,
+          })
           if (started) return started
         }
         const change = context.session.change()

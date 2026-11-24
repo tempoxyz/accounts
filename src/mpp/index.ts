@@ -769,7 +769,20 @@ export function mpp(options: mpp.Options = {}) {
         // no identity, since Tempo ID issued it no tokens.
         const guest = overrides.session ? undefined : context.session.get()
         if (guest && Session.guest(guest)) {
-          const account = Guest.account(instance.config, { session: guest })
+          // A sign-out keeps the key pair, so the payer stops once the session ends or holds another
+          // account, in this tab or another one, as the access key's payer below does.
+          const started = ends
+          const reads = !messaged()
+          const ended = () =>
+            ends !== started || !Session.same(context.session.get(), guest)
+          const account = checked(
+            Guest.account(instance.config, { session: guest }),
+            {
+              check: () => {
+                if (ended()) throw new Accounts.SignedOutError()
+              },
+            },
+          )
           return create({
             ...settings,
             account,
@@ -784,7 +797,14 @@ export function mpp(options: mpp.Options = {}) {
             pay: undefined,
             subscribe: undefined,
             turn: registrations.turn,
-            verify: undefined,
+            verify: async (options) => {
+              if (reads)
+                await Retry.abortable(
+                  context.session.reload().catch(() => undefined),
+                  { signal: options.signal },
+                )
+              if (ended()) throw new Accounts.SignedOutError()
+            },
           })
         }
         // Only a page shows the payment page, and only for the instance's own session.
@@ -1774,14 +1794,14 @@ function messaged() {
 
 /**
  * Returns `account`, which runs `options.check` before each signature, so a check that throws keeps
- * the access key from signing.
+ * the access key, or a guest session's key pair, from signing.
  */
-function checked(
-  account: Account.AccessKeyAccount,
-  options: { check: () => void },
-): Account.AccessKeyAccount {
+function checked<
+  account extends Account.AccessKeyAccount | Account.RootAccount,
+>(account: account, options: { check: () => void }): account {
   const { check } = options
-  const { sign } = account
+  // A root account signs a hash as an access key account does.
+  const { sign } = account as Account.AccessKeyAccount
   return {
     ...account,
     // Viem reads `sign` to choose how an account signs a hash, so it stays absent without one.
@@ -1811,7 +1831,7 @@ function checked(
       check()
       return account.signTypedData(...args)
     },
-  } as Account.AccessKeyAccount
+  } as account
 }
 
 /**

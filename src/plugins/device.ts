@@ -337,7 +337,9 @@ export function device(options: device.Options = {}) {
         ): Promise<Session.GuestSession | Session.Session> {
           if (!onCode) throw new OnCodeRequiredError()
           if (context.config.guest === 'auto') {
-            const started = await SignIn.guestAuto(context)
+            const started = await SignIn.guestAuto(context, {
+              signal: parameters.signal,
+            })
             if (started) return started
           }
           // The request names the instance's chain, so the stored selection loads first. The store
