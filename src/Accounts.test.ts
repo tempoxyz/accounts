@@ -1653,6 +1653,7 @@ describe('RequestError', () => {
       'backend_sign_in_not_permitted',
       'body_too_large',
       'challenge_not_permitted',
+      'checkout_cancelled',
       'config_conflict',
       'configurable_accounts_disabled',
       'connection_mismatch',
