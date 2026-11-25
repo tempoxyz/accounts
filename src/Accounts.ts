@@ -663,6 +663,13 @@ export type Accounts<
        * or a device. A later load then restores `session.account` with no request. A session with
        * an access key takes only the account of that access key.
        *
+       * If Tempo ID refuses the session's live access token, such as after the user's Tempo ID
+       * session ended in another app, the call refreshes the tokens once, and reads again. If Tempo
+       * ID refuses the refresh token too, the session ends, and the status is `signedOut`.
+       *
+       * @throws {SignedOutError} Outside a page, when Tempo ID refuses the session's access token and
+       *   its refresh token, with the refresh's `RequestError` as `cause`. On a page, the read
+       *   then sends the session cookie.
        * @throws {RequestError} When Tempo ID refuses the read, with one of these `reason` values,
        *   which [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md) describes:
        *   - `session_required`: The read sends the session cookie, and the browser holds no Tempo
@@ -671,8 +678,9 @@ export type Accounts<
        *     DPoP token that the instance's `dpop` key does not bind. Or the user holds no account,
        *     and the instance runs outside a page. The call then throws with status 0, and sends no
        *     creation request.
-       *   - `invalid_token`: `accessToken` is expired or revoked, its session ended, or it belongs
-       *     to another app. Refresh the tokens, or sign in again.
+       *   - `invalid_token`: The `accessToken` parameter is expired or revoked, its session ended,
+       *     or it belongs to another app. Or Tempo ID refuses the session's access token, and the
+       *     session holds no refresh token, or the refreshed one. Sign in again.
        *   - `invalid_dpop_proof`: `accessToken` is a DPoP token, and the instance holds no `dpop`
        *     key or another one than the one that bound it. The call sends no request.
        *   - `invalid_field`: The instance's `clientId` is not a valid client ID, `chain` names no
@@ -2222,18 +2230,57 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   let server: Promise<Handler.Handler> | undefined
   const relaying = plugins.some((plugin) => plugin.id === 'relay')
 
+  /** Refreshes the session's tokens. Overlapping calls share one request. */
+  const refresh = () =>
+    (rotating ??= Core.refresh(context).finally(() => {
+      rotating = undefined
+    }))
+
   /** Returns the user's Tempo Account, and saves one that the session's access token read. */
   const getAccount = async (parameters: Core.getAccount.Parameters = {}) => {
-    const accessToken = parameters.accessToken ?? (await ownAccessToken())
-    // The default resolves after the token, whose read loads the stored chain.
-    const chainId = parameters.chainId ?? chain.get()
-    const account = await Core.getAccount(context, {
-      ...parameters,
-      accessToken,
-      chainId,
+    const read = async (accessToken: string | undefined) => {
+      // The default resolves after the token, whose read loads the stored chain.
+      const chainId = parameters.chainId ?? chain.get()
+      const account = await Core.getAccount(context, {
+        ...parameters,
+        accessToken,
+        chainId,
+      })
+      if (account && accessToken) keepAccount(account, { accessToken, chainId })
+      return account
+    }
+    if (parameters.accessToken) return await read(parameters.accessToken)
+    const accessToken = await ownAccessToken()
+    if (!accessToken) return await read(undefined)
+    return await read(accessToken).catch(async (error: unknown) => {
+      // Tempo ID refuses a live access token of the session when the user's Tempo ID session ended
+      // elsewhere, such as at a logout in another app. One refresh tells that from a stale token:
+      // new tokens read again, and a refused refresh token ends the session.
+      if (!(error instanceof RequestError) || error.reason !== 'invalid_token')
+        throw error
+      const current = context.session.get()
+      if (!current?.refreshToken) throw error
+      // Another call can have replaced the refused token already, and then the read sends its token.
+      const failure =
+        current.accessToken === accessToken
+          ? await refresh().then(
+              () => undefined,
+              (refusal: unknown) => ({ refusal }),
+            )
+          : undefined
+      if (failure) {
+        const ended =
+          failure.refusal instanceof RequestError &&
+          failure.refusal.code === 'invalid_grant' &&
+          !context.session.get()
+        if (!ended) throw failure.refusal
+        // A page still reads with any session cookie that reaches Tempo ID, as without a live
+        // access token.
+        if (Api.page() === undefined)
+          throw new SignedOutError({ cause: failure.refusal })
+      }
+      return await read(await ownAccessToken())
     })
-    if (account && accessToken) keepAccount(account, { accessToken, chainId })
-    return account
   }
 
   const instance: Record<string, unknown> = {
@@ -2593,10 +2640,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
           restoring = undefined
         }))
       },
-      refresh: () =>
-        (rotating ??= Core.refresh(context).finally(() => {
-          rotating = undefined
-        })),
+      refresh,
       status: session.status,
       subscribe: session.subscribe,
     },

@@ -33,6 +33,77 @@ import * as Store from './Store.js'
 import { local } from './plugins/local.js'
 import { viem } from './plugins/viem.js'
 
+describe('account.get', () => {
+  test('refreshes once when Tempo ID refuses the live access token, and signs out when it refuses the refresh token too', async () => {
+    const memory = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      // The user's Tempo ID session ended elsewhere, so Tempo ID refuses both tokens.
+      fetch: ((input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        requests.push(`${request.method} ${pathname}`)
+        if (pathname === '/oauth2/token')
+          return Promise.resolve(
+            Response.json(
+              {
+                error: 'invalid_grant',
+                error_description: 'invalid refresh token',
+              },
+              { status: 400 },
+            ),
+          )
+        return Promise.resolve(
+          Response.json(
+            {
+              error: 'invalid_token',
+              error_description: 'Invalid access token',
+              reason: 'invalid_token',
+            },
+            { status: 401 },
+          ),
+        )
+      }) as typeof globalThis.fetch,
+      store: memory,
+      url: 'http://127.0.0.1:9',
+    })
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const error = await accounts.account.get().catch((error: unknown) => error)
+
+    expect(error).toMatchInlineSnapshot(
+      `[Accounts.SignedOutError: The client's account is signed out. Sign in before sending.]`,
+    )
+    expect({
+      requests,
+      status: accounts.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          "GET /v1/account",
+          "POST /oauth2/token",
+        ],
+        "status": "signedOut",
+      }
+    `)
+  })
+})
+
 describe('authorize', () => {
   test('rejects with `rejected`, and sends no request, for a third-party client ID', async () => {
     const requests: string[] = []
