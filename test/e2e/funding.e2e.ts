@@ -344,6 +344,56 @@ test.describe('funding', () => {
       })
     })
 
+    test("opens the deposit page of another chain for the account of the session's access key there, without a read of the account", async ({
+      capture,
+      code,
+      email,
+      page,
+    }) => {
+      const key = await Web.enter_dialog(page, {
+        capture,
+        code,
+        deposit: { chainId: Chain.chain.id },
+        email,
+        fund: false,
+        path: Apps.web.paths.chains,
+      })
+
+      await test.step('switches to the second chain, which moves the access key to `accessKeys`', async () => {
+        expect(
+          await Playwright.run(page, { name: 'Switch to the second chain' }),
+        ).toEqual({
+          state: 'fulfilled',
+          value: { chainId: Chain.second.chain.id },
+        })
+        await capture('switched')
+      })
+
+      await test.step("shows the first chain's deposit page for the access key's account, and reads no account", async () => {
+        // The page's own reads run in the deposit frame, so only the app's main frame counts.
+        const reads: string[] = []
+        page.on('request', (request) => {
+          const url = new URL(request.url())
+          if (
+            request.frame() === page.mainFrame() &&
+            url.origin === new URL(TempoId.url).origin &&
+            url.pathname === '/v1/account'
+          )
+            reads.push(request.method())
+        })
+        const urls = loads(page)
+        await Playwright.start(page, { name: 'Deposit' })
+        const deposit = await Playwright.deposit(await Playwright.dialog(page))
+
+        await expect(deposit.faucet).toBeVisible()
+        expect(urls.map((url) => url.searchParams.get('address'))).toEqual([
+          key.account,
+        ])
+        expect(reads).toEqual([])
+        await capture('deposit page of the first chain')
+      })
+    })
+
     test('rejects a redirect URI of another origin, and a popup outside a click', async ({
       capture,
       code,
