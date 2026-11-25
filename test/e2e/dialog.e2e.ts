@@ -543,6 +543,42 @@ test.describe('dialog', () => {
     errors.splice(0)
   })
 
+  test('rejects a sign-in in a browser without a connection at once, and offers no popup', async ({
+    capture,
+    context,
+    errors,
+    page,
+  }) => {
+    await page.goto(url)
+    await context.setOffline(true)
+
+    await test.step('rejects with server_error and status 0, and opens no dialog', async () => {
+      await Playwright.start(page, { name: 'Sign in' })
+
+      expect(
+        await Playwright.outcome(page, { name: 'Sign in', timeout: 2_000 }),
+      ).toMatchObject({
+        state: 'rejected',
+        value: {
+          code: 'server_error',
+          message:
+            'The browser is offline, so the sign-in receives no response. Check the connection, then sign in again.',
+          name: 'Accounts.RequestError',
+          status: 0,
+        },
+      })
+      await expect(
+        page.locator('dialog[data-tempo-id-dialog][open]'),
+      ).toHaveCount(0)
+      await expect(page.locator('#status')).toHaveText('signedOut')
+      await capture('offline')
+    })
+
+    await context.setOffline(false)
+    // The browser logs the loads that failed offline.
+    errors.splice(0)
+  })
+
   test('pushes the request of a sign-in with `par`, and signs in in a popup', async ({
     capture,
     code,
