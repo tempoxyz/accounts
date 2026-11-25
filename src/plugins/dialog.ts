@@ -527,6 +527,8 @@ export function dialog<const options extends dialog.Options = {}>(
          *     or
          *     [`empty_scopes`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#empty_scopes)
          *     for an empty `accessKey.limits` or `accessKey.scopes`.
+         *   - With `server_error` and status 0, in a browser without a connection, before the
+         *     dialog or the popup opens.
          *   - With `server_error` and status 0, when the instance pushes its requests, with `par`,
          *     and `POST /oauth2/par` receives no response, such as offline.
          *   - With `invalid_request`, when the `state` of the callback or of the posted

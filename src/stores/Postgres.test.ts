@@ -7,6 +7,7 @@ import { WebCryptoP256 } from 'ox'
 import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
 import * as BackendSessions from '../internal/BackendSessions.js'
+import * as Session from '../Session.js'
 import * as Postgres from './Postgres.js'
 
 describe('Store.postgres', () => {
@@ -624,5 +625,56 @@ describe('Store.postgres', () => {
         "name": "Store.InvalidValueError",
       }
     `)
+  })
+
+  test('behavior: a sign-out of one instance empties the session of another instance on the store in the same process', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const store = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 3_600_000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    // The session holds no refresh token, so its sign-out sends no request.
+    const create = () =>
+      Accounts.create({
+        chain: 1337,
+        clientId: 'https://app.example.com',
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const first = create()
+    const second = create()
+    await Promise.all([first.session.get(), second.session.get()])
+    const statuses: string[] = []
+    second.session.status.subscribe((status) => statuses.push(status.status))
+
+    // The second instance reads no store before its next refresh, so only a message tells it of the
+    // sign-out.
+    await first.signOut()
+    await expect
+      .poll(() => second.session.status.get().status, { timeout: 1_000 })
+      .toBe('signedOut')
+
+    expect({ session: await second.session.get(), statuses })
+      .toMatchInlineSnapshot(`
+        {
+          "session": undefined,
+          "statuses": [
+            "signedOut",
+          ],
+        }
+      `)
   })
 })

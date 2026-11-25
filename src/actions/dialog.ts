@@ -230,6 +230,9 @@ export declare namespace preload {
  * `Cross-Origin-Opener-Policy: same-origin` severs its handle to the popup, so a popup that the user
  * closes there leaves the call pending until `signal` aborts or the next call replaces it.
  *
+ * In a browser without a connection, the call throws `Accounts.RequestError` with `server_error`
+ * and status 0, before the dialog or the popup opens.
+ *
  * With `backend`, the path where the app mounts `accounts.handler`, the handler's sign-in routes
  * run the sign-in. `POST /login` builds the request, and `POST /callback` redeems the callback's
  * code and sets the session cookie. The call resolves with the session that the page reads, and the
@@ -501,6 +504,16 @@ async function authorize<
   // either mode ends when the next one starts.
   const actor = slot(auth)
   actor.send({ type: 'replace' })
+  // Without a connection, the frame and the popup load no page of Tempo ID, so the dialog would
+  // offer a popup at its timeout that fails too. The call fails as a request without a response,
+  // after the checks of its options and after it replaced the pending sign-in.
+  if (navigator.onLine === false)
+    throw new RequestError({
+      code: 'server_error',
+      message:
+        'The browser is offline, so the sign-in receives no response. Check the connection, then sign in again.',
+      status: 0,
+    })
   const entry = machines.entry(actor.getSnapshot())
   const mode =
     requested === 'iframe' &&

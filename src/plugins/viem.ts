@@ -9,6 +9,7 @@ import {
   type Chain,
   type Client,
   custom,
+  defineChain,
   formatUnits,
   http,
   type LocalAccount,
@@ -107,20 +108,36 @@ export class RetryAccountError extends Error {
 /**
  * The user closed the screen that a failed transaction showed, so the transaction did not send. A
  * transaction whose retry the user ended throws it: a close of the deposit page before a deposit,
- * **Continue to** the app without one, or a close of the sign-in for a new access key. Its `cause`
- * is the transaction's error. The same transaction, sent again, retries. Match it by `name`.
+ * **Continue to** the app without one, a close of the sign-in for a new access key, or, outside a
+ * page, a denial of the retry's device code. Its `cause` is the transaction's error. The same
+ * transaction, sent again, retries. Match it by `name`.
  */
 export class RetryClosedError extends Error {
   override readonly name = 'Plugins.viem.RetryClosedError'
   /** The failure that the screen resolves: `accessKey`, `balance`, or `limit`. */
   readonly kind: Retry.Kind
 
-  constructor(options: { cause: unknown; kind: Retry.Kind }) {
+  constructor(options: RetryClosedError.Options) {
+    const messages = options.denied ? deniedMessages : closedMessages
     super(
-      `${closedMessages[options.kind]} The transaction did not send. Send it again to retry.`,
+      `${messages[options.kind]} The transaction did not send. Send it again to retry.`,
       { cause: options.cause },
     )
     this.kind = options.kind
+  }
+}
+
+export declare namespace RetryClosedError {
+  type Options = {
+    /** The transaction's error. */
+    cause: unknown
+    /**
+     * Whether the user denied the device code of the retry outside a page, in place of a close of
+     * its screen. Defaults to `false`.
+     */
+    denied?: boolean | undefined
+    /** The failure that the screen resolves. */
+    kind: Retry.Kind
   }
 }
 
@@ -433,8 +450,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           (request: Prepare.Request, args: Prepare.Args) => unknown,
           unknown,
         ]
-        return {
-          ...chain,
+        const hook = {
           prepareTransactionRequest: [
             async (request: Prepare.Request, args: Prepare.Args) => {
               // Viem refills without the authorization of a registered access key. A refusal of a
@@ -475,7 +491,11 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             },
             options,
           ],
-        } as Chain
+        }
+        // The `extend` of a chain merges onto the chain that it came from, so a spread alone would keep
+        // the old `extend`, and the `feeToken` of Viem's `createClient` would drop the hook and the
+        // chain's own fields, such as `rpcUrls`.
+        return defineChain({ ...chain, ...hook } as Chain)
       }
 
       /** Returns whether `request` attaches the key authorization of its access key. */
@@ -1532,7 +1552,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * which each call of the screen waits for. With `options.raise`, the limit of its token adds
        * its amount, and the sign-in
        * always shows, also for an expired access key. The new access key keeps the old one's
-       * expiry while it is in the future. Otherwise it takes the instance's `accessKey` expiry.
+       * expiry while it is more than {@link approvalTime} ahead. Otherwise it takes the instance's
+       * `accessKey` expiry.
        * Without one, it takes the old one's lifetime from now, as a renewal does, or else the
        * expiry that Tempo ID fills. A sign-in that returns another user or account sets no
        * session, and rejects.
@@ -1624,12 +1645,14 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           !!authorization.expiry &&
           authorization.expiry >= Request_internal.millisecondExpiry
         // `kept`: the earliest granted expiry, in Unix seconds, at which the new access key keeps the
-        // old one's lifetime. An earlier expiry means that Tempo ID shortened the request.
+        // old one's lifetime. An earlier expiry means that Tempo ID shortened the request. Tempo ID
+        // refuses an approval after the requested expiry, so an old expiry that can pass while the
+        // screen waits counts as expired.
         const { expiry, kept } = (() => {
           if (
             authorization.expiry &&
             !milliseconds &&
-            authorization.expiry * 1000 > Date.now()
+            authorization.expiry > Math.floor(Date.now() / 1000) + approvalTime
           )
             return { expiry: authorization.expiry, kept: authorization.expiry }
           if (resolved) return { expiry: resolved.expiry, kept: undefined }
@@ -1637,8 +1660,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           // An instance without `accessKey` renews an expired access key that the sign-in named for
           // the same lifetime, as `authorize` does, so the new access key lives no longer than the first.
           // A duration counts from the request, which a popup's Continue prompt can delay, so the
-          // request starts no earlier than now.
-          if (previous.lifetime && previous.lifetime > 0)
+          // request starts no earlier than now. A lifetime within `approvalTime` can end while the
+          // screen waits, so Tempo ID fills the expiry in its place.
+          if (previous.lifetime && previous.lifetime > approvalTime)
             return {
               expiry: `${previous.lifetime}s` as Permissions.Duration,
               kept: Math.floor(Date.now() / 1000) + previous.lifetime,
@@ -1783,6 +1807,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                   return change.fail(
                     new RetryClosedError({
                       cause: error,
+                      denied: true,
                       kind: failure.kind,
                     }),
                   )
@@ -2854,11 +2879,14 @@ export declare namespace viem {
      * resource. The sign-in requests the resources and the API scopes of the session's access token
      * again.
      *
-     * The new access key keeps the old one's expiry while it is in the future. An expired access
-     * key's replacement takes the expiry of the instance's `accessKey`. Without it, the replacement
+     * The new access key keeps the old one's expiry while it is more than 10 minutes ahead, the
+     * longest wait of a device code. Tempo ID refuses an approval after the requested expiry. An
+     * access key that expires sooner counts as expired. An expired access key's replacement takes
+     * the expiry of the instance's `accessKey`. Without it, the replacement
      * takes the expired access key's lifetime, counted from the retry's request, as
      * `accounts.authorize` renews it, so it lives no longer than the first. An access key without a
-     * lifetime, such as one that never expires, takes the expiry that Tempo ID fills. A sign-in
+     * lifetime, such as one that never expires, or with a lifetime of 10 minutes or less, takes the
+     * expiry that Tempo ID fills. A sign-in
      * that returns another user or Tempo Account sets no session, and the call rejects with
      * {@link RetryAccountError}.
      */
@@ -3303,6 +3331,17 @@ const closedMessages = {
   limit: 'The user closed the sign-in for a new access key with a new limit.',
 } as const satisfies Record<Retry.Kind, string>
 
+/**
+ * What the user denied outside a page, for each kind of failure, in the message of
+ * {@link RetryClosedError}.
+ */
+const deniedMessages = {
+  accessKey: 'The user denied the device code for a new access key.',
+  balance: 'The user denied the device code for a deposit.',
+  limit:
+    'The user denied the device code for a new access key with a new limit.',
+} as const satisfies Record<Retry.Kind, string>
+
 /** Tempo's chains, which a chain ID without a `chain` in its options uses. */
 const defaultChains = [tempo, tempoTestnet, tempoDevnet, tempoLocalnet] as const
 
@@ -3338,6 +3377,13 @@ type Screen = {
  * milliseconds.
  */
 const depositLimit = 600_000
+
+/**
+ * How long a retry's screen can wait for the user's approval, in seconds: the longest lifetime of a
+ * device code. Tempo ID refuses an approval after the requested expiry, so a new access key keeps
+ * the old one's expiry only if that expiry is later.
+ */
+const approvalTime = 600
 
 /** How often a retry outside a page reads the balance while it waits for a deposit, in milliseconds. */
 const depositInterval = 2_000
