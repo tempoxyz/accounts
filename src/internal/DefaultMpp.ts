@@ -24,12 +24,20 @@ export function plugin(): Mpp {
   return Plugin.from({
     extend(instance: Accounts.Accounts, context: Plugin.Context): Members {
       let loading: Promise<Members> | undefined
-      // The changes that ended the instance's session, or replaced it with one of another user or
-      // account. A guest session holds no access key, so only this count tells a sign-out and a
-      // later guest session from the session that a manager holds.
+      // The changes that ended the instance's session, or replaced it with one of another user,
+      // account, or start of a guest session. A guest session holds no access key, so only this
+      // count tells a sign-out and a later guest session from the session that a manager holds.
       let ends = 0
       instance.session.subscribe((next, before) => {
         if (!before || !Session.same(next, before)) ends++
+        // A sign-out keeps the guest key pair, so another start of the guest session, such as one
+        // that a reload adopts from another process, holds the same account with a later revision.
+        else if (
+          Session.guest(before) &&
+          Session.guest(next) &&
+          next.revision !== before.revision
+        )
+          ends++
       })
 
       /** Loads the plugin once. A failed load, such as offline, lets the next call try again. */

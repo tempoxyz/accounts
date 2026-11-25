@@ -4,9 +4,11 @@
  * @module
  */
 import { PGlite } from '@electric-sql/pglite'
+import Esbuild from 'esbuild'
 import { Challenge } from 'mppx'
 import { Mppx, Store as MppxStore, tempo } from 'mppx/server'
 import { Methods } from 'mppx/tempo'
+import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs/promises'
 import * as Http from 'node:http'
 import * as Os from 'node:os'
@@ -948,6 +950,122 @@ describe('mpp', () => {
           [TypeError: fetch failed],
         ]
       `)
+  })
+
+  test("refuses a payer's charge and a session manager's request of a guest session with Accounts.SignedOutError, before its key pair signs, once another process on `Store.file` signs out and starts the guest session again", async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'session.json')
+    const endpoint = server()
+    const accounts = instance({
+      fetch: endpoint.fetch,
+      store: Store.file(path),
+    })
+    const started = await Guest.session(accounts.config)
+    await accounts.renew.commit(started)
+    const payer = accounts.mpp({ maxAmount: '1' })
+    const manager = accounts.mpp({ maxDeposit: '1' }).session()
+    // The endpoint's chain never answers, so it refuses the signed credential.
+    await payer.fetch('http://mpp.test/proof').catch(() => undefined)
+    // Another process sends this one no message, so this instance never holds the signed-out state.
+    // A sign-out keeps the key pair, so the next start holds the same guest account. Its revision is
+    // set explicitly, since two starts in one millisecond share `Date.now()`.
+    const output = await Esbuild.build({
+      bundle: true,
+      format: 'esm',
+      logLevel: 'silent',
+      platform: 'node',
+      stdin: {
+        contents: [
+          "import * as Guest from '../actions/guest.ts'",
+          "import * as Accounts from '../Accounts.ts'",
+          "import * as Plugin from '../Plugin.ts'",
+          "import * as Store from '../Store.ts'",
+          'const accounts = Accounts.create({',
+          '  chain: 42431,',
+          "  clientId: 'https://app.example.com',",
+          "  guest: 'offer',",
+          '  plugins: [',
+          '    Plugin.from({',
+          '      actions: (context) => ({ commit: (value) => context.session.change().commit(value) }),',
+          "      id: 'renew',",
+          '    }),',
+          '  ],',
+          '  store: Store.file(process.env.STORE),',
+          "  url: 'http://127.0.0.1:9',",
+          '})',
+          'await accounts.session.get()',
+          'await accounts.signOut()',
+          'const session = await Guest.session(accounts.config)',
+          'await accounts.renew.commit({ ...session, revision: Number(process.env.REVISION) })',
+          'process.stdout.write(session.address)',
+          'process.exit(0)',
+        ].join('\n'),
+        loader: 'ts',
+        resolveDir: import.meta.dirname,
+      },
+      write: false,
+    })
+    const address = await new Promise<string>((resolve, reject) => {
+      const child = ChildProcess.spawn(
+        process.execPath,
+        ['--input-type=module'],
+        {
+          env: {
+            ...process.env,
+            REVISION: String(started.revision + 1),
+            STORE: path,
+          },
+        },
+      )
+      let stderr = ''
+      let stdout = ''
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString()
+      })
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString()
+      })
+      child.on('close', (code) => {
+        if (code === 0) resolve(stdout)
+        else reject(new Error(stderr))
+      })
+      child.stdin.end(output.outputFiles[0]!.text)
+    })
+
+    const error = await payer
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+    const ended = await (async () =>
+      manager.fetch('http://127.0.0.1:9/content'))().catch(
+      (error: unknown) => error,
+    )
+
+    expect({
+      credentials: endpoint.credentials,
+      ended,
+      error,
+      revision: await (async () => {
+        const current = await accounts.session.get()
+        return (
+          !!current &&
+          Session.guest(current) &&
+          current.revision === started.revision + 1
+        )
+      })(),
+      same: address === started.address,
+    }).toMatchInlineSnapshot(`
+      {
+        "credentials": [
+          false,
+          true,
+          false,
+        ],
+        "ended": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "error": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "revision": true,
+        "same": true,
+      }
+    `)
   })
 
   test.for([

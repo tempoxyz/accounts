@@ -432,11 +432,19 @@ export function mpp(options: mpp.Options = {}) {
       const clients = new Map<number, Client<Transport, Chain>>()
       // The payers of each access key, one for each setting of the charges.
       const payers = new WeakMap<AccessKey.AccessKey, Map<string, mpp.Payer>>()
-      // The changes that ended the instance's session, or replaced it with one of another user or
-      // Tempo Account. One subscription per instance holds it, so a discarded manager holds none.
+      // The changes that ended the instance's session, or replaced it with one of another user,
+      // Tempo Account, or start of a guest session. One subscription per instance holds it, so a
+      // discarded manager holds none.
       let ends = 0
       instance.session.subscribe((next, before) => {
         if (!before || !Session.same(next, before)) ends++
+        // A sign-out keeps the guest key pair, so another start of the guest session holds the same
+        // guest account, with a later revision.
+        else if (
+          Session.guest(before) &&
+          !Guest.active({ current: next, started: before })
+        )
+          ends++
       })
 
       /** Returns the client of the chain of `chainId`, which the viem plugin resolves. */
@@ -817,12 +825,14 @@ export function mpp(options: mpp.Options = {}) {
         // no identity, since Tempo ID issued it no tokens.
         const guest = overrides.session ? undefined : context.session.get()
         if (guest && Session.guest(guest)) {
-          // A sign-out keeps the key pair, so the payer stops once the session ends or holds another
-          // account, in this tab or another one, as the access key's payer below does.
+          // A sign-out keeps the key pair, so the payer stops once the session ends, holds another
+          // account, or starts again, in this tab or another process, as the access key's payer below
+          // does.
           const started = ends
           const reads = !messaged()
           const ended = () =>
-            ends !== started || !Session.same(context.session.get(), guest)
+            ends !== started ||
+            !Guest.active({ current: context.session.get(), started: guest })
           // A session manager supplies its own check, which lets `close` sign the final voucher of
           // an open channel after the session ends.
           const account = checked(
@@ -1255,9 +1265,12 @@ export function mpp(options: mpp.Options = {}) {
         const started = ends
         const check = () => {
           // A guest session's key pair signs as the root account, with no access key, until the
-          // session ends or holds another account.
+          // session ends, holds another account, or starts again with the same key pair.
           if (held && Session.guest(held)) {
-            if (ends !== started || !Session.same(context.session.get(), held))
+            if (
+              ends !== started ||
+              !Guest.active({ current: context.session.get(), started: held })
+            )
               throw new Accounts.SignedOutError()
             return
           }
