@@ -9,6 +9,7 @@ import {
   type Chain,
   type Client,
   custom,
+  defineChain,
   formatUnits,
   http,
   type LocalAccount,
@@ -433,8 +434,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           (request: Prepare.Request, args: Prepare.Args) => unknown,
           unknown,
         ]
-        return {
-          ...chain,
+        const hook = {
           prepareTransactionRequest: [
             async (request: Prepare.Request, args: Prepare.Args) => {
               // Viem refills without the authorization of a registered access key. A refusal of a
@@ -475,7 +475,11 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             },
             options,
           ],
-        } as Chain
+        }
+        // The `extend` of a chain merges onto the chain that it came from, so a spread alone would keep
+        // the old `extend`, and the `feeToken` of Viem's `createClient` would drop the hook and the
+        // chain's own fields, such as `rpcUrls`.
+        return defineChain({ ...chain, ...hook } as Chain)
       }
 
       /** Returns whether `request` attaches the key authorization of its access key. */
