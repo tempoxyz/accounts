@@ -132,6 +132,10 @@ export function create(
   const saving = new Map<string, Promise<unknown>>()
   // One refresh for each session ID, which concurrent reads of that session await.
   const refreshes = new Map<string, Promise<Stored | undefined>>()
+  // The access token that the last refresh for a refused token issued, for each session ID. An API
+  // that refuses that token too refuses it for another reason, such as its audience, so a refusal
+  // of it starts no refresh, and each call adds no round trip.
+  const forced = new Map<string, string>()
   // Refresh tokens sent without a known outcome. Tempo ID may have rotated each, so a second send
   // can be a reuse, which revokes every refresh token of the app for the user.
   const unknown = new Set<string>()
@@ -414,7 +418,9 @@ export function create(
     // An API refused the access token that the session still holds, such as after Tempo ID ended the
     // user's session, so the read refreshes it, also while it is fresh.
     const refused =
-      stored.method !== 'siwe' && stored.accessToken === options.refused
+      stored.method !== 'siwe' &&
+      stored.accessToken === options.refused &&
+      forced.get(id) !== options.refused
     if (!refused && usable(stored)) return view(stored, id)
     // A session without a refresh token never refreshes, so it takes no refresh lock: it serves
     // until its access token expires, as `refresh` serves it, and otherwise `expire` ends it.
@@ -430,6 +436,8 @@ export function create(
       ).finally(() => refreshes.delete(id))
     refreshes.set(id, refreshing)
     const next = await refreshing
+    if (refused && next && next.method !== 'siwe')
+      forced.set(id, next.accessToken)
     return next && view(next, id)
   }
 
@@ -674,6 +682,7 @@ export function create(
           if (refreshToken) revoked.delete(refreshToken)
         })().finally(() => {
           ending.delete(id)
+          forced.delete(id)
           endingIssuedAt.delete(id)
           endingSid.delete(id)
           unrevoked.delete(id)
