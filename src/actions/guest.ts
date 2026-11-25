@@ -1179,12 +1179,10 @@ export async function pay(
     // the checkout once, until the transaction's window ends. Then the checkout's status decides.
     for (;;) {
       try {
-        const value = await guest()
         // Another process on the same store, such as another CLI command, can sign out or forget
-        // the guest account, so each send reads the store's session and key pair first.
-        const [stored] = await Promise.all([get(auth), reload?.()])
-        if (!stored || !Address.isEqual(stored, session.address))
-          throw new SignedOutError()
+        // the guest account, so each send reads the store's session beside the guest request,
+        // whose signature reads the key pair.
+        const [value] = await Promise.all([guest(), reload?.()])
         // The send starts in the same task as the check, so no sign-out lands between them. A send
         // that already left settles as Tempo ID's claim of the checkout decides.
         held()

@@ -273,7 +273,11 @@ describe('Actions.guest.check', () => {
 function pick() {
   return Plugin.from({
     actions: (context) => ({
-      guest: () => SignIn.guest(context, { change: context.session.change() }),
+      guest: (options: { signal?: AbortSignal | undefined } = {}) =>
+        SignIn.guest(context, {
+          change: context.session.change(),
+          signal: options.signal,
+        }),
       reload: () => context.session.reload(),
     }),
     id: 'pick',
@@ -1774,7 +1778,7 @@ describe('Accounts.create with guest', () => {
       chain: 4217,
       clientId: 'cli:guest-example',
       guest: true,
-      plugins: [device({ onCode: () => {} })],
+      plugins: [device({ onCode: () => {} }), pick()],
       // The read of the guest account's entry aborts the sign-in.
       store: Store.from({
         ...memory,
@@ -1787,18 +1791,29 @@ describe('Accounts.create with guest', () => {
     })
     await accounts.session.get()
 
-    const error = await SignIn.guest(
-      { config: accounts.config },
-      {
-        change: {
-          commit: () => Promise.reject(new Error('Committed.')),
-          fail: (error) => Promise.reject(error),
-        },
-        signal: controller.signal,
-      },
-    ).catch((error: unknown) => error)
+    const error = await accounts.pick
+      .guest({ signal: controller.signal })
+      .catch((error: unknown) => error)
 
-    expect(error === reason).toMatchInlineSnapshot(`true`)
+    expect([
+      error === reason,
+      await accounts.session.get(),
+      accounts.session.status.get().status,
+      await Accounts.create({
+        chain: 4217,
+        clientId: 'cli:guest-example',
+        guest: true,
+        store: memory,
+        url: 'http://127.0.0.1:9',
+      }).session.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        undefined,
+        "signedOut",
+        undefined,
+      ]
+    `)
   })
 
   test.for([
