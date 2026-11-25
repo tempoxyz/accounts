@@ -163,6 +163,13 @@ test.describe('funding', () => {
             }),
           ).toBeVisible()
 
+          // The frame's URL names the scheme, since some browsers give a frame the browser's.
+          const src = await Playwright.prompt(page)
+            .locator('iframe')
+            .getAttribute('src')
+          expect(new URL(src ?? '').searchParams.get('color_scheme')).toBe(
+            'dark',
+          )
           expect(
             await Playwright.prompt(page).evaluate(
               (element) => getComputedStyle(element).backgroundColor,

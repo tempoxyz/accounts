@@ -505,7 +505,7 @@ export function create(options: create.Options): create.ReturnType {
     if (!blank) actor.send({ type: 'frame.load' })
   })
 
-  frame.src = url
+  frame.src = schemed(url)
   dialog.appendChild(frame)
   document.body.appendChild(dialog)
 
@@ -821,7 +821,7 @@ export function load(options: load.Options): load.ReturnType {
   element.setAttribute('sandbox', options.sandbox)
   element.setAttribute('title', 'Tempo ID')
   element.style.height = '420px'
-  element.src = options.url
+  element.src = schemed(options.url)
   // An inert frame's page takes no focus or input, so a covered page cannot approve.
   element.inert = options.covered === true
 
@@ -1223,6 +1223,16 @@ function scheme() {
   return window.matchMedia('(prefers-color-scheme: dark)').matches
     ? 'dark'
     : 'light'
+}
+
+/**
+ * Returns `url` with `color_scheme`, the scheme of the app's page, so Tempo ID's page draws in it.
+ * Some browsers give a frame the browser's preference, whatever the `iframe` element's scheme.
+ */
+function schemed(url: string) {
+  const value = new URL(url)
+  value.searchParams.set('color_scheme', scheme())
+  return value.href
 }
 
 /** Returns whether the dialog plays its entrance and exit, which reduced motion turns off. */
