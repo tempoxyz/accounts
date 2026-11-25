@@ -27,6 +27,25 @@ import * as Permissions from '../Permissions.js'
 import * as Session from '../Session.js'
 import type { Store } from '../Store.js'
 
+/**
+ * A guest payment whose transfer can still land, or whose outcome Tempo ID did not confirm before
+ * the call stopped, such as after its connection failed past the transfer's window. The store keeps
+ * its checkout, so a later `pay` of the same payment, also from another process, resumes it and pays
+ * at most once. `checkout` names it.
+ */
+export class PendingError extends Error {
+  override readonly name = 'Actions.guest.PendingError'
+  /** The checkout ID of the unresolved payment, which a later `pay` of the same payment resumes. */
+  readonly checkout: string
+
+  constructor(options: { checkout: string }) {
+    super(
+      `Pending payment: the transfer of checkout ${options.checkout} can still land, or its outcome is unknown. Call \`pay\` again with the same payment, which resumes the checkout and pays at most once.`,
+    )
+    this.checkout = options.checkout
+  }
+}
+
 /** The attodollars per gas of a fee that charge one base unit of a TIP-20 fee token of 6 decimals. */
 const attodollars = 1_000_000_000_000n
 
@@ -35,6 +54,12 @@ const attodollars = 1_000_000_000_000n
  * before the next prepare, and rejects after the last.
  */
 const quoteAttempts = 3
+
+/**
+ * The time after a transfer's validity window during which the payment still reads its checkout's
+ * status, since a transfer can land in the last block of its window, in milliseconds.
+ */
+const settleMargin = 60_000
 
 /** The time between the guest request's signature and its expiry, in seconds. */
 const lifetime = 4 * 60
@@ -374,6 +399,16 @@ type Quoted = {
   token: `0x${string}`
 }
 
+/** The checkout of an unresolved guest payment, which the store keeps under the payment's terms. */
+type Unresolved = {
+  /** The guest account that pays. */
+  address: `0x${string}`
+  /** The checkout ID. */
+  checkout: string
+  /** The end of the prepared transaction's window, in Unix seconds. */
+  validBefore: number
+}
+
 /** A guest payment's paid checkout, which each route returns for a checkout that paid. */
 type Paid = { paid: { transaction: `0x${string}` } }
 
@@ -399,6 +434,14 @@ type Refused = { cancel: string; refusal: Refusal }
  * refuses a fill above it with `quote_changed`, and the call quotes again and prepares at the new
  * quote, up to three prepares. The key pair signs only a fill whose fee is within the quote.
  *
+ * Before the first send, the store keeps the checkout under the payment's terms: the chain, amount,
+ * recipient, token, and memo. A send without an answer repeats until the prepared transaction's
+ * window ends. Then the checkout's status decides: a paid checkout returns its transaction, and a
+ * checkout whose transfer can no longer land is cancelled, which fences it. A later call of the same
+ * payment, also in another process, resumes a stored checkout the same way before it opens a new
+ * one. So an unresolved payment of the same terms pays at most once. The call removes the stored
+ * checkout once the outcome is final.
+ *
  * @throws {RequestError} With the reason of Tempo ID's refusal, such as `recipient_not_permitted`.
  *   With `insufficient_balance` and status 0 for a shortfall without a faucet or `fund`, after the
  *   funding code expired, or for a new quote with a shortfall. With `quote_changed` when the third
@@ -406,6 +449,9 @@ type Refused = { cancel: string; refusal: Refusal }
  * @throws {RequestError} With `invalid_request` at `transaction`, for a prepared transaction other
  *   than the requested transfer, or whose fee exceeds the quoted fee, which the key pair never
  *   signs.
+ * @throws {PendingError} When the transfer can still land, or Tempo ID does not confirm its
+ *   outcome, 60 seconds after the transaction's window. The store keeps the checkout, which a later
+ *   call of the same payment resumes.
  * @throws {SignedOutError} When the store holds another key pair than the session's, or once
  *   `current` no longer holds the session, such as after a sign-out.
  *
@@ -431,10 +477,22 @@ export async function pay(
   const memo =
     options.memo === undefined ? undefined : Payment.memo(options.memo)
   const chainId = options.chainId ?? auth.chainId
+  const store = storeOf(auth)
+  // The store keeps the checkout of an unresolved payment under its terms, so a later call of the
+  // same payment, also in another process, resumes it, and Tempo ID pays it once.
+  const unresolved = `${keyOf(auth)}:payment:${JSON.stringify([chainId, amount, to.toLowerCase(), token.toLowerCase(), memo ?? null])}`
+  const stored = await (async () => {
+    const value = (await store.getItem(unresolved)) as Unresolved | undefined
+    if (!value || typeof value.checkout !== 'string') return undefined
+    if (!Address.isEqual(value.address, session.address)) return undefined
+    return value
+  })()
   // One checkout ID for the call, so each retry pays the same checkout, and Tempo ID pays it once.
   // `Bytes.random` needs only `crypto.getRandomValues`, which React Native polyfills, and the
   // URL-safe Base64 holds only letters, digits, `-`, and `_`.
-  const checkout = Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
+  let checkout =
+    stored?.checkout ??
+    Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
   const redirectUri = auth.redirectUri ?? ''
   const terms = {
     amount,
@@ -517,6 +575,64 @@ export async function pay(
       status: 0,
     })
 
+  /** Returns the paid result, and removes the stored checkout, which no later call resumes. */
+  const settled = async (transaction: `0x${string}`) => {
+    await store.removeItem(unresolved)
+    return { address: session.address, transaction }
+  }
+  /**
+   * Reads the checkout's status until it paid, or no transaction of it can land, and returns the
+   * paid transaction, or `undefined` after it cancels the checkout. The cancellation stores a fence,
+   * so no later send pays the checkout. After `deadline`, a transfer that can still land, or a
+   * status that Tempo ID does not confirm, rejects with `PendingError`, and the store keeps the
+   * checkout.
+   */
+  const settle = async (options: { deadline: number }) => {
+    for (;;) {
+      try {
+        const status = await send<{
+          paid: { transaction: `0x${string}` } | null
+          pending: boolean
+        }>(
+          `/i/guest/pay/status?${new URLSearchParams({ ...terms, chain_id: String(chainId), guest: await guest() })}`,
+          { method: 'GET' },
+        )
+        if (status.paid) return status.paid.transaction
+        if (!status.pending) {
+          await post('/i/guest/pay/cancel', {
+            chain_id: chainId,
+            client_id: auth.clientId,
+            guest: await guest(),
+            redirect_uri: redirectUri,
+          })
+          return undefined
+        }
+      } catch (error) {
+        if (signal?.aborted) throw aborted()
+        // A refusal other than a held send's ends the payment, such as a sign-out.
+        const unknown =
+          error instanceof RequestError &&
+          ((error.status === 0 && error.code === 'server_error') ||
+            error.status >= 500 ||
+            error.reason === 'payment_pending')
+        if (!unknown) throw error
+      }
+      if (Date.now() >= options.deadline) throw new PendingError({ checkout })
+      await wait(2_000, { aborted, signal })
+    }
+  }
+
+  // A stored checkout of the same payment settles first: its transfer paid, or can still land, or
+  // the cancellation fences it, and the payment opens a new checkout.
+  if (stored) {
+    const transaction = await settle({
+      deadline: stored.validBefore * 1_000 + settleMargin,
+    })
+    if (transaction) return await settled(transaction)
+    await store.removeItem(unresolved)
+    checkout = Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
+  }
+
   /** Reads the payment until no shortfall remains, and returns it, or the paid checkout. */
   const covered = async (options: {
     deadline: number
@@ -536,8 +652,7 @@ export async function pay(
   }
 
   const read = await quote()
-  if ('paid' in read)
-    return { address: session.address, transaction: read.paid.transaction }
+  if ('paid' in read) return await settled(read.paid.transaction)
   if (!('shortfall' in read)) throw refused(read.refusal)
   if (read.refusal && !read.shortfall) throw refused(read.refusal)
   const quoted = await (async () => {
@@ -569,8 +684,7 @@ export async function pay(
       interval: code.interval * 1_000,
     })
   })()
-  if ('paid' in quoted)
-    return { address: session.address, transaction: quoted.paid.transaction }
+  if ('paid' in quoted) return await settled(quoted.paid.transaction)
 
   // The prepare names the quoted cost, which bounds the fill: the sponsor, or the fee that the
   // guest pays, also `0` for a sponsored quote. A cost above it receives `quote_changed`, and the
@@ -607,8 +721,7 @@ export async function pay(
       approved = next
     }
   })()
-  if ('paid' in prepared)
-    return { address: session.address, transaction: prepared.paid.transaction }
+  if ('paid' in prepared) return await settled(prepared.paid.transaction)
   const envelope = check(prepared.transaction, {
     amount,
     chainId,
@@ -622,9 +735,20 @@ export async function pay(
     account: account(auth, { session }),
   })
 
+  // The prepared transaction's window, in seconds, which Tempo ID sets at the prepare. No transfer
+  // of it lands after it.
+  const validBefore =
+    envelope.validBefore ?? Math.floor(Date.now() / 1_000) + lifetime
+  // The store keeps the checkout before the first send, so a later call resumes it, also after the
+  // process exits before the outcome.
+  await store.setItem(unresolved, {
+    address: session.address,
+    checkout,
+    validBefore,
+  } satisfies Unresolved)
+
   // A send without a response, or of a held payment, sends the same transaction again, which pays
-  // the checkout once. The window of a held send ends within the deadline.
-  const deadline = Date.now() + 2 * 60_000
+  // the checkout once, until the transaction's window ends. Then the checkout's status decides.
   for (;;) {
     try {
       const value = await guest()
@@ -639,7 +763,7 @@ export async function pay(
         tag: prepared.tag,
         transaction,
       })
-      return { address: session.address, transaction: paid.paid.transaction }
+      return await settled(paid.paid.transaction)
     } catch (error) {
       if (signal?.aborted) throw aborted()
       const retried =
@@ -647,8 +771,18 @@ export async function pay(
         ((error.status === 0 && error.code === 'server_error') ||
           error.status >= 500 ||
           error.reason === 'payment_pending')
-      if (!retried || Date.now() >= deadline) throw error
-      await wait(1_000, { aborted, signal })
+      if (retried && Date.now() < validBefore * 1_000) {
+        await wait(1_000, { aborted, signal })
+        continue
+      }
+      // The send's outcome is unknown, or Tempo ID refused it. The status tells a landed transfer
+      // from one that can no longer land, which the cancellation fences.
+      const transaction = await settle({
+        deadline: validBefore * 1_000 + settleMargin,
+      })
+      if (transaction) return await settled(transaction)
+      await store.removeItem(unresolved)
+      throw error
     }
   }
 }
