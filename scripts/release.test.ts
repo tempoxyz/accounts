@@ -113,7 +113,7 @@ describe('resolve', () => {
     ).toMatchInlineSnapshot(`"1.0.20261118190300"`)
   })
 
-  test('raises the breaking number and resets the minor number for a breaking title or body', () => {
+  test('raises the minor number, not the breaking number, for a breaking title or body', () => {
     const { commit, cwd } = repository()
     const first = commit('feat: add Tab (#1)')
     const title = commit('feat(web)!: rename Tab (#2)')
@@ -126,15 +126,15 @@ describe('resolve', () => {
         latest: '1.4.20261118190100',
         sha: title,
       })?.version,
-    ).toMatchInlineSnapshot(`"2.0.20261118190200"`)
+    ).toMatchInlineSnapshot(`"1.5.20261118190200"`)
     expect(
       Release.resolve({
         base: title,
         cwd,
-        latest: '2.0.20261118190200',
+        latest: '1.5.20261118190200',
         sha: body,
       })?.version,
-    ).toMatchInlineSnapshot(`"3.0.20261118190300"`)
+    ).toMatchInlineSnapshot(`"1.6.20261118190300"`)
   })
 
   test('reads a breaking title past its dogfood prefix', () => {
@@ -145,7 +145,7 @@ describe('resolve', () => {
     expect(
       Release.resolve({ base, cwd, latest: '1.0.20261118190100', sha })
         ?.version,
-    ).toMatchInlineSnapshot(`"2.0.20261118190200"`)
+    ).toMatchInlineSnapshot(`"1.1.20261118190200"`)
   })
 
   test('reads a commit body that holds separators', () => {
@@ -228,7 +228,7 @@ describe('resolve', () => {
       Release.resolve({ base, cwd, latest: '1.1.20261118190200', sha })
         ?.version,
     ).toMatchInlineSnapshot(`"1.1.20261118190201"`)
-    // A raised breaking number sorts above the latest at any time.
+    // A raised minor number sorts above the latest at any time.
     expect(
       Release.resolve({
         base,
@@ -236,7 +236,7 @@ describe('resolve', () => {
         latest: '1.1.20261118190500',
         sha: breaking,
       })?.version,
-    ).toMatchInlineSnapshot(`"2.0.20261118190300"`)
+    ).toMatchInlineSnapshot(`"1.2.20261118190300"`)
   })
 
   test('refuses a pull request prerelease as the latest version', () => {

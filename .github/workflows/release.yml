@@ -1,7 +1,7 @@
 # Publishes each push to main to npm, through npm trusted publishing, as
 # `<breaking>.<minor>.<commit time>` under `latest`, such as `1.2.20261118194700`, with
 # a GitHub release that lists the description of each `feat`, `fix`, `perf`, and breaking pull request since the last one. `scripts/release.ts`
-# picks the version: a breaking title (`feat!:`) raises `<breaking>`, a `feat:` title raises `<minor>`, and `ci:` and `test:` commits
+# picks the version: a breaking title (`feat!:`) or a `feat:` title raises `<minor>`, no title raises `<breaking>`, and `ci:` and `test:` commits
 # release nothing alone, unless Main runs by hand.
 name: Release
 
