@@ -2505,10 +2505,13 @@ export function create<
             chainId: chainOf(),
             current: () => context.session.get(),
             memo,
-            session: () =>
+            // A close of the page aborts the start, so no guest session commits after the payment.
+            session: (options) =>
               SignIn.guest(context, {
                 change: offered,
-                signal: parameters.signal,
+                signal: parameters.signal
+                  ? AbortSignal.any([parameters.signal, options.signal])
+                  : options.signal,
               }),
           })
         }

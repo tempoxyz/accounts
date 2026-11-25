@@ -4,10 +4,11 @@
  * guest account's one signature.
  * @module
  */
-import { createActor } from 'xstate'
+import { createActor, fromPromise, waitFor } from 'xstate'
 import { getShortestPaths } from 'xstate/graph'
 import { describe, expect, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
+import * as Session from '../Session.js'
 import * as AccountActions from './account.js'
 import { machines } from './account.js'
 
@@ -117,7 +118,23 @@ describe('Actions.account.updateAccessKey', () => {
  * an address where nothing listens, so each call rejects with no response.
  */
 describe('machines.approval', () => {
-  /** Returns the events that the runner sends from `snapshot`, keyed by every event type. */
+  const session = Session.from({
+    address: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+    kind: 'guest',
+    publicKey: '0x04',
+    revision: 1,
+  })
+  /** The machine with a start of the guest session that never settles, for the traversal. */
+  const traversed = machines.approval.provide({
+    actors: {
+      start: fromPromise(() => new Promise<Session.GuestSession>(() => {})),
+    },
+  })
+
+  /**
+   * Returns the events that the runner sends from `snapshot`, keyed by every event type, and the
+   * start's completion and failures, which the invoked actor sends.
+   */
   function events(snapshot: machines.approval.Snapshot) {
     const all: Record<
       machines.approval.Event['type'],
@@ -127,31 +144,51 @@ describe('machines.approval', () => {
         snapshot.context.challenge && snapshot.context.message === undefined
           ? { message: 'Sign in', type: 'challenge.resolve' }
           : undefined,
-      'guest.resolve': snapshot.context.guest
-        ? { type: 'guest.resolve', value: 'request' }
+      'guest.resolve':
+        snapshot.context.guest || snapshot.matches({ offer: 'started' })
+          ? { type: 'guest.resolve', value: 'request' }
+          : undefined,
+      'offer.start': snapshot.context.offer
+        ? { type: 'offer.start' }
         : undefined,
-      'sign.end': snapshot.matches('signing')
+      'sign.end': snapshot.matches({ page: 'signing' })
         ? { type: 'sign.end' }
         : undefined,
-      'sign.fail': snapshot.matches('signing')
+      'sign.fail': snapshot.matches({ page: 'signing' })
         ? { type: 'sign.fail' }
         : undefined,
       'sign.start':
-        snapshot.context.guest && machines.signs(snapshot)
+        machines.values(snapshot).guest !== undefined &&
+        machines.signs(snapshot)
           ? { type: 'sign.start' }
           : undefined,
     }
-    return Object.values(all).filter((event) => event !== undefined)
+    const started = snapshot.matches({ offer: 'starting' })
+      ? ([
+          { output: session, type: 'xstate.done.actor.start' },
+          { error: new Error('Failed.'), type: 'xstate.error.actor.start' },
+          {
+            error: new Accounts.SupersededError(),
+            type: 'xstate.error.actor.start',
+          },
+        ] as never[])
+      : []
+    return [
+      ...Object.values(all).filter((event) => event !== undefined),
+      ...started,
+    ]
   }
 
   test('reaches each state along its shortest paths, where the status agrees with the context', () => {
     const ends = [
-      { challenge: false, guest: false },
-      { challenge: false, guest: true },
-      { challenge: true, guest: false },
-      { challenge: true, guest: true },
+      { challenge: false, guest: false, offer: false },
+      { challenge: false, guest: false, offer: true },
+      { challenge: false, guest: true, offer: false },
+      { challenge: true, guest: false, offer: false },
+      { challenge: true, guest: false, offer: true },
+      { challenge: true, guest: true, offer: false },
     ].flatMap((input) =>
-      getShortestPaths(machines.approval, {
+      getShortestPaths(traversed, {
         events,
         input,
         // The requests grow at each renewal, so the traversal reads only whether one arrived.
@@ -165,52 +202,126 @@ describe('machines.approval', () => {
     )
 
     expect(
-      [...new Set(ends.map((state) => JSON.stringify(state.value)))].sort(),
+      [...new Set(ends.map((state) => JSON.stringify(state.value)))]
+        .sort()
+        .map((value) => JSON.parse(value) as unknown),
     ).toMatchInlineSnapshot(`
       [
-        ""ready"",
-        ""signed"",
-        ""signing"",
-        ""waiting"",
+        {
+          "offer": "failed",
+          "page": "ready",
+        },
+        {
+          "offer": "failed",
+          "page": "waiting",
+        },
+        {
+          "offer": "idle",
+          "page": "ready",
+        },
+        {
+          "offer": "idle",
+          "page": "waiting",
+        },
+        {
+          "offer": "none",
+          "page": "ready",
+        },
+        {
+          "offer": "none",
+          "page": "signed",
+        },
+        {
+          "offer": "none",
+          "page": "signing",
+        },
+        {
+          "offer": "none",
+          "page": "waiting",
+        },
+        {
+          "offer": "started",
+          "page": "ready",
+        },
+        {
+          "offer": "started",
+          "page": "signed",
+        },
+        {
+          "offer": "started",
+          "page": "signing",
+        },
+        {
+          "offer": "started",
+          "page": "waiting",
+        },
+        {
+          "offer": "starting",
+          "page": "ready",
+        },
+        {
+          "offer": "starting",
+          "page": "waiting",
+        },
+        {
+          "offer": "superseded",
+          "page": "ready",
+        },
+        {
+          "offer": "superseded",
+          "page": "waiting",
+        },
       ]
     `)
     expect(
       ends.every(
         (state) =>
-          !state.matches('settling') &&
+          !state.matches({ offer: 'settling' }) &&
+          !state.matches({ page: 'settling' }) &&
           machines.ready(state) ===
-            (machines.select(state.context) === 'ready'),
+            (machines.select(state.context) === 'ready') &&
+          state.matches({ offer: 'started' }) ===
+            (state.context.session !== undefined) &&
+          (state.matches({ offer: 'failed' }) ||
+            state.matches({ offer: 'superseded' })) ===
+            (state.context.failure !== undefined),
       ),
     ).toBe(true)
   })
 
   test('handles every event type in some state', () => {
-    const actor = createActor(machines.approval, {
-      input: { challenge: true, guest: true },
-    }).start()
     const handled = new Set<string>()
-    const record = () => {
+    const record = (actor: machines.approval.Actor) => {
       for (const event of [
         { message: 'm', type: 'challenge.resolve' },
         { type: 'guest.resolve', value: 'v' },
+        { type: 'offer.start' },
         { type: 'sign.end' },
         { type: 'sign.fail' },
         { type: 'sign.start' },
       ] as const)
         if (actor.getSnapshot().can(event)) handled.add(event.type)
     }
+    const actor = createActor(traversed, {
+      input: { challenge: true, guest: true, offer: false },
+    }).start()
+    const offer = createActor(traversed, {
+      input: { challenge: false, guest: false, offer: true },
+    }).start()
 
-    record()
+    record(actor)
+    record(offer)
     actor.send({ message: 'Sign in', type: 'challenge.resolve' })
     actor.send({ type: 'guest.resolve', value: 'first' })
-    record()
+    record(actor)
     actor.send({ type: 'sign.start' })
-    record()
+    record(actor)
 
     expect([...handled].sort()).toMatchInlineSnapshot(`
       [
         "challenge.resolve",
         "guest.resolve",
+        "offer.start",
         "sign.end",
         "sign.fail",
         "sign.start",
@@ -220,7 +331,7 @@ describe('machines.approval', () => {
 
   test('waits for the first guest request, and holds each renewal in the URL', () => {
     const actor = createActor(machines.approval, {
-      input: { challenge: false, guest: true },
+      input: { challenge: false, guest: true, offer: false },
     }).start()
     const waiting = machines.ready(actor.getSnapshot())
 
@@ -234,28 +345,50 @@ describe('machines.approval', () => {
       machines.values(snapshot),
       machines.issued(snapshot, { value: 'first' }),
       machines.issued(snapshot, { value: 'other' }),
+      machines.guest(snapshot),
     ]).toMatchInlineSnapshot(`
       [
         false,
-        "ready",
+        {
+          "offer": "none",
+          "page": "ready",
+        },
         {
           "guest": "second",
           "message": undefined,
         },
         true,
         false,
+        {
+          "type": "none",
+        },
       ]
     `)
   })
 
-  test("opens a guest offer's page at once, holds the first guest request once the user selects Continue as guest, and signs one transaction", () => {
+  test("opens a guest offer's page at once, starts the guest session once at the user's selection, holds the first guest request, and signs one transaction", async () => {
+    const starts: AbortSignal[] = []
     // A guest offer's URL waits for no guest request, so the input names none.
-    const actor = createActor(machines.approval, {
-      input: { challenge: false, guest: false },
-    }).start()
+    const actor = createActor(
+      machines.approval.provide({
+        actors: {
+          start: fromPromise((args) => {
+            starts.push(args.signal)
+            return Promise.resolve(session)
+          }),
+        },
+      }),
+      { input: { challenge: false, guest: false, offer: true } },
+    ).start()
     const opened = machines.ready(actor.getSnapshot())
-    const before = machines.values(actor.getSnapshot()).guest
+    const before = machines.guest(actor.getSnapshot())
 
+    actor.send({ type: 'offer.start' })
+    actor.send({ type: 'offer.start' })
+    const started = await waitFor(actor, (snapshot) =>
+      snapshot.matches({ offer: 'started' }),
+    )
+    actor.send({ type: 'offer.start' })
     actor.send({ type: 'guest.resolve', value: 'first' })
     const selected = actor.getSnapshot()
     actor.send({ type: 'sign.start' })
@@ -264,6 +397,8 @@ describe('machines.approval', () => {
     expect([
       opened,
       before,
+      starts.length,
+      machines.guest(started),
       machines.values(selected).guest,
       machines.issued(selected, { value: 'first' }),
       actor.getSnapshot().value,
@@ -271,18 +406,118 @@ describe('machines.approval', () => {
     ]).toMatchInlineSnapshot(`
       [
         true,
-        undefined,
+        {
+          "type": "idle",
+        },
+        1,
+        {
+          "session": {
+            "address": "0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326",
+            "kind": "guest",
+            "publicKey": "0x04",
+            "revision": 1,
+          },
+          "type": "started",
+        },
         "first",
         true,
-        "signed",
+        {
+          "offer": "started",
+          "page": "signed",
+        },
         false,
+      ]
+    `)
+  })
+
+  test('starts the guest session again after a failed start, and holds a supersession', async () => {
+    const results = [
+      new Error('Failed.'),
+      new Accounts.SupersededError(),
+    ] as const
+    const actor = createActor(
+      machines.approval.provide({
+        actors: {
+          start: fromPromise<Session.GuestSession>(() =>
+            Promise.reject(results[starts++]),
+          ),
+        },
+      }),
+      { input: { challenge: false, guest: false, offer: true } },
+    ).start()
+    let starts = 0
+
+    actor.send({ type: 'offer.start' })
+    const failed = machines.guest(
+      await waitFor(actor, (snapshot) => snapshot.matches({ offer: 'failed' })),
+    )
+    actor.send({ type: 'offer.start' })
+    const superseded = machines.guest(
+      await waitFor(actor, (snapshot) =>
+        snapshot.matches({ offer: 'superseded' }),
+      ),
+    )
+    actor.send({ type: 'offer.start' })
+
+    expect([
+      failed.type,
+      failed.type === 'failed' && failed.error === results[0],
+      superseded.type,
+      superseded.type === 'superseded' && superseded.error === results[1],
+      starts,
+      machines.guest(actor.getSnapshot()).type,
+    ]).toMatchInlineSnapshot(`
+      [
+        "failed",
+        true,
+        "superseded",
+        true,
+        2,
+        "superseded",
+      ]
+    `)
+  })
+
+  test("aborts the start of the guest session at the machine's end, and discards its result", async () => {
+    const signals: AbortSignal[] = []
+    let resolve: ((value: Session.GuestSession) => void) | undefined
+    const actor = createActor(
+      machines.approval.provide({
+        actors: {
+          start: fromPromise((args) => {
+            signals.push(args.signal)
+            return new Promise<Session.GuestSession>((settle) => {
+              resolve = settle
+            })
+          }),
+        },
+      }),
+      { input: { challenge: false, guest: false, offer: true } },
+    ).start()
+    actor.send({ type: 'offer.start' })
+
+    actor.stop()
+    resolve?.(session)
+    await Promise.resolve()
+
+    expect([
+      signals.map((signal) => signal.aborted),
+      machines.guest(actor.getSnapshot()).type,
+      actor.getSnapshot().context.session,
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          true,
+        ],
+        "starting",
+        undefined,
       ]
     `)
   })
 
   test('signs one transaction for each payment, and another after a failed signature', () => {
     const actor = createActor(machines.approval, {
-      input: { challenge: false, guest: true },
+      input: { challenge: false, guest: true, offer: false },
     }).start()
     actor.send({ type: 'guest.resolve', value: 'first' })
 
@@ -299,7 +534,10 @@ describe('machines.approval', () => {
       [
         false,
         true,
-        "signed",
+        {
+          "offer": "none",
+          "page": "signed",
+        },
         false,
       ]
     `)
@@ -372,7 +610,14 @@ describe('machines.select', () => {
       'waiting',
     ],
   ] as const)('returns %o as %s', ([context, status]) => {
-    expect(machines.select(context)).toBe(status)
+    expect(
+      machines.select({
+        ...context,
+        failure: undefined,
+        offer: false,
+        session: undefined,
+      }),
+    ).toBe(status)
   })
 })
 

@@ -19,8 +19,10 @@ import {
   assertEvent,
   assign,
   createActor,
+  fromPromise,
   setup,
   type SnapshotFrom,
+  waitFor,
 } from 'xstate'
 import {
   type Config,
@@ -711,45 +713,25 @@ export async function pay_guest(
     typeof options.session === 'function'
       ? Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
       : undefined
-  // A guest offer starts the guest session once, at the user's selection. A failed start lets the
-  // next selection try again, and fails no payment, since the user can still sign in on the page.
-  let starting: Promise<Session.GuestSession> | undefined
-  // A sign-out since the payment started supersedes the whole payment, so its guest offer ends the
-  // page, and the call rejects with `SupersededError`.
-  const superseded = new AbortController()
-  const signal = options.signal
-    ? AbortSignal.any([options.signal, superseded.signal])
-    : superseded.signal
-  const session = () => {
-    const value = options.session
-    starting ??= (
-      typeof value === 'function' ? value() : Promise.resolve(value)
-    ).catch((error: unknown) => {
-      if (error instanceof SupersededError) superseded.abort(error)
-      starting = undefined
-      throw error
-    })
-    return starting
-  }
 
   /**
-   * Returns the guest session and the guest module, or throws `SignedOutError` once the instance's
-   * session no longer holds the guest session, such as after a sign-out, which keeps the key pair.
+   * Returns the guest module, or throws `SignedOutError` once the instance's session no longer holds
+   * the guest session `held`, such as after a sign-out, which keeps the key pair.
    */
-  const holding = async () => {
-    const [Guest, held] = await Promise.all([loading, session()])
+  const holding = async (held: Session.GuestSession) => {
+    const Guest = await loading
     if (
       options.current &&
       !Guest.active({ current: options.current(), started: held })
     )
       throw new SignedOutError()
-    return [Guest, held] as const
+    return Guest
   }
 
   const url = await approve(auth, {
     guest: {
-      request: async () => {
-        const [Guest, held] = await holding()
+      request: async (held) => {
+        const Guest = await holding(held)
         const { address, value } = await Guest.request(auth, {
           chainId,
           checkout,
@@ -760,8 +742,9 @@ export async function pay_guest(
         if (!Address.isEqual(address, held.address)) throw new SignedOutError()
         return value
       },
-      sign: async (transaction) => {
-        const [Guest, held] = await holding()
+      session: options.session,
+      sign: async (transaction, held) => {
+        const Guest = await holding(held)
         const envelope = Guest.check(transaction, {
           amount,
           chainId,
@@ -791,7 +774,7 @@ export async function pay_guest(
       to,
       token,
     },
-    signal,
+    signal: options.signal,
     skeleton: 'payment',
     text: 'Continue in a Tempo ID window to pay.',
   })
@@ -818,10 +801,12 @@ export declare namespace pay_guest {
     current?: (() => Session.Any | undefined) | undefined
     /**
      * The guest session whose guest account pays, or a function that starts it, for a guest offer
-     * on the signed-out payment page. The function runs once, when the user selects Continue as
-     * guest.
+     * on the signed-out payment page. The function runs when the user selects Continue as guest,
+     * again after a failure. A close of the page aborts its `signal`, and discards its result.
      */
-    session: Session.GuestSession | (() => Promise<Session.GuestSession>)
+    session:
+      | Session.GuestSession
+      | ((options: { signal: AbortSignal }) => Promise<Session.GuestSession>)
   }
 
   type ReturnType = pay.ReturnType<Omit<Options, 'session'>>
@@ -1632,25 +1617,69 @@ async function approve<held = never>(
   // signature, which the machine holds.
   // A guest offer opens the signed-out page, whose URL waits for no guest request. The guest
   // request arrives once the user selects Continue as guest.
-  const actor = createActor(machines.approval, {
-    input: {
-      challenge: challenge !== undefined,
-      guest: guest !== undefined && guest.state === undefined,
+  const actor = createActor(
+    machines.approval.provide({
+      actors: {
+        start: fromPromise((args) =>
+          typeof guest?.session === 'function'
+            ? guest.session({ signal: args.signal })
+            : Promise.reject(new Error('No guest offer.')),
+        ),
+      },
+    }),
+    {
+      input: {
+        challenge: challenge !== undefined,
+        guest: guest !== undefined && guest.state === undefined,
+        offer: typeof guest?.session === 'function',
+      },
     },
-  }).start()
+  ).start()
   challenge?.then(
     (message) => actor.send({ message, type: 'challenge.resolve' }),
     () => {},
   )
+  /**
+   * Returns the guest session: the held one, or the guest offer's, which the machine starts once at
+   * the user's selection. A failed start lets the next selection try again, and fails no payment,
+   * since the user can still sign in on the page. A supersession ends the call below.
+   */
+  const session = async () => {
+    if (!guest) throw new Error('No guest payment.')
+    if (typeof guest.session !== 'function') return guest.session
+    actor.send({ type: 'offer.start' })
+    const result = machines.guest(
+      await waitFor(
+        actor,
+        (snapshot) => !snapshot.matches({ offer: 'starting' }),
+      ),
+    )
+    if (result.type === 'started') return result.session
+    if (result.type === 'failed' || result.type === 'superseded')
+      throw result.error
+    throw new Error('No guest offer.')
+  }
+  // A sign-out since the payment started supersedes the whole payment, so its guest offer ends the
+  // page, and the call rejects with `SupersededError`.
+  const superseded = new Promise<never>((_, reject) => {
+    const subscription = actor.subscribe((snapshot) => {
+      const result = machines.guest(snapshot)
+      if (result.type !== 'superseded') return
+      subscription.unsubscribe()
+      reject(result.error)
+    })
+  })
+  superseded.catch(() => {})
   /** Signs a fresh guest request, which the page's URL holds from then on. */
-  const renew = async (fn: () => Promise<string>) => {
-    const value = await fn()
+  const renew = async () => {
+    if (!guest) throw new Error('No guest payment.')
+    const value = await guest.request(await session())
     actor.send({ type: 'guest.resolve', value })
     return value
   }
   // The first guest request, which the guest account signs from the store, with no request. A
   // guest offer signs none until the user selects Continue as guest.
-  const requested = guest && guest.state === undefined && renew(guest.request)
+  const requested = guest && guest.state === undefined && renew()
   // The values that the page's URL waits for. Each rejects the call itself, so `pending` only signals.
   const pending =
     challenge || requested
@@ -1691,7 +1720,7 @@ async function approve<held = never>(
     // A guest offer that the user has not taken signs no guest request for a later popup.
     const renewal =
       entry.later && guest && machines.values(actor.getSnapshot()).guest
-        ? renew(guest.request)
+        ? renew()
         : undefined
     if (!renewal && machines.ready(actor.getSnapshot())) {
       const popup = Popup.openPopup(toUrl('popup', entry.method))
@@ -1741,6 +1770,7 @@ async function approve<held = never>(
         )
         abort = () => reject(signal?.reason)
         signal?.addEventListener('abort', abort, { once: true })
+        superseded.catch(reject)
         // A rejected challenge or guest request closes the blank popup before any page shows. A
         // blank popup sends no `tempo-id:popup.open`, so the watcher misses its close, which the
         // end of `shown` reads.
@@ -1812,7 +1842,7 @@ async function approve<held = never>(
     const fault = (error: unknown) =>
       error instanceof Error ? error.message : 'Signing failed.'
     if (data.type === 'tempo-id:guest.request') {
-      renew(guest.request).then(
+      renew().then(
         (value) =>
           source.postMessage(
             { id: data.id, type: 'tempo-id:guest.requested', value },
@@ -1844,27 +1874,29 @@ async function approve<held = never>(
       return
     }
     actor.send({ type: 'sign.start' })
-    guest.sign(data.transaction).then(
-      (transaction) => {
-        actor.send({ type: 'sign.end' })
-        source.postMessage(
-          { id: data.id, transaction, type: 'tempo-id:guest.signature' },
-          origin,
-        )
-      },
-      (error: unknown) => {
-        // No signature exists, so the page can post the transaction again.
-        actor.send({ type: 'sign.fail' })
-        source.postMessage(
-          {
-            error: fault(error),
-            id: data.id,
-            type: 'tempo-id:guest.signature',
-          },
-          origin,
-        )
-      },
-    )
+    session()
+      .then((held) => guest.sign(data.transaction, held))
+      .then(
+        (transaction) => {
+          actor.send({ type: 'sign.end' })
+          source.postMessage(
+            { id: data.id, transaction, type: 'tempo-id:guest.signature' },
+            origin,
+          )
+        },
+        (error: unknown) => {
+          // No signature exists, so the page can post the transaction again.
+          actor.send({ type: 'sign.fail' })
+          source.postMessage(
+            {
+              error: fault(error),
+              id: data.id,
+              type: 'tempo-id:guest.signature',
+            },
+            origin,
+          )
+        },
+      )
   }
   if (guest) window.addEventListener('message', listener)
   try {
@@ -1928,6 +1960,7 @@ async function approve<held = never>(
       return await new Promise<URL | held>((resolve, reject) => {
         abort = () => reject(signal?.reason)
         signal?.addEventListener('abort', abort, { once: true })
+        superseded.catch(reject)
         const show = () =>
           sheet.show({
             onCallback: (value) => {
@@ -1997,13 +2030,25 @@ declare namespace approve {
      */
     guest?:
       | {
+          /** Signs a fresh guest request of the guest session, with no request. */
+          request: (session: Session.GuestSession) => Promise<string>
           /**
-           * Signs a fresh guest request, with no request. Of a guest offer, the first call starts
-           * the guest session.
+           * The guest session, or a function that starts it, for a guest offer. The approval's
+           * machine runs the function at the user's selection, and aborts its `signal` at its end.
            */
-          request: () => Promise<string>
-          /** Checks and signs the transaction that the page posts, and returns it serialized. */
-          sign: (transaction: unknown) => Promise<`0x${string}`>
+          session:
+            | Session.GuestSession
+            | ((options: {
+                signal: AbortSignal
+              }) => Promise<Session.GuestSession>)
+          /**
+           * Checks and signs the transaction that the page posts as the guest session, and returns
+           * it serialized.
+           */
+          sign: (
+            transaction: unknown,
+            session: Session.GuestSession,
+          ) => Promise<`0x${string}`>
           /**
            * The `state` of a guest offer, which the signed-out page's URL holds beside
            * `guest=offer`. The page's `tempo-id:guest.request` names it once the user selects
@@ -2268,17 +2313,24 @@ transactionOf.missing = () =>
 
 export namespace machines {
   /**
-   * The approval page's readiness and the guest account's signature. The page's URL waits for the
-   * challenge's message and the first guest request, and the guest account signs one transaction
-   * for each payment.
+   * The approval page's readiness, the guest account's signature, and the start of a guest offer's
+   * guest session, in two parallel regions. The page's URL waits for the challenge's message and the
+   * first guest request, and the guest account signs one transaction for each payment.
    *
-   * | State      | Meaning                                                                    |
-   * | ---------- | -------------------------------------------------------------------------- |
-   * | `settling` | Transient. Routes to the status that {@link select} returns.               |
-   * | `waiting`  | The challenge's message or the first guest request has not arrived.        |
-   * | `ready`    | The page's URL holds its values. The guest account signs no transaction.   |
-   * | `signing`  | The guest account signs a transaction, and refuses another.                |
-   * | `signed`   | The guest account signed the payment's transaction, and signs no other.    |
+   * | Region  | State        | Meaning                                                                  |
+   * | ------- | ------------ | ------------------------------------------------------------------------ |
+   * | `page`  | `settling`   | Transient. Routes to the status that {@link select} returns.             |
+   * | `page`  | `waiting`    | The challenge's message or the first guest request has not arrived.      |
+   * | `page`  | `ready`      | The page's URL holds its values. The guest account signs no transaction. |
+   * | `page`  | `signing`    | The guest account signs a transaction, and refuses another.              |
+   * | `page`  | `signed`     | The guest account signed the payment's transaction, and signs no other.  |
+   * | `offer` | `settling`   | Transient. Routes to `idle` for a guest offer, or `none`.                |
+   * | `offer` | `none`       | No guest offer: a held guest session, or no guest payment.               |
+   * | `offer` | `idle`       | The user has not selected Continue as guest.                             |
+   * | `offer` | `starting`   | The guest session starts. The machine's end aborts the start.            |
+   * | `offer` | `started`    | The guest session started.                                               |
+   * | `offer` | `failed`     | The last start failed. The next selection starts it again.               |
+   * | `offer` | `superseded` | A sign-out since the payment started superseded the payment.             |
    */
   export const approval = setup({
     actions: {
@@ -2289,6 +2341,12 @@ export namespace machines {
           return [...args.context.requests, args.event.value]
         },
       }),
+      /** Drops the failure of the last start of the guest session, before another start. */
+      clearFailure: assign({ failure: undefined }),
+      /** Holds the failure of the last start of the guest session, which its waiters throw. */
+      setFailure: assign((_, params: { error: unknown }) => ({
+        failure: params.error,
+      })),
       /** Holds the challenge's message. */
       setMessage: assign({
         message: (args) => {
@@ -2296,11 +2354,27 @@ export namespace machines {
           return args.event.message
         },
       }),
+      /** Holds the started guest session. */
+      setSession: assign((_, params: { session: Session.GuestSession }) => ({
+        failure: undefined,
+        session: params.session,
+      })),
+    },
+    actors: {
+      /** Starts the guest session of a guest offer. `approve` provides it from `guest.session`. */
+      start: fromPromise<Session.GuestSession>(() =>
+        Promise.reject(new Error('No guest offer.')),
+      ),
     },
     guards: {
+      /** Whether the approval offers a guest session that the user's selection starts. */
+      offers: (args) => args.context.offer,
       /** Whether {@link select} returns `params.status`. */
       selects: (args, params: { status: approval.Status }) =>
         select(args.context) === params.status,
+      /** Whether a sign-out since the payment started superseded the start of the guest session. */
+      supersedes: (_, params: { error: unknown }) =>
+        params.error instanceof SupersededError,
     },
     types: {
       context: {} as approval.Context,
@@ -2310,61 +2384,128 @@ export namespace machines {
   }).createMachine({
     context: (args) => ({
       challenge: args.input.challenge,
+      failure: undefined,
       guest: args.input.guest,
       message: undefined,
+      offer: args.input.offer,
       requests: [],
+      session: undefined,
     }),
     id: 'approval',
-    initial: 'settling',
     states: {
-      ready: {
-        on: {
-          'guest.resolve': { actions: 'addRequest' },
-          'sign.start': { target: 'signing' },
-        },
-        tags: 'ready',
-      },
-      settling: {
-        always: [
-          {
-            guard: { params: { status: 'ready' }, type: 'selects' },
-            target: 'ready',
+      offer: {
+        initial: 'settling',
+        states: {
+          failed: {
+            on: {
+              'offer.start': { actions: 'clearFailure', target: 'starting' },
+            },
           },
-          { target: 'waiting' },
-        ],
-      },
-      signed: {
-        on: { 'guest.resolve': { actions: 'addRequest' } },
-        tags: 'ready',
-      },
-      signing: {
-        on: {
-          'guest.resolve': { actions: 'addRequest' },
-          'sign.end': { target: 'signed' },
-          // No signature exists, so the page can post a transaction again.
-          'sign.fail': { target: 'ready' },
+          idle: { on: { 'offer.start': { target: 'starting' } } },
+          none: {},
+          settling: {
+            always: [{ guard: 'offers', target: 'idle' }, { target: 'none' }],
+          },
+          started: {},
+          starting: {
+            invoke: {
+              id: 'start',
+              onDone: {
+                actions: {
+                  params: (args) => ({ session: args.event.output }),
+                  type: 'setSession',
+                },
+                target: 'started',
+              },
+              onError: [
+                {
+                  actions: {
+                    params: (args) => ({ error: args.event.error }),
+                    type: 'setFailure',
+                  },
+                  guard: {
+                    params: (args) => ({ error: args.event.error }),
+                    type: 'supersedes',
+                  },
+                  target: 'superseded',
+                },
+                {
+                  actions: {
+                    params: (args) => ({ error: args.event.error }),
+                    type: 'setFailure',
+                  },
+                  target: 'failed',
+                },
+              ],
+              src: 'start',
+            },
+          },
+          superseded: {},
         },
-        tags: 'ready',
       },
-      waiting: {
-        on: {
-          'challenge.resolve': { actions: 'setMessage', target: 'settling' },
-          'guest.resolve': { actions: 'addRequest', target: 'settling' },
+      page: {
+        initial: 'settling',
+        states: {
+          ready: {
+            on: {
+              'guest.resolve': { actions: 'addRequest' },
+              'sign.start': { target: 'signing' },
+            },
+            tags: 'ready',
+          },
+          settling: {
+            always: [
+              {
+                guard: { params: { status: 'ready' }, type: 'selects' },
+                target: 'ready',
+              },
+              { target: 'waiting' },
+            ],
+          },
+          signed: {
+            on: { 'guest.resolve': { actions: 'addRequest' } },
+            tags: 'ready',
+          },
+          signing: {
+            on: {
+              'guest.resolve': { actions: 'addRequest' },
+              'sign.end': { target: 'signed' },
+              // No signature exists, so the page can post a transaction again.
+              'sign.fail': { target: 'ready' },
+            },
+            tags: 'ready',
+          },
+          waiting: {
+            on: {
+              'challenge.resolve': {
+                actions: 'setMessage',
+                target: 'settling',
+              },
+              'guest.resolve': { actions: 'addRequest', target: 'settling' },
+            },
+          },
         },
       },
     },
+    type: 'parallel',
   })
 
   export declare namespace approval {
     type Context = {
       /** Whether the page's URL waits for the challenge's message. */
       challenge: boolean
+      /** The failure of the last start of the guest session. Absent outside `failed` and `superseded`. */
+      failure: unknown
       /** Whether the page's URL waits for a guest request. */
       guest: boolean
       /** The challenge's message. Absent until it arrives, and without a challenge. */
       message: string | undefined
+      /** Whether the approval offers a guest session that the user's selection starts. */
+      offer: boolean
       /** The guest requests of the payment, in the order of their signatures. Empty without one. */
       requests: readonly string[]
+      /** The guest offer's started guest session. Absent before its start, and without an offer. */
+      session: Session.GuestSession | undefined
     }
 
     type Event =
@@ -2381,6 +2522,10 @@ export namespace machines {
           value: string
         }
       | {
+          /** The user selected Continue as guest, which starts the guest offer's guest session. */
+          type: 'offer.start'
+        }
+      | {
           /** The guest account signed the transaction. */
           type: 'sign.end'
         }
@@ -2393,7 +2538,7 @@ export namespace machines {
           type: 'sign.start'
         }
 
-    type Input = Pick<Context, 'challenge' | 'guest'>
+    type Input = Pick<Context, 'challenge' | 'guest' | 'offer'>
 
     /** The readiness of the page's URL. */
     type Status = 'ready' | 'waiting'
@@ -2401,6 +2546,39 @@ export namespace machines {
     type Actor = ActorRefFrom<typeof approval>
 
     type Snapshot = SnapshotFrom<typeof approval>
+  }
+
+  /**
+   * Returns the start of the guest offer's guest session: `none` without an offer, `idle` before the
+   * user's selection, `starting`, `started` with the session, or `failed` or `superseded` with the
+   * failure.
+   */
+  export function guest(snapshot: approval.Snapshot): guest.ReturnType {
+    const { failure, session } = snapshot.context
+    if (snapshot.matches({ offer: 'started' }) && session)
+      return { session, type: 'started' }
+    if (snapshot.matches({ offer: 'failed' }))
+      return { error: failure, type: 'failed' }
+    if (snapshot.matches({ offer: 'superseded' }))
+      return { error: failure, type: 'superseded' }
+    if (snapshot.matches({ offer: 'starting' })) return { type: 'starting' }
+    if (snapshot.matches({ offer: 'idle' })) return { type: 'idle' }
+    return { type: 'none' }
+  }
+
+  export declare namespace guest {
+    type ReturnType =
+      | {
+          /** The failure of the start. */
+          error: unknown
+          type: 'failed' | 'superseded'
+        }
+      | { type: 'idle' | 'none' | 'starting' }
+      | {
+          /** The started guest session. */
+          session: Session.GuestSession
+          type: 'started'
+        }
   }
 
   /** Returns whether `snapshot` holds a guest request of the payment that equals `options.value`. */
