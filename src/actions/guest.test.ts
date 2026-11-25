@@ -1125,6 +1125,83 @@ describe('Actions.guest.funding', () => {
   })
 })
 
+describe('Actions.guest.requote', () => {
+  const changed = new Accounts.RequestError({
+    code: 'invalid_request',
+    message: 'The quote changed.',
+    reason: 'quote_changed',
+    status: 400,
+  })
+  const token: `0x${string}` = ousd
+  const quote = (fee: string, shortfall = false) => ({
+    faucet: false,
+    fee: { amount: fee, formatted: fee, token },
+    refusal: null,
+    shortfall: shortfall
+      ? {
+          amount: '1',
+          formatted: '0.000001',
+          listed: true,
+          symbol: 'OUSD',
+          token,
+        }
+      : null,
+    sponsored: false,
+    token,
+  })
+  const failed = { error: changed, type: 'failed' } as const
+  const prepared = { prepared: 'tx', type: 'prepared' } as const
+  /** Returns each step's type, and the fee of each `prepare` step's quote. */
+  const steps = (
+    results: readonly (readonly [number, Guest.requote.Options['result']])[],
+  ) =>
+    results.map(([attempt, result]) => {
+      const step = Guest.requote({ attempt, result })
+      return step.type === 'prepare'
+        ? `prepare ${step.quote.fee?.amount}`
+        : step.type
+    })
+
+  test.for([
+    ['signs at the first prepare', [[1, prepared]], ['sign']],
+    [
+      'quotes again after `quote_changed`, and signs the prepare at the new quote',
+      [
+        [1, failed],
+        [1, { quote: quote('7'), type: 'quoted' }],
+        [2, prepared],
+      ],
+      ['quote', 'prepare 7', 'sign'],
+    ],
+    [
+      'rejects with `quote_changed` at the third prepare that receives it',
+      [
+        [1, failed],
+        [1, { quote: quote('7'), type: 'quoted' }],
+        [2, failed],
+        [2, { quote: quote('8'), type: 'quoted' }],
+        [3, failed],
+      ],
+      ['quote', 'prepare 7', 'quote', 'prepare 8', 'throw'],
+    ],
+    [
+      'rejects with `insufficient_balance` for a shortfall at the new quote',
+      [
+        [1, failed],
+        [1, { quote: quote('7', true), type: 'quoted' }],
+      ],
+      ['quote', 'short'],
+    ],
+    [
+      'rejects with any other refusal of the prepare',
+      [[1, { error: new Error('Network.'), type: 'failed' }]],
+      ['throw'],
+    ],
+  ] as const)('%s', ([, results, expected]) => {
+    expect(steps(results)).toEqual(expected)
+  })
+})
+
 describe('Actions.guest.settlement', () => {
   /** The time of each row, in Unix milliseconds: 100 seconds after the transaction's window. */
   const now = 1_700_000_100_000

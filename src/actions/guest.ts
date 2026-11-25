@@ -1202,21 +1202,25 @@ export async function pay(
   const { approved, prepared } = await (async () => {
     let approved = quoted
     for (let attempt = 1; ; attempt++) {
-      try {
-        return { approved, prepared: await prepare(approved) }
-      } catch (error) {
-        const changed =
-          error instanceof RequestError && error.reason === 'quote_changed'
-        if (!changed || attempt >= quoteAttempts) throw error
-      }
-      const next = await quote()
-      if ('paid' in next) return { approved, prepared: next }
-      if (!('shortfall' in next)) throw refused(next.refusal)
-      if (next.shortfall)
+      const result = await prepare(approved).then(
+        (prepared) => ({ prepared, type: 'prepared' as const }),
+        (error: unknown) => ({ error, type: 'failed' as const }),
+      )
+      const step = requote({ attempt, result })
+      if (step.type === 'sign') return { approved, prepared: step.prepared }
+      if (step.type === 'throw') throw step.error
+      const next = requote({
+        attempt,
+        result: { quote: await quote(), type: 'quoted' },
+      })
+      if (next.type === 'paid') return { approved, prepared: next.paid }
+      if (next.type === 'refused') throw refused(next.refusal)
+      if (next.type === 'short')
         throw short(
           `Insufficient balance: the guest account ${session.address} lacks ${next.shortfall.formatted} ${next.shortfall.symbol} at the new quote. Fund the guest account, then pay again.`,
         )
-      approved = next
+      // A quote's step is `prepare` once no other step applies.
+      if (next.type === 'prepare') approved = next.quote
     }
   })()
   if ('paid' in prepared) return await settled(prepared.paid.transaction)
@@ -1503,6 +1507,102 @@ export declare namespace request {
     /** The guest request, as the page's `guest` parameter takes it. */
     value: string
   }
+}
+
+/**
+ * Returns the next step of `Actions.guest.pay` after a prepare of the transfer, or after the quote
+ * that follows Tempo ID's `quote_changed`. The prepare names the quoted cost, so a fill that costs
+ * more receives `quote_changed`, and the payment quotes again, up to 3 prepares.
+ *
+ * | Result     | Step                                                                                  |
+ * | ---------- | ------------------------------------------------------------------------------------- |
+ * | `prepared` | `sign`: the key pair signs the prepared transaction.                                  |
+ * | `failed`   | `quote` for `quote_changed` before the third prepare, or `throw` with the error.      |
+ * | `quoted`   | `paid` for a paid checkout, `refused`, `short` for a shortfall, or `prepare` at the new quote. |
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const step = Actions.guest.requote({ attempt: 1, result: { error, type: 'failed' } })
+ * ```
+ */
+export function requote<const prepared>(
+  options: requote.Options<prepared>,
+): requote.ReturnType<prepared> {
+  const { attempt, result } = options
+  if (result.type === 'prepared')
+    return { prepared: result.prepared, type: 'sign' }
+  if (result.type === 'failed') {
+    const changed =
+      result.error instanceof RequestError &&
+      result.error.reason === 'quote_changed'
+    if (changed && attempt < quoteAttempts) return { type: 'quote' }
+    return { error: result.error, type: 'throw' }
+  }
+  const { quote } = result
+  if ('paid' in quote) return { paid: quote, type: 'paid' }
+  if (!('shortfall' in quote))
+    return { refusal: quote.refusal, type: 'refused' }
+  if (quote.shortfall) return { shortfall: quote.shortfall, type: 'short' }
+  return { quote, type: 'prepare' }
+}
+
+export declare namespace requote {
+  type Options<prepared = unknown> = {
+    /** The number of the prepare, from 1. */
+    attempt: number
+    /** The outcome of the prepare, or of the quote after it. */
+    result:
+      | {
+          /** The prepare's error. */
+          error: unknown
+          type: 'failed'
+        }
+      | {
+          /** The prepared transaction, or the paid checkout. */
+          prepared: prepared
+          type: 'prepared'
+        }
+      | {
+          /** The new quote of `GET /i/guest/pay`. */
+          quote: Paid | Quoted | Refused
+          type: 'quoted'
+        }
+  }
+
+  type ReturnType<prepared = unknown> =
+    | {
+        /** The paid checkout of the new quote. */
+        paid: Paid
+        type: 'paid'
+      }
+    | {
+        /** The new quote, which the next prepare names. */
+        quote: Quoted
+        type: 'prepare'
+      }
+    | { type: 'quote' }
+    | {
+        /** Why Tempo ID refuses the payment at the new quote. */
+        refusal: Refusal
+        type: 'refused'
+      }
+    | {
+        /** What the guest account lacks at the new quote. */
+        shortfall: NonNullable<Quoted['shortfall']>
+        type: 'short'
+      }
+    | {
+        /** The prepared transaction, or the paid checkout, which the payment signs or returns. */
+        prepared: prepared
+        type: 'sign'
+      }
+    | {
+        /** The prepare's error, which the payment rejects with. */
+        error: unknown
+        type: 'throw'
+      }
 }
 
 /**
