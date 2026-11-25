@@ -9,6 +9,8 @@ import { SourceLink } from '../../../components/SourceLink.tsx'
 
 The dialog shows Tempo ID's sign-in in a frame over the app's page, which never sees the user's email code or passkey. It is the default sign-in flow for a web page, and needs no registration. For a full-page sign-in, use a [redirect](/docs/guides/redirect).
 
+The dialog and Tempo ID's page in it draw in the `color-scheme` that the app's page declares, on its root element or in its meta tag. A page that declares both schemes, or none, takes the browser's preference.
+
 The demo signs a user in from a button, shows the user, and signs the user out.
 
 <Demo
@@ -450,16 +452,6 @@ export const accounts = Accounts.create({
   chain: 'testnet',
   plugins: [dialog({ preload: false }), react()], // [!code hl]
 })
-```
-
-### Match the page's color scheme
-
-The dialog and Tempo ID's page in its frame draw in the color scheme that the app's page declares, on its root element or in its `color-scheme` meta tag. A page that declares both schemes, or none, takes the browser's preference. A frame keeps the scheme that it loads with. If the page changes its scheme, the next sign-in or deposit loads a new frame.
-
-```css [app.css]
-:root {
-  color-scheme: dark; /* [!code hl] */
-}
 ```
 
 ### Isolate the page from popups
