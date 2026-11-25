@@ -621,6 +621,14 @@ async function script(page: Page, expression: string): Promise<unknown> {
   return result.value
 }
 
+/** Returns the color scheme that Tempo ID's page in `frame` prefers: `dark` or `light`. */
+export async function scheme(frame: FrameLocator) {
+  const dark = await frame
+    .locator('html')
+    .evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)
+  return dark ? 'dark' : 'light'
+}
+
 /**
  * Returns the screen of a sign-in that Tempo ID shows in `target` after the email's code, with no
  * wait: the approval, the deposit page, or `undefined` for any other screen.
