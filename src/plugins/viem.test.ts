@@ -408,6 +408,86 @@ describe('viem', () => {
     expect(revoked).toMatchInlineSnapshot(`"Accounts.SignedOutError"`)
   })
 
+  test('takes an expiring nonce for a transaction that starts while another of the access key is in flight, also with feeToken', async () => {
+    // The nonce key of the second transaction's first fill, for each feeToken.
+    const fills: Record<string, string | undefined> = {}
+    for (const feeToken of [
+      undefined,
+      '0x20c0000000000000000000000000000000000000',
+    ] as const) {
+      const store = Store.memory()
+      const session = Session.from({
+        accessKey: createAccessKey({
+          chainId: 4217,
+          owner: Secp256k1.randomPrivateKey(),
+        }),
+        accessToken: 'access-token',
+        expiresAt: Date.now() + 60 * 60 * 1000,
+        user: { email: 'user@example.com', id: 'user_1' },
+      })
+      await store.setItem(
+        'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]',
+        { state: { session }, version: 0 },
+      )
+      const nonceKeys: (string | undefined)[] = []
+      let release = () => {}
+      const accounts = Accounts.create({
+        chain: 4217,
+        clientId: 'https://app.example.com',
+        plugins: [
+          viem({
+            ...(feeToken ? { feeToken } : {}),
+            // The node holds the first fill, so the first transaction stays in flight.
+            transport: custom({
+              request(args) {
+                if (args.method !== 'eth_fillTransaction')
+                  return Promise.reject(new Error())
+                const [request] = args.params as [{ nonceKey?: string }]
+                nonceKeys.push(request.nonceKey)
+                if (nonceKeys.length > 1) return Promise.reject(new Error())
+                return new Promise((_, reject) => {
+                  release = () => reject(new Error())
+                })
+              },
+            }),
+          }),
+        ],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+      await accounts.session.get()
+      // The chain holds the access key, so no transaction attaches its key authorization.
+      await (
+        accounts.viem.account as Account.AccessKeyAccount
+      ).keyAuthorizationManager!.remove({
+        accessKey: KeyAuthorization.fromRpc(session.accessKey!.keyAuthorization)
+          .address,
+        address: session.accessKey!.account,
+        chainId: 4217,
+      })
+      const parameters = {
+        amount: 1n,
+        to: '0x0000000000000000000000000000000000000001',
+        token: '0x20c0000000000000000000000000000000000000',
+      } as const
+
+      const first = accounts.token.transfer(parameters).catch(() => undefined)
+      await expect.poll(() => nonceKeys.length).toBe(1)
+      const second = accounts.token.transfer(parameters).catch(() => undefined)
+      await expect.poll(() => nonceKeys.length).toBe(2)
+      release()
+      await Promise.all([first, second])
+      fills[String(feeToken)] = nonceKeys[1]
+    }
+
+    expect(fills).toMatchInlineSnapshot(`
+      {
+        "0x20c0000000000000000000000000000000000000": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "undefined": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      }
+    `)
+  })
+
   test("rejects Viem's standalone transfer with SignedOutError once the access key expired, and reads no account", async () => {
     const store = Store.memory()
     const owner = Secp256k1.randomPrivateKey()
