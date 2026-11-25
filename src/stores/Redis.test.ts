@@ -616,6 +616,96 @@ describe('Store.redis', () => {
     `)
   }, 120_000)
 
+  test('behavior: a refresh that waits for the refresh of another instance on the store writes no session', async () => {
+    const container = await new GenericContainer('redis:7.4-alpine')
+      .withExposedPorts(6379)
+      .withWaitStrategy(Wait.forLogMessage('Ready to accept connections'))
+      .start()
+    const client = new IORedis({
+      host: container.getHost(),
+      port: container.getMappedPort(6379),
+    })
+    const key =
+      'tempo-id:session:["http://127.0.0.1:9","cli:acme-example",42431]'
+    // Each write of the session, with the refresh token that it holds.
+    const writes: string[] = []
+    const store = Redis.create({
+      sendCommand: (args) => {
+        if (args[0] === 'SET' && args[1] === key)
+          writes.push(JSON.parse(args[2]!).state.session.refreshToken)
+        return client.call(...(args as [string, ...string[]]))
+      },
+    })
+    await store.setItem(key, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 3_600_000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    writes.length = 0
+    // `fetch` records each request, and answers the refresh with new tokens after 200 milliseconds.
+    const requests: string[] = []
+    const create = () =>
+      Accounts.create({
+        chain: 42431,
+        clientId: 'cli:acme-example',
+        async fetch(input, init) {
+          const token = new URLSearchParams(String(init?.body)).get(
+            'refresh_token',
+          )
+          requests.push(`${new URL(String(input)).pathname} ${token}`)
+          await new Promise((resolve) => setTimeout(resolve, 200))
+          return Response.json({
+            access_token: 'access-token-1',
+            expires_in: 3600,
+            refresh_token: 'refresh-token-1',
+            token_type: 'Bearer',
+          })
+        },
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const first = create()
+    const second = create()
+    await Promise.all([first.session.get(), second.session.get()])
+
+    const sessions = await (async () => {
+      try {
+        return await Promise.all([
+          first.session.refresh(),
+          second.session.refresh(),
+        ])
+      } finally {
+        client.disconnect()
+        await container.stop()
+      }
+    })()
+
+    expect({
+      refreshTokens: sessions.map((session) => session?.refreshToken),
+      requests,
+      writes,
+    }).toMatchInlineSnapshot(`
+      {
+        "refreshTokens": [
+          "refresh-token-1",
+          "refresh-token-1",
+        ],
+        "requests": [
+          "/oauth2/token refresh-token",
+        ],
+        "writes": [
+          "refresh-token-1",
+        ],
+      }
+    `)
+  }, 120_000)
+
   test('behavior: sends one refresh for two processes on one Redis, whose Web Locks span one process', async () => {
     const container = await new GenericContainer('redis:7.4-alpine')
       .withExposedPorts(6379)

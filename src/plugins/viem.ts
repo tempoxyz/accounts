@@ -175,8 +175,13 @@ export class RetryClosedError extends Error {
  *
  * A transaction of an access key whose node fills its nonce, and that starts while another
  * transaction of the same account is in flight in the instance, takes an expiring nonce, as Viem's
- * own transactions do within one turn of the event loop. Concurrent requests of a server for one
- * session thus each land, without a request more.
+ * own transactions do within one turn of the event loop. A client of a fixed `session` takes an
+ * expiring nonce for each such transaction that attaches no key authorization, since another
+ * instance, such as that of another request of a Worker, can send for the session at once.
+ * Concurrent requests of a server for one session thus each land, without a request more, once the
+ * chain registered the access key. Expiring nonces put no order on transactions, so a transaction
+ * of a fixed `session` that depends on an earlier one waits for that one's receipt, as
+ * `token.transferSync` and the other synchronous actions do.
  *
  * The access key attaches its key authorization to transactions until the chain registers the
  * access key. While a transaction of the instance attaches it, the fill of another that attaches it
@@ -209,7 +214,9 @@ export class RetryClosedError extends Error {
  * this app holds on the client's chain, and that expired, rejects before the node receives it, with
  * `Accounts.SignedOutError`, or `Accounts.AccessKeyRequiredError` while an access key on another
  * chain keeps the session. The rejection starts a read of the session, which empties an expired
- * session, so the status changes to `signedOut`. Outside a page, an instance with the `device`
+ * session, so the status changes to `signedOut`. Outside a page, a read of the client's account
+ * throws `Accounts.SignedOutError` once the status is `signedOut`, so a standalone Viem action, such as
+ * `Actions.token.transferSync(accounts.viem, …)`, rejects with it too. Outside a page, an instance with the `device`
  * plugin, such as a CLI's, retries a low balance and a spent limit through `device.request`, whose
  * `onCode` shows the code.
  *
@@ -408,12 +415,18 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
 
       /**
        * Returns `chain`, whose preparation of a transaction of an access key takes an expiring
-       * nonce while another transaction of the same account is in flight in the instance. Both would
-       * otherwise fill the same protocol nonce, and the node keeps one of them. Viem detects only
-       * transactions that start in one turn of the event loop, and a server's requests start in turns
-       * of their own.
+       * nonce while another transaction of the same account is in flight in the instance, or with
+       * `shared`, for each transaction that attaches no key authorization. Both would otherwise fill
+       * the same protocol nonce, and the node keeps one of them. Viem detects only transactions that
+       * start in one turn of the event loop, and a server's requests start in turns of their own. A
+       * client of a fixed session is `shared`, since another instance, such as that of another
+       * request or replica, can send for the session at once.
        */
-      function coordinate(chain: Chain): Chain {
+      function coordinate(
+        chain: Chain,
+        options_coordinate: { shared: boolean },
+      ): Chain {
+        const { shared } = options_coordinate
         const prepare = (chain as TempoChain).prepareTransactionRequest
         if (!Array.isArray(prepare)) return chain
         // Viem types the hook's request by the chain's formatters, which a plain chain does not hold.
@@ -448,14 +461,36 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
               )
                 return fn(request, args)
               const concurrent = startSend(account.address.toLowerCase())
+              const expiring = await (async () => {
+                if (concurrent) return true
+                if (!shared) return false
+                // A transaction that carries the key authorization keeps the protocol nonce. A
+                // concurrent one of another instance that carries it too then fails at its send,
+                // since the node never includes a second registration of the access key.
+                return !(await carries(request))
+              })()
               return fn(
-                concurrent ? { ...request, nonceKey: 'expiring' } : request,
+                expiring ? { ...request, nonceKey: 'expiring' } : request,
                 args,
               )
             },
             options,
           ],
         } as Chain
+      }
+
+      /** Returns whether `request` attaches the key authorization of its access key. */
+      async function carries(request: Prepare.Request) {
+        const { account } = request
+        const chainId = request.chainId ?? request.chain?.id
+        if (!account?.keyAuthorizationManager || chainId === undefined)
+          return false
+        const pending = await account.keyAuthorizationManager.get({
+          accessKey: account.accessKeyAddress as `0x${string}`,
+          address: account.address as `0x${string}`,
+          chainId,
+        })
+        return Boolean(pending)
       }
 
       /**
@@ -2086,6 +2121,10 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           else if (
             within === false ||
             ((within === undefined || requested) &&
+              !(
+                failure.spent &&
+                Address.isEqual(failure.spent, current.keyAuthorization.keyId)
+              ) &&
               !(await spent(current, {
                 chainId,
                 limits: Retry.counted(current.keyAuthorization, {
@@ -2311,7 +2350,19 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         const account = (() => {
           if (!session)
             return Signer.live(
-              () => (renews ? current_renewing(chainId) : current(chainId)),
+              () => {
+                if (renews) return current_renewing(chainId)
+                const account = current(chainId)
+                if (!account || page) return account
+                if (context.session.status.get().status !== 'signedOut')
+                  return account
+                // Outside a page, no retry renews a held session that expired, so its account reads
+                // as signed out, as the status does. Viem reads the account before it wraps an
+                // action's errors, so a standalone action rejects with `Accounts.SignedOutError`.
+                // The read of the session empties it, as the refusal of a transaction does.
+                void context.session.load().catch(() => undefined)
+                return undefined
+              },
               {
                 // A renewal of an expired session holds no session, and `session.get` returns
                 // its result, as it does in `pending`.
@@ -2344,7 +2395,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             ...defaults,
             ...clientOptions,
             account,
-            chain: coordinate(chain),
+            chain: coordinate(chain, { shared: Boolean(session) }),
             transport: reads,
           },
           { verifier: tokens },

@@ -110,6 +110,9 @@ const unknownAddress = '0x0000000000000000000000000000000000000000'
 /** The most wrappers of a signature: one of ERC-6492 and one of ERC-8010. */
 const wrapperLimit = 2
 
+/** The largest WebAuthn envelope, in bytes: its type and at most 2048 bytes of data. */
+const webAuthnLimit = 1 + 2048
+
 /**
  * Returns the plugin of Sign-In with Ethereum
  * ([EIP-4361](https://eips.ethereum.org/EIPS/eip-4361)) on a backend, which adds `accounts.siwe`
@@ -123,8 +126,8 @@ const wrapperLimit = 2
  * holds no tokens: it never refreshes, holds no email address, and receives no logout token. It
  * ends after `lifetime`.
  *
- * Each message names the app's `origin`, or the request's, as its domain and URI, so an account
- * that signs it signs in to this app only. Tempo ID shows a challenge whose domain is another
+ * Each message names the app's `origin` as its domain and URI, never the request's `Host`, so an
+ * account that signs it signs in to this app only. Tempo ID shows a challenge whose domain is another
  * app's with a warning. The account signs the message's EIP-191 hash, as `personal_sign` does. A
  * signature verifies with Viem's `verifyMessage` on the message's chain, through the `viem`
  * plugin's transport, for the account's current configuration:
@@ -201,6 +204,8 @@ const wrapperLimit = 2
  * ```
  * @throws {Error} When `plugins` lacks the `backend` plugin, at `Accounts.create`.
  * @throws {Error} When `accessTokens.clientIds` is `'any'`.
+ * @throws {Error} When neither `origin`, `redirectUri`, nor `clientId` names an `http` or `https`
+ *   origin, at `Accounts.create`.
  *
  * @example
  * ```ts
@@ -307,13 +312,6 @@ function server(options: siwe.Options) {
     throw new Error(
       "Invalid `accessTokens.clientIds`: `'any'` accepts every app's token, which proves no sign-in for this app. Name the app's own client IDs.",
     )
-  const origins =
-    options.origin === undefined
-      ? undefined
-      : (typeof options.origin === 'string'
-          ? [options.origin]
-          : options.origin
-        ).map((value) => new URL(value).origin)
 
   return Plugin.from({
     extend(instance: Accounts.Accounts, context: Plugin.Context) {
@@ -322,6 +320,27 @@ function server(options: siwe.Options) {
         throw new Error(
           'Invalid plugins: the siwe plugin stores its sessions with the backend plugin, which `plugins` lacks. Add `backend({ store })` or `backend({ remote })` beside it.',
         )
+      // A server can answer any `Host` header, so the request's URL never names the app. A message
+      // of the requester's host would sign the user in here from another site's page.
+      const origins = (() => {
+        if (options.origin !== undefined)
+          return (
+            typeof options.origin === 'string'
+              ? [options.origin]
+              : options.origin
+          ).map((value) => new URL(value).origin)
+        for (const value of [
+          instance.config.redirectUri,
+          instance.config.clientId,
+        ]) {
+          const url = value === undefined ? null : URL.parse(value)
+          if (url?.protocol === 'https:' || url?.protocol === 'http:')
+            return [url.origin]
+        }
+        throw new Error(
+          "Missing `origin`: neither `redirectUri` nor `clientId` is an `http` or `https` URL that names the app's origin. Pass the app's public origin as `origin`.",
+        )
+      })()
       const sessions = held[BackendOperations.key] as backend.Operations
       // The instance's `viem` plugin, or one of the plugin's own, resolves each chain and transport.
       const client =
@@ -388,6 +407,15 @@ function server(options: siwe.Options) {
         if (envelope?.type === 'keychain') return false
 
         const client = getClient(chainId)
+        // No WebAuthn envelope exceeds its limit. A Tempo chain's `verifyHash` would parse a larger
+        // one again before any request, so the refusal is local, also inside a wrapper. Another
+        // chain sends the signature to the account's code, whatever its first byte.
+        if (
+          client.chain.verifyHash &&
+          Hex.slice(unwrapped, 0, 1) === '0x02' &&
+          Hex.size(unwrapped) > webAuthnLimit
+        )
+          return false
         // The chain's signature verifier accepts a configurable envelope only for the account's
         // current configuration. A wrapper carries a call that the signer chooses, so the verifier
         // receives the signature without it.
@@ -419,15 +447,14 @@ function server(options: siwe.Options) {
 
       /**
        * Returns the app's origin for `request`: the request's `Origin` header, or its URL without
-       * one, which one of the plugin's `origin` must be, or the request's URL without `origin`.
-       * With `origin`, throws for a request from any other origin.
+       * one, which one of the app's origins must be. Throws for a request from any other origin.
        */
       function originOf(request: Request) {
         const requested =
           request.headers.get('origin') ?? new URL(request.url).origin
-        if (origins && !origins.includes(requested))
+        if (!origins.includes(requested))
           throw new InvalidError({ reason: 'origin' })
-        return new URL(origins ? requested : request.url)
+        return new URL(requested)
       }
 
       /** Returns a new message of the app's origin, with a nonce of 16 random bytes, and the nonce. */
@@ -496,11 +523,18 @@ function server(options: siwe.Options) {
             statement,
           } = parameters
           const url = originOf(request)
-          // The nonce names the challenge, and the challenge's own message is the one to verify.
-          const { domain, nonce, uri } = parseSiweMessage(message)
+          // The caller sends the message, so its fields are read from its lines, and only the
+          // challenge's own message is parsed, once it equals the one sent.
+          const nonce = fieldOf(message, 'Nonce')
           if (!nonce) throw new InvalidError({ reason: 'challenge' })
-          // A message of another origin, such as an alias that shares the store, approves nothing here.
-          if (domain !== url.host || uri !== url.origin)
+          // A message of another origin, such as an alias that shares the store, approves nothing
+          // here, and leaves its challenge to that origin.
+          if (
+            !message.startsWith(
+              `${url.host} wants you to sign in with your Ethereum account:\n`,
+            ) ||
+            fieldOf(message, 'URI') !== url.origin
+          )
             throw new InvalidError({ reason: 'message' })
           const challenge = await sessions.take({
             id: session.id,
@@ -576,8 +610,9 @@ function server(options: siwe.Options) {
         },
         /**
          * Verifies a signed message of `start` for the session `id`, and stores the SIWE session
-         * under `id`. The message must equal the challenge, unspent and unexpired, and `address`
-         * must sign it, and equal the address that it names, unless it names the zero address.
+         * under `id`. The message must equal the challenge, unspent and unexpired, and name one of
+         * the plugin's `origin`. `address` must sign it, and equal the address that it names, unless
+         * it names the zero address.
          * Spends the challenge first, so it verifies once, also when a check fails. The session
          * lasts `lifetime`. It does not end the session that the browser held before, which
          * `POST /auth/siwe/verify` does.
@@ -602,12 +637,19 @@ function server(options: siwe.Options) {
           if (!challenge) throw new InvalidError({ reason: 'challenge' })
           if (message !== challenge.message)
             throw new InvalidError({ reason: 'message' })
+          const named = parseSiweMessage(message)
+          // A store that another instance shares holds its challenges too, which name its origin.
+          const url =
+            named.uri && origins.includes(named.uri)
+              ? new URL(named.uri)
+              : undefined
+          if (!url || named.domain !== url.host)
+            throw new InvalidError({ reason: 'message' })
 
           // The caller names the signer, so a value that is no address signs nothing.
           if (!Address.validate(parameters.address, { strict: false }))
             throw new InvalidError({ reason: 'signer' })
           const address = Address.checksum(parameters.address)
-          const named = parseSiweMessage(message)
           // A message for an account that the backend did not know names the zero address, and the
           // signature binds the signer.
           if (
@@ -770,12 +812,12 @@ export declare namespace siwe {
     lifetime?: number | undefined
     /**
      * The app's public origin, such as `https://app.example`, which each message names as its
-     * domain and URI. `start`, `challenge`, and `approve` then refuse a request whose `Origin`
-     * header, or URL without one, names another origin, with the reason `origin`. Absent, each
-     * message names the request's origin, so a server that answers any `Host` header sets it.
-     * Without it, a request through another host receives a message that names that host, and
-     * Tempo ID shows no warning for it. A list names every origin of the app's pages, such as for
-     * an API that serves several, and each message names the request's.
+     * domain and URI. `start`, `challenge`, and `approve` refuse a request whose `Origin` header,
+     * or URL without one, names another origin, with the reason `origin`, and `complete` refuses a
+     * challenge of another origin. A list names every origin of the app's pages, such as for an API
+     * that serves several, and each message names the request's. Defaults to the origin of the
+     * instance's `redirectUri`, or else of its `clientId`, if it is an `http` or `https` URL.
+     * Without such a URL, the creation of the instance throws.
      */
     origin?: string | readonly string[] | undefined
     /**
@@ -796,8 +838,8 @@ export declare namespace siwe {
 
   /** The settings of the plugin on a backend that its routes read. */
   type Settings = {
-    /** The app's public origins, from the plugin's `origin`. Absent without it. */
-    origins: readonly string[] | undefined
+    /** The app's public origins, from the plugin's `origin`. */
+    origins: readonly string[]
     /** Whether the routes hand the session to the page as a token. */
     token: boolean
   }
@@ -806,10 +848,7 @@ export declare namespace siwe {
     type Parameters = {
       /** The message that `challenge` returned, as the account signed it. */
       message: string
-      /**
-       * The request of the change, whose origin the message must name without the plugin's
-       * `origin`.
-       */
+      /** The request of the change, whose origin, one of the plugin's `origin`, the message names. */
       request: Request
       /** The resources of the change, as the app derives them from the request. Defaults to none. */
       resources?: readonly string[] | undefined
@@ -824,7 +863,7 @@ export declare namespace siwe {
 
   namespace challenge {
     type Parameters = {
-      /** The request of the change, whose origin the message names without the plugin's `origin`. */
+      /** The request of the change, whose origin, one of the plugin's `origin`, the message names. */
       request: Request
       /**
        * The resources of the change, each an RFC 3986 URI, such as
@@ -877,7 +916,7 @@ export declare namespace siwe {
        * Defaults to the instance's chain.
        */
       chainId?: number | undefined
-      /** The request of the sign-in, whose origin the message names without the plugin's `origin`. */
+      /** The request of the sign-in, whose origin, one of the plugin's `origin`, the message names. */
       request: Request
     }
   }
@@ -907,6 +946,15 @@ function envelopeOf(signature: `0x${string}`) {
   } catch {
     return undefined
   }
+}
+
+/** The value of the first `name: value` line of a SIWE message after its first line. */
+function fieldOf(message: string, name: string) {
+  const prefix = `\n${name}: `
+  const start = message.indexOf(prefix)
+  if (start === -1) return undefined
+  const end = message.indexOf('\n', start + prefix.length)
+  return message.slice(start + prefix.length, end === -1 ? undefined : end)
 }
 
 /** Returns a new ID: 32 random bytes in unpadded URL-safe Base64. */

@@ -20,6 +20,8 @@ export type Deposit = {
   address?: `0x${string}` | undefined
   /** The amount that the app needs in the Tempo Account, as a decimal string. */
   amount?: string | undefined
+  /** The chain of the deposit. Defaults to the instance's. */
+  chainId?: number | undefined
   /** The currency of the amount, such as `USD`. */
   currency?: string | undefined
   /** How the deposit page shows. Defaults to the frame of a dialog. */

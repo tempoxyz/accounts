@@ -637,7 +637,8 @@ async function authorize<
 
   // The sign-in takes the preloaded frame of the same redirect URI, and keeps it loaded for the next
   // sign-in once it settles. A frame of another redirect URI closes, and so does one that the page
-  // removed, such as when a framework mounts into the body after the client preloads it.
+  // removed, such as when a framework mounts into the body after the client preloads it, or one
+  // in a scheme that the page no longer declares.
   const reused =
     mode === 'iframe' &&
     entry?.redirectUri === redirectUri &&

@@ -8,7 +8,7 @@
 import { Address, Secp256k1 } from 'ox'
 import { KeyAuthorization, TxEnvelopeTempo } from 'ox/tempo'
 import { custom, http } from 'viem'
-import type { Account } from 'viem/tempo'
+import { type Account, Actions } from 'viem/tempo'
 import { describe, expect, test } from 'vite-plus/test'
 import {
   createActor,
@@ -382,8 +382,8 @@ describe('viem', () => {
       .poll(() => AccessKey.expired(accessKey), { timeout: 5_000 })
       .toBe(true)
 
-    // Tempo ID sends a change of an access key, so its request leaves for Tempo ID. The refused
-    // transfer below empties the session, so the change runs first.
+    // The status shows the sign-out once the access key expired, so a change of an access key reads
+    // the client's account as signed out, and sends no request.
     const revoked = await accounts.accessKey
       .revoke({ accessKey: '0x0000000000000000000000000000000000000002' })
       .catch((error: unknown) => (error as Error).name)
@@ -407,7 +407,74 @@ describe('viem', () => {
         "sent": [],
       }
     `)
-    expect(revoked).toMatchInlineSnapshot(`"TypeError"`)
+    expect(revoked).toMatchInlineSnapshot(`"Accounts.SignedOutError"`)
+  })
+
+  test("rejects Viem's standalone transfer with SignedOutError once the access key expired, and reads no account", async () => {
+    const store = Store.memory()
+    const owner = Secp256k1.randomPrivateKey()
+    // At least a second before the access key expires, so the instance reads it while it lives.
+    const accessKey = createAccessKey({ chainId: 4217, expiry: 2, owner })
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]',
+      {
+        state: {
+          session: Session.from({
+            accessKey,
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const sent: string[] = []
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'https://app.example.com',
+      plugins: [
+        viem({
+          // Nothing listens at the URL, so the transport records each request that would reach a node.
+          transport: http('http://127.0.0.1:9', {
+            async onFetchRequest(request) {
+              const body = (await request.clone().json()) as { method: string }
+              sent.push(body.method)
+            },
+            retryCount: 0,
+          }),
+        }),
+      ],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+    await expect
+      .poll(() => accounts.session.status.get().status, { timeout: 5_000 })
+      .toBe('signedOut')
+
+    const account = (() => {
+      try {
+        return accounts.viem.account.address
+      } catch (error) {
+        return error
+      }
+    })()
+    const error = await Actions.token
+      .transferSync(accounts.viem, {
+        amount: 1n,
+        to: '0x0000000000000000000000000000000000000001',
+        token: '0x20c0000000000000000000000000000000000000',
+      })
+      .catch((error: unknown) => error)
+
+    expect({ account, error, sent }).toMatchInlineSnapshot(`
+      {
+        "account": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "error": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "sent": [],
+      }
+    `)
   })
 
   test('empties the session at the refusal of a transfer of an access key that expired, so the status shows the sign-out', async () => {

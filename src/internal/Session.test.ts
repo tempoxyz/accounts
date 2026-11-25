@@ -781,6 +781,39 @@ describe('machines.session', () => {
         ]
       `)
     })
+
+    test('requests no write at a set of a session that the store holds, and sets it', () => {
+      const saved: (string | undefined)[] = []
+      const actor = createActor(
+        machines.session.provide({
+          actions: {
+            save: (args) => {
+              saved.push(args.context.session?.refreshToken)
+            },
+          },
+        }),
+      ).start()
+
+      actor.send({ session: expired, type: 'set' })
+      actor.send({ saved: true, session: renewed, type: 'set' })
+
+      const { session, version } = actor.getSnapshot().context
+      expect({
+        saved,
+        session: session?.refreshToken,
+        value: actor.getSnapshot().value,
+        version,
+      }).toMatchInlineSnapshot(`
+        {
+          "saved": [
+            "expired",
+          ],
+          "session": "renewed",
+          "value": "signedIn",
+          "version": 2,
+        }
+      `)
+    })
   })
 
   describe('expiry', () => {

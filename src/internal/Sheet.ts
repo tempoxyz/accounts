@@ -88,7 +88,8 @@ const payment = {
  * degree point, as the design system draws them. A click on the backdrop
  * targets the dialog, so the dialog takes no selection, which repeated clicks would draw over the
  * frame. The dialog's fill is the design system's `background.elevated`, which the frame's page
- * draws too, so the dialog shows no seam while the frame loads. IntersectionObserver v2 reports the
+ * draws too, so the dialog shows no seam while the frame loads. {@link scheme} sets the dialog's
+ * color scheme, and the frame inherits it, so its page draws in the same scheme. IntersectionObserver v2 reports the
  * frame not visible under an opacity below 1 or a scale, and `/embed` waits for a visible frame
  * before it acts. So the card's entrance translates without a scale, and its fade takes 120
  * milliseconds of the 320 that the translate takes. The frame takes the height that its page reports,
@@ -103,7 +104,6 @@ dialog[${attribute}] {
   border-radius: 20px;
   box-shadow: 0 16px 48px rgb(0 0 0 / 0.24);
   color: CanvasText;
-  color-scheme: light dark;
   margin: auto;
   max-height: calc(100dvh - 32px);
   max-width: calc(100vw - 32px);
@@ -127,7 +127,7 @@ dialog[${attribute}]::backdrop {
 }
 dialog[${attribute}] iframe {
   border: 0;
-  color-scheme: normal;
+  color-scheme: inherit;
   display: block;
   max-height: inherit;
   width: 100%;
@@ -306,6 +306,9 @@ export function create(options: create.Options): create.ReturnType {
   // shows.
   dialog.setAttribute('aria-hidden', 'true')
   dialog.inert = true
+  // The frame's page takes the scheme from its URL, so the dialog keeps the scheme it loads with.
+  const colorScheme = scheme()
+  dialog.style.colorScheme = colorScheme
 
   const frame = document.createElement('iframe')
   // The frame runs the passkey ceremonies for Tempo ID's origin, a sign-in and a new user's passkey
@@ -513,7 +516,7 @@ export function create(options: create.Options): create.ReturnType {
     if (!blank) actor.send({ type: 'frame.load' })
   })
 
-  frame.src = url
+  frame.src = schemed(url, { colorScheme })
   dialog.appendChild(frame)
   document.body.appendChild(dialog)
 
@@ -524,7 +527,7 @@ export function create(options: create.Options): create.ReturnType {
     close() {
       actor.send({ animate: animate(), type: 'close' })
     },
-    connected: () => dialog.isConnected,
+    connected: () => dialog.isConnected && scheme() === colorScheme,
     hide() {
       if (machines.failed(actor.getSnapshot())) return false
       actor.send({ animate: animate(), type: 'hide' })
@@ -556,7 +559,10 @@ export function create(options: create.Options): create.ReturnType {
       return id
     },
     trusted: () => machines.trusted(actor.getSnapshot()),
-    usable: () => dialog.isConnected && !machines.failed(actor.getSnapshot()),
+    usable: () =>
+      dialog.isConnected &&
+      scheme() === colorScheme &&
+      !machines.failed(actor.getSnapshot()),
   }
 }
 
@@ -586,8 +592,9 @@ export declare namespace create {
     /** Closes the dialog, after its exit, and removes it with its frame and any popup it opened. */
     close: () => void
     /**
-     * Returns whether the dialog is still in the document. A page can remove it, such as a framework
-     * that mounts into the body after the dialog loads.
+     * Returns whether the dialog is still in the document, in the scheme of the app's page. A page
+     * can remove it, such as a framework that mounts into the body after the dialog loads, or change
+     * its scheme.
      */
     connected: () => boolean
     /**
@@ -614,8 +621,8 @@ export declare namespace create {
      */
     trusted: () => boolean | undefined
     /**
-     * Returns whether the dialog is still in the document and its frame has not failed, so the next
-     * `show` can take the frame.
+     * Returns whether the dialog is still in the document, in the scheme of the app's page, and its
+     * frame has not failed, so the next `show` can take the frame.
      */
     usable: () => boolean
   }
@@ -663,6 +670,7 @@ export function waiting(options: waiting.Options): waiting.ReturnType {
   const dialog = document.createElement('dialog')
   dialog.setAttribute(attribute, '')
   dialog.setAttribute('aria-label', 'Continue with Tempo')
+  dialog.style.colorScheme = scheme()
 
   const panel = document.createElement('div')
   panel.setAttribute('data-panel', '')
@@ -735,6 +743,7 @@ export function prompt(options: prompt.Options): prompt.ReturnType {
   const dialog = document.createElement('dialog')
   dialog.setAttribute(attribute, '')
   dialog.setAttribute('aria-label', label)
+  dialog.style.colorScheme = scheme()
 
   const panel = document.createElement('div')
   panel.setAttribute('data-panel', '')
@@ -816,6 +825,9 @@ export function load(options: load.Options): load.ReturnType {
   dialog.setAttribute('aria-hidden', 'true')
   dialog.setAttribute('aria-label', options.label)
   dialog.inert = true
+  // The frame's page takes the scheme from its URL, so the dialog keeps the scheme it loads with.
+  const colorScheme = scheme()
+  dialog.style.colorScheme = colorScheme
 
   const element = document.createElement('iframe')
   // The frame may never navigate this page.
@@ -826,7 +838,7 @@ export function load(options: load.Options): load.ReturnType {
   element.setAttribute('sandbox', options.sandbox)
   element.setAttribute('title', 'Tempo ID')
   element.style.height = '420px'
-  element.src = options.url
+  element.src = schemed(options.url, { colorScheme })
   // An inert frame's page takes no focus or input, so a covered page cannot approve.
   element.inert = options.covered === true
 
@@ -1051,7 +1063,10 @@ export function load(options: load.Options): load.ReturnType {
         if (child instanceof HTMLElement) child.inert = false
     },
     // The offer of a popup replaces the frame, so a frame that offers one shows no page.
-    usable: () => state.phase === 'hidden' && element.isConnected,
+    usable: () =>
+      state.phase === 'hidden' &&
+      element.isConnected &&
+      scheme() === colorScheme,
     window: () => element.contentWindow,
   }
 }
@@ -1132,8 +1147,8 @@ export declare namespace load {
      */
     uncover: (options?: { challenge?: string | undefined }) => void
     /**
-     * Whether a call can still show the dialog: it is not closed or shown, the page holds it, and
-     * its frame offers no popup.
+     * Whether a call can still show the dialog: it is not closed or shown, the page holds it in the
+     * scheme of the app's page, and its frame offers no popup.
      */
     usable: () => boolean
     /**
@@ -1238,6 +1253,45 @@ function address(funding: unknown) {
   if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(value))
     return undefined
   return value as `0x${string}`
+}
+
+/**
+ * Returns the color scheme of the app's page, which the dialog takes. A browser gives a frame the
+ * scheme of its `iframe` element as the preferred scheme, so Tempo ID's page draws in it too. A
+ * page that declares one scheme, on its root or in its `color-scheme` meta tag, decides it. A page
+ * that declares both or none takes the user's preference.
+ */
+function scheme() {
+  const root = getComputedStyle(document.documentElement).colorScheme
+  // HTML matches the meta tag's name, and CSS its keywords, without regard to case.
+  const declared =
+    root === 'normal'
+      ? (document.querySelector<HTMLMetaElement>('meta[name="color-scheme" i]')
+          ?.content ?? '')
+      : root
+  const names = declared.toLowerCase().split(/\s+/)
+  const dark = names.includes('dark')
+  if (dark !== names.includes('light')) return dark ? 'dark' : 'light'
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light'
+}
+
+/**
+ * Returns `url` with `color_scheme`, the scheme of the app's page, so Tempo ID's page draws in it.
+ * Some browsers give a frame the browser's preference, whatever the `iframe` element's scheme.
+ */
+function schemed(url: string, options: schemed.Options) {
+  const value = new URL(url)
+  value.searchParams.set('color_scheme', options.colorScheme)
+  return value.href
+}
+
+declare namespace schemed {
+  type Options = {
+    /** The scheme that {@link scheme} returned when the dialog loaded. */
+    colorScheme: ReturnType<typeof scheme>
+  }
 }
 
 /** Returns whether the dialog plays its entrance and exit, which reduced motion turns off. */
