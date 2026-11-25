@@ -8,7 +8,6 @@ import { PGlite } from '@electric-sql/pglite'
 import * as Esbuild from 'esbuild'
 import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs/promises'
-import * as Http from 'node:http'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
 import {
@@ -31,6 +30,8 @@ import {
   onTestFinished,
   test,
 } from 'vite-plus/test'
+import { createActor } from 'xstate'
+import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
 import * as DefaultAccounts from '../internal/DefaultAccounts.js'
 import * as DeviceStore from '../internal/DeviceStore.js'
@@ -625,483 +626,6 @@ describe('Actions.guest.session in other processes', () => {
     '  ],',
   ]
 
-  /**
-   * Starts a stand-in of Tempo ID's guest payment routes, which records each route with the
-   * checkout ID of its guest request. With `first: 'lost'`, the default, the first send never
-   * answers, as a response lost on the network. With `first: 'held'`, it answers once a second send
-   * arrives. `status` answers each status read: a body, or a refusal with its status code.
-   */
-  async function routes(options: {
-    first?: 'held' | 'lost' | undefined
-    /** Whether the chain holds a receipt of each transaction. Defaults to `false`. */
-    receipt?: boolean | undefined
-    /** The seconds from the prepare to the end of the transaction's window. Defaults to 290. */
-    window?: number | undefined
-    status:
-      | { paid: { transaction: `0x${string}` } | null; pending: boolean }
-      | { refusal: { reason: string; status: number } }
-  }) {
-    const recorded: {
-      checkout: string
-      route: string
-      transaction?: `0x${string}` | undefined
-    }[] = []
-    const sent = Promise.withResolvers<void>()
-    const held: Http.ServerResponse[] = []
-    const checkoutOf = (guest: unknown) =>
-      typeof guest === 'string'
-        ? (
-            JSON.parse(
-              new TextDecoder().decode(
-                Base64.toBytes(guest.split('.')[0] ?? guest),
-              ),
-            ) as { checkout: string }
-          ).checkout
-        : ''
-    const server = Http.createServer((request, response) => {
-      const url = new URL(request.url ?? '/', 'http://127.0.0.1')
-      const route = `${request.method} ${url.pathname}`
-      let text = ''
-      request.on('data', (chunk: Buffer) => {
-        text += chunk.toString()
-      })
-      request.on('end', () => {
-        const body = text
-          ? (JSON.parse(text) as {
-              guest?: string
-              id?: number
-              method?: string
-              params?: readonly string[]
-              transaction?: `0x${string}`
-            })
-          : {}
-        const reply = (body: unknown, target = response, status = 200) => {
-          target.writeHead(status, { 'content-type': 'application/json' })
-          target.end(JSON.stringify(body))
-        }
-        // The chain's RPC answers only the receipt read, with a receipt or none.
-        if (route === 'POST /rpc') {
-          recorded.push({ checkout: '', route: `RPC ${body.method}` })
-          const hash = body.params?.[0]
-          return reply({
-            id: body.id,
-            jsonrpc: '2.0',
-            result:
-              body.method === 'eth_getTransactionReceipt' && options.receipt
-                ? {
-                    blockHash: `0x${'11'.repeat(32)}`,
-                    blockNumber: '0x1',
-                    contractAddress: null,
-                    cumulativeGasUsed: '0x1',
-                    effectiveGasPrice: '0x1',
-                    from: to,
-                    gasUsed: '0x1',
-                    logs: [],
-                    logsBloom: `0x${'00'.repeat(256)}`,
-                    status: '0x1',
-                    to: ousd,
-                    transactionHash: hash,
-                    transactionIndex: '0x0',
-                    type: '0x76',
-                  }
-                : body.method === 'eth_chainId'
-                  ? '0x107d'
-                  : null,
-          })
-        }
-        const guest = url.searchParams.get('guest') ?? body.guest
-        recorded.push({
-          checkout: checkoutOf(guest),
-          route,
-          transaction: body.transaction,
-        })
-        if (route === 'GET /i/guest/pay')
-          return reply({
-            faucet: false,
-            fee: null,
-            refusal: null,
-            shortfall: null,
-            sponsored: true,
-            token: ousd,
-          })
-        if (route === 'POST /i/guest/pay')
-          return reply({
-            tag: 'tag-1',
-            transaction: transaction({
-              validBefore:
-                Math.floor(Date.now() / 1_000) + (options.window ?? 290),
-            }),
-          })
-        if (route === 'POST /i/guest/pay/send') {
-          if (recorded.filter((entry) => entry.route === route).length === 1) {
-            held.push(response)
-            return sent.resolve()
-          }
-          if (options.first === 'held')
-            for (const first of held.splice(0))
-              reply({ paid: { transaction: `0x${'ef'.repeat(32)}` } }, first)
-          return reply({ paid: { transaction: `0x${'cd'.repeat(32)}` } })
-        }
-        if (route === 'GET /i/guest/pay/status')
-          return 'refusal' in options.status
-            ? reply(
-                {
-                  error: 'invalid_request',
-                  error_description: 'Invalid request: refused.',
-                  reason: options.status.refusal.reason,
-                },
-                response,
-                options.status.refusal.status,
-              )
-            : reply(options.status)
-        if (route === 'POST /i/guest/pay/cancel')
-          return reply({ cancelled: true })
-        response.writeHead(404).end()
-      })
-    })
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    onTestFinished(
-      () =>
-        new Promise<void>((resolve) => {
-          for (const response of held) response.destroy()
-          server.close(() => resolve())
-        }),
-    )
-    const { port } = server.address() as { port: number }
-    return { recorded, sent: sent.promise, url: `http://127.0.0.1:${port}` }
-  }
-
-  /**
-   * Ends the lease of each stored checkout in the file at `path`, as the lease of a process that
-   * exited ends once its time passes.
-   */
-  async function expire(path: string) {
-    const entries = JSON.parse(await Fs.readFile(path, 'utf8')) as Record<
-      string,
-      { value: Record<string, { leaseUntil: number }> }
-    >
-    for (const [key, entry] of Object.entries(entries))
-      if (key.includes(':payment:'))
-        for (const checkout of Object.values(entry.value))
-          checkout.leaseUntil = 0
-    await Fs.writeFile(path, JSON.stringify(entries))
-  }
-
-  /** Returns a program that pays `payment` from the guest account of the file at `path`. */
-  function payer(options: { path: string; url: string }) {
-    return bundle([
-      "import * as Accounts from '../Accounts.ts'",
-      "import * as SignIn from '../internal/SignIn.ts'",
-      "import * as Plugin from '../Plugin.ts'",
-      "import { viem } from '../plugins/viem.ts'",
-      "import * as Store from '../Store.ts'",
-      "import { http } from 'viem'",
-      'const accounts = Accounts.create({',
-      '  chain: 4217,',
-      "  clientId: 'cli:guest-example',",
-      '  guest: true,',
-      '  plugins: [',
-      '    Plugin.from({',
-      '      actions: (context) => ({',
-      '        guest: () => SignIn.guest(context, { change: context.session.change() }),',
-      '      }),',
-      "      id: 'pick',",
-      '    }),',
-      `    viem({ transport: http(${JSON.stringify(`${options.url}/rpc`)}) }),`,
-      '  ],',
-      `  store: Store.file(${JSON.stringify(options.path)}),`,
-      `  url: ${JSON.stringify(options.url)},`,
-      '})',
-      'if (!(await accounts.session.get())) await accounts.pick.guest()',
-      `const paid = await accounts.pay(${JSON.stringify(payment)})`,
-      'process.stdout.write(JSON.stringify(paid.transaction))',
-      'process.exit(0)',
-    ])
-  }
-
-  test('resumes the checkout of a send whose response was lost after the process exited, and returns its payment with no second send', async () => {
-    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
-    const path = Path.join(directory, 'store.json')
-    const transaction = `0x${'ab'.repeat(32)}` as const
-    // The first transfer landed, so its checkout's status reads paid.
-    const tempoId = await routes({
-      status: { paid: { transaction }, pending: false },
-    })
-    const program = await payer({ path, url: tempoId.url })
-
-    const first = start(program)
-    const exited = first.output.catch(() => undefined)
-    await tempoId.sent
-    first.kill()
-    await exited
-    await expire(path)
-    const resumed = JSON.parse(await run(program))
-    const stored = JSON.parse(await Fs.readFile(path, 'utf8'))
-
-    const [opened] = tempoId.recorded
-    expect({
-      checkouts: tempoId.recorded.map(
-        (entry) => entry.checkout === opened?.checkout,
-      ),
-      resumed: resumed === transaction,
-      routes: tempoId.recorded.map((entry) => entry.route),
-      stored: Object.keys(stored).some((key) => key.includes(':payment:')),
-    }).toMatchInlineSnapshot(`
-      {
-        "checkouts": [
-          true,
-          true,
-          true,
-          true,
-        ],
-        "resumed": true,
-        "routes": [
-          "GET /i/guest/pay",
-          "POST /i/guest/pay",
-          "POST /i/guest/pay/send",
-          "GET /i/guest/pay/status",
-        ],
-        "stored": false,
-      }
-    `)
-  })
-
-  test('keeps the lost checkout of two payments of the same terms that run at once, and resumes it after a restart while the other one paid', async () => {
-    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
-    const path = Path.join(directory, 'store.json')
-    const transaction = `0x${'ab'.repeat(32)}` as const
-    // The lost transfer landed, so its checkout's status reads paid.
-    const tempoId = await routes({
-      status: { paid: { transaction }, pending: false },
-    })
-    await Accounts.create({
-      chain: 4217,
-      clientId: 'cli:guest-example',
-      guest: true,
-      plugins: [pick()],
-      store: Store.file(path),
-      url: tempoId.url,
-    }).pick.guest()
-    const program = await payer({ path, url: tempoId.url })
-
-    // The first send that arrives gets no response, and the other one pays.
-    const payments = [start(program), start(program)]
-    const outputs = payments.map((payment) =>
-      payment.output.catch(() => undefined),
-    )
-    await tempoId.sent
-    await expect
-      .poll(
-        () =>
-          tempoId.recorded.filter(
-            (entry) => entry.route === 'POST /i/guest/pay/send',
-          ).length,
-      )
-      .toBe(2)
-    const finished = await Promise.race(outputs)
-    for (const payment of payments) payment.kill()
-    await Promise.all(outputs)
-    await expire(path)
-    const before = tempoId.recorded.length
-    const resumed = JSON.parse(await run(program))
-
-    const sends = tempoId.recorded.filter(
-      (entry) => entry.route === 'POST /i/guest/pay/send',
-    )
-    const lost = sends[0]?.checkout
-    expect({
-      // The payment that paid returned the other checkout's transaction.
-      finished: finished === JSON.stringify(`0x${'cd'.repeat(32)}`),
-      resumed: resumed === transaction,
-      restart: tempoId.recorded
-        .slice(before)
-        .map(
-          (entry) =>
-            `${entry.route} ${entry.checkout === lost ? 'lost' : 'other'}`,
-        ),
-      stored: Object.keys(JSON.parse(await Fs.readFile(path, 'utf8'))).some(
-        (key) => key.includes(':payment:'),
-      ),
-    }).toMatchInlineSnapshot(`
-      {
-        "finished": true,
-        "restart": [
-          "GET /i/guest/pay/status lost",
-        ],
-        "resumed": true,
-        "stored": false,
-      }
-    `)
-  })
-
-  test("returns the landed transfer of a stored checkout whose payment Tempo ID forgot, from the chain's receipt, with no second send", async () => {
-    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
-    const path = Path.join(directory, 'store.json')
-    // Tempo ID forgets a paid checkout a day after its receipt, so its status reads unpaid, and no
-    // transaction can land. The chain still holds the receipt.
-    const tempoId = await routes({
-      receipt: true,
-      status: { paid: null, pending: false },
-      window: -1,
-    })
-    const program = await payer({ path, url: tempoId.url })
-
-    const first = start(program)
-    const exited = first.output.catch(() => undefined)
-    await tempoId.sent
-    first.kill()
-    await exited
-    await expire(path)
-    const before = tempoId.recorded.length
-    const resumed = JSON.parse(await run(program))
-
-    const signed = tempoId.recorded.find(
-      (entry) => entry.route === 'POST /i/guest/pay/send',
-    )?.transaction
-    expect({
-      resumed: !!signed && resumed === Hash.keccak256(signed),
-      restart: tempoId.recorded.slice(before).map((entry) => entry.route),
-    }).toMatchInlineSnapshot(`
-      {
-        "restart": [
-          "GET /i/guest/pay/status",
-          "RPC eth_getTransactionReceipt",
-        ],
-        "resumed": true,
-      }
-    `)
-  })
-
-  test('skips the stored checkout of a payment of the same terms that still runs, so each of the two payments pays once', async () => {
-    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
-    const path = Path.join(directory, 'store.json')
-    // A status read or a cancellation of the running payment's checkout would show in the routes.
-    const tempoId = await routes({
-      first: 'held',
-      status: { paid: null, pending: false },
-    })
-    const program = await payer({ path, url: tempoId.url })
-
-    // The first payment waits for its send's response while the second one starts.
-    const first = start(program)
-    await tempoId.sent
-    const second = await run(program)
-    const output = await first.output
-
-    const [opened] = tempoId.recorded
-    expect({
-      outputs: [output, second].map((value) => JSON.parse(value) as string),
-      routes: tempoId.recorded.map(
-        (entry) =>
-          `${entry.route} ${entry.checkout === opened?.checkout ? 'first' : 'second'}`,
-      ),
-      stored: Object.keys(JSON.parse(await Fs.readFile(path, 'utf8'))).some(
-        (key) => key.includes(':payment:'),
-      ),
-    }).toMatchInlineSnapshot(`
-      {
-        "outputs": [
-          "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
-          "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
-        ],
-        "routes": [
-          "GET /i/guest/pay first",
-          "POST /i/guest/pay first",
-          "POST /i/guest/pay/send first",
-          "GET /i/guest/pay second",
-          "POST /i/guest/pay second",
-          "POST /i/guest/pay/send second",
-        ],
-        "stored": false,
-      }
-    `)
-  })
-
-  test('removes a stored checkout whose status Tempo ID refuses for good, and pays once with a new checkout', async () => {
-    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
-    const path = Path.join(directory, 'store.json')
-    // The chain holds no receipt, and the transaction's window passed.
-    const tempoId = await routes({
-      status: { refusal: { reason: 'invalid_field', status: 400 } },
-      window: -1,
-    })
-    const program = await payer({ path, url: tempoId.url })
-
-    const first = start(program)
-    const exited = first.output.catch(() => undefined)
-    await tempoId.sent
-    first.kill()
-    await exited
-    await expire(path)
-    await run(program)
-
-    const [opened] = tempoId.recorded
-    expect({
-      routes: tempoId.recorded.map((entry) =>
-        entry.checkout
-          ? `${entry.route} ${entry.checkout === opened?.checkout ? 'first' : 'new'}`
-          : entry.route,
-      ),
-      stored: Object.keys(JSON.parse(await Fs.readFile(path, 'utf8'))).some(
-        (key) => key.includes(':payment:'),
-      ),
-    }).toMatchInlineSnapshot(`
-      {
-        "routes": [
-          "GET /i/guest/pay first",
-          "POST /i/guest/pay first",
-          "POST /i/guest/pay/send first",
-          "GET /i/guest/pay/status first",
-          "RPC eth_getTransactionReceipt",
-          "GET /i/guest/pay new",
-          "POST /i/guest/pay new",
-          "POST /i/guest/pay/send new",
-        ],
-        "stored": false,
-      }
-    `)
-  })
-
-  test('cancels the stored checkout of a send that can no longer land, and pays once with a new checkout', async () => {
-    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
-    const path = Path.join(directory, 'store.json')
-    // The chain holds no receipt, and the transaction's window passed.
-    const tempoId = await routes({
-      status: { paid: null, pending: false },
-      window: -1,
-    })
-    const program = await payer({ path, url: tempoId.url })
-
-    const first = start(program)
-    const exited = first.output.catch(() => undefined)
-    await tempoId.sent
-    first.kill()
-    await exited
-    await expire(path)
-    await run(program)
-
-    const [opened] = tempoId.recorded
-    expect(
-      tempoId.recorded.map((entry) =>
-        entry.checkout
-          ? `${entry.route} ${entry.checkout === opened?.checkout ? 'first' : 'new'}`
-          : entry.route,
-      ),
-    ).toMatchInlineSnapshot(`
-      [
-        "GET /i/guest/pay first",
-        "POST /i/guest/pay first",
-        "POST /i/guest/pay/send first",
-        "GET /i/guest/pay/status first",
-        "RPC eth_getTransactionReceipt",
-        "POST /i/guest/pay/cancel first",
-        "GET /i/guest/pay new",
-        "POST /i/guest/pay new",
-        "POST /i/guest/pay/send new",
-      ]
-    `)
-  })
-
   test("creates and saves the guest account in a `cli:` client's default store, whose instance in another process adopts it", async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     // Each process reads `TEMPO_HOME` at its first store call, so the default store is the file in
@@ -1380,80 +904,304 @@ describe('Actions.guest.session in other processes', () => {
   }, 60_000)
 })
 
-describe('Accounts.pay of a guest session outside a page', () => {
-  test('sends no transfer after a sign-out during the signature of the guest request of the send, and rejects with `SignedOutError`', async () => {
-    // Tempo ID's guest routes, as a local server that records each request and answers the read
-    // and the prepare of a covered payment.
-    const routes: string[] = []
-    const server = Http.createServer((request, response) => {
-      const route = `${request.method} ${new URL(request.url ?? '/', 'http://127.0.0.1').pathname}`
-      routes.push(route)
-      request.resume()
-      request.on('end', () => {
-        const body = (() => {
-          if (route === 'GET /i/guest/pay')
-            return {
-              faucet: false,
-              fee: null,
-              refusal: null,
-              shortfall: null,
-              sponsored: true,
-              token: ousd,
-            }
-          if (route === 'POST /i/guest/pay') {
-            // The next reads of the key pair sign the transfer, then the guest request of the send.
-            armed = true
-            return { tag: 'tag-1', transaction: transaction() }
-          }
-          return { paid: { transaction: `0x${'ab'.repeat(32)}` } }
-        })()
-        response.writeHead(200, { 'content-type': 'application/json' })
-        response.end(JSON.stringify(body))
-      })
-    })
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    onTestFinished(
-      () => new Promise<void>((resolve) => server.close(() => resolve())),
-    )
-    const { port } = server.address() as { port: number }
-    const memory = Store.memory()
-    let armed = false
-    let reads = 0
-    const accounts = Accounts.create({
-      chain: 4217,
-      clientId: 'cli:guest-example',
-      guest: true,
-      plugins: [pick()],
-      // The second read of the key pair after the prepare signs the guest request of the send, and
-      // the instance signs out during it.
-      store: Store.from({
-        ...memory,
-        getItem: async (key) => {
-          if (
-            armed &&
-            key.startsWith('tempo-id:guest:') &&
-            !key.includes(':payment:') &&
-            ++reads === 2
-          )
-            await accounts.signOut()
-          return await memory.getItem(key)
+describe('Actions.guest.settlement', () => {
+  /** The time of each row, in Unix milliseconds: 100 seconds after the transaction's window. */
+  const now = 1_700_000_100_000
+  const hash = `0x${'ab'.repeat(32)}` as const
+  const paid = `0x${'cd'.repeat(32)}` as const
+  /** A stored checkout of a call that ended, whose window ended at `now` minus 100 seconds. */
+  const ended = { hash, leaseUntil: 0, validBefore: 1_700_000_000 }
+  /** A stored checkout whose window ended at `now` minus 30 seconds, within `settleMargin`. */
+  const recent = { hash, leaseUntil: 0, validBefore: 1_700_000_070 }
+  /** A stored checkout whose window ends 100 seconds after `now`. */
+  const open = { hash, leaseUntil: 0, validBefore: 1_700_000_200 }
+  const unpaid = { paid: null, pending: false } as const
+  const day = 24 * 60 * 60
+
+  test.for([
+    [
+      'waits for a checkout whose call still holds its lease, such as a payment of the same terms that runs',
+      {
+        entry: { ...ended, leaseUntil: now + 1 },
+        receipt: 'unknown',
+        status: 'unknown',
+      },
+      'held',
+    ],
+    [
+      'settles a checkout whose lease expired, such as after its process exited',
+      {
+        entry: { ...ended, leaseUntil: now - 1 },
+        receipt: 'missing',
+        status: unpaid,
+      },
+      'cancel',
+    ],
+    [
+      "returns the paid transaction of Tempo ID's status, nested as the route returns it",
+      { entry: ended, receipt: 'unknown', status: { paid, pending: false } },
+      `paid ${paid}`,
+    ],
+    [
+      'returns the signed transaction that the chain holds a receipt of, though Tempo ID forgot it',
+      {
+        entry: { ...ended, validBefore: ended.validBefore - day },
+        receipt: 'success',
+        status: unpaid,
+      },
+      `paid ${hash}`,
+    ],
+    [
+      'cancels a checkout that Tempo ID still remembers as unpaid after the window, without a receipt',
+      { entry: ended, receipt: 'missing', status: unpaid },
+      'cancel',
+    ],
+    [
+      'cancels a sponsored checkout that Tempo ID still remembers as unpaid after the window, with no known hash',
+      {
+        entry: { ...ended, hash: undefined },
+        receipt: 'unknown',
+        status: unpaid,
+      },
+      'cancel',
+    ],
+    [
+      'keeps a sponsored checkout unknown after Tempo ID forgets paid checkouts, with no known hash',
+      {
+        entry: {
+          ...ended,
+          hash: undefined,
+          validBefore: ended.validBefore - day,
         },
-      }),
-      url: `http://127.0.0.1:${port}`,
-    })
+        receipt: 'unknown',
+        status: unpaid,
+      },
+      'pending',
+    ],
+    [
+      'cancels a checkout that Tempo ID forgot, whose transaction the chain holds no receipt of after the window',
+      {
+        entry: { ...ended, validBefore: ended.validBefore - day },
+        receipt: 'missing',
+        status: unpaid,
+      },
+      'cancel',
+    ],
+    [
+      'keeps a checkout that Tempo ID forgot unknown without a client of the chain',
+      {
+        entry: { ...ended, validBefore: ended.validBefore - day },
+        receipt: 'unknown',
+        status: unpaid,
+      },
+      'pending',
+    ],
+    [
+      'cancels a checkout whose transaction reverted',
+      { entry: open, receipt: 'reverted', status: unpaid },
+      'cancel',
+    ],
+    [
+      'waits for a checkout within its window, whose transaction can still land',
+      { entry: open, receipt: 'missing', status: unpaid },
+      'wait',
+    ],
+    [
+      'waits for a send that can still land, within the margin after the window',
+      {
+        entry: recent,
+        receipt: 'missing',
+        status: { paid: null, pending: true },
+      },
+      'wait',
+    ],
+    [
+      'rejects as pending a send that can still land after the window and its margin',
+      {
+        entry: { ...ended, validBefore: ended.validBefore - 60 },
+        receipt: 'missing',
+        status: { paid: null, pending: true },
+      },
+      'pending',
+    ],
+    [
+      'forgets a checkout that Tempo ID refuses for good, whose transaction never landed',
+      { entry: ended, receipt: 'missing', status: 'refused' },
+      'forget',
+    ],
+    [
+      'keeps a checkout that Tempo ID refuses for good unknown without a receipt read',
+      {
+        entry: { ...ended, validBefore: ended.validBefore - 60 },
+        receipt: 'unknown',
+        status: 'refused',
+      },
+      'pending',
+    ],
+    [
+      'waits after a failed status read within the margin',
+      { entry: recent, receipt: 'missing', status: 'unknown' },
+      'wait',
+    ],
+    [
+      "settles the call's own checkout, which its own lease holds",
+      {
+        entry: { ...ended, leaseUntil: now + 1 },
+        own: true,
+        receipt: 'missing',
+        status: unpaid,
+      },
+      'cancel',
+    ],
+  ] as const)('%s', ([, options, expected]) => {
+    const step = Guest.settlement({
+      now,
+      ...options,
+    } as Guest.settlement.Options)
 
-    await accounts.pick.guest()
-    const error = await accounts.pay(payment).catch((error: unknown) => error)
+    expect(step.type === 'paid' ? `paid ${step.transaction}` : step.type).toBe(
+      expected,
+    )
+  })
+})
 
-    expect([error, reads, routes]).toMatchInlineSnapshot(`
+describe('machines.lease', () => {
+  /** Returns the events that the runner sends from `snapshot`, keyed by every event type. */
+  function events(snapshot: Guest.machines.lease.Snapshot) {
+    const all: Record<
+      Guest.machines.lease.Event['type'],
+      Guest.machines.lease.Event | undefined
+    > = {
+      'lease.end': snapshot.matches('released')
+        ? undefined
+        : { type: 'lease.end' },
+      'lease.free': snapshot.matches('waiting')
+        ? { type: 'lease.free' }
+        : undefined,
+      'lease.hold': snapshot.matches('idle')
+        ? { type: 'lease.hold' }
+        : undefined,
+      'lease.wait': snapshot.matches('idle')
+        ? { type: 'lease.wait' }
+        : undefined,
+    }
+    return Object.values(all).filter((event) => event !== undefined)
+  }
+
+  test('reaches each state along its shortest paths', () => {
+    const paths = getShortestPaths(Guest.machines.lease, { events })
+
+    expect(
       [
-        [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
-        2,
-        [
-          "GET /i/guest/pay",
-          "POST /i/guest/pay",
-        ],
+        ...new Set(paths.map((path) => JSON.stringify(path.state.value))),
+      ].sort(),
+    ).toMatchInlineSnapshot(`
+      [
+        ""holding"",
+        ""idle"",
+        ""released"",
+        ""waiting"",
       ]
+    `)
+  })
+
+  test('handles every event type in some state', () => {
+    const actor = createActor(Guest.machines.lease).start()
+    const handled = new Set<string>()
+    const record = () => {
+      for (const type of [
+        'lease.end',
+        'lease.free',
+        'lease.hold',
+        'lease.wait',
+      ] as const)
+        if (actor.getSnapshot().can({ type })) handled.add(type)
+    }
+
+    record()
+    actor.send({ type: 'lease.wait' })
+    record()
+    actor.send({ type: 'lease.free' })
+    actor.send({ type: 'lease.hold' })
+    record()
+
+    expect([...handled].sort()).toMatchInlineSnapshot(`
+      [
+        "lease.end",
+        "lease.free",
+        "lease.hold",
+        "lease.wait",
+      ]
+    `)
+  })
+
+  test('renews the lease while it holds it, and releases it once at the end', async () => {
+    const calls: string[] = []
+    const actor = createActor(
+      Guest.machines.lease.provide({
+        actions: {
+          release: () => void calls.push('release'),
+          renew: () => void calls.push('renew'),
+        },
+        delays: { renewal: 1 },
+      }),
+    ).start()
+
+    actor.send({ type: 'lease.hold' })
+    await expect.poll(() => calls.length).toBeGreaterThanOrEqual(2)
+    actor.send({ type: 'lease.end' })
+
+    expect({
+      calls: calls.slice(0, 2),
+      last: calls.at(-1),
+      releases: calls.filter((call) => call === 'release').length,
+      state: actor.getSnapshot().value,
+    }).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "renew",
+          "renew",
+        ],
+        "last": "release",
+        "releases": 1,
+        "state": "released",
+      }
+    `)
+  })
+
+  test('checks the store while it waits for another call, and holds its own lease after the other ends', async () => {
+    const calls: string[] = []
+    const actor = createActor(
+      Guest.machines.lease.provide({
+        actions: {
+          check: () => {
+            calls.push('check')
+            // The second check finds the other call's lease ended.
+            if (calls.length === 2) actor.send({ type: 'lease.free' })
+          },
+          renew: () => void calls.push('renew'),
+        },
+        delays: { check: 1, renewal: 1 },
+      }),
+    ).start()
+
+    actor.send({ type: 'lease.wait' })
+    await expect
+      .poll(() => Guest.machines.waiting(actor.getSnapshot()))
+      .toBe(false)
+    const freed = actor.getSnapshot().value
+    actor.send({ type: 'lease.hold' })
+    await expect.poll(() => calls.includes('renew')).toBe(true)
+
+    expect({ calls: calls.slice(0, 3), freed }).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "check",
+          "check",
+          "renew",
+        ],
+        "freed": "idle",
+      }
     `)
   })
 })
