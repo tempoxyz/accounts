@@ -1003,6 +1003,66 @@ describe('Actions.guest.claims', () => {
   })
 })
 
+describe('Actions.guest.funding', () => {
+  const ousd = '0x20C0000000000000000000000000000000000000'
+  const fee = '0x20C0000000000000000000000000000000000001'
+
+  test.for([
+    [
+      "funds the missing part of the payment's token",
+      {
+        amount: '5',
+        quote: {
+          shortfall: {
+            amount: '1500000',
+            formatted: '1.5',
+            listed: true,
+            symbol: 'OUSD',
+            token: ousd,
+          },
+          token: ousd,
+        },
+      },
+      { amount: '1.5', token: ousd },
+    ],
+    [
+      'funds the fee token of a transfer whose fee the guest account pays',
+      {
+        amount: '5',
+        quote: {
+          shortfall: {
+            amount: '20000',
+            formatted: '0.02',
+            listed: false,
+            symbol: 'FEE',
+            token: fee,
+          },
+          token: ousd,
+        },
+      },
+      { amount: '0.02', token: fee },
+    ],
+    [
+      "funds the payment's amount and token without a shortfall token, from an earlier Tempo ID",
+      {
+        amount: '5',
+        quote: {
+          shortfall: {
+            amount: '1500000',
+            formatted: '1.5',
+            listed: true,
+            symbol: 'OUSD',
+          },
+          token: ousd,
+        },
+      },
+      { amount: '5', token: ousd },
+    ],
+  ] as const)('%s', ([, options, expected]) => {
+    expect(Guest.funding(options)).toEqual(expected)
+  })
+})
+
 describe('Actions.guest.settlement', () => {
   /** The time of each row, in Unix milliseconds: 100 seconds after the transaction's window. */
   const now = 1_700_000_100_000

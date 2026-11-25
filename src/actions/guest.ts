@@ -466,6 +466,41 @@ export declare namespace claims {
 }
 
 /**
+ * Returns the funding hint of a guest payment's funding code: the amount and the token that the
+ * guest account lacks, as `quote.shortfall` names them. Without a shortfall token, such as from an
+ * earlier Tempo ID, it returns the payment's amount and token.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const hint = Actions.guest.funding({ amount: '5', quote })
+ * ```
+ */
+export function funding(options: funding.Options): funding.ReturnType {
+  const { amount, quote } = options
+  if (quote.shortfall?.token)
+    return { amount: quote.shortfall.formatted, token: quote.shortfall.token }
+  return { amount, token: quote.token }
+}
+
+export declare namespace funding {
+  type Options = {
+    /** The payment's amount, in whole units of the payment's token. */
+    amount: string
+    /** The payment's quote, from `GET /i/guest/pay`. */
+    quote: Pick<Quoted, 'shortfall' | 'token'>
+  }
+
+  type ReturnType = {
+    /** The amount to fund, in whole units of `token`. */
+    amount: string
+    /** The token's address. */
+    token: `0x${string}`
+  }
+}
+
+/**
  * Forgets the instance's guest account: removes its key pair from the store. The next guest session
  * creates a new guest account. The funds of the forgotten guest account stay on its address, and no
  * key signs for it again. The instance's session stays as it is, so call it after a sign-out.
@@ -588,7 +623,21 @@ type Quoted = {
   /** Why no transaction pays, other than a shortfall. */
   refusal: Refusal | null
   /** What the guest account lacks. */
-  shortfall: { formatted: string; symbol: string } | null
+  shortfall: {
+    /** The missing amount, in base units of `token`. */
+    amount: string
+    /** The missing amount, in whole units of `token`. */
+    formatted: string
+    /** Whether the chain lists `token`. */
+    listed: boolean
+    /** The missing token's symbol. */
+    symbol: string
+    /**
+     * The missing token's address: the payment's token, or the fee token of a transfer whose fee
+     * the guest account pays. Absent from an earlier Tempo ID.
+     */
+    token?: `0x${string}` | undefined
+  } | null
   /** Whether Tempo ID's sponsor pays the fee. */
   sponsored: boolean
   /** The token's address. */
@@ -1053,12 +1102,12 @@ export async function pay(
       throw short(
         `Insufficient balance: the guest account ${session.address} lacks ${read.shortfall.formatted} ${read.shortfall.symbol}, and the chain has no faucet. Add the \`device\` plugin with \`onCode\`, so the payment shows a funding code, or fund the guest account.`,
       )
-    // The funding hint names the payment's exact token, also an unlisted one, since a deposit of
-    // another token pays nothing. The device form names no redirect URI, so its guest request
-    // names none either.
+    // The funding hint names what the guest account lacks, by the exact token's address, also an
+    // unlisted one, since a deposit of another token covers nothing. The device form names no
+    // redirect URI, so its guest request names none either.
     const code = await fund({
       chainId,
-      funding: { amount, token: read.token },
+      funding: funding({ amount, quote: read }),
       guest: await guest({ redirectUri: '' }),
       signal,
     })
