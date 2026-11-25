@@ -585,6 +585,72 @@ describe('Actions.guest.session in other processes', () => {
     }
   }
 
+  test('gives a new guest session a later revision than a stored one ahead of the clock, which an instance on `Store.file` in another process adopts', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: 'auto',
+      plugins: [
+        Plugin.from({
+          actions: (context) => ({
+            commit: (value: Session.Any) =>
+              context.session.change().commit(value),
+            reload: () => context.session.reload(),
+          }),
+          id: 'held',
+        }),
+      ],
+      store: Store.file(path),
+      url: 'http://127.0.0.1:9',
+    })
+    // A session started before the clock stepped back by an hour holds a revision ahead of it.
+    const ahead = Date.now() + 3_600_000
+    await accounts.held.commit({
+      ...(await Guest.session(accounts.config)),
+      revision: ahead,
+    })
+    await Store.file(path).setItem(
+      'tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]:revision',
+      ahead,
+    )
+    // The other process sends this one no message, so only a reload reads its session.
+    const program = await bundle([
+      "import * as Accounts from '../Accounts.ts'",
+      "import { device } from '../plugins/index.ts'",
+      "import * as Store from '../Store.ts'",
+      'const accounts = Accounts.create({',
+      '  chain: 4217,',
+      "  clientId: 'cli:guest-example',",
+      "  guest: 'auto',",
+      '  plugins: [device({ onCode: () => {} })],',
+      `  store: Store.file(${JSON.stringify(path)}),`,
+      "  url: 'http://127.0.0.1:9',",
+      '})',
+      'await accounts.session.get()',
+      'await accounts.signOut()',
+      'const session = await accounts.device.signIn()',
+      'process.stdout.write(String(session.revision))',
+      'process.exit(0)',
+    ])
+
+    const revision = Number(await run(program))
+    await accounts.held.reload()
+    const current = await accounts.session.get()
+
+    expect({
+      adopted:
+        !!current && 'revision' in current && current.revision === revision,
+      later: revision > ahead,
+    }).toMatchInlineSnapshot(`
+      {
+        "adopted": true,
+        "later": true,
+      }
+    `)
+  })
+
   test('keeps one guest account for two processes that create it at once on `Store.file`', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const path = Path.join(directory, 'store.json')

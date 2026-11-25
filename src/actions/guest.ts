@@ -784,12 +784,19 @@ export declare namespace request {
  * ```
  */
 export async function session(auth: Config): Promise<Session.GuestSession> {
-  const publicKey = publicKeyOf(await load(auth))
+  const store = storeOf(auth)
+  const key = keyOf(auth)
+  // The key pair and the revision share one lock, so two starts never take one revision.
+  const [held, revision] = await exclusive(store, { key }, async (check) => {
+    const held = await create(store, { check, key })
+    return [held, await advance(store, { check, key })] as const
+  })
+  const publicKey = publicKeyOf(held)
   return Session.from({
     address: Address.fromPublicKey(publicKey, { checksum: true }),
     kind: 'guest',
     publicKey: PublicKey.toHex(publicKey),
-    revision: Date.now(),
+    revision,
   })
 }
 
@@ -879,30 +886,70 @@ async function load(auth: Config): Promise<Key> {
       'Invalid `store`: it keeps the guest account only in the page, which a page load loses with its funds. Use a store that persists, such as the default IndexedDB store.',
     )
   const key = keyOf(auth)
-  return await exclusive(store, { key }, async (check) => {
-    const held = await read(store, { key })
-    if (held) return held
-    const value: P256Entry | WebCryptoP256.createKeyPair.ReturnType = store.json
-      ? { privateKey: P256.randomPrivateKey(), type: 'p256' }
-      : await WebCryptoP256.createKeyPair()
-    // A holder that lost the lock to another process, such as after a pause past a stale lock,
-    // writes nothing, and runs again, so it reads the other process's key pair.
-    await check?.()
-    // The first key pair lands only on an empty entry, so a key pair that another process saved,
-    // whose guest account it may have shown for funding, stays.
-    if (store.update) {
-      const stored = await store.update(key, (current) =>
-        current === undefined || current === null
-          ? { result: value as unknown, value }
-          : { result: current, value: current },
-      )
-      return decode(stored)
-    }
-    const again = await read(store, { key })
-    if (again) return again
-    await store.setItem(key, value)
-    return decode(value)
-  })
+  return await exclusive(store, { key }, (check) =>
+    create(store, { check, key }),
+  )
+}
+
+/**
+ * Returns the guest account's stored key pair, or creates and saves one. The caller holds the lock
+ * of {@link exclusive}, whose `check` throws once another process took it.
+ */
+async function create(store: Store, options: create.Options): Promise<Key> {
+  const { check, key } = options
+  const held = await read(store, { key })
+  if (held) return held
+  const value: P256Entry | WebCryptoP256.createKeyPair.ReturnType = store.json
+    ? { privateKey: P256.randomPrivateKey(), type: 'p256' }
+    : await WebCryptoP256.createKeyPair()
+  // A holder that lost the lock to another process, such as after a pause past a stale lock,
+  // writes nothing, and runs again, so it reads the other process's key pair.
+  await check?.()
+  // The first key pair lands only on an empty entry, so a key pair that another process saved,
+  // whose guest account it may have shown for funding, stays.
+  if (store.update) {
+    const stored = await store.update(key, (current) =>
+      current === undefined || current === null
+        ? { result: value as unknown, value }
+        : { result: current, value: current },
+    )
+    return decode(stored)
+  }
+  const again = await read(store, { key })
+  if (again) return again
+  await store.setItem(key, value)
+  return decode(value)
+}
+
+declare namespace create {
+  type Options = {
+    /** Throws once another process took the lock. Absent for a lock without an owner's check. */
+    check?: (() => Promise<void>) | undefined
+    /** The store's entry of the guest account. */
+    key: string
+  }
+}
+
+/**
+ * Returns the next revision of the guest session: the clock, or one more than the last revision
+ * that the store holds, whichever is greater. A clock that steps back, or two starts in one
+ * millisecond, then still give a later revision, which another context adopts. The caller holds the
+ * lock of {@link exclusive}.
+ */
+async function advance(store: Store, options: create.Options): Promise<number> {
+  const { check } = options
+  const key = `${options.key}:revision`
+  const next = (current: unknown) =>
+    Math.max(Date.now(), typeof current === 'number' ? current + 1 : 0)
+  await check?.()
+  if (store.update)
+    return await store.update(key, (current) => {
+      const value = next(current)
+      return { result: value, value }
+    })
+  const value = next(await store.getItem(key))
+  await store.setItem(key, value)
+  return value
 }
 
 /** Returns the public key of `key`. */
