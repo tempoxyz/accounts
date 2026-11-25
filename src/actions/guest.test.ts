@@ -120,12 +120,52 @@ describe('Actions.guest.check', () => {
     ],
   ] as const
 
+  /** A quote of a fee that the guest account pays: 1 base unit of OUSD. */
+  const unsponsored = {
+    fee: { formatted: '0.000001', token: ousd },
+    sponsored: false,
+  } as const
+
   test.for([
     [
-      'accepts a guest-paid fee in the quoted fee token',
+      'accepts a sponsored payment that keeps the sponsor marker',
+      {},
+      { fee: null, sponsored: true },
+      undefined,
+    ],
+    [
+      'refuses a sponsored payment whose transaction drops the sponsor marker',
       { feePayerSignature: undefined, feeToken: ousd },
-      ousd,
-      true,
+      { fee: null, sponsored: true },
+      'it drops the sponsor that the quote names.',
+    ],
+    [
+      'accepts a guest-paid fee in the quoted fee token, at the quoted fee',
+      { feePayerSignature: undefined, feeToken: ousd },
+      unsponsored,
+      undefined,
+    ],
+    [
+      'accepts a guest-paid fee within the 25 percent margin over the quoted fee',
+      // 100,000 gas at 2e7 attodollars per gas is 2 base units, within 1 base unit plus 25 percent,
+      // rounded up.
+      {
+        feePayerSignature: undefined,
+        feeToken: ousd,
+        maxFeePerGas: 20_000_000n,
+      },
+      unsponsored,
+      undefined,
+    ],
+    [
+      'refuses a guest-paid fee over the cap',
+      {
+        feePayerSignature: undefined,
+        feeToken: ousd,
+        maxFeePerGas: 30_000_000n,
+      },
+      unsponsored,
+      'its fee exceeds the quoted fee.',
     ],
     [
       'refuses a guest-paid fee in another fee token than the quoted one',
@@ -133,30 +173,45 @@ describe('Actions.guest.check', () => {
         feePayerSignature: undefined,
         feeToken: '0x20c0000000000000000000000000000000000001',
       },
-      ousd,
-      false,
+      unsponsored,
+      'its fee token is not the quoted one.',
     ],
     [
-      'refuses a guest-paid fee in a token that is no TIP-20 token, without a quoted fee token',
+      'refuses a guest-paid fee of a quote that names no fee',
+      { feePayerSignature: undefined },
+      { fee: null, sponsored: false },
+      'the quote names no fee for the guest account.',
+    ],
+    [
+      'accepts a sponsored fee in any fee token, which the guest account never pays',
+      { feeToken: '0x20c0000000000000000000000000000000000001' },
+      unsponsored,
+      undefined,
+    ],
+    [
+      "accepts a guest-paid fee in any TIP-20 token without a quote, as Tempo ID's page posts it",
+      {
+        feePayerSignature: undefined,
+        feeToken: '0x20c0000000000000000000000000000000000001',
+      },
+      undefined,
+      undefined,
+    ],
+    [
+      'refuses a guest-paid fee in a token that is no TIP-20 token, without a quote',
       {
         feePayerSignature: undefined,
         feeToken: '0x000000000000000000000000000000000000dEaD',
       },
       undefined,
-      false,
+      'its fee token is not the quoted one.',
     ],
-    [
-      'accepts a sponsored fee in any fee token, which the guest account never pays',
-      { feeToken: '0x20c0000000000000000000000000000000000001' },
-      ousd,
-      true,
-    ],
-  ] as const)('%s', ([, fields, feeToken, accepted]) => {
+  ] as const)('%s', ([, fields, quote, refusal]) => {
     const check = () =>
-      Guest.check(transaction(fields as never), { ...payment, feeToken })
+      Guest.check(transaction(fields as never), { ...payment, quote })
 
-    if (accepted) expect(check().calls).toHaveLength(1)
-    else expect(check).toThrow('its fee token is not the quoted one.')
+    if (refusal === undefined) expect(check().calls).toHaveLength(1)
+    else expect(check).toThrow(refusal)
   })
 
   test("names the fee payer's signature that it refuses", () => {
@@ -602,6 +657,70 @@ describe('Actions.guest.session in other processes', () => {
 
     expect([addresses[0] === addresses[1], addresses[0] === kept])
       .toMatchInlineSnapshot(`
+      [
+        true,
+        true,
+      ]
+    `)
+  }, 60_000)
+
+  test('keeps the first saved key pair when a process that paused past the stale lock resumes on `Store.file`', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    // The first process blocks its event loop on a read of the FIFO, as a stalled process does, so
+    // it renews no lock. The parent writes to the FIFO to let it go on.
+    const fifo = Path.join(directory, 'stall')
+    ChildProcess.execFileSync('mkfifo', [fifo])
+    const program = await bundle([
+      "import * as NodeFs from 'node:fs'",
+      "import * as Accounts from '../Accounts.ts'",
+      "import * as Store from '../Store.ts'",
+      "import * as Guest from './guest.ts'",
+      'const queue = []',
+      'const waiters = []',
+      "process.on('message', (message) => { const waiter = waiters.shift(); if (waiter) waiter(message); else queue.push(message) })",
+      'const next = () => (queue.length > 0 ? Promise.resolve(queue.shift()) : new Promise((resolve) => waiters.push(resolve)))',
+      `const file = Store.file(${JSON.stringify(path)})`,
+      'const role = await next()',
+      'let stalled = false',
+      'const store = Store.from({',
+      '  ...file,',
+      '  async getItem(key) {',
+      '    const value = await file.getItem(key)',
+      "    if (role === 'stall' && !stalled && key.startsWith('tempo-id:guest:')) {",
+      '      stalled = true',
+      "      process.send('read')",
+      `      NodeFs.readFileSync(${JSON.stringify(fifo)})`,
+      '    }',
+      '    return value',
+      '  },',
+      '})',
+      "const session = await Guest.session(Accounts.from({ chain: 4217, clientId: 'cli:guest-example', store, url: 'http://127.0.0.1:9' }))",
+      'console.log(session.address)',
+      'process.disconnect()',
+    ])
+    const options = { timeout: 30_000 }
+
+    const first = start(program)
+    first.send('stall')
+    // The first process read the empty entry under the lock, and stalls before it creates a key pair.
+    await expect.poll(() => first.messages.includes('read'), options).toBe(true)
+    // The stall outlasts the lock, so its lock file is older than the stale lock.
+    const past = new Date(Date.now() - 60 * 60 * 1000)
+    for (const name of await Fs.readdir(directory))
+      if (name.endsWith('.lock'))
+        await Fs.utimes(Path.join(directory, name), past, past)
+    // The second process takes the stale lock over, and saves its key pair, whose guest account it
+    // can show for funding.
+    const second = start(program)
+    second.send('run')
+    const saved = await second.output
+    await Fs.writeFile(fifo, 'go')
+    const resumed = await first.output
+    const kept = await Guest.get(config(Store.file(path)))
+    await Fs.rm(directory, { force: true, recursive: true })
+
+    expect([resumed === saved, kept === saved]).toMatchInlineSnapshot(`
       [
         true,
         true,

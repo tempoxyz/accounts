@@ -315,7 +315,7 @@ export const accounts = Accounts.create({
 
 :::
 
-The funding code opens Tempo ID's guest funding page, which signs no one in and opens the deposit pages of the guest account. Its funding hint names the payment's amount and its exact token, also an unlisted one, since a deposit of another token cannot pay. The funding code's guest request names no redirect URI, as the device form has none. If the guest account pays the fee, the call also checks that the prepared transaction pays it in the fee token that Tempo ID quoted.
+The funding code opens Tempo ID's guest funding page, which signs no one in and opens the deposit pages of the guest account. Its funding hint names the payment's amount and its exact token, also an unlisted one, since a deposit of another token cannot pay. The funding code's guest request names no redirect URI, as the device form has none. If the quote names a sponsor, the call refuses a prepared transaction without the sponsor. If the guest account pays the fee, the call checks that the transaction pays it in the quoted fee token and refuses a fee over the quoted fee plus 25%.
 
 A sign-out during the payment ends it: the key pair signs nothing more, and the call rejects with <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink>. `signal` stops the requests and the wait for funds.
 

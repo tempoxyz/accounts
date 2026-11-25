@@ -27,6 +27,16 @@ import * as Permissions from '../Permissions.js'
 import * as Session from '../Session.js'
 import type { Store } from '../Store.js'
 
+/** The attodollars per gas of a fee that charge one base unit of a TIP-20 fee token of 6 decimals. */
+const attodollars = 1_000_000_000_000n
+
+/**
+ * The percent by which the fee that the guest account signs may exceed the quoted fee, since the
+ * fill's fee cap per gas can sit above the fee that the quote reports, such as at Viem's base fee
+ * multiplier of 1.2.
+ */
+const feeMargin = 25n
+
 /** The time between the guest request's signature and its expiry, in seconds. */
 const lifetime = 4 * 60
 
@@ -224,10 +234,15 @@ export function check(
   )
     throw refused('it holds a fee payer signature.')
   if (envelope.signature) throw refused('it holds a signature.')
+  const { quote } = options
+  // A payment that Tempo ID quoted as sponsored keeps the sponsor's marker, so the guest account
+  // pays no fee that the quote did not show.
+  if (quote?.sponsored && envelope.feePayerSignature !== null)
+    throw refused('it drops the sponsor that the quote names.')
   // Without the sponsor's marker, the guest account pays the fee, in the fee token that Tempo ID
   // quoted, or else in a TIP-20 token.
   if (envelope.feePayerSignature === undefined) {
-    const expected = options.feeToken
+    const expected = quote ? (quote.fee?.token ?? undefined) : undefined
     const valid = (() => {
       if (envelope.feeToken === undefined) return expected === undefined
       try {
@@ -240,6 +255,19 @@ export function check(
       }
     })()
     if (!valid) throw refused('its fee token is not the quoted one.')
+    // The most that the guest account pays is the gas times the fee cap per gas, in attodollars
+    // per gas, which a TIP-20 fee token of 6 decimals charges as 1e12 attodollars per base unit.
+    if (quote) {
+      if (!quote.fee)
+        throw refused('the quote names no fee for the guest account.')
+      const { gas, maxFeePerGas } = envelope
+      if (gas === undefined || maxFeePerGas === undefined)
+        throw refused('it names no gas or fee cap.')
+      const most = (gas * maxFeePerGas + attodollars - 1n) / attodollars
+      const quoted = parseUnits(quote.fee.formatted, 6)
+      if (most > (quoted * (100n + feeMargin) + 99n) / 100n)
+        throw refused('its fee exceeds the quoted fee.')
+    }
   }
   return envelope
 }
@@ -251,10 +279,24 @@ export declare namespace check {
     /** The payment's chain. */
     chainId: number
     /**
-     * The fee token that Tempo ID quoted. A transaction without the sponsor's marker, whose fee the
-     * guest account pays, must name it. Absent, such a transaction names any TIP-20 fee token.
+     * The quote of `GET /i/guest/pay` that the transaction fills. With it, a payment quoted as
+     * sponsored must keep the sponsor's marker, and a transaction whose fee the guest account pays
+     * must name the quoted fee token, and cap its fee at the quoted fee plus 25 percent. Absent, such a transaction names any TIP-20 fee token, at any fee, as on Tempo ID's
+     * own payment page.
      */
-    feeToken?: `0x${string}` | undefined
+    quote?:
+      | {
+          /** The quoted fee, or `null` when Tempo ID knows none. */
+          fee: {
+            /** The fee, in whole units of the fee token. */
+            formatted: string
+            /** The fee token's address, or `null` when the fill names none. */
+            token?: `0x${string}` | null | undefined
+          } | null
+          /** Whether Tempo ID's sponsor pays the fee. */
+          sponsored: boolean
+        }
+      | undefined
     /** The transfer's memo, as hex. Absent for a transfer without one. */
     memo?: `0x${string}` | undefined
     /** The recipient's address. */
@@ -313,8 +355,13 @@ export declare namespace get {
 type Quoted = {
   /** Whether the chain's faucet drips the payment's token. */
   faucet: boolean
-  /** The network fee. `token`, when present, names the fee token's address. */
-  fee: { token?: `0x${string}` | undefined } | null
+  /** The network fee, or `null` when Tempo ID knows none. */
+  fee: {
+    /** The fee, in whole units of the fee token. */
+    formatted: string
+    /** The fee token's address, or `null` when the fill names none. */
+    token?: `0x${string}` | null | undefined
+  } | null
   /** Why no transaction pays, other than a shortfall. */
   refusal: Refusal | null
   /** What the guest account lacks. */
@@ -526,7 +573,7 @@ export async function pay(
   const envelope = check(prepared.transaction, {
     amount,
     chainId,
-    feeToken: quoted.fee?.token,
+    quote: quoted,
     memo,
     to,
     token,
@@ -793,7 +840,7 @@ function keyOf(auth: Config) {
 async function exclusive<value>(
   store: Store,
   options: exclusive.Options,
-  fn: () => Promise<value>,
+  fn: (check?: () => Promise<void>) => Promise<value>,
 ): Promise<value> {
   const locks = (globalThis.navigator as { locks?: LockManager } | undefined)
     ?.locks
@@ -804,7 +851,7 @@ async function exclusive<value>(
   // file of `Store.file`, also serializes other processes. The Web Lock orders the process's runs.
   if (locks && store.lock && !store.local)
     return await locks.request(name, () => store.lock!(name, fn))
-  if (locks) return await locks.request(name, fn)
+  if (locks) return await locks.request(name, () => fn())
   if (store.lock) return await store.lock(name, fn)
   // Two pages or processes that create the guest account at once would each save a key pair, and
   // the funds of the overwritten one would stay with no signer.
@@ -832,22 +879,29 @@ async function load(auth: Config): Promise<Key> {
       'Invalid `store`: it keeps the guest account only in the page, which a page load loses with its funds. Use a store that persists, such as the default IndexedDB store.',
     )
   const key = keyOf(auth)
-  return await exclusive(store, { key }, async () => {
+  return await exclusive(store, { key }, async (check) => {
     const held = await read(store, { key })
     if (held) return held
-    if (store.json) {
-      const privateKey = P256.randomPrivateKey()
-      const value: P256Entry = { privateKey, type: 'p256' }
-      await store.setItem(key, value)
-      return {
-        privateKey,
-        publicKey: P256.getPublicKey({ privateKey }),
-        type: 'p256',
-      }
+    const value: P256Entry | WebCryptoP256.createKeyPair.ReturnType = store.json
+      ? { privateKey: P256.randomPrivateKey(), type: 'p256' }
+      : await WebCryptoP256.createKeyPair()
+    // A holder that lost the lock to another process, such as after a pause past a stale lock,
+    // writes nothing, and runs again, so it reads the other process's key pair.
+    await check?.()
+    // The first key pair lands only on an empty entry, so a key pair that another process saved,
+    // whose guest account it may have shown for funding, stays.
+    if (store.update) {
+      const stored = await store.update(key, (current) =>
+        current === undefined || current === null
+          ? { result: value as unknown, value }
+          : { result: current, value: current },
+      )
+      return decode(stored)
     }
-    const keyPair = await WebCryptoP256.createKeyPair()
-    await store.setItem(key, keyPair)
-    return { keyPair, type: 'webCrypto' }
+    const again = await read(store, { key })
+    if (again) return again
+    await store.setItem(key, value)
+    return decode(value)
   })
 }
 
@@ -866,6 +920,18 @@ async function read(
 ): Promise<Key | undefined> {
   const value = await store.getItem(options.key)
   if (value === undefined || value === null) return undefined
+  return decode(value)
+}
+
+declare namespace read {
+  type Options = {
+    /** The store's entry of the guest account. */
+    key: string
+  }
+}
+
+/** Returns the key pair of a stored value. Throws for a value that is no key pair. */
+function decode(value: unknown): Key {
   const stored = value as {
     privateKey?: unknown
     publicKey?: PublicKey.PublicKey | undefined
@@ -894,13 +960,6 @@ async function read(
   throw new Error(
     'Invalid guest account: its entry of the store holds no key pair. Remove the entry with `guest.disconnect`, then start the guest session again.',
   )
-}
-
-declare namespace read {
-  type Options = {
-    /** The store's entry of the guest account. */
-    key: string
-  }
 }
 
 /**
