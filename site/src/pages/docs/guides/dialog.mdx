@@ -88,7 +88,7 @@ export const accounts = Accounts.create({
 :::
 
 :::note
-Tempo ID frames its sign-in only on an HTTPS page. On an HTTP page, such as one on localhost, and in Safari and Firefox for an app that is neither [first-party](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps) nor [verified](https://github.com/tempoxyz/id/blob/main/docs/apps.md#verification), the call opens a popup instead.
+Tempo ID frames its sign-in only in a secure context, such as an HTTPS page or `http://localhost`. Outside one, and in Safari and Firefox for an app that is neither [first-party](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps) nor [verified](https://github.com/tempoxyz/id/blob/main/docs/apps.md#verification), the call opens a popup instead.
 :::
 
 If the user closes the dialog, or denies the app on the approval page, the call rejects. [Errors](/docs/guides/errors#ignore-a-closed-dialog) shows which errors the app ignores.

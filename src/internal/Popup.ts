@@ -172,28 +172,6 @@ export function activated() {
   return navigator.userActivation?.isActive ?? true
 }
 
-/**
- * Returns whether the page is on `http:` while Tempo ID is on `https:`, so Tempo ID's sign-in opens
- * in a popup in place of a frame. `window.isSecureContext` does not name such a page, since
- * `http://localhost` is a secure context. A local Tempo ID on `http:` frames its sign-in on a page
- * on `http:`.
- */
-export function http(options: http.Options) {
-  return (
-    new URL(options.page).protocol === 'http:' &&
-    new URL(options.url).protocol === 'https:'
-  )
-}
-
-export declare namespace http {
-  type Options = {
-    /** The URL of the app's page. */
-    page: string
-    /** Tempo ID's URL. */
-    url: string
-  }
-}
-
 export namespace machines {
   /**
    * The watch of a popup. This page's own `Cross-Origin-Opener-Policy` severs the handle as the
