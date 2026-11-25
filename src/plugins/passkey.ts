@@ -71,10 +71,10 @@ export function passkey(options: passkey.Options = {}) {
         return entry.promise
       }
 
-      // Returns the ceremony of a sign-in, whose first call throws once a sign-out overtakes the
-      // sign-in, also during the prompt. Its commit would throw and revoke the tokens, so an
-      // overtaken sign-in shows no prompt, sends no assertion, and `change.fail` throws
-      // `SupersededError`. The first call is the sign-in's assertion. The session's account keeps
+      // Returns the ceremony of a sign-in or of a registration's proof, whose first call throws once
+      // a sign-out overtakes the sign-in, also during the prompt. Its commit would throw and revoke
+      // the tokens, so an overtaken sign-in shows no prompt, sends no assertion, and `change.fail`
+      // throws `SupersededError`. The first call is the sign-in's assertion. The session's account keeps
       // the function for its own signatures, which no later sign-out refuses.
       function ceremony(
         change: ReturnType<Plugin.Context['session']['change']>,
@@ -90,6 +90,23 @@ export function passkey(options: passkey.Options = {}) {
             : await navigator.credentials.get(parameters as never)
           if (checked && change.overtaken())
             throw new Accounts.SupersededError()
+          return credential as never
+        }
+      }
+
+      // Returns the creation ceremony of a registration, which throws `SupersededError` before the
+      // prompt once a sign-out overtakes the registration. The proof's `ceremony` checks again
+      // around its prompt, so an overtaken registration sends no verify request, and Tempo ID stores
+      // no passkey for the user who signed out.
+      function creation(
+        change: ReturnType<Plugin.Context['session']['change']>,
+        createFn: PasskeyActions.register.Options['createFn'],
+      ): NonNullable<PasskeyActions.register.Options['createFn']> {
+        return async (parameters) => {
+          if (change.overtaken()) throw new Accounts.SupersededError()
+          const credential = createFn
+            ? await createFn(parameters)
+            : await navigator.credentials.create(parameters as never)
           return credential as never
         }
       }
@@ -226,6 +243,10 @@ export function passkey(options: passkey.Options = {}) {
          * @throws {Error} Named `InvalidStateError`, when the authenticator already holds one of
          *   the user's passkeys, before any request after the options. Offer a sign-in with that
          *   passkey. The session does not change.
+         * @throws {Accounts.SupersededError} When a sign-out completes during the call, before the
+         *   proof's assertion. If it completes before the creation prompt, the call shows no prompt.
+         *   If it completes later, the call sends no verify request, so Tempo ID stores no passkey,
+         *   and the authenticator drops the new passkey.
          * @throws {TypeError} On a page, when the instance's `store` has `json`, such as
          *   `Store.redis`, and the call generates an access key. The call throws before any
          *   request.
@@ -260,6 +281,9 @@ export function passkey(options: passkey.Options = {}) {
                 'Invalid account: a passkey registration creates a Tempo Account, which `account: false` creates none of. Create the instance without `account`.',
               status: 0,
             })
+          // The change starts before the read of the mark, so a sign-out that completes during the
+          // read or a prompt overtakes the registration.
+          const change = context.session.change()
           if (await context.session.signedOut())
             throw new Accounts.RequestError({
               code: 'login_required',
@@ -271,11 +295,21 @@ export function passkey(options: passkey.Options = {}) {
 
           // The type parameter follows the caller's parameters. The union narrows on `accessKey`.
           const input: passkey.register.Parameters = parameters
+          const ceremonies = {
+            createFn: creation(change, input.createFn),
+            getFn: ceremony(change),
+          }
+          // A registration without an access key commits no session, so only its rejection reports
+          // the sign-out that overtook it.
+          const superseded = (error: unknown): never => {
+            if (change.overtaken()) throw new Accounts.SupersededError()
+            throw error
+          }
           if (input.accessKey === undefined)
             return (await PasskeyActions.register(config, {
               ...input,
-              getFn,
-            })) as passkey.register.ReturnType<parameters>
+              ...ceremonies,
+            }).catch(superseded)) as passkey.register.ReturnType<parameters>
 
           const { accessKey: requested, ...rest } = input
           const accessKey = SignIn.accessKey(context, requested)
@@ -283,14 +317,15 @@ export function passkey(options: passkey.Options = {}) {
           if (!accessKey)
             return (await PasskeyActions.register(config, {
               ...rest,
-              getFn,
-            } as PasskeyActions.register.Options<undefined>)) as passkey.register.ReturnType<parameters>
+              ...ceremonies,
+            } as PasskeyActions.register.Options<undefined>).catch(
+              superseded,
+            )) as passkey.register.ReturnType<parameters>
 
-          const change = context.session.change()
           const result = await PasskeyActions.register(config, {
             ...rest,
             accessKey,
-            getFn,
+            ...ceremonies,
           }).catch(change.fail)
           const session = SignIn.toSession(result.authorization)
           await change.commit(session)
