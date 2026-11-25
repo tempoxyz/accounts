@@ -504,8 +504,8 @@ export function create(options: create.Options): Handler.Handler {
    * Starts a SIWE sign-in under a new session ID, sets the ID as the pending cookie, and returns
    * the message. In the token mode, returns `{ id, message }` without a cookie. A body may name the
    * account that signs as `address`, and the chain that the message names as `chainId`. A chain that
-   * is outside the plugin's `chains` receives 400. With the plugin's `origin`, a request from
-   * another origin receives 403.
+   * is outside the plugin's `chains` receives 400. A request from another origin than the plugin's
+   * `origin` receives 403.
    */
   async function siweChallenge(request: Request, actions: create.Siwe) {
     const refusal = foreign(request, { origins: pageOrigins })

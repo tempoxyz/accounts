@@ -347,6 +347,7 @@ export const servers = [
       VITE_RESOURCE_PREPARED: backend.resources.prepared,
       VITE_TEMPO_API_KEY: TempoApi.apiKey,
       VITE_TEMPO_API_URL: TempoApi.url,
+      VITE_URL: backend.url,
     },
     name: 'backend',
     package: 'backend',

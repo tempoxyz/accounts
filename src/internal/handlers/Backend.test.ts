@@ -7,6 +7,7 @@ import * as Http from 'node:http'
 import { Base64 } from 'ox'
 import { custom } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { parseSiweMessage } from 'viem/siwe'
 import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 import * as Accounts from '../../Accounts.js'
 import { backend } from '../../plugins/backend.js'
@@ -2324,6 +2325,63 @@ describe('fetch with siwe', () => {
         status: spent.status,
       }).toMatchObject({ body: { error: 'invalid_request' }, status: 400 })
       expect(borrowed).toBeUndefined()
+    })
+
+    test("answers the client ID's origin without `origin`, and refuses another origin and the API's own host", async () => {
+      const accounts = Accounts.create({
+        chain: 4217,
+        clientId: origin,
+        handler: { basePath: '/accounts' },
+        plugins: [
+          backend({ store: Store.memory() }),
+          siwe({ token: true }),
+          viem({ transport: transport() }),
+        ],
+        url: 'http://127.0.0.1:9',
+      })
+      const challenge = (from: string) =>
+        accounts.handler
+          .fetch(
+            new Request(`${api}/accounts/auth/siwe/challenge`, {
+              headers: { origin: from },
+              method: 'POST',
+            }),
+          )
+          .then(async (response) => ({
+            allowed: response.headers.get('access-control-allow-origin'),
+            domain: response.ok
+              ? parseSiweMessage(
+                  ((await response.json()) as { message: string }).message,
+                ).domain
+              : undefined,
+            status: response.status,
+          }))
+
+      const results = await Promise.all([
+        challenge(origin),
+        challenge('https://evil.example'),
+        challenge(api),
+      ])
+
+      expect(results).toMatchInlineSnapshot(`
+        [
+          {
+            "allowed": "https://app.example.com",
+            "domain": "app.example.com",
+            "status": 200,
+          },
+          {
+            "allowed": null,
+            "domain": undefined,
+            "status": 403,
+          },
+          {
+            "allowed": null,
+            "domain": undefined,
+            "status": 403,
+          },
+        ]
+      `)
     })
 
     test("refuses a key authorization without the sign-in's access token, since any app may set its witness, and spends the challenge", async () => {

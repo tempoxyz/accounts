@@ -23,7 +23,7 @@
  * The build reads `VITE_CLIENT_ID`, `VITE_CLIENT_ID_API`, `VITE_CLIENT_ID_ASSERTION`,
  * `VITE_CLIENT_ID_HEADLESS`, `VITE_CLIENT_ID_PAGE`, `VITE_CLIENT_ID_SHORT`, `VITE_CLIENT_SECRET`,
  * `VITE_FEE_PAYER`, `VITE_PRIVATE_KEY`, `VITE_RESOURCE_DEFERRED`, `VITE_RESOURCE_PREPARED`,
- * `VITE_TEMPO_API_KEY`, `VITE_TEMPO_API_URL`, `VITE_TEMPO_ID_URL`, and `VITE_TEMPO_RPC_URL`, which
+ * `VITE_TEMPO_API_KEY`, `VITE_TEMPO_API_URL`, `VITE_TEMPO_ID_URL`, `VITE_TEMPO_RPC_URL`, and `VITE_URL`, which
  * `test/Apps.ts` sets. Only this module reads the client secret, the private keys, and the API key,
  * so the pages' bundle holds none.
  * @module
@@ -172,7 +172,10 @@ function confidential(options: confidential.Options) {
     handler: { basePath: options.basePath },
     plugins: [
       backend({ sessions: Sessions.durableObject(env.SESSIONS) }),
-      siwe({ statement: 'Sign in to the backend test app.' }),
+      siwe({
+        origin: import.meta.env.VITE_URL,
+        statement: 'Sign in to the backend test app.',
+      }),
       node(),
     ],
   })
