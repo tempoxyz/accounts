@@ -300,7 +300,7 @@ export const accounts = Accounts.create({ chain: 'testnet' })
 
 A transaction without a session throws <SourceLink name="SignedOutError" path="src/Accounts.ts">`Accounts.SignedOutError`</SourceLink>. If a refused refresh token ended the session, its `cause` holds that refusal.
 
-A transaction from a session without an access key throws <SourceLink name="AccessKeyRequiredError" path="src/Accounts.ts">`Accounts.AccessKeyRequiredError`</SourceLink>. The app then signs the user in with an [access key](/docs/guides/access-keys/authorize-access-keys).
+A transaction from a session without an access key throws <SourceLink name="AccessKeyRequiredError" path="src/Accounts.ts">`Accounts.AccessKeyRequiredError`</SourceLink>, before any request to the node. The app then signs the user in with an [access key](/docs/guides/access-keys/authorize-access-keys).
 
 :::code-group
 

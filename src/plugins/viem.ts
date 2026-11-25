@@ -152,7 +152,9 @@ export class RetryClosedError extends Error {
  * always signs with its access key. A signature of a message or typed data reads nothing from the
  * chain. A cloud wallet signs only for an app with the `tempo-id:sign` scope, on a chain with
  * configurable accounts. If no owner signs alone, such as passkeys below the threshold, the
- * signature throws `Accounts.AccessKeyRequiredError`.
+ * signature throws `Accounts.AccessKeyRequiredError`. A transaction of such a session, or its
+ * estimate, throws it before the node receives a fill, also through a standalone action, such as
+ * `Actions.token.transferSync`.
  *
  * A session without its account, such as after a dialog's sign-in, reads the account at the owner's
  * first signature, with the access token that `session.accessToken` returns. A token that holds for
@@ -419,13 +421,15 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * the same protocol nonce, and the node keeps one of them. Viem detects only transactions that
        * start in one turn of the event loop, and a server's requests start in turns of their own. A
        * client of a fixed session is `shared`, since another instance, such as that of another
-       * request or replica, can send for the session at once.
+       * request or replica, can send for the session at once. A transaction of `options.account`,
+       * the client's own account, that no access key signs rejects with
+       * {@link AccessKeyRequiredError} before the fill, so the node receives no request.
        */
       function coordinate(
         chain: Chain,
-        options_coordinate: { shared: boolean },
+        options_coordinate: { account: LocalAccount; shared: boolean },
       ): Chain {
-        const { shared } = options_coordinate
+        const { account: own, shared } = options_coordinate
         const prepare = (chain as TempoChain).prepareTransactionRequest
         if (!Array.isArray(prepare)) return chain
         // Viem types the hook's request by the chain's formatters, which a plain chain does not hold.
@@ -448,6 +452,16 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                 return (await fn(request, args)) ?? reattach(request, args)
               }
               const { account, nonce, nonceKey, parameters } = request
+              // The client's own account signs a transaction only with an access key on the chain.
+              // Without one, its signature would reject after the fill, so the fill would only
+              // read the node, and its refusal, such as for a low balance, would hide the cause.
+              if (
+                args.phase === 'beforeFillTransaction' &&
+                account === own &&
+                parameters?.includes('nonce') &&
+                own.source !== 'accessKey'
+              )
+                throw new AccessKeyRequiredError()
               // Only a transaction whose nonce the node fills takes the protocol nonce. Viem's
               // estimate prepares no nonce, and sends nothing.
               if (
@@ -2388,7 +2402,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             ...defaults,
             ...clientOptions,
             account,
-            chain: coordinate(chain, { shared: Boolean(session) }),
+            chain: coordinate(chain, { account, shared: Boolean(session) }),
             transport: reads,
           },
           { verifier: tokens },
