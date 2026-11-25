@@ -201,7 +201,9 @@ export function device(options: device.Options = {}) {
          *   `code` values:
          *   - `access_denied`: The user denied the code.
          *   - `expired_token`: The code expired.
-         *   - `invalid_grant`: The code was already collected, or is unknown.
+         *   - `invalid_grant`: The code was already collected, is unknown, or belongs to another
+         *     client ID. A poll whose approval received no response collected it, and its tokens
+         *     stay live until they expire. Request a new code.
          * @throws {Accounts.RequestError} For a poll without a decision, after which the code stays
          *   valid. A poll without a response, such as offline, has `server_error` and status 0, and
          *   `cause` holds the platform's error. Poll again.
