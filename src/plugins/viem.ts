@@ -9,6 +9,7 @@ import {
   type Chain,
   type Client,
   custom,
+  defineChain,
   formatUnits,
   http,
   type LocalAccount,
@@ -475,11 +476,10 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             options,
           ],
         }
-        // The `extend` of a Tempo chain merges onto the chain that it came from, so a spread would
-        // keep the old `extend`, and the `feeToken` of Viem's `createClient` would drop the hook.
-        const { extend } = chain as { extend?: unknown }
-        if (typeof extend === 'function') return extend(hook) as Chain
-        return { ...chain, ...hook } as Chain
+        // The `extend` of a chain merges onto the chain that it came from, so a spread alone would keep
+        // the old `extend`, and the `feeToken` of Viem's `createClient` would drop the hook and the
+        // chain's own fields, such as `rpcUrls`.
+        return defineChain({ ...chain, ...hook } as Chain)
       }
 
       /** Returns whether `request` attaches the key authorization of its access key. */

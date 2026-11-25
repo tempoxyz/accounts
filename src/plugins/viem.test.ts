@@ -9,6 +9,7 @@ import { Address, Secp256k1 } from 'ox'
 import { KeyAuthorization, TxEnvelopeTempo } from 'ox/tempo'
 import { custom, http } from 'viem'
 import { type Account, Actions } from 'viem/tempo'
+import { tempo } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vite-plus/test'
 import {
   createActor,
@@ -408,82 +409,74 @@ describe('viem', () => {
     expect(revoked).toMatchInlineSnapshot(`"Accounts.SignedOutError"`)
   })
 
-  test('takes an expiring nonce for a transaction that starts while another of the access key is in flight, also with feeToken', async () => {
-    // The nonce key of the second transaction's first fill, for each feeToken.
-    const fills: Record<string, string | undefined> = {}
-    for (const feeToken of [
-      undefined,
-      '0x20c0000000000000000000000000000000000000',
-    ] as const) {
-      const store = Store.memory()
-      const session = Session.from({
-        accessKey: createAccessKey({
-          chainId: 4217,
-          owner: Secp256k1.randomPrivateKey(),
-        }),
-        accessToken: 'access-token',
-        expiresAt: Date.now() + 60 * 60 * 1000,
-        user: { email: 'user@example.com', id: 'user_1' },
-      })
-      await store.setItem(
-        'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]',
-        { state: { session }, version: 0 },
-      )
-      const nonceKeys: (string | undefined)[] = []
-      let release = () => {}
-      const accounts = Accounts.create({
-        chain: 4217,
-        clientId: 'https://app.example.com',
-        plugins: [
-          viem({
-            ...(feeToken ? { feeToken } : {}),
-            // The node holds the first fill, so the first transaction stays in flight.
-            transport: custom({
-              request(args) {
-                if (args.method !== 'eth_fillTransaction')
-                  return Promise.reject(new Error())
-                const [request] = args.params as [{ nonceKey?: string }]
-                nonceKeys.push(request.nonceKey)
-                if (nonceKeys.length > 1) return Promise.reject(new Error())
-                return new Promise((_, reject) => {
-                  release = () => reject(new Error())
-                })
-              },
-            }),
-          }),
-        ],
-        store,
-        url: 'http://127.0.0.1:9',
-      })
-      await accounts.session.get()
-      // The chain holds the access key, so no transaction attaches its key authorization.
-      await (
-        accounts.viem.account as Account.AccessKeyAccount
-      ).keyAuthorizationManager!.remove({
-        accessKey: KeyAuthorization.fromRpc(session.accessKey!.keyAuthorization)
-          .address,
-        address: session.accessKey!.account,
+  test("keeps the plugin's nonce of a fixed session's transaction and the chain's own fields, with feeToken", async () => {
+    const store = Store.memory()
+    const session = Session.from({
+      accessKey: createAccessKey({
         chainId: 4217,
-      })
-      const parameters = {
+        owner: Secp256k1.randomPrivateKey(),
+      }),
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      user: { email: 'user@example.com', id: 'user_1' },
+    })
+    const nonceKeys: (string | undefined)[] = []
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'https://app.example.com',
+      plugins: [
+        backend({ store }),
+        viem({
+          // A spread copy of a Tempo chain keeps the original's extend, which Viem's client calls for feeToken.
+          chain: {
+            ...tempo,
+            rpcUrls: { default: { http: ['http://127.0.0.1:9'] } },
+          },
+          feeToken: '0x20c0000000000000000000000000000000000000',
+          // Nothing listens at the URL, so the transport records each fill that would reach a node.
+          transport: http('http://127.0.0.1:9', {
+            async onFetchRequest(request) {
+              const body = (await request.clone().json()) as {
+                method: string
+                params: readonly [{ nonceKey?: string }]
+              }
+              if (body.method === 'eth_fillTransaction')
+                nonceKeys.push(body.params[0].nonceKey)
+            },
+            retryCount: 0,
+          }),
+        }),
+      ],
+      url: 'http://127.0.0.1:9',
+    })
+    const client = accounts.viem({ session })
+    // The chain holds the access key, so the transaction attaches no key authorization.
+    await (
+      client.account as Account.AccessKeyAccount
+    ).keyAuthorizationManager!.remove({
+      accessKey: KeyAuthorization.fromRpc(session.accessKey!.keyAuthorization)
+        .address,
+      address: session.accessKey!.account,
+      chainId: 4217,
+    })
+
+    await client.token
+      .transfer({
         amount: 1n,
         to: '0x0000000000000000000000000000000000000001',
         token: '0x20c0000000000000000000000000000000000000',
-      } as const
+      })
+      .catch(() => undefined)
 
-      const first = accounts.token.transfer(parameters).catch(() => undefined)
-      await expect.poll(() => nonceKeys.length).toBe(1)
-      const second = accounts.token.transfer(parameters).catch(() => undefined)
-      await expect.poll(() => nonceKeys.length).toBe(2)
-      release()
-      await Promise.all([first, second])
-      fills[String(feeToken)] = nonceKeys[1]
-    }
-
-    expect(fills).toMatchInlineSnapshot(`
+    expect({
+      nonceKey: nonceKeys[0],
+      rpcUrls: client.chain.rpcUrls.default.http,
+    }).toMatchInlineSnapshot(`
       {
-        "0x20c0000000000000000000000000000000000000": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-        "undefined": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "nonceKey": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "rpcUrls": [
+          "http://127.0.0.1:9",
+        ],
       }
     `)
   })
