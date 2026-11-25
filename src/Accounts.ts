@@ -668,8 +668,13 @@ export type Accounts<
        * ID refuses the refresh token too, the session ends, and the status is `signedOut`.
        *
        * @throws {SignedOutError} Outside a page, when Tempo ID refuses the session's access token and
-       *   its refresh token, with the refresh's `RequestError` as `cause`. On a page, the read
-       *   then sends the session cookie.
+       *   its refresh token, with the refresh's `RequestError` as `cause`, and when the session
+       *   ends during the refresh, such as at a sign-out in another context, with the read's
+       *   refusal as `cause`. On a page, the read then sends the session cookie.
+       * @throws {RequestError} When Tempo ID refuses the session's access token, and the refresh
+       *   after it fails without an end of the session, with the refresh's error, as
+       *   `session.refresh` throws it, such as `server_error` with status 0 for a refresh without
+       *   a response.
        * @throws {RequestError} When Tempo ID refuses the read, with one of these `reason` values,
        *   which [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md) describes:
        *   - `session_required`: The read sends the session cookie, and the browser holds no Tempo
@@ -2148,6 +2153,19 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   }
 
   /**
+   * Returns whether `error`, a failure of a refresh, ended the session: Tempo ID refused the refresh
+   * token, and the session is empty. Any other failure, such as a store that refuses the empty
+   * session, keeps the session.
+   */
+  function endedBy(error: unknown) {
+    return (
+      error instanceof RequestError &&
+      error.code === 'invalid_grant' &&
+      !context.session.get()
+    )
+  }
+
+  /**
    * Returns a live access token of the instance's session. A token that expires within 30 seconds
    * serves while a refresh runs beside it, and one that expires within 5 seconds waits for it.
    * Throws `SignedOutError` when the refresh reads a store that another context emptied, or that
@@ -2187,12 +2205,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
           // A refused refresh token, such as a revoked one, empties the session, so the call throws
           // as it throws without a session, also before the next call reads the empty session.
           // Any other failure, such as a store that refuses the empty session, keeps its own error.
-          if (
-            error instanceof RequestError &&
-            error.code === 'invalid_grant' &&
-            !context.session.get()
-          )
-            throw new SignedOutError({ cause: error })
+          if (endedBy(error)) throw new SignedOutError({ cause: error })
           throw error
         })) ?? context.session.get()
       if (!latest) throw new SignedOutError()
@@ -2273,13 +2286,11 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
           () => undefined,
           (refusal: unknown) => refusal,
         )
-        if (refusal === undefined) return undefined
-        if (
-          !(refusal instanceof RequestError) ||
-          refusal.code !== 'invalid_grant' ||
-          context.session.get()
-        )
-          throw refusal
+        // A refresh that finds no session, such as after a sign-out in another context, ends the
+        // call as a refused one does.
+        if (refusal === undefined)
+          return context.session.get() ? undefined : { cause: error }
+        if (!endedBy(refusal)) throw refusal
         return { cause: refusal }
       })()
       // A page still reads with any session cookie that reaches Tempo ID, as without a live access

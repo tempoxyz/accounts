@@ -267,6 +267,71 @@ describe('account.get', () => {
       }
     `)
   })
+
+  test('throws SignedOutError, and reads no account without a token, when another context signs out during the refused read', async () => {
+    const memory = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    let release = () => {}
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        requests.push(`${request.method} ${pathname}`)
+        if (pathname !== '/v1/account')
+          return new Response(null, { status: 200 })
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+        return Response.json(
+          {
+            error: 'invalid_token',
+            error_description: 'Invalid access token',
+            reason: 'invalid_token',
+          },
+          { status: 401 },
+        )
+      }) as typeof globalThis.fetch,
+      store: memory,
+      url: 'http://127.0.0.1:9',
+    })
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const read = accounts.account.get().catch((error: unknown) => error)
+    await expect.poll(() => requests.length).toBe(1)
+    // Another context, such as another process on the store, signs out before the refusal arrives.
+    await memory.setItem(name, { state: { session: undefined }, version: 1 })
+    release()
+
+    expect(await read).toMatchInlineSnapshot(
+      `[Accounts.SignedOutError: The client's account is signed out. Sign in before sending.]`,
+    )
+    expect({
+      requests,
+      status: accounts.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          "GET /v1/account",
+        ],
+        "status": "signedOut",
+      }
+    `)
+  })
 })
 
 describe('authorize', () => {
