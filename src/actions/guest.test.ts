@@ -904,6 +904,59 @@ describe('Actions.guest.session in other processes', () => {
   }, 60_000)
 })
 
+describe('Actions.guest.canonical', () => {
+  const base = {
+    amount: '1',
+    chainId,
+    to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+    token: 'ousd',
+  } as const
+
+  test.for([
+    ['an amount with trailing zeros', { amount: '1.00' }, true],
+    ['an amount with a leading zero', { amount: '01' }, true],
+    ['another amount', { amount: '1.000001' }, false],
+    ['a recipient in lowercase', { to: base.to.toLowerCase() }, true],
+    [
+      'a recipient in uppercase hex',
+      { to: `0x${base.to.slice(2).toUpperCase()}` },
+      true,
+    ],
+    ["the token's symbol in uppercase", { token: 'OUSD' }, true],
+    ["the token's address", { token: ousd }, true],
+    [
+      "the token's address in uppercase hex",
+      { token: `0x${ousd.slice(2).toUpperCase()}` },
+      true,
+    ],
+    [
+      'another token',
+      { token: '0x20c0000000000000000000000000000000000001' },
+      false,
+    ],
+    ['another chain', { chainId: 42431 }, false],
+  ] as const)('names one payment for %s: %s', ([, change, same]) => {
+    const value = Guest.canonical({ ...base, ...change })
+
+    expect(value === Guest.canonical(base)).toBe(same)
+  })
+
+  test('names one payment for a memo in any hex case, and another one without a memo', () => {
+    const memo = '0x696E762D31303432'
+
+    const values = [
+      Guest.canonical({ ...base, memo }),
+      Guest.canonical({ ...base, memo: memo.toLowerCase() as `0x${string}` }),
+      Guest.canonical(base),
+    ]
+
+    expect([values[0] === values[1], values[0] === values[2]]).toEqual([
+      true,
+      false,
+    ])
+  })
+})
+
 describe('Actions.guest.settlement', () => {
   /** The time of each row, in Unix milliseconds: 100 seconds after the transaction's window. */
   const now = 1_700_000_100_000
@@ -1042,6 +1095,46 @@ describe('Actions.guest.settlement', () => {
       'waits after a failed status read within the margin',
       { entry: recent, receipt: 'missing', status: 'unknown' },
       'wait',
+    ],
+    [
+      'forgets a checkout whose cancellation Tempo ID refuses for good, whose transaction never landed',
+      {
+        cancellation: 'refused',
+        entry: ended,
+        receipt: 'missing',
+        status: unpaid,
+      },
+      'forget',
+    ],
+    [
+      'keeps a checkout unknown whose cancellation Tempo ID refuses for good, without a receipt read',
+      {
+        cancellation: 'refused',
+        entry: { ...ended, hash: undefined },
+        receipt: 'unknown',
+        status: unpaid,
+      },
+      'pending',
+    ],
+    [
+      'cancels again after a cancellation that failed on the network, within the margin',
+      {
+        cancellation: 'unknown',
+        entry: recent,
+        receipt: 'missing',
+        status: unpaid,
+      },
+      'cancel',
+    ],
+    [
+      'rejects as pending after cancellations that failed on the network, past the margin',
+      {
+        cancellation: 'unknown',
+        entry: ended,
+        receipt: 'missing',
+        status: unpaid,
+      },
+      'pending',
     ],
     [
       "settles the call's own checkout, which its own lease holds",

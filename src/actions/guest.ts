@@ -179,6 +179,69 @@ export declare namespace active {
 }
 
 /**
+ * Returns the canonical terms of a guest payment, under which the store keeps its unresolved
+ * checkouts: the chain, the amount in base units, the recipient, the token's address, and the memo,
+ * with addresses and hex in lowercase. So `1` and `1.00`, a token's symbol and its address, and hex
+ * in any case name one payment. A token that the chain does not list keeps its lowercase symbol.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * Actions.guest.canonical({
+ *   amount: '1.00',
+ *   chainId: 4217,
+ *   to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+ *   token: 'ousd',
+ * })
+ * ```
+ */
+export function canonical(options: canonical.Options): string {
+  const { chainId, memo } = options
+  // Each TIP-20 token has 6 decimals.
+  const amount = parseUnits(options.amount, 6).toString()
+  const token = (() => {
+    if (Address.validate(options.token, { strict: false }))
+      return options.token.toLowerCase()
+    const [resolved] =
+      Permissions.resolve(
+        {
+          limits: [
+            {
+              limit: options.amount as `${number}`,
+              token: options.token as Permissions.Token,
+            },
+          ],
+        },
+        { chainId },
+      ).limits ?? []
+    return (resolved?.token ?? options.token).toLowerCase()
+  })()
+  return JSON.stringify([
+    chainId,
+    amount,
+    options.to.toLowerCase(),
+    token,
+    memo?.toLowerCase() ?? null,
+  ])
+}
+
+export declare namespace canonical {
+  type Options = {
+    /** The amount, as a decimal string in whole units of the token. */
+    amount: string
+    /** The payment's chain. */
+    chainId: number
+    /** The transfer's memo, as hex. Absent for a transfer without one. */
+    memo?: `0x${string}` | undefined
+    /** The recipient's address. */
+    to: string
+    /** The token: its symbol that the chain lists, or the address of any TIP-20 token. */
+    token: string
+  }
+}
+
+/**
  * Returns `value`, a transaction that Tempo ID's page prepared for a guest payment, as a Tempo
  * envelope to sign, if it makes the requested transfer and nothing else. With the sponsor's marker,
  * Tempo ID's sponsor pays its fee. Without it, the guest account pays its fee. The sender is the
@@ -377,6 +440,71 @@ export async function disconnect(auth: Config): Promise<void> {
 }
 
 /**
+ * Removes the unresolved checkout `checkout` of a guest payment from the store, such as after the
+ * app confirmed its outcome by hand. A later `pay` of the same payment then neither settles nor
+ * waits for it. A checkout that Tempo ID no longer holds, and whose transaction has no known hash,
+ * such as a sponsored one, stays in the store until this call, since no read decides it.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * try {
+ *   await accounts.pay({ amount: '5', to, token: 'ousd' })
+ * } catch (error) {
+ *   if (error instanceof Actions.guest.PendingError)
+ *     await Actions.guest.forget(accounts.config, {
+ *       amount: '5',
+ *       checkout: error.checkout,
+ *       to,
+ *       token: 'ousd',
+ *     })
+ * }
+ * ```
+ */
+export async function forget(
+  auth: Config,
+  options: forget.Options,
+): Promise<void> {
+  const store = storeOf(auth)
+  const memo =
+    options.memo === undefined ? undefined : Payment.memo(options.memo)
+  const key = `${keyOf(auth)}:payment:${canonical({
+    amount: Payment.amount(options.amount),
+    chainId: options.chainId ?? auth.chainId,
+    memo,
+    to: Payment.to(options.to),
+    token: options.token,
+  })}`
+  await exclusive(store, { key }, async (check) => {
+    const value = ((await store.getItem(key)) ?? {}) as Unresolved
+    const next = Object.fromEntries(
+      Object.entries(value).filter(([id]) => id !== options.checkout),
+    )
+    await check?.()
+    if (Object.keys(next).length === 0) await store.removeItem(key)
+    else await store.setItem(key, next)
+  })
+}
+
+export declare namespace forget {
+  type Options = {
+    /** The payment's amount, as a decimal string in whole units of the token. */
+    amount: string
+    /** The payment's chain. Defaults to the instance's. */
+    chainId?: number | undefined
+    /** The checkout ID, such as `PendingError`'s `checkout`. */
+    checkout: string
+    /** The transfer's memo: a string, or hex of at most 32 bytes. Absent, the transfer has none. */
+    memo?: string | undefined
+    /** The recipient's address. */
+    to: string
+    /** The token: its symbol that the chain lists, or the address of any TIP-20 token. */
+    token: string
+  }
+}
+
+/**
  * Returns the address of the instance's guest account, or `undefined` before a guest session creates
  * one. The read creates no guest account.
  *
@@ -480,7 +608,10 @@ type Refused = { cancel: string; refusal: Refusal }
  * opens a new one, so each checkout pays at most once. Calls that run at once each keep their own
  * checkout, under a lock that spans the processes on the store, and each changes only its own. A
  * running call holds a lease of 15 seconds on its checkout, which `machines.lease` renews, and a
- * later call of the same payment waits until it is released or expires.
+ * later call of the same payment waits until it is released or expires, then claims the checkout
+ * under the lock. A later call rejects with `PendingError` only while Tempo ID still holds the
+ * checkout's outcome. After that, a checkout that no read decides stays in the store, blocks no
+ * payment, and {@link forget} removes it. The terms compare as {@link canonical} values.
  *
  * @throws {RequestError} With the reason of Tempo ID's refusal, such as `recipient_not_permitted`.
  *   With `insufficient_balance` and status 0 for a shortfall without a faucet or `fund`, after the
@@ -520,7 +651,7 @@ export async function pay(
   const store = storeOf(auth)
   // The store keeps each unresolved checkout of a payment under its terms, so a later call of the
   // same payment, also in another process, resumes each one, and Tempo ID pays each once.
-  const unresolved = `${keyOf(auth)}:payment:${JSON.stringify([chainId, amount, to.toLowerCase(), token.toLowerCase(), memo ?? null])}`
+  const unresolved = `${keyOf(auth)}:payment:${canonical({ amount, chainId, memo, to, token })}`
   /** Returns the stored checkouts of the payment, by checkout ID. */
   const outstanding = async (): Promise<Unresolved> => {
     const value = (await store.getItem(unresolved)) as Unresolved | undefined
@@ -684,6 +815,7 @@ export async function pay(
    * outcome that stays unknown rejects with `PendingError`, and the store keeps the checkout.
    */
   const settle = async (id: string, entry: settlement.Options['entry']) => {
+    let cancellation: settlement.Options['cancellation']
     for (;;) {
       const read = await status(id)
       const receipt =
@@ -691,6 +823,7 @@ export async function pay(
           ? ('unknown' as const)
           : await landed(entry.hash)
       const step = settlement({
+        cancellation,
         entry,
         now: Date.now(),
         own: true,
@@ -701,21 +834,21 @@ export async function pay(
       if (step.type === 'forget') return undefined
       if (step.type === 'pending') throw new PendingError({ checkout: id })
       if (step.type === 'cancel') {
-        const cancelled = await post('/i/guest/pay/cancel', {
+        cancellation = await post('/i/guest/pay/cancel', {
           chain_id: chainId,
           client_id: auth.clientId,
           guest: await guest({ checkout: id }),
           redirect_uri: redirectUri,
         }).then(
-          () => true,
+          () => undefined,
           (error: unknown) => {
             if (signal?.aborted) throw aborted()
             if (error instanceof SignedOutError) throw error
             // A held send, such as one that the cancellation found, reads the status again.
-            return false
+            return final(error) ? ('refused' as const) : ('unknown' as const)
           },
         )
-        if (cancelled) return undefined
+        if (cancellation === undefined) return undefined
       }
       await wait(2_000, { aborted, signal })
     }
@@ -725,20 +858,97 @@ export async function pay(
     Object.entries(await outstanding()).filter(([, entry]) =>
       Address.isEqual(entry.address, session.address),
     )
-
-  // A running call of the same payment holds a lease on its checkout, so the payment waits until
-  // the call releases it, which removes a settled checkout, or until the lease expires, such as
-  // after the call's process exited. The lease machine polls the store.
-  for (;;) {
-    const live = (await mine()).some(
-      ([, entry]) =>
-        settlement({
+  /**
+   * Claims each stored checkout of the payment whose lease expired, in one step under the payment's
+   * lock, with the call's own lease, so no other call settles it at once. Returns the claimed
+   * checkouts, and whether another call still holds the lease of one.
+   */
+  const claim = async () => {
+    const claimed: [string, settlement.Options['entry']][] = []
+    let live = false
+    await record((value) => {
+      const now = Date.now()
+      const next = { ...value }
+      for (const [id, entry] of Object.entries(value)) {
+        if (!Address.isEqual(entry.address, session.address)) continue
+        const step = settlement({
           entry,
-          now: Date.now(),
+          now,
           receipt: 'unknown',
           status: 'unknown',
-        }).type === 'held',
-    )
+        })
+        if (step.type === 'held') {
+          live = true
+          continue
+        }
+        next[id] = { ...entry, leaseUntil: now + leaseDuration }
+        claimed.push([id, entry])
+      }
+      return next
+    })
+    return { claimed, live }
+  }
+  /** Sets the lease of each checkout of `ids` that the store still keeps to end at `until`. */
+  const lend = (ids: readonly string[], until: number) =>
+    record((value) => {
+      const next = { ...value }
+      for (const id of ids) {
+        const entry = next[id]
+        if (entry) next[id] = { ...entry, leaseUntil: until }
+      }
+      return next
+    })
+
+  // Each stored checkout of the same payment settles before the payment opens its own: its
+  // transfer paid, or can still land, or no longer lands. A running call of the same payment holds
+  // a lease on its checkout, so the payment waits until the call releases it, which removes a
+  // settled checkout, or until the lease expires, such as after the call's process exited. The
+  // lease machine polls the store, and renews the leases of the claimed checkouts.
+  for (;;) {
+    const { claimed, live } = await claim()
+    if (claimed.length > 0) {
+      const held = new Set(claimed.map(([id]) => id))
+      let released: Promise<void> | undefined
+      const holder = createActor(
+        machines.lease.provide({
+          actions: {
+            release: () => {
+              released = lend([...held], 0).catch(() => undefined)
+            },
+            renew: () =>
+              void lend([...held], Date.now() + leaseDuration).catch(
+                () => undefined,
+              ),
+          },
+        }),
+      ).start()
+      holder.send({ type: 'lease.hold' })
+      let paid: `0x${string}` | undefined
+      let unknown: string | undefined
+      try {
+        for (const [id, entry] of claimed) {
+          try {
+            const transaction = await settle(id, entry)
+            held.delete(id)
+            await forget(id)
+            paid ??= transaction
+          } catch (error) {
+            if (!(error instanceof PendingError)) throw error
+            // Only a call that owns the checkout rejects with `PendingError` once Tempo ID no longer
+            // holds its outcome, so a checkout that nothing can decide blocks no later payment.
+            // The store keeps it, and `forget` removes it.
+            if (Date.now() < entry.validBefore * 1_000 + retention)
+              unknown ??= id
+          }
+        }
+      } finally {
+        holder.send({ type: 'lease.end' })
+        holder.stop()
+        await released
+      }
+      if (paid) return { address: session.address, transaction: paid }
+      if (unknown) throw new PendingError({ checkout: unknown })
+    }
     if (!live) break
     const waiter = createActor(
       machines.lease.provide({
@@ -767,25 +977,6 @@ export async function pay(
     } finally {
       waiter.stop()
     }
-  }
-
-  // Each stored checkout of the same payment, of a call that ended, settles first: its transfer
-  // paid, or can still land, or no longer lands. Only then does the payment open its own checkout.
-  {
-    let paid: `0x${string}` | undefined
-    let unknown: string | undefined
-    for (const [id, entry] of await mine()) {
-      try {
-        const transaction = await settle(id, entry)
-        await forget(id)
-        paid ??= transaction
-      } catch (error) {
-        if (!(error instanceof PendingError)) throw error
-        unknown ??= id
-      }
-    }
-    if (paid) return { address: session.address, transaction: paid }
-    if (unknown) throw new PendingError({ checkout: unknown })
   }
 
   /** Reads the payment until no shortfall remains, and returns it, or the paid checkout. */
@@ -1194,9 +1385,9 @@ export async function session(auth: Config): Promise<Session.GuestSession> {
  * | `held`    | Another running call holds the checkout's lease. The payment waits until it ends.             |
  * | `paid`    | Tempo ID's status names the paid transaction, or the chain holds a receipt of the signed one. |
  * | `cancel`  | No transaction of it can land: a reverted receipt, or after the window no receipt, or Tempo ID still holds paid checkouts and reads it unpaid with no send that can land. |
- * | `forget`  | Tempo ID refuses the checkout for good, and the chain shows that it did not land.             |
+ * | `forget`  | Tempo ID refuses the checkout or its cancellation for good, and the chain shows that it did not land. |
  * | `wait`    | The outcome is not known yet, before the window's end and `settleMargin`.                     |
- * | `pending` | The outcome is still unknown after the window's end and `settleMargin`.                       |
+ * | `pending` | The outcome is still unknown after the window's end and `settleMargin`, also after cancellations that failed. |
  *
  * Tempo ID's status is a fast path: it forgets a paid checkout a day after its receipt, and a
  * sponsored transaction has no known hash, so after that time only a receipt decides.
@@ -1214,7 +1405,7 @@ export async function session(auth: Config): Promise<Session.GuestSession> {
  * ```
  */
 export function settlement(options: settlement.Options): settlement.ReturnType {
-  const { entry, now, receipt, status } = options
+  const { cancellation, entry, now, receipt, status } = options
   if (!options.own && entry.leaseUntil > now) return { type: 'held' }
   if (typeof status === 'object' && status.paid)
     return { transaction: status.paid, type: 'paid' }
@@ -1225,18 +1416,29 @@ export function settlement(options: settlement.Options): settlement.ReturnType {
   // A reverted transaction spent its nonce, and a transaction without a receipt after its window
   // never lands.
   const landless = receipt === 'reverted' || (ended && receipt === 'missing')
+  const late = now >= entry.validBefore * 1_000 + settleMargin
   if (typeof status === 'object' && !status.pending) {
     const remembered = now < entry.validBefore * 1_000 + retention
-    if (landless || (ended && remembered)) return { type: 'cancel' }
+    if (landless || (ended && remembered)) {
+      if (cancellation === undefined) return { type: 'cancel' }
+      // A cancellation that failed on the network or the server tries again until the margin.
+      if (cancellation === 'unknown')
+        return late ? { type: 'pending' } : { type: 'cancel' }
+      // Tempo ID refuses the cancellation for good, so the chain decides, as for a refused status.
+    }
   }
-  if (status === 'refused' && landless) return { type: 'forget' }
-  return now >= entry.validBefore * 1_000 + settleMargin
-    ? { type: 'pending' }
-    : { type: 'wait' }
+  if ((status === 'refused' || cancellation === 'refused') && landless)
+    return { type: 'forget' }
+  return late ? { type: 'pending' } : { type: 'wait' }
 }
 
 export declare namespace settlement {
   type Options = {
+    /**
+     * The outcome of the last cancellation of the checkout: `refused` for Tempo ID's definitive
+     * refusal, or `unknown` after a network or server failure. Absent before a cancellation.
+     */
+    cancellation?: 'refused' | 'unknown' | undefined
     /** The stored checkout. */
     entry: {
       /** The hash of its signed transaction. Absent for a sponsored one, whose hash is unknown. */
