@@ -2480,6 +2480,7 @@ export function create<
                 })
               },
               memo,
+              reload: () => context.session.reload(),
               session: held,
               signal: parameters.signal,
               to: parameters.to,

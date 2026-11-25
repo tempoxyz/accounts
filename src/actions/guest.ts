@@ -421,6 +421,51 @@ export declare namespace check {
 }
 
 /**
+ * Returns the stored checkouts of an unresolved payment that a call of `Actions.guest.pay` claims
+ * before it opens its own: the guest account's checkouts whose lease expired, oldest first. The
+ * call settles them in this order, and returns the first paid one. The store keeps the rest, so a
+ * later call of the same payment returns each paid one.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const { claimed, live } = Actions.guest.claims({ address, entries, now: Date.now() })
+ * ```
+ */
+export function claims(options: claims.Options): claims.ReturnType {
+  const { address, entries, now } = options
+  const claimed = Object.entries(entries).filter(
+    ([, entry]) =>
+      Address.isEqual(entry.address, address) && entry.leaseUntil <= now,
+  )
+  const live = Object.values(entries).some(
+    (entry) =>
+      Address.isEqual(entry.address, address) && entry.leaseUntil > now,
+  )
+  claimed.sort(([, a], [, b]) => a.validBefore - b.validBefore)
+  return { claimed, live }
+}
+
+export declare namespace claims {
+  type Options = {
+    /** The guest account that pays. */
+    address: `0x${string}`
+    /** The stored checkouts of the payment, by checkout ID. */
+    entries: Unresolved
+    /** The time, in Unix milliseconds. */
+    now: number
+  }
+
+  type ReturnType = {
+    /** The claimed checkouts, as checkout ID and stored checkout, oldest window first. */
+    claimed: [string, Unresolved[string]][]
+    /** Whether another running call holds the lease of a checkout of the guest account. */
+    live: boolean
+  }
+}
+
+/**
  * Forgets the instance's guest account: removes its key pair from the store. The next guest session
  * creates a new guest account. The funds of the forgotten guest account stay on its address, and no
  * key signs for it again. The instance's session stays as it is, so call it after a sign-out.
@@ -642,7 +687,7 @@ export async function pay(
   auth: Config,
   options: pay.Options,
 ): Promise<pay.ReturnType> {
-  const { current, fund, session, signal, token } = options
+  const { current, fund, reload, session, signal, token } = options
   const amount = Payment.amount(options.amount)
   const to = Payment.to(options.to)
   const memo =
@@ -865,29 +910,16 @@ export async function pay(
    * checkouts, and whether another call still holds the lease of one.
    */
   const claim = async () => {
-    const claimed: [string, settlement.Options['entry']][] = []
-    let live = false
+    let result: claims.ReturnType = { claimed: [], live: false }
     await record((value) => {
       const now = Date.now()
+      result = claims({ address: session.address, entries: value, now })
       const next = { ...value }
-      for (const [id, entry] of Object.entries(value)) {
-        if (!Address.isEqual(entry.address, session.address)) continue
-        const step = settlement({
-          entry,
-          now,
-          receipt: 'unknown',
-          status: 'unknown',
-        })
-        if (step.type === 'held') {
-          live = true
-          continue
-        }
+      for (const [id, entry] of result.claimed)
         next[id] = { ...entry, leaseUntil: now + leaseDuration }
-        claimed.push([id, entry])
-      }
       return next
     })
-    return { claimed, live }
+    return result
   }
   /** Sets the lease of each checkout of `ids` that the store still keeps to end at `until`. */
   const lend = (ids: readonly string[], until: number) =>
@@ -935,7 +967,12 @@ export async function pay(
             if (typeof transaction === 'object') continue
             held.delete(id)
             await forget(id)
-            paid ??= transaction
+            // The call returns one paid checkout. The store keeps the rest of the claimed ones, so a
+            // later call of the same payment returns each one.
+            if (transaction) {
+              paid = transaction
+              break
+            }
           } catch (error) {
             if (!(error instanceof PendingError)) throw error
             unknown ??= id
@@ -1143,6 +1180,11 @@ export async function pay(
     for (;;) {
       try {
         const value = await guest()
+        // Another process on the same store, such as another CLI command, can sign out or forget
+        // the guest account, so each send reads the store's session and key pair first.
+        const [stored] = await Promise.all([get(auth), reload?.()])
+        if (!stored || !Address.isEqual(stored, session.address))
+          throw new SignedOutError()
         // The send starts in the same task as the check, so no sign-out lands between them. A send
         // that already left settles as Tempo ID's claim of the checkout decides.
         held()
@@ -1220,6 +1262,12 @@ export declare namespace pay {
       | undefined
     /** The transfer's memo: a string, or hex of at most 32 bytes. Absent, the transfer has none. */
     memo?: string | undefined
+    /**
+     * Reads the store's session again, and sets it as the instance's session when it is newer, such
+     * as after a sign-out in another process on the same store. Each send calls it before `current`.
+     * Absent, each send checks only the stored key pair and `current`.
+     */
+    reload?: (() => Promise<unknown>) | undefined
     /** The guest session whose guest account pays. */
     session: Session.GuestSession
     /** Rejects the payment with the signal's reason, and stops its requests and waits. */

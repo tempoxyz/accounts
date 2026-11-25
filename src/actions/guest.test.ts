@@ -267,12 +267,14 @@ describe('Actions.guest.check', () => {
 
 /**
  * Returns a plugin whose `pick.guest` starts the instance's guest session, as a sign-in that selects
- * "Continue as guest" does.
+ * "Continue as guest" does, and whose `pick.reload` reads the stored session again, as each send of
+ * `Accounts.pay` for a guest session does.
  */
 function pick() {
   return Plugin.from({
     actions: (context) => ({
       guest: () => SignIn.guest(context, { change: context.session.change() }),
+      reload: () => context.session.reload(),
     }),
     id: 'pick',
   })
@@ -957,6 +959,46 @@ describe('Actions.guest.canonical', () => {
   })
 })
 
+describe('Actions.guest.claims', () => {
+  const address: `0x${string}` = '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326'
+  const now = 1_700_000_000_000
+  const entry = (validBefore: number, leaseUntil = 0) => ({
+    address,
+    leaseUntil,
+    validBefore,
+  })
+
+  test.for([
+    [
+      'claims each paid or unknown checkout oldest first, so a call returns the oldest paid one and the store keeps the rest',
+      { a: entry(30), b: entry(10), c: entry(20) },
+      { claimed: ['b', 'c', 'a'], live: false },
+    ],
+    [
+      'skips a checkout whose lease another running call holds, and waits for it',
+      { a: entry(10, now + 1), b: entry(20) },
+      { claimed: ['b'], live: true },
+    ],
+    [
+      "skips another guest account's checkout",
+      {
+        a: {
+          ...entry(10),
+          address: '0x000000000000000000000000000000000000dEaD' as const,
+        },
+        b: entry(20),
+      },
+      { claimed: ['b'], live: false },
+    ],
+  ] as const)('%s', ([, entries, expected]) => {
+    const result = Guest.claims({ address, entries, now })
+    expect({
+      claimed: result.claimed.map(([id]) => id),
+      live: result.live,
+    }).toEqual(expected)
+  })
+})
+
 describe('Actions.guest.settlement', () => {
   /** The time of each row, in Unix milliseconds: 100 seconds after the transaction's window. */
   const now = 1_700_000_100_000
@@ -1443,6 +1485,42 @@ describe('Accounts.create with guest', () => {
         [],
       ]
     `)
+  })
+
+  test("a reload of the stored session, as each guest send reads it, ends the guest session of another instance's sign-out on the same `Store.file`, which keeps the key pair", async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'guest-'))
+    try {
+      const path = Path.join(directory, 'store.json')
+      const options = {
+        chain: 4217,
+        clientId: 'cli:guest-example',
+        guest: true,
+        plugins: [device({ onCode: () => {} }), pick()],
+        url: 'http://127.0.0.1:9',
+      } as const
+      const a = Accounts.create({ ...options, store: Store.file(path) })
+      const b = Accounts.create({ ...options, store: Store.file(path) })
+      const started = await a.pick.guest()
+
+      const adopted = await b.session.get()
+      await b.signOut()
+      const reloaded = await a.pick.reload()
+      const kept = await Guest.get(config(Store.file(path)))
+
+      expect([
+        adopted?.address === started.address,
+        Session.guest(started) && Guest.active({ current: reloaded, started }),
+        kept === started.address,
+      ]).toMatchInlineSnapshot(`
+        [
+          true,
+          false,
+          true,
+        ]
+      `)
+    } finally {
+      await Fs.rm(directory, { force: true, recursive: true })
+    }
   })
 
   test('`guest.disconnect` forgets the guest account, and signs out its session', async () => {
