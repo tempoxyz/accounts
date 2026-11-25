@@ -1438,7 +1438,9 @@ describe('fetch', () => {
         .finally(() => request.socket.destroy())
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    onTestFinished(() => new Promise((resolve) => server.close(resolve)))
+    onTestFinished(
+      () => new Promise<void>((resolve) => server.close(() => resolve())),
+    )
     const { port } = server.address() as { port: number }
     const accounts = Accounts.create({
       ...options,
