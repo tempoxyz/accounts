@@ -180,7 +180,11 @@ export function backend(options: backend.Options) {
         /**
          * Sends a request with the session's access token, as `Actions.fetch` does, after a refresh
          * if necessary. Returns `undefined` without a session, and for a SIWE session, which holds
-         * no access token, and sends no request.
+         * no access token, and sends no request. If the response has status 401 and `WWW-Authenticate`
+         * names `invalid_token`, such as after Tempo ID ended the user's session, the call refreshes
+         * the session once. New tokens send the request again, unless its body is a stream, which the
+         * call returns the first response for. A refused refresh token ends the session, and the call
+         * returns the first response.
          * @throws {Accounts.RequestError} With `invalid_dpop_proof` and status 400, if another DPoP
          *   key, or no key, binds the access token. The call sends no request. Also when a refresh
          *   fails, as `get` describes.
@@ -211,6 +215,12 @@ export function backend(options: backend.Options) {
             }
           })()
           const method = (init.method ?? 'GET').toUpperCase()
+          const send = (tokenHeaders: Record<string, string>) =>
+            (config.fetch ?? globalThis.fetch)(url, {
+              ...init,
+              headers: Api.requestHeaders(init.headers, { tokenHeaders }),
+              method,
+            })
           // The sessions sign the request with the configuration that redeemed the tokens, such as a
           // Durable Object's, whose DPoP key bound them.
           const tokenHeaders = await sessions.headers({
@@ -219,12 +229,26 @@ export function backend(options: backend.Options) {
             url: url.href,
           })
           if (!tokenHeaders) return undefined
-          const headers = Api.requestHeaders(init.headers, { tokenHeaders })
-          return (config.fetch ?? globalThis.fetch)(url, {
-            ...init,
-            headers,
+          const response = await send(tokenHeaders)
+          if (!refusesToken(response)) return response
+
+          // The API refused a token that the session still holds, so the session refreshes once. An
+          // object of an earlier release ignores `refused`, and returns the same token.
+          const refused = accessTokenOf(tokenHeaders)
+          const renewed = await sessions.headers({
+            id: parameters.id,
             method,
+            refused,
+            url: url.href,
           })
+          if (
+            !renewed ||
+            accessTokenOf(renewed) === refused ||
+            init.body instanceof ReadableStream
+          )
+            return response
+          await response.body?.cancel()
+          return send(renewed)
         },
         /**
          * Returns the session, after a refresh if its access token expires within 30 seconds, or
@@ -688,11 +712,9 @@ export declare namespace backend {
      * Returns the headers that send the session's access token for a request, or `undefined`
      * without a Tempo ID session.
      */
-    headers: (options: {
-      id: string
-      method: string
-      url: string
-    }) => Promise<Record<string, string> | undefined>
+    headers: (
+      options: BackendSessions.headers.Options,
+    ) => Promise<Record<string, string> | undefined>
     /** Stores a challenge of the session: its SIWE sign-in's, or an approval's. */
     issue: (options: BackendSessions.issue.Options) => Promise<void>
     /**
@@ -889,6 +911,21 @@ function local(sessions: BackendSessions.create.ReturnType): backend.Sessions {
     take: sessions.take,
     unlink: sessions.unlink,
   }
+}
+
+/** Returns the access token of the headers that send it: the credentials of `Authorization`. */
+function accessTokenOf(headers: Record<string, string>) {
+  return headers.authorization?.split(' ')[1]
+}
+
+/**
+ * Returns whether the response refuses its request's access token: status 401, with a
+ * `WWW-Authenticate` challenge that names `invalid_token` (RFC 6750 §3.1).
+ */
+function refusesToken(response: Response) {
+  if (response.status !== 401) return false
+  const challenge = response.headers.get('www-authenticate') ?? ''
+  return /\berror="?invalid_token"?/i.test(challenge)
 }
 
 /** Returns a new session ID: 32 random bytes in unpadded URL-safe Base64. */

@@ -263,17 +263,17 @@ export function create(
    * the lock rejects before the refresh, such as a folder that refuses the lock file, the refresh
    * runs without it.
    */
-  async function exclusive(id: string) {
-    if (!store.lock) return refresh(id)
+  async function exclusive(id: string, refused?: string) {
+    if (!store.lock) return refresh(id, refused)
     let started = false
     return await store
       .lock(refreshKey(id), () => {
         started = true
-        return refresh(id)
+        return refresh(id, refused)
       })
       .catch((error: unknown) => {
         if (started) throw error
-        return refresh(id)
+        return refresh(id, refused)
       })
   }
 
@@ -293,9 +293,10 @@ export function create(
 
   /**
    * Refreshes the session's access token unless it is still valid. It reads the session again, since
-   * a read before this refresh started can hold a refresh token that an earlier refresh rotated.
+   * a read before this refresh started can hold a refresh token that an earlier refresh rotated. A
+   * session that still holds `refused`, an access token that an API refused, refreshes while fresh.
    */
-  async function refresh(id: string) {
+  async function refresh(id: string, refused?: string) {
     const stored = await read(id)
     if (!stored) return stored
     // A SIWE session holds no tokens, so it ends at its expiry.
@@ -317,7 +318,7 @@ export function create(
       if (!sent) await Api.revoke(auth, { refreshToken }).catch(() => undefined)
       return undefined
     }
-    if (fresh(stored)) return stored
+    if (fresh(stored) && stored.accessToken !== refused) return stored
     const { refreshToken } = stored
     // Without a refresh token, the session lasts until its access token expires.
     if (!refreshToken && stored.expiresAt > Date.now()) return stored
@@ -410,7 +411,11 @@ export function create(
       return get(options)
     }
     if (!stored || ending.has(id)) return undefined
-    if (usable(stored)) return view(stored, id)
+    // An API refused the access token that the session still holds, such as after Tempo ID ended the
+    // user's session, so the read refreshes it, also while it is fresh.
+    const refused =
+      stored.method !== 'siwe' && stored.accessToken === options.refused
+    if (!refused && usable(stored)) return view(stored, id)
     // A session without a refresh token never refreshes, so it takes no refresh lock: it serves
     // until its access token expires, as `refresh` serves it, and otherwise `expire` ends it.
     if (!renewable(stored) && serves(stored)) return view(stored, id)
@@ -419,9 +424,10 @@ export function create(
     // save or a callback that starts later waits for it.
     const refreshing =
       refreshes.get(id) ??
-      (renewable(stored) ? exclusive(id) : expire(id)).finally(() =>
-        refreshes.delete(id),
-      )
+      (renewable(stored)
+        ? exclusive(id, refused ? options.refused : undefined)
+        : expire(id)
+      ).finally(() => refreshes.delete(id))
     refreshes.set(id, refreshing)
     const next = await refreshing
     return next && view(next, id)
@@ -692,7 +698,7 @@ export function create(
     },
     get,
     async headers(options) {
-      const session = await get({ id: options.id })
+      const session = await get({ id: options.id, refused: options.refused })
       if (!session || session.method === 'siwe') return undefined
       // Every API refuses a token that another DPoP key binds, so the request goes unsent.
       Api.checkBound(auth, { accessToken: session.accessToken })
@@ -925,11 +931,9 @@ export declare namespace create {
      * refresh if necessary: a `DPoP` proof with the key that bound the token, or a Bearer token.
      * Returns `undefined` without a session, and for a SIWE session, which holds no access token.
      */
-    headers: (options: {
-      id: string
-      method: string
-      url: string
-    }) => Promise<Record<string, string> | undefined>
+    headers: (
+      options: headers.Options,
+    ) => Promise<Record<string, string> | undefined>
     /**
      * Stores a challenge of the session `id`, with an `expiresAt` of the challenge's expiry: the
      * challenge of a SIWE sign-in, or with `name`, an approval of the session.
@@ -1084,6 +1088,12 @@ export declare namespace get {
   type Options = {
     /** The session ID. */
     id: string
+    /**
+     * An access token that an API refused. If the session still holds it, the read refreshes the
+     * session, also while the token is fresh. Absent, only a token that expires within 30 seconds
+     * refreshes.
+     */
+    refused?: string | undefined
   }
 
   /**
@@ -1093,6 +1103,17 @@ export declare namespace get {
    * keeps any other entry of its key.
    */
   type ReturnType = BackendSession | SiweSession | undefined
+}
+
+export declare namespace headers {
+  type Options = Pick<get.Options, 'refused'> & {
+    /** The session ID. */
+    id: string
+    /** The request's method, which the DPoP proof names. */
+    method: string
+    /** The request's URL, which the DPoP proof names. */
+    url: string
+  }
 }
 
 export declare namespace issue {
