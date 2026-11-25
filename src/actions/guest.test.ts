@@ -1013,23 +1013,23 @@ describe('Actions.guest.settlement', () => {
       'cancels a sponsored checkout that Tempo ID still remembers as unpaid after the window, with no known hash',
       {
         entry: { ...ended, hash: undefined },
-        receipt: 'unknown',
+        receipt: 'unreadable',
         status: unpaid,
       },
       'cancel',
     ],
     [
-      'keeps a sponsored checkout unknown after Tempo ID forgets paid checkouts, with no known hash',
+      'leaves a sponsored checkout undecidable after Tempo ID forgets paid checkouts, with no known hash',
       {
         entry: {
           ...ended,
           hash: undefined,
           validBefore: ended.validBefore - day,
         },
-        receipt: 'unknown',
+        receipt: 'unreadable',
         status: unpaid,
       },
-      'pending',
+      'undecidable',
     ],
     [
       'cancels a checkout that Tempo ID forgot, whose transaction the chain holds no receipt of after the window',
@@ -1041,11 +1041,38 @@ describe('Actions.guest.settlement', () => {
       'cancel',
     ],
     [
-      'keeps a checkout that Tempo ID forgot unknown without a client of the chain',
+      'leaves a checkout that Tempo ID forgot undecidable without a client of the chain',
+      {
+        entry: { ...ended, validBefore: ended.validBefore - day },
+        receipt: 'unreadable',
+        status: unpaid,
+      },
+      'undecidable',
+    ],
+    [
+      'rejects as pending a checkout that Tempo ID forgot after a failed receipt read, which a retry can decide',
       {
         entry: { ...ended, validBefore: ended.validBefore - day },
         receipt: 'unknown',
         status: unpaid,
+      },
+      'pending',
+    ],
+    [
+      'waits after a failed receipt read within the window',
+      { entry: open, receipt: 'unknown', status: unpaid },
+      'wait',
+    ],
+    [
+      'rejects as pending an unreadable checkout that Tempo ID forgot, whose status read failed',
+      {
+        entry: {
+          ...ended,
+          hash: undefined,
+          validBefore: ended.validBefore - day,
+        },
+        receipt: 'unreadable',
+        status: 'unknown',
       },
       'pending',
     ],

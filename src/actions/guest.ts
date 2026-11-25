@@ -769,13 +769,13 @@ export async function pay(
   }
   /**
    * Returns what the chain holds of the signed transaction `hash`: its receipt's status, `missing`
-   * for no receipt, or `unknown` without a hash, without a client, or after a failed read.
+   * for no receipt, `unreadable` without a hash or a client, or `unknown` after a failed read.
    */
   const landed = async (
     hash: `0x${string}` | undefined,
   ): Promise<settlement.Options['receipt']> => {
     const client = hash ? options.getClient?.({ chainId }) : undefined
-    if (!hash || !client) return 'unknown'
+    if (!hash || !client) return 'unreadable'
     try {
       return (await getTransactionReceipt(client, { hash })).status
     } catch (error) {
@@ -833,6 +833,7 @@ export async function pay(
       if (step.type === 'paid') return step.transaction
       if (step.type === 'forget') return undefined
       if (step.type === 'pending') throw new PendingError({ checkout: id })
+      if (step.type === 'undecidable') return step
       if (step.type === 'cancel') {
         cancellation = await post('/i/guest/pay/cancel', {
           chain_id: chainId,
@@ -929,16 +930,15 @@ export async function pay(
         for (const [id, entry] of claimed) {
           try {
             const transaction = await settle(id, entry)
+            // A checkout that no read can decide blocks no later payment. The store keeps it, and
+            // `forget` removes it.
+            if (typeof transaction === 'object') continue
             held.delete(id)
             await forget(id)
             paid ??= transaction
           } catch (error) {
             if (!(error instanceof PendingError)) throw error
-            // Only a call that owns the checkout rejects with `PendingError` once Tempo ID no longer
-            // holds its outcome, so a checkout that nothing can decide blocks no later payment.
-            // The store keeps it, and `forget` removes it.
-            if (Date.now() < entry.validBefore * 1_000 + retention)
-              unknown ??= id
+            unknown ??= id
           }
         }
       } finally {
@@ -1173,6 +1173,10 @@ export async function pay(
           leaseUntil: 0,
           validBefore,
         })
+        // The call owns the checkout, so an outcome that no read decides rejects with
+        // `PendingError`.
+        if (typeof transaction === 'object')
+          throw new PendingError({ checkout })
         if (transaction) return await settled(transaction)
         await forget(checkout)
         throw error
@@ -1387,7 +1391,8 @@ export async function session(auth: Config): Promise<Session.GuestSession> {
  * | `cancel`  | No transaction of it can land: a reverted receipt, or after the window no receipt, or Tempo ID still holds paid checkouts and reads it unpaid with no send that can land. |
  * | `forget`  | Tempo ID refuses the checkout or its cancellation for good, and the chain shows that it did not land. |
  * | `wait`    | The outcome is not known yet, before the window's end and `settleMargin`.                     |
- * | `pending` | The outcome is still unknown after the window's end and `settleMargin`, also after cancellations that failed. |
+ * | `pending` | The outcome is still unknown after the window's end and `settleMargin`, also after cancellations or reads that failed. |
+ * | `undecidable` | Tempo ID no longer holds the outcome, and no receipt can be read: the checkout has no known hash, or the call no client. |
  *
  * Tempo ID's status is a fast path: it forgets a paid checkout a day after its receipt, and a
  * sponsored transaction has no known hash, so after that time only a receipt decides.
@@ -1429,6 +1434,15 @@ export function settlement(options: settlement.Options): settlement.ReturnType {
   }
   if ((status === 'refused' || cancellation === 'refused') && landless)
     return { type: 'forget' }
+  // Only a receipt that no read can return leaves the outcome undecidable for good. A failed read
+  // tries again, then rejects as pending.
+  const forgotten = now >= entry.validBefore * 1_000 + retention
+  if (
+    forgotten &&
+    receipt === 'unreadable' &&
+    (status === 'refused' || (typeof status === 'object' && !status.pending))
+  )
+    return { type: 'undecidable' }
   return late ? { type: 'pending' } : { type: 'wait' }
 }
 
@@ -1453,10 +1467,10 @@ export declare namespace settlement {
     /** Whether the checkout is the call's own, which no lease holds back. Defaults to `false`. */
     own?: boolean | undefined
     /**
-     * The chain's receipt of the signed transaction: its status, `missing` for none, or `unknown`
-     * without a hash, without a client, or after a failed read.
+     * The chain's receipt of the signed transaction: its status, `missing` for none, `unreadable`
+     * without a hash or a client, or `unknown` after a failed read.
      */
-    receipt: 'missing' | 'reverted' | 'success' | 'unknown'
+    receipt: 'missing' | 'reverted' | 'success' | 'unknown' | 'unreadable'
     /**
      * Tempo ID's status of the checkout: the paid transaction and whether a send can land,
      * `refused` for a definitive refusal, or `unknown` after a failed read.
@@ -1482,6 +1496,7 @@ export declare namespace settlement {
         type: 'paid'
       }
     | { type: 'pending' }
+    | { type: 'undecidable' }
     | { type: 'wait' }
 }
 
