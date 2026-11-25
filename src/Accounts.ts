@@ -2252,6 +2252,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     if (parameters.accessToken) return await read(parameters.accessToken)
     const accessToken = await ownAccessToken()
     if (!accessToken) return await read(undefined)
+    // The call started for the user of this token, so its retry never returns another user's account.
+    const started = context.session.get()
+    const subject = started && Session.subject(started)
     return await read(accessToken).catch(async (error: unknown) => {
       // Tempo ID refuses a live access token of the session when the user's Tempo ID session ended
       // elsewhere, such as at a logout in another app. One refresh tells that from a stale token:
@@ -2259,26 +2262,33 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       if (!(error instanceof RequestError) || error.reason !== 'invalid_token')
         throw error
       const current = context.session.get()
-      if (!current?.refreshToken) throw error
-      // Another call can have replaced the refused token already, and then the read sends its token.
-      const failure =
-        current.accessToken === accessToken
-          ? await refresh().then(
-              () => undefined,
-              (refusal: unknown) => ({ refusal }),
-            )
-          : undefined
-      if (failure) {
-        const ended =
-          failure.refusal instanceof RequestError &&
-          failure.refusal.code === 'invalid_grant' &&
-          !context.session.get()
-        if (!ended) throw failure.refusal
-        // A page still reads with any session cookie that reaches Tempo ID, as without a live
-        // access token.
-        if (Api.page() === undefined)
-          throw new SignedOutError({ cause: failure.refusal })
-      }
+      const ended = await (async () => {
+        // An overlapping call's refused refresh can have ended the session already.
+        if (!current) return { cause: error }
+        if (Session.subject(current) !== subject) throw new SignedOutError()
+        // Another call can have replaced the refused token already, and then the read sends its token.
+        if (current.accessToken !== accessToken) return undefined
+        if (!current.refreshToken) throw error
+        const refusal = await refresh().then(
+          () => undefined,
+          (refusal: unknown) => refusal,
+        )
+        if (refusal === undefined) return undefined
+        if (
+          !(refusal instanceof RequestError) ||
+          refusal.code !== 'invalid_grant' ||
+          context.session.get()
+        )
+          throw refusal
+        return { cause: refusal }
+      })()
+      // A page still reads with any session cookie that reaches Tempo ID, as without a live access
+      // token.
+      if (ended && Api.page() === undefined) throw new SignedOutError(ended)
+      // A sign-in of another user during the refresh ends the call, as `session.accessToken` does.
+      const latest = context.session.get()
+      if (latest && Session.subject(latest) !== subject)
+        throw new SignedOutError()
       return await read(await ownAccessToken())
     })
   }
