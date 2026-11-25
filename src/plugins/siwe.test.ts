@@ -107,6 +107,72 @@ describe('siwe.start', () => {
       ]
     `)
   })
+
+  test("names the origin of the client ID or the redirect URI without `origin`, whatever the request's host, and throws without one", async () => {
+    const attacker = 'https://attacker.example'
+    const create = (config: { clientId: string; redirectUri?: string }) =>
+      Accounts.create({
+        ...config,
+        chain: 4217,
+        plugins: [
+          backend({ store: Store.memory() }),
+          siwe(),
+          viem({ transport: node().transport }),
+        ],
+        url: 'http://127.0.0.1:9',
+      })
+    const named = (accounts: ReturnType<typeof create>, url: string) =>
+      accounts.siwe
+        .start({
+          // A server that answers any `Host` header builds the request's URL from it.
+          request: new Request(`${url}/api/siwe/challenge`, {
+            headers: { origin: url },
+            method: 'POST',
+          }),
+        })
+        .then(({ message }) => {
+          const { domain, uri } = parseSiweMessage(message)
+          return { domain, uri }
+        }, reason)
+    const byClientId = create({ clientId: origin })
+    const byRedirectUri = create({
+      clientId: 'client_123',
+      redirectUri: `${origin}/api/auth/callback`,
+    })
+
+    const results = await Promise.all([
+      named(byClientId, origin),
+      named(byClientId, attacker),
+      named(byRedirectUri, origin),
+      named(byRedirectUri, attacker),
+    ])
+    const missing = (() => {
+      try {
+        create({ clientId: 'client_123', redirectUri: 'app://callback' })
+        return undefined
+      } catch (error) {
+        return (error as Error).message
+      }
+    })()
+
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "domain": "app.example.com",
+          "uri": "https://app.example.com",
+        },
+        "origin",
+        {
+          "domain": "app.example.com",
+          "uri": "https://app.example.com",
+        },
+        "origin",
+      ]
+    `)
+    expect(missing).toMatchInlineSnapshot(
+      `"Missing \`origin\`: neither \`redirectUri\` nor \`clientId\` is an \`http\` or \`https\` URL that names the app's origin. Pass the app's public origin as \`origin\`."`,
+    )
+  })
 })
 
 describe('siwe.complete', () => {
@@ -206,6 +272,38 @@ describe('siwe.complete', () => {
         "retried": "challenge",
       }
     `)
+  })
+
+  test("refuses a challenge of another origin than the plugin's, such as one of an alias that shares the store", async () => {
+    const store = Store.memory()
+    const alias = 'https://alias.example.com'
+    const create = (value: string) =>
+      Accounts.create({
+        chain: 4217,
+        clientId: origin,
+        plugins: [
+          backend({ store }),
+          siwe({ origin: value }),
+          viem({ transport: node().transport }),
+        ],
+        url: 'http://127.0.0.1:9',
+      })
+    const app = create(origin)
+    const account = privateKeyToAccount(generatePrivateKey())
+    const { id, message } = await create(alias).siwe.start({
+      request: new Request(`${alias}/api/siwe/challenge`),
+    })
+
+    const refused = await app.siwe
+      .complete({
+        address: account.address,
+        id,
+        message,
+        signature: await account.signMessage({ message }),
+      })
+      .then(reason, reason)
+
+    expect(refused).toMatchInlineSnapshot(`"message"`)
   })
 
   test('refuses a signature of another account, and a signer other than the address that the message names', async () => {
@@ -1189,10 +1287,10 @@ describe('siwe.approve', () => {
   })
 
   test("refuses a message of another origin than the request's, such as an alias that shares the store", async () => {
-    const { accounts } = instance()
+    const alias = 'https://alias.example.com'
+    const { accounts } = instance({ origin: [origin, alias] })
     const account = privateKeyToAccount(generatePrivateKey())
     const session = await signIn(accounts, account)
-    const alias = 'https://alias.example.com'
     const change = { statement: 'Delete note 1.' }
     const { message } = await accounts.siwe.challenge({
       ...change,
