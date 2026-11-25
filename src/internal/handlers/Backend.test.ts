@@ -3,11 +3,12 @@
  * store, at a Tempo ID URL where nothing listens, so a route that sends a request to Tempo ID fails.
  * @module
  */
+import * as Http from 'node:http'
 import { Base64 } from 'ox'
 import { custom } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { parseSiweMessage } from 'viem/siwe'
-import { describe, expect, test } from 'vite-plus/test'
+import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 import * as Accounts from '../../Accounts.js'
 import { backend } from '../../plugins/backend.js'
 import { siwe } from '../../plugins/siwe.js'
@@ -1366,8 +1367,9 @@ describe('fetch', () => {
     ).toMatchInlineSnapshot(`4217`)
   })
 
-  test('GET /session answers 503 temporarily_unavailable, and keeps the cookie, when the refresh of its session fails', async () => {
-    const accounts = instance()
+  test('GET /session returns null and deletes the cookie in one read, when a refresh without a response ends its session', async () => {
+    const store = Store.memory()
+    const accounts = instance({ store })
     const { id } = await accounts.backend.save({
       session: Session.from({
         ...session(),
@@ -1375,33 +1377,101 @@ describe('fetch', () => {
         refreshToken: 'refresh-token',
       }),
     })
-
-    // Nothing listens at the URL, so the refresh of the expired access token receives no response.
-    const response = await accounts.handler
-      .fetch(
+    const read = () =>
+      accounts.handler.fetch(
         new Request(`${origin}/accounts/auth/session`, {
           headers: { cookie: `__Host-tempo-id.sid=${id}` },
         }),
       )
-      .catch((error: Error) => error.name)
 
-    expect(
-      response instanceof Response
-        ? {
-            body: await response.json(),
-            cacheControl: response.headers.get('cache-control'),
-            cookies: response.headers.getSetCookie(),
-            status: response.status,
-          }
-        : response,
-    ).toMatchInlineSnapshot(`
+    // Nothing listens at the URL, so the refresh of the expired access token receives no response.
+    // Tempo ID may have rotated the refresh token, so the read ends the session.
+    const response = await read()
+
+    expect({
+      body: await response.json(),
+      cacheControl: response.headers.get('cache-control'),
+      cookies: response.headers.getSetCookie(),
+      status: response.status,
+    }).toMatchInlineSnapshot(`
       {
         "body": {
-          "error": "temporarily_unavailable",
+          "session": null,
         },
         "cacheControl": "no-store",
+        "cookies": [
+          "__Host-tempo-id.sid=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+        ],
+        "status": 200,
+      }
+    `)
+    expect(await store.getItem(`tempo-id:session:${id}`)).toMatchInlineSnapshot(
+      `undefined`,
+    )
+  })
+
+  test('GET /session returns the session that another process stored on a shared store while the refresh received no response, and keeps the cookie', async () => {
+    const store = Store.memory()
+    const options = {
+      clientId: origin,
+      handler: { basePath: '/accounts' },
+    } as const
+    // Another process on the shared store signs the user in again under the same session ID while
+    // this process's refresh is in flight. The token endpoint then drops the connection, so the
+    // refresh receives no response.
+    const other = Accounts.create({
+      ...options,
+      plugins: [backend({ store })],
+      url: 'http://127.0.0.1:9',
+    })
+    let id = ''
+    const server = Http.createServer((request) => {
+      void other.backend
+        .save({
+          id,
+          session: Session.from({
+            ...session(),
+            accessToken: 'access-token-2',
+            expiresAt: Date.now() + 3_600_000,
+            refreshToken: 'refresh-token-2',
+          }),
+        })
+        .finally(() => request.socket.destroy())
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    onTestFinished(
+      () => new Promise<void>((resolve) => server.close(() => resolve())),
+    )
+    const { port } = server.address() as { port: number }
+    const accounts = Accounts.create({
+      ...options,
+      plugins: [backend({ store })],
+      url: `http://127.0.0.1:${port}`,
+    })
+    ;({ id } = await accounts.backend.save({
+      session: Session.from({
+        ...session(),
+        expiresAt: 0,
+        refreshToken: 'refresh-token',
+      }),
+    }))
+
+    const response = await accounts.handler.fetch(
+      new Request(`${origin}/accounts/auth/session`, {
+        headers: { cookie: `__Host-tempo-id.sid=${id}` },
+      }),
+    )
+
+    expect({
+      cookies: response.headers.getSetCookie(),
+      method: ((await response.json()) as { session?: { method?: string } })
+        .session?.method,
+      status: response.status,
+    }).toMatchInlineSnapshot(`
+      {
         "cookies": [],
-        "status": 503,
+        "method": "tempo-id",
+        "status": 200,
       }
     `)
   })
