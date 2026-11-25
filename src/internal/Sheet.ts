@@ -303,7 +303,9 @@ export function create(options: create.Options): create.ReturnType {
   // shows.
   dialog.setAttribute('aria-hidden', 'true')
   dialog.inert = true
-  dialog.style.colorScheme = scheme()
+  // The frame's page takes the scheme from its URL, so the dialog keeps the scheme it loads with.
+  const colorScheme = scheme()
+  dialog.style.colorScheme = colorScheme
 
   const frame = document.createElement('iframe')
   // The frame runs the passkey ceremonies for Tempo ID's origin, a sign-in and a new user's passkey
@@ -440,8 +442,6 @@ export function create(options: create.Options): create.ReturnType {
         },
         reveal: () => {
           if (dialog.open) return
-          // The app's page can change its scheme while the frame loads hidden.
-          dialog.style.colorScheme = scheme()
           dialog.removeAttribute('aria-hidden')
           dialog.inert = false
           dialog.showModal()
@@ -505,7 +505,7 @@ export function create(options: create.Options): create.ReturnType {
     if (!blank) actor.send({ type: 'frame.load' })
   })
 
-  frame.src = schemed(url)
+  frame.src = schemed(url, { colorScheme })
   dialog.appendChild(frame)
   document.body.appendChild(dialog)
 
@@ -516,7 +516,7 @@ export function create(options: create.Options): create.ReturnType {
     close() {
       actor.send({ animate: animate(), type: 'close' })
     },
-    connected: () => dialog.isConnected,
+    connected: () => dialog.isConnected && scheme() === colorScheme,
     hide() {
       if (machines.failed(actor.getSnapshot())) return false
       actor.send({ animate: animate(), type: 'hide' })
@@ -548,7 +548,10 @@ export function create(options: create.Options): create.ReturnType {
       return id
     },
     trusted: () => machines.trusted(actor.getSnapshot()),
-    usable: () => dialog.isConnected && !machines.failed(actor.getSnapshot()),
+    usable: () =>
+      dialog.isConnected &&
+      scheme() === colorScheme &&
+      !machines.failed(actor.getSnapshot()),
   }
 }
 
@@ -578,8 +581,9 @@ export declare namespace create {
     /** Closes the dialog, after its exit, and removes it with its frame and any popup it opened. */
     close: () => void
     /**
-     * Returns whether the dialog is still in the document. A page can remove it, such as a framework
-     * that mounts into the body after the dialog loads.
+     * Returns whether the dialog is still in the document, in the scheme of the app's page. A page
+     * can remove it, such as a framework that mounts into the body after the dialog loads, or change
+     * its scheme.
      */
     connected: () => boolean
     /**
@@ -606,8 +610,8 @@ export declare namespace create {
      */
     trusted: () => boolean | undefined
     /**
-     * Returns whether the dialog is still in the document and its frame has not failed, so the next
-     * `show` can take the frame.
+     * Returns whether the dialog is still in the document, in the scheme of the app's page, and its
+     * frame has not failed, so the next `show` can take the frame.
      */
     usable: () => boolean
   }
@@ -810,7 +814,9 @@ export function load(options: load.Options): load.ReturnType {
   dialog.setAttribute('aria-hidden', 'true')
   dialog.setAttribute('aria-label', options.label)
   dialog.inert = true
-  dialog.style.colorScheme = scheme()
+  // The frame's page takes the scheme from its URL, so the dialog keeps the scheme it loads with.
+  const colorScheme = scheme()
+  dialog.style.colorScheme = colorScheme
 
   const element = document.createElement('iframe')
   // The frame may never navigate this page.
@@ -821,7 +827,7 @@ export function load(options: load.Options): load.ReturnType {
   element.setAttribute('sandbox', options.sandbox)
   element.setAttribute('title', 'Tempo ID')
   element.style.height = '420px'
-  element.src = schemed(options.url)
+  element.src = schemed(options.url, { colorScheme })
   // An inert frame's page takes no focus or input, so a covered page cannot approve.
   element.inert = options.covered === true
 
@@ -1027,8 +1033,6 @@ export function load(options: load.Options): load.ReturnType {
     show: (value) => {
       if (state.phase !== 'hidden') return
       state = { handlers: value, phase: 'shown' }
-      // The app's page can change its scheme while a preloaded frame waits.
-      dialog.style.colorScheme = scheme()
       dialog.removeAttribute('aria-hidden')
       dialog.inert = false
       dialog.showModal()
@@ -1043,7 +1047,10 @@ export function load(options: load.Options): load.ReturnType {
         if (child instanceof HTMLElement) child.inert = false
     },
     // The offer of a popup replaces the frame, so a frame that offers one shows no page.
-    usable: () => state.phase === 'hidden' && element.isConnected,
+    usable: () =>
+      state.phase === 'hidden' &&
+      element.isConnected &&
+      scheme() === colorScheme,
   }
 }
 
@@ -1123,8 +1130,8 @@ export declare namespace load {
      */
     uncover: (options?: { challenge?: string | undefined }) => void
     /**
-     * Whether a call can still show the dialog: it is not closed or shown, the page holds it, and
-     * its frame offers no popup.
+     * Whether a call can still show the dialog: it is not closed or shown, the page holds it in the
+     * scheme of the app's page, and its frame offers no popup.
      */
     usable: () => boolean
   }
@@ -1229,10 +1236,17 @@ function scheme() {
  * Returns `url` with `color_scheme`, the scheme of the app's page, so Tempo ID's page draws in it.
  * Some browsers give a frame the browser's preference, whatever the `iframe` element's scheme.
  */
-function schemed(url: string) {
+function schemed(url: string, options: schemed.Options) {
   const value = new URL(url)
-  value.searchParams.set('color_scheme', scheme())
+  value.searchParams.set('color_scheme', options.colorScheme)
   return value.href
+}
+
+declare namespace schemed {
+  type Options = {
+    /** The scheme that {@link scheme} returned when the dialog loaded. */
+    colorScheme: ReturnType<typeof scheme>
+  }
 }
 
 /** Returns whether the dialog plays its entrance and exit, which reduced motion turns off. */

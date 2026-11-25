@@ -183,13 +183,7 @@ test.describe('funding', () => {
           const frame = await Playwright.dialog(page)
           await Playwright.deposit(frame)
 
-          expect(
-            await frame
-              .locator('html')
-              .evaluate(
-                () => matchMedia('(prefers-color-scheme: dark)').matches,
-              ),
-          ).toBe(true)
+          expect(await Playwright.scheme(frame)).toBe('dark')
           await capture('dark deposit page')
         })
       })
