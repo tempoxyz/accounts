@@ -6,9 +6,9 @@
  *   commit's UTC time, so a rerun of a commit resolves the same version. If `latest` holds the same
  *   or a later time in the same `<breaking>.<minor>`, `<time>` is one more than its time. No version
  *   is a prerelease, so a caret range resolves each later release.
- * - A title marked breaking, such as `feat!: …` or one whose commit says `BREAKING CHANGE:`, raises
- *   `<breaking>` and resets `<minor>` to `0`. Else a `feat` title raises `<minor>`. A `dogfood: `
- *   prefix is read past, so `dogfood: feat!: …` is breaking too.
+ * - A `feat` title, or a title marked breaking, such as `feat!: …` or one whose commit says
+ *   `BREAKING CHANGE:`, raises `<minor>`. No title raises `<breaking>`. A `dogfood: ` prefix is read
+ *   past, so `dogfood: feat!: …` is breaking too.
  * - The first release of this scheme is `1.0.<time>`, after the `0.x` releases of
  *   `tempoxyz/accounts` and the `<breaking>.<time>.<n>` versions before it, such as
  *   `2.20261120231248.0`.
@@ -79,9 +79,13 @@ function next(
 
   const major = Number(match[1])
   const minor = Number(match[2])
-  if (known.some(breaking)) return `${major + 1}.0.${at}`
+  // A breaking commit raises `<minor>` like a `feat`, so no title raises `<breaking>`.
   if (
-    known.some((commit) => title.exec(subject(commit))?.groups?.type === 'feat')
+    known.some(
+      (commit) =>
+        breaking(commit) ||
+        title.exec(subject(commit))?.groups?.type === 'feat',
+    )
   )
     return `${major}.${minor + 1}.${at}`
   // npm refuses a version twice, and a later version must sort above `latest`, so a release in the
