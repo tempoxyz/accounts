@@ -775,10 +775,11 @@ export function create(options: create.Options): Handler.Handler {
   /**
    * Returns the cookie's user and Tempo Account, or `null`, and deletes a cookie whose session
    * ended. In the token mode, a request without the cookie reads the SIWE session of its bearer
-   * token. A refresh without a response, or with a 429 or 5xx status, answers 503
-   * `temporarily_unavailable` and keeps the cookie, so the next request reads the session again.
-   * Any other refusal, such as `invalid_dpop_proof`, repeats at each read, so the route ends the
-   * session as `POST /logout` does, returns `null`, and deletes the cookie.
+   * token. A refresh with a 429 status, or a refused redirect, keeps the session, so the route
+   * answers 503 `temporarily_unavailable` and keeps the cookie for the next request. A refresh
+   * without a response, or with a 5xx status, ends the session, so the route returns `null` and
+   * deletes the cookie. Any other refusal, such as `invalid_dpop_proof`, repeats at each read, so
+   * the route ends the session as `POST /logout` does, returns `null`, and deletes the cookie.
    */
   async function session(request: Request) {
     const cookie = BackendCookie.get(request, {
@@ -798,7 +799,11 @@ export function create(options: create.Options): Handler.Handler {
         ? undefined
         : read
     const headers = new Headers({ 'cache-control': 'no-store' })
-    if (current instanceof RequestError && transient(current))
+    // A refresh that ended the session, such as one without a response, leaves nothing for the next
+    // request to read, so only a refusal that keeps the session answers 503.
+    const kept =
+      current instanceof RequestError && BackendSessions.keeps(current)
+    if (kept && transient(current))
       return Response.json(
         { error: 'temporarily_unavailable' },
         { headers, status: 503 },
@@ -806,8 +811,7 @@ export function create(options: create.Options): Handler.Handler {
     // The store keeps a session that Tempo ID refused, so the route ends it, which revokes its refresh
     // token. The cookie goes either way, so the page signs in again. A failed end leaves a session
     // that no cookie names, as `/logout` does.
-    if (cookie && current instanceof RequestError)
-      await backend.end({ id: cookie }).catch(() => undefined)
+    if (cookie && kept) await backend.end({ id: cookie }).catch(() => undefined)
     if (cookie && (!current || current instanceof RequestError))
       headers.set(
         'set-cookie',
