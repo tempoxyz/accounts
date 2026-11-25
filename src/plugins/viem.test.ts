@@ -462,12 +462,23 @@ describe('viem', () => {
     const standalone = await Actions.token
       .transferSync(accounts.viem, parameters)
       .catch((error: BaseError) => error.walk())
+    const transfers = [...sent]
+    // An estimate signs nothing, so it still fills.
+    await accounts.token.transfer
+      .estimateGas({
+        ...parameters,
+        account: accounts.viem.account,
+        chain: accounts.viem.chain,
+      })
+      .catch(() => undefined)
 
-    expect({ own, sent, standalone }).toMatchInlineSnapshot(`
+    expect({ estimate: sent[0], own, standalone, transfers })
+      .toMatchInlineSnapshot(`
       {
+        "estimate": "eth_fillTransaction",
         "own": [Accounts.AccessKeyRequiredError: The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain.],
-        "sent": [],
         "standalone": [Accounts.AccessKeyRequiredError: The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain.],
+        "transfers": [],
       }
     `)
   })
