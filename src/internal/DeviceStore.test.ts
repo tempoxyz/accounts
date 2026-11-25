@@ -55,4 +55,72 @@ describe('create', () => {
       .toBe('signedOut')
     expect(await other.session.get()).toMatchInlineSnapshot(`undefined`)
   })
+
+  test('reads a refusal of the refresh token as final, so a revoked session sends one refresh and signs out', async () => {
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
+    const values = new Map<string, string>()
+    const secureStore = {
+      deleteItemAsync(key: string) {
+        values.delete(key)
+        return Promise.resolve()
+      },
+      getItemAsync: (key: string) => Promise.resolve(values.get(key) ?? null),
+      setItemAsync(key: string, value: string) {
+        values.set(key, value)
+        return Promise.resolve()
+      },
+    } satisfies DeviceStore.create.SecureStore
+    await DeviceStore.create(secureStore).setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 3_600_000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    const requests: string[] = []
+    // Tempo ID refuses the refresh token, as after a revocation on its connections page.
+    const accounts = Accounts.create({
+      chain: 1337,
+      clientId: 'https://app.example.com',
+      fetch(input, init) {
+        const token = new URLSearchParams(String(init?.body)).get(
+          'refresh_token',
+        )
+        requests.push(`${new URL(String(input)).pathname} ${token}`)
+        return Promise.resolve(
+          Response.json(
+            {
+              error: 'invalid_grant',
+              error_description: 'The refresh token is revoked.',
+            },
+            { status: 400 },
+          ),
+        )
+      },
+      store: DeviceStore.create(secureStore),
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+
+    const error = await accounts.session
+      .refresh()
+      .catch((error: Accounts.RequestError) => error.code)
+
+    expect({ error, requests }).toMatchInlineSnapshot(`
+      {
+        "error": "invalid_grant",
+        "requests": [
+          "/oauth2/token refresh-token",
+        ],
+      }
+    `)
+    expect(accounts.session.status.get().status).toMatchInlineSnapshot(
+      `"signedOut"`,
+    )
+  })
 })
