@@ -31,11 +31,10 @@ import type { Store } from '../Store.js'
 const attodollars = 1_000_000_000_000n
 
 /**
- * The percent by which the fee that the guest account signs may exceed the quoted fee, since the
- * fill's fee cap per gas can sit above the fee that the quote reports, such as at Viem's base fee
- * multiplier of 1.2.
+ * The prepares of one guest payment at most. A cost above the quote, `quote_changed`, quotes again
+ * before the next prepare, and rejects after the last.
  */
-const feeMargin = 25n
+const quoteAttempts = 3
 
 /** The time between the guest request's signature and its expiry, in seconds. */
 const lifetime = 4 * 60
@@ -257,6 +256,7 @@ export function check(
     if (!valid) throw refused('its fee token is not the quoted one.')
     // The most that the guest account pays is the gas times the fee cap per gas, in attodollars
     // per gas, which a TIP-20 fee token of 6 decimals charges as 1e12 attodollars per base unit.
+    // The guest approved the quoted fee, which Tempo ID's prepare also bounds the fill by.
     if (quote) {
       if (!quote.fee)
         throw refused('the quote names no fee for the guest account.')
@@ -264,8 +264,7 @@ export function check(
       if (gas === undefined || maxFeePerGas === undefined)
         throw refused('it names no gas or fee cap.')
       const most = (gas * maxFeePerGas + attodollars - 1n) / attodollars
-      const quoted = parseUnits(quote.fee.formatted, 6)
-      if (most > (quoted * (100n + feeMargin) + 99n) / 100n)
+      if (most > BigInt(quote.fee.amount))
         throw refused('its fee exceeds the quoted fee.')
     }
   }
@@ -281,15 +280,16 @@ export declare namespace check {
     /**
      * The quote of `GET /i/guest/pay` that the transaction fills. With it, a payment quoted as
      * sponsored must keep the sponsor's marker, and a transaction whose fee the guest account pays
-     * must name the quoted fee token, and cap its fee at the quoted fee plus 25 percent. Absent, such a transaction names any TIP-20 fee token, at any fee, as on Tempo ID's
-     * own payment page.
+     * must name the quoted fee token, and its gas at its fee cap costs at most the quoted fee.
+     * Absent, such a transaction names any TIP-20 fee token, at any fee, as on Tempo ID's own
+     * payment page.
      */
     quote?:
       | {
           /** The quoted fee, or `null` when Tempo ID knows none. */
           fee: {
-            /** The fee, in whole units of the fee token. */
-            formatted: string
+            /** The fee, in base units of the fee token. */
+            amount: string
             /** The fee token's address, or `null` when the fill names none. */
             token?: `0x${string}` | null | undefined
           } | null
@@ -357,6 +357,8 @@ type Quoted = {
   faucet: boolean
   /** The network fee, or `null` when Tempo ID knows none. */
   fee: {
+    /** The fee, in base units of the fee token, which the prepare names as the approved fee. */
+    amount: string
     /** The fee, in whole units of the fee token. */
     formatted: string
     /** The fee token's address, or `null` when the fill names none. */
@@ -393,11 +395,17 @@ type Refused = { cancel: string; refusal: Refusal }
  * funding code, such as the `device` plugin's `fundGuest`, and the call waits for the funds until
  * the code expires.
  *
+ * The prepare names the quoted cost: the sponsor, or the fee that the guest account pays. Tempo ID
+ * refuses a fill above it with `quote_changed`, and the call quotes again and prepares at the new
+ * quote, up to three prepares. The key pair signs only a fill whose fee is within the quote.
+ *
  * @throws {RequestError} With the reason of Tempo ID's refusal, such as `recipient_not_permitted`.
- *   With `insufficient_balance` and status 0 for a shortfall without a faucet or `fund`, or after
- *   the funding code expired.
+ *   With `insufficient_balance` and status 0 for a shortfall without a faucet or `fund`, after the
+ *   funding code expired, or for a new quote with a shortfall. With `quote_changed` when the third
+ *   prepare's fill still costs more than its quote.
  * @throws {RequestError} With `invalid_request` at `transaction`, for a prepared transaction other
- *   than the requested transfer, which the key pair never signs.
+ *   than the requested transfer, or whose fee exceeds the quoted fee, which the key pair never
+ *   signs.
  * @throws {SignedOutError} When the store holds another key pair than the session's, or once
  *   `current` no longer holds the session, such as after a sign-out.
  *
@@ -564,16 +572,47 @@ export async function pay(
   if ('paid' in quoted)
     return { address: session.address, transaction: quoted.paid.transaction }
 
-  const prepared = await post<Paid | { tag: string; transaction: string }>(
-    '/i/guest/pay',
-    { ...terms, guest: await guest(), sponsored: quoted.sponsored },
-  )
+  // The prepare names the quoted cost, which bounds the fill: the sponsor, or the fee that the
+  // guest pays, also `0` for a sponsored quote. A cost above it receives `quote_changed`, and the
+  // payment quotes again, so the key pair signs only a fill within a quote. A quote without a fee
+  // names none, and the check below refuses a fill whose fee the guest pays.
+  const prepare = async (quote: Quoted) =>
+    post<Paid | { tag: string; transaction: string }>('/i/guest/pay', {
+      ...terms,
+      ...(quote.sponsored
+        ? { fee: '0' }
+        : quote.fee
+          ? { fee: quote.fee.amount }
+          : {}),
+      guest: await guest(),
+      sponsored: quote.sponsored,
+    })
+  const { approved, prepared } = await (async () => {
+    let approved = quoted
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return { approved, prepared: await prepare(approved) }
+      } catch (error) {
+        const changed =
+          error instanceof RequestError && error.reason === 'quote_changed'
+        if (!changed || attempt >= quoteAttempts) throw error
+      }
+      const next = await quote()
+      if ('paid' in next) return { approved, prepared: next }
+      if (!('shortfall' in next)) throw refused(next.refusal)
+      if (next.shortfall)
+        throw short(
+          `Insufficient balance: the guest account ${session.address} lacks ${next.shortfall.formatted} ${next.shortfall.symbol} at the new quote. Fund the guest account, then pay again.`,
+        )
+      approved = next
+    }
+  })()
   if ('paid' in prepared)
     return { address: session.address, transaction: prepared.paid.transaction }
   const envelope = check(prepared.transaction, {
     amount,
     chainId,
-    quote: quoted,
+    quote: approved,
     memo,
     to,
     token,

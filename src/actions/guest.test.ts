@@ -122,7 +122,7 @@ describe('Actions.guest.check', () => {
 
   /** A quote of a fee that the guest account pays: 1 base unit of OUSD. */
   const unsponsored = {
-    fee: { formatted: '0.000001', token: ousd },
+    fee: { amount: '1', token: ousd },
     sponsored: false,
   } as const
 
@@ -146,23 +146,33 @@ describe('Actions.guest.check', () => {
       undefined,
     ],
     [
-      'accepts a guest-paid fee within the 25 percent margin over the quoted fee',
-      // 100,000 gas at 2e7 attodollars per gas is 2 base units, within 1 base unit plus 25 percent,
-      // rounded up.
+      'refuses a guest-paid fee whose gas at its fee cap exceeds the approved fee',
+      // 100,000 gas at 2e7 attodollars per gas is 2 base units, above the approved 1 base unit.
       {
         feePayerSignature: undefined,
         feeToken: ousd,
         maxFeePerGas: 20_000_000n,
       },
       unsponsored,
-      undefined,
+      'its fee exceeds the quoted fee.',
     ],
     [
-      'refuses a guest-paid fee over the cap',
+      'accepts a guest-paid fee whose gas at its fee cap costs exactly the approved fee',
+      // 100,000 gas at 1e7 attodollars per gas is 1e12 attodollars, 1 base unit.
       {
         feePayerSignature: undefined,
         feeToken: ousd,
-        maxFeePerGas: 30_000_000n,
+        maxFeePerGas: 10_000_000n,
+      },
+      unsponsored,
+      undefined,
+    ],
+    [
+      'refuses a guest-paid fee whose gas at its fee cap costs a fraction of a base unit above the approved fee',
+      {
+        feePayerSignature: undefined,
+        feeToken: ousd,
+        maxFeePerGas: 10_000_001n,
       },
       unsponsored,
       'its fee exceeds the quoted fee.',
