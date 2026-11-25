@@ -108,20 +108,36 @@ export class RetryAccountError extends Error {
 /**
  * The user closed the screen that a failed transaction showed, so the transaction did not send. A
  * transaction whose retry the user ended throws it: a close of the deposit page before a deposit,
- * **Continue to** the app without one, or a close of the sign-in for a new access key. Its `cause`
- * is the transaction's error. The same transaction, sent again, retries. Match it by `name`.
+ * **Continue to** the app without one, a close of the sign-in for a new access key, or, outside a
+ * page, a denial of the retry's device code. Its `cause` is the transaction's error. The same
+ * transaction, sent again, retries. Match it by `name`.
  */
 export class RetryClosedError extends Error {
   override readonly name = 'Plugins.viem.RetryClosedError'
   /** The failure that the screen resolves: `accessKey`, `balance`, or `limit`. */
   readonly kind: Retry.Kind
 
-  constructor(options: { cause: unknown; kind: Retry.Kind }) {
+  constructor(options: RetryClosedError.Options) {
+    const messages = options.denied ? deniedMessages : closedMessages
     super(
-      `${closedMessages[options.kind]} The transaction did not send. Send it again to retry.`,
+      `${messages[options.kind]} The transaction did not send. Send it again to retry.`,
       { cause: options.cause },
     )
     this.kind = options.kind
+  }
+}
+
+export declare namespace RetryClosedError {
+  type Options = {
+    /** The transaction's error. */
+    cause: unknown
+    /**
+     * Whether the user denied the device code of the retry outside a page, in place of a close of
+     * its screen. Defaults to `false`.
+     */
+    denied?: boolean | undefined
+    /** The failure that the screen resolves. */
+    kind: Retry.Kind
   }
 }
 
@@ -1791,6 +1807,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                   return change.fail(
                     new RetryClosedError({
                       cause: error,
+                      denied: true,
                       kind: failure.kind,
                     }),
                   )
@@ -3312,6 +3329,17 @@ const closedMessages = {
   accessKey: 'The user closed the sign-in for a new access key.',
   balance: 'The user closed the deposit page before a deposit arrived.',
   limit: 'The user closed the sign-in for a new access key with a new limit.',
+} as const satisfies Record<Retry.Kind, string>
+
+/**
+ * What the user denied outside a page, for each kind of failure, in the message of
+ * {@link RetryClosedError}.
+ */
+const deniedMessages = {
+  accessKey: 'The user denied the device code for a new access key.',
+  balance: 'The user denied the device code for a deposit.',
+  limit:
+    'The user denied the device code for a new access key with a new limit.',
 } as const satisfies Record<Retry.Kind, string>
 
 /** Tempo's chains, which a chain ID without a `chain` in its options uses. */
