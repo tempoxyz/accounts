@@ -1914,8 +1914,9 @@ function messaged() {
 }
 
 /**
- * Returns `account`, which runs `options.check` before each signature, so a check that throws keeps
- * the access key, or a guest session's key pair, from signing.
+ * Returns `account`, which runs `options.check` before each signature and after it, so a check that
+ * throws keeps the access key, or a guest session's key pair, from signing, and a sign-out during an
+ * async signature, such as a guest key pair's read or a WebCrypto signature, releases no signature.
  */
 function checked<
   account extends Account.AccessKeyAccount | Account.RootAccount,
@@ -1930,7 +1931,9 @@ function checked<
       ? {
           async sign(...args: Parameters<typeof sign>) {
             check()
-            return sign(...args)
+            const signature = await sign(...args)
+            check()
+            return signature
           },
         }
       : {}),
@@ -1938,19 +1941,25 @@ function checked<
       ...args: Parameters<Account.AccessKeyAccount['signMessage']>
     ) {
       check()
-      return account.signMessage(...args)
+      const signature = await account.signMessage(...args)
+      check()
+      return signature
     },
     async signTransaction(
       ...args: Parameters<Account.AccessKeyAccount['signTransaction']>
     ) {
       check()
-      return account.signTransaction(...args)
+      const signed = await account.signTransaction(...args)
+      check()
+      return signed
     },
     async signTypedData(
       ...args: Parameters<Account.AccessKeyAccount['signTypedData']>
     ) {
       check()
-      return account.signTypedData(...args)
+      const signature = await account.signTypedData(...args)
+      check()
+      return signature
     },
   } as account
 }

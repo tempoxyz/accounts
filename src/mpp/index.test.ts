@@ -846,6 +846,49 @@ describe('mpp', () => {
     `)
   })
 
+  test('refuses a charge of a guest session with Accounts.SignedOutError, and sends no credential, once a sign-out during the read of its key pair ends the session', async () => {
+    const memory = Store.memory()
+    let armed = false
+    const endpoint = server()
+    const accounts = instance({
+      fetch: endpoint.fetch,
+      // The signature's read of the key pair signs the instance out first, once armed.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (armed && key.startsWith('tempo-id:guest:')) {
+            armed = false
+            await accounts.signOut()
+          }
+          return await memory.getItem(key)
+        },
+      }),
+    })
+    await accounts.renew.commit(await Guest.session(accounts.config))
+    await accounts.session.get()
+    armed = true
+
+    const error = await accounts
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+
+    expect({
+      armed,
+      credentials: endpoint.credentials,
+      error,
+      session: await accounts.session.get(),
+    }).toMatchInlineSnapshot(`
+      {
+        "armed": false,
+        "credentials": [
+          false,
+        ],
+        "error": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "session": undefined,
+      }
+    `)
+  })
+
   test('refuses a charge of a guest session without `maxAmount` with mpp.MaxAmountRequiredError, before its key pair signs', async () => {
     const endpoint = server({ amount: '1' })
     const accounts = instance({ fetch: endpoint.fetch, store: Store.memory() })
