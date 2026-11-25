@@ -3,6 +3,7 @@
  * @module
  */
 import { createActor } from 'xstate'
+import * as Broadcast from '../internal/Broadcast.js'
 import * as StoreValue from '../internal/StoreValue.js'
 import type * as Store from '../Store.js'
 import * as Redis from './Redis.js'
@@ -21,7 +22,10 @@ import * as Redis from './Redis.js'
  * row with a 30-second lease on the database's clock, and renews the lease each 10 seconds while the
  * hold runs, until the lease ends 120 seconds after the hold starts. So replicas that share the
  * table refresh a session's token once, also when the refresh outlasts the lease. A crashed
- * holder's lock expires within 30 seconds, and a hung holder's at about 120 seconds.
+ * holder's lock expires within 30 seconds, and a hung holder's at about 120 seconds. The instances on
+ * one store hear each other's saved changes in memory through `connect`, so a sign-out empties the
+ * session of every instance in the process at once. An instance in another process reads the
+ * sign-out from the table at its next refresh.
  *
  * `client` is any client with `query(text, values)`, such as a `pg` pool.
  *
@@ -97,6 +101,10 @@ export function create(
   }
 
   return {
+    // The instances on the store in this process hear the saved changes of each other through it.
+    // A runtime without `WeakRef` has no `connect`, so its instances read sign-outs from the table
+    // instead.
+    ...(typeof WeakRef === 'function' ? { connect: Broadcast.create() } : {}),
     async getItem(key) {
       await ready()
       const { rows } = await client.query(
