@@ -371,7 +371,8 @@ export declare namespace poll {
 
 /**
  * Sends one poll (RFC 8628 §3.4), and maps the token endpoint's answer. `authorization_pending` and
- * `slow_down` return `pending` (§3.5). A denial and an expiry throw with a CLI's message.
+ * `slow_down` return `pending` (§3.5). A denial, an expiry, and a code that the grant cannot redeem
+ * throw with a CLI's message.
  */
 async function request<chainId extends number, hasAccessKey extends boolean>(
   auth: Config,
@@ -386,7 +387,8 @@ async function request<chainId extends number, hasAccessKey extends boolean>(
     if (error.code === 'authorization_pending' || error.code === 'slow_down')
       return error.code
     // A refusal of Tempo ID with a `reason`, such as `foreign_account`, keeps its fields. Only the
-    // user's denial and the expiry of the code, which carry none, take a CLI's message.
+    // user's denial, the expiry of the code, and a code that the grant cannot redeem, which carry
+    // none, take a CLI's message.
     if (error.code in messages && error.reason === undefined)
       throw new RequestError({
         code: error.code,
@@ -469,6 +471,9 @@ function answered(auth: Config): Config {
 const messages = {
   access_denied: 'The user denied the request.',
   expired_token: 'Device code expired. Request a new code.',
+  // A poll whose approval received no response, such as offline, redeemed the code already.
+  invalid_grant:
+    'The device code is unknown, belongs to another client ID, or was redeemed already. Request a new code.',
 } as const
 
 /**
