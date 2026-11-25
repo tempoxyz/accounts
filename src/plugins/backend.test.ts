@@ -1057,7 +1057,7 @@ describe('backend', () => {
   test('start offers no guest on an instance with `guest`, since no backend sign-in starts a guest session', async () => {
     const accounts = Accounts.create({
       clientId: 'https://app.example.com',
-      guest: 'offer',
+      guest: true,
       plugins: [backend({ store: Store.memory() })],
       url: 'http://127.0.0.1:9',
     })

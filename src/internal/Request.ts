@@ -535,7 +535,7 @@ export declare namespace keyAuthorization {
 }
 
 /**
- * Returns `guest=offer` for a sign-in request of an instance with `guest: 'offer'`, so Tempo ID's
+ * Returns `guest=offer` for a sign-in request of an instance with `guest: true`, so Tempo ID's
  * sign-in page offers "Continue as guest". A request with a challenge offers none, since a guest
  * session signs no challenge. Returns none otherwise.
  */
@@ -543,7 +543,7 @@ export function guestParameters(
   auth: Pick<Config, 'guest'>,
   options: guestParameters.Options,
 ): Record<string, string> {
-  if (auth.guest !== 'offer' || options.challenge !== undefined) return {}
+  if (auth.guest !== true || options.challenge !== undefined) return {}
   return { guest: 'offer' }
 }
 

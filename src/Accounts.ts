@@ -575,14 +575,13 @@ export type Config = {
   getFn?: TempoAccount.deserialize.Options['getFn']
   /**
    * Whether the instance holds a guest session: a root Tempo Account whose owner is a P256 key pair in
-   * the instance's store, with no Tempo ID sign-in. `offer` adds `guest=offer` to each sign-in
-   * request, so Tempo ID's sign-in page offers "Continue as guest". `auto` starts the guest session
-   * at a sign-in without a session, with no screen and no request. With a guest session, `pay`,
-   * transactions, and MPP payments sign with the key pair. Absent, the instance holds no guest
-   * session, and reads a stored guest session as signed out. The guest account's key pair stays in
+   * the instance's store, with no Tempo ID sign-in. `true` adds `guest=offer` to each sign-in
+   * request, so Tempo ID's sign-in page offers "Continue as guest". With a guest session, `pay`,
+   * transactions, and MPP payments sign with the key pair. `false` or absent, the instance holds no
+   * guest session, and reads a stored guest session as signed out. The guest account's key pair stays in
    * the store.
    */
-  guest?: 'auto' | 'offer' | undefined
+  guest?: boolean | undefined
   /**
    * The platform capabilities of the key set that the verifiers of Tempo ID's tokens fetch, such as
    * `AccessToken.create`: a cache that instances share, and a function that keeps background work
@@ -1112,15 +1111,14 @@ export type Accounts<
     /**
      * The instance's guest account: a root Tempo Account whose owner is a P256 key pair in the
      * instance's store, with no Tempo ID sign-in. With `guest`, a sign-in that selects "Continue as
-     * guest", or a sign-in of `guest: 'auto'` without a session, starts a guest session of it, and
-     * the first guest session creates it. `signOut` ends the guest session, and keeps the key pair,
+     * guest" starts a guest session of it, and the first guest session creates it. `signOut` ends the guest session, and keeps the key pair,
      * so the next guest session holds the same account.
      *
      * @example
      * ```ts
      * import { Accounts } from 'accounts'
      *
-     * const accounts = Accounts.create({ guest: 'offer' })
+     * const accounts = Accounts.create({ guest: true })
      * const address = await accounts.guest.get()
      * ```
      */
@@ -1213,8 +1211,7 @@ export type Accounts<
      *
      * With a guest session, a payment without `account` and `challenge` opens the payment page
      * for the guest account, as `Actions.account.pay_guest` describes. The page posts the transfer,
-     * and the guest account's key pair signs it. With `guest: 'auto'`, a call without a session
-     * starts the guest session first, with no request. With `guest: 'offer'`, a page's call without a
+     * and the guest account's key pair signs it. With `guest: true`, a page's call without a
      * session and without a challenge opens the signed-out payment page, which offers "Continue as
      * guest". That selection starts the guest session, and the same page pays from the guest
      * account. A sign-in on the page pays from the user's account, as without `guest`.
@@ -1963,7 +1960,7 @@ export function create<
     chainId: chain.get,
     enabled,
     getFn: config.getFn,
-    guest: config.guest !== undefined,
+    guest: config.guest === true,
     loadChain: chain.load,
     name,
     onMoved: readMoved,
@@ -2430,25 +2427,17 @@ export function create<
           memo,
         })
       // A guest session's account pays on the page, which posts the transfer for its key pair to
-      // sign. With `guest: 'auto'`, a call without a session starts the guest session first. The
-      // reads are local, so the dialog or the popup opens with no request.
+      // sign. The reads are local, so the dialog or the popup opens with no request.
       if (config.guest && !fixed && parameters.account === undefined) {
-        // With `auto`, the guest session's change starts before the read of the stored session, so a
-        // sign-out during the read overtakes it, and an aborted payment starts no guest session.
         // A plugin's challenge, such as the `siwe` plugin's, signs the user in with the payment, which
-        // a guest account cannot, so the payment starts no guest session.
-        // With `offer`, the guest session's change starts before the read too, so a sign-out during
-        // the read overtakes the whole payment, also a later selection of Continue as guest.
+        // a guest account cannot, so the payment offers no guest session. The offer's change starts
+        // before the read of the stored session, so a sign-out during the read overtakes the whole
+        // payment, also a later selection of Continue as guest.
         const offered =
-          config.guest === 'offer' && context.challenge() === undefined
+          context.challenge() === undefined
             ? context.session.change()
             : undefined
-        const held =
-          config.guest === 'auto' && context.challenge() === undefined
-            ? ((await SignIn.guestAuto(context, {
-                signal: parameters.signal,
-              })) ?? context.session.get())
-            : (context.session.get() ?? (await context.session.load()))
+        const held = context.session.get() ?? (await context.session.load())
         if (offered?.overtaken()) throw new SupersededError()
         if (held && Session.guest(held)) {
           const { attempt: _attempt, ...rest } = parameters
@@ -2481,7 +2470,7 @@ export function create<
             session: held,
           })
         }
-        // With `offer`, a page without a session opens the signed-out payment page, which offers
+        // With `guest`, a page without a session opens the signed-out payment page, which offers
         // Continue as guest. The selection starts the guest session, whose change starts now, so a
         // sign-out during the payment overtakes it.
         if (offered && !held && typeof document !== 'undefined') {
@@ -3130,21 +3119,21 @@ export declare namespace create {
  */
 export type GuestNamespaces<namespaces, guest extends Config['guest']> = {
   [id in keyof namespaces]: id extends 'device' | 'redirect'
-    ? guest extends undefined
-      ? {
+    ? true extends guest
+      ? namespaces[id]
+      : {
           [name in keyof namespaces[id]]: name extends 'signIn'
             ? WithoutGuest<namespaces[id][name]>
             : namespaces[id][name]
         }
-      : namespaces[id]
     : id extends 'dialog'
-      ? guest extends undefined
-        ? namespaces[id]
-        : {
+      ? true extends guest
+        ? {
             [name in keyof namespaces[id]]: name extends 'signIn'
               ? WithGuest<namespaces[id][name]> & namespaces[id][name]
               : namespaces[id][name]
           }
+        : namespaces[id]
       : namespaces[id]
 }
 

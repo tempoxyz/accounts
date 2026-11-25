@@ -576,9 +576,9 @@ describe('challenge', () => {
 
 describe('guestParameters', () => {
   test.for([
-    { challenge: undefined, expected: 'offer', guest: 'offer' },
-    { challenge: 'Sign in to app.example', expected: null, guest: 'offer' },
-    { challenge: undefined, expected: null, guest: 'auto' },
+    { challenge: undefined, expected: 'offer', guest: true },
+    { challenge: 'Sign in to app.example', expected: null, guest: true },
+    { challenge: undefined, expected: null, guest: false },
     { challenge: undefined, expected: null, guest: undefined },
   ] as const)(
     'adds $expected for guest $guest and challenge $challenge',
@@ -595,7 +595,7 @@ describe('guestParameters', () => {
   )
 
   test('adds none to a request whose challenge arrives later', async () => {
-    const auth = Accounts.from({ clientId: 'client_1', guest: 'offer' })
+    const auth = Accounts.from({ clientId: 'client_1', guest: true })
 
     const { url } = await Request.authorizeUrl(auth, {
       guest: false,

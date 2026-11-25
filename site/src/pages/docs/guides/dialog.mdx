@@ -439,7 +439,7 @@ export const accounts = Accounts.create({
 
 ### Offer a guest checkout
 
-<SourceLink name="Config.guest" path="src/Accounts.ts">`guest: 'offer'`</SourceLink> shows Continue as guest on the sign-in, in a frame or a popup. If the visitor selects it, <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> resolves with a guest session, whose key pair the instance keeps in its store. [Guest checkout](/docs/guides/guest-checkout) covers the guest session, and <SourceLink name="session" path="src/plugins/dialog.ts">`dialog.session`</SourceLink> never returns one.
+<SourceLink name="Config.guest" path="src/Accounts.ts">`guest: true`</SourceLink> shows Continue as guest on the sign-in, in a frame or a popup. If the visitor selects it, <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> resolves with a guest session, whose key pair the instance keeps in its store. [Guest checkout](/docs/guides/guest-checkout) covers the guest session, and <SourceLink name="session" path="src/plugins/dialog.ts">`dialog.session`</SourceLink> never returns one.
 
 ```ts [tempo.config.ts]
 import { Accounts } from 'accounts'
@@ -447,7 +447,7 @@ import { react } from 'accounts/react'
 
 export const accounts = Accounts.create({
   chain: 'testnet',
-  guest: 'offer', // [!code hl]
+  guest: true, // [!code hl]
   plugins: [react()],
 })
 ```

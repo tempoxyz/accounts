@@ -298,11 +298,9 @@ export function device(options: device.Options = {}) {
          * further poll, changes no session, and rejects with the signal's reason. A poll in flight
          * finishes, and an approval that it carries signs in.
          *
-         * With `guest: 'offer'`, a request without a challenge adds `guest=offer`, so Tempo ID's
+         * With `guest: true`, a request without a challenge adds `guest=offer`, so Tempo ID's
          * device page offers "Continue as guest". The poll then refuses the code with
          * `guest_selected`, and the call sets and returns a guest session in place of the refusal.
-         * With `guest: 'auto'`, a call without a session sets the guest session, and requests no
-         * code.
          *
          * @throws {Accounts.RequestError} When Tempo ID refuses the code request, with one of these
          *   `reason` values, which [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md)
@@ -369,13 +367,6 @@ export function device(options: device.Options = {}) {
           parameters: device.signIn.Parameters = {},
         ): Promise<Session.GuestSession | Session.Session> {
           if (!onCode) throw new OnCodeRequiredError()
-          if (context.config.guest === 'auto') {
-            const started = await SignIn.guestAuto(context, {
-              challenge: parameters.challenge !== undefined,
-              signal: parameters.signal,
-            })
-            if (started) return started
-          }
           // The request names the instance's chain, so the stored selection loads first. The store
           // also holds the session, so after a failed read its save fails too, and the sign-in
           // rejects before the user approves a code. An entry that holds no valid value fails its

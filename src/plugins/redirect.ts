@@ -154,10 +154,9 @@ export function redirect(options: redirect.Options = {}) {
          * when `open` resolves with no URL, such as for a dismissed browser. The session holds no
          * Tempo Account.
          *
-         * With `guest: 'offer'`, the request adds `guest=offer`. A return with `guest=1`, after the
+         * With `guest: true`, the request adds `guest=offer`. A return with `guest=1`, after the
          * user selects "Continue as guest", sets a guest session in place of a redemption: with
-         * `open` in the call, else on the callback's page. With `guest: 'auto'`, a call without a
-         * session sets the guest session, with no navigation and no request.
+         * `open` in the call, else on the callback's page.
          * @throws {Accounts.RedirectUriRequiredError} Before any navigation, outside a browser, such
          *   as in React Native, when the instance names no `redirectUri`. Pass it to `Accounts.create`.
          * @throws {Accounts.RequestError} For a refused sign-in:
@@ -269,12 +268,6 @@ export function redirect(options: redirect.Options = {}) {
             throw new TypeError(
               'Missing `open`: outside a page, a redirect has no page to leave. Pass `open` to the plugin, to show the sign-in URL, such as in a system browser.',
             )
-          }
-          if (context.config.guest === 'auto') {
-            const started = await SignIn.guestAuto(context, {
-              challenge: parameters.challenge !== undefined,
-            })
-            if (started) return started
           }
           // The request names the instance's chain, so its access key waits for the stored
           // selection. The reads of the hint and of the sign-out flag need no chain, so they run

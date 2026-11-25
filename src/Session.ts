@@ -29,14 +29,14 @@ export type Any = GuestSession | LocalSession | TempoIdSession
  */
 export type Of<
   plugins extends readonly { id: string }[],
-  guest extends 'auto' | 'offer' | undefined = undefined,
+  guest extends boolean | undefined = undefined,
 > =
   | (string extends plugins[number]['id']
       ? Any
       : 'local' extends plugins[number]['id']
         ? Any
         : Session)
-  | (guest extends undefined ? never : GuestSession)
+  | (true extends guest ? GuestSession : never)
 
 /**
  * The session of a guest account: a root Tempo Account whose owner is a P256 key pair in the

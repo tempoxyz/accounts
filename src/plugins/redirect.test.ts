@@ -561,7 +561,7 @@ describe('redirect', () => {
     const accounts = Accounts.create({
       chain: 42431,
       clientId: 'example-mobile',
-      guest: 'offer',
+      guest: true,
       plugins: [
         redirect({
           // The first sign-in selects "Continue as guest". The second one is dismissed.

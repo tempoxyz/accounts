@@ -272,15 +272,6 @@ export function dialog<const options extends dialog.Options = {}>(
 
         // Without `backend`, the parameters are the page's own.
         const page: dialog.signIn.WithPage = parameters
-        // The read of the stored session is local, so a popup still opens within the gesture.
-        if (context.config.guest === 'auto') {
-          const started = await SignIn.guestAuto(context, {
-            challenge:
-              page.challenge !== undefined || context.challenge() !== undefined,
-            signal: page.signal,
-          })
-          if (started) return started
-        }
         const change = context.session.change()
         // The sign-in registers before its first await, so a sign-out here or in another tab closes
         // its dialog once that sign-out completes, before the user approves a sign-in that the commit
@@ -500,10 +491,9 @@ export function dialog<const options extends dialog.Options = {}>(
          * handler, before any `await`, since a popup opens only within the gesture. The session
          * holds no Tempo Account, so read it with `accounts.account.get` if necessary.
          *
-         * With `guest: 'offer'`, a request without a challenge adds `guest=offer`, so Tempo ID's page
+         * With `guest: true`, a request without a challenge adds `guest=offer`, so Tempo ID's page
          * offers "Continue as guest". That choice returns `guest=1`, or posts `guest: true`, and the
-         * call sets and returns a guest session, with no request. With `guest: 'auto'`, a call
-         * without a session sets the guest session, and shows no dialog.
+         * call sets and returns a guest session, with no request.
          *
          * With the `siwe` plugin's `auth`, and without `challenge`, the sign-in also signs the user
          * in to the app: the dialog opens, then requests the message from the app's challenge

@@ -10,13 +10,7 @@ A guest session is a sign-in without a Tempo ID user. The instance keeps a P256 
 
 With a guest session, <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> is a one-click checkout on Tempo ID's payment page, the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin sends transactions, and the <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin pays MPP charges. [Guest sessions](https://github.com/tempoxyz/id/blob/main/docs/guest-checkout.md) describes Tempo ID's side.
 
-Guests are opt-in. An instance without <SourceLink name="Config.guest" path="src/Accounts.ts">`guest`</SourceLink> never holds a guest session, and its sign-ins offer none.
-
-| `guest`   | A sign-in                                                                                     |
-| --------- | --------------------------------------------------------------------------------------------- |
-| `'offer'` | Shows Continue as guest on Tempo ID's sign-in screen, beside the passkey and the emailed code |
-| `'auto'`  | Without a session, starts the guest session at once, with no screen and no request            |
-| Absent    | Offers no guest                                                                               |
+Guests are opt-in. With <SourceLink name="Config.guest" path="src/Accounts.ts">`guest: true`</SourceLink>, each sign-in shows Continue as guest on Tempo ID's sign-in screen, beside the passkey and the emailed code. An instance with `guest: false`, or without `guest`, never holds a guest session, and its sign-ins offer none.
 
 :::warning
 The key pair is the guest account's only owner. Whoever reads the store, or runs a script in the app's page, signs for the guest account. The key pair signs with no limits, so the app sends only the transactions that the visitor asked for.
@@ -46,7 +40,7 @@ bun add accounts react react-dom viem
 
 ### Create the instance
 
-<SourceLink name="Config.guest" path="src/Accounts.ts">`guest: 'offer'`</SourceLink> adds `guest=offer` to each sign-in request. In a browser, the default store is IndexedDB, which keeps the key pair as a non-extractable `CryptoKey`.
+<SourceLink name="Config.guest" path="src/Accounts.ts">`guest: true`</SourceLink> adds `guest=offer` to each sign-in request. In a browser, the default store is IndexedDB, which keeps the key pair as a non-extractable `CryptoKey`.
 
 ```ts [tempo.config.ts]
 import { Accounts } from 'accounts'
@@ -55,7 +49,7 @@ import { react } from 'accounts/react'
 
 export const accounts = Accounts.create({
   chain: 'testnet',
-  guest: 'offer', // [!code hl]
+  guest: true, // [!code hl]
   plugins: [react(), viem()],
 })
 ```
@@ -103,7 +97,7 @@ import { react } from 'accounts/react'
 
 export const accounts = Accounts.create({
   chain: 'testnet',
-  guest: 'offer',
+  guest: true,
   plugins: [react(), viem()],
 })
 ```
@@ -118,7 +112,7 @@ With a guest session, <SourceLink name="pay" path="src/Accounts.ts">`accounts.pa
 
 The token is a symbol that the chain lists, such as `ousd`, or the address of any TIP-20 token. The key pair signs only the requested transfer of that token.
 
-With `guest: 'offer'` and no session, `accounts.pay` in a page opens the signed-out payment page, which offers Continue as guest beside the sign-in. If the visitor selects it, the page asks the app for a guest request, the call starts the guest session, and the same page continues as the guest's payment page, with no second popup. If the visitor signs in instead, the page pays from the user's account. A call with `challenge`, or an instance with a plugin's challenge such as `siwe`, offers no guest.
+With `guest: true` and no session, `accounts.pay` in a page opens the signed-out payment page, which offers Continue as guest beside the sign-in. If the visitor selects it, the page asks the app for a guest request, the call starts the guest session, and the same page continues as the guest's payment page, with no second popup. If the visitor signs in instead, the page pays from the user's account. A call with `challenge`, or an instance with a plugin's challenge such as `siwe`, offers no guest.
 
 :::code-group
 
@@ -159,7 +153,7 @@ import { react } from 'accounts/react'
 
 export const accounts = Accounts.create({
   chain: 'testnet',
-  guest: 'offer',
+  guest: true,
   plugins: [react(), viem()],
 })
 ```
@@ -187,51 +181,9 @@ Each call is one checkout. The instance signs a random checkout ID into the gues
 
 Each use case sets one option of the instance, or calls one member of a guest session.
 
-### Start a guest session at once
-
-<SourceLink name="Config.guest" path="src/Accounts.ts">`guest: 'auto'`</SourceLink> starts the guest session at a sign-in without a session, and at a payment without a session, with no screen and no request. A sign-in with a challenge, as `challenge` or from the <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe`</SourceLink> plugin, starts none, since a guest account signs no challenge. It shows Tempo ID's sign-in instead.
-
-:::code-group
-
-```tsx [Checkout.tsx]
-import { accounts } from './tempo.config.js'
-
-export function Checkout() {
-  return (
-    <button
-      // Without a session, the payment starts the guest session first.
-      onClick={() =>
-        accounts.pay({
-          amount: '5',
-          to: '0x000000000000000000000000000000000000dEaD',
-          token: 'ousd',
-        })
-      }
-      type="button"
-    >
-      Pay 5 OUSD
-    </button>
-  )
-}
-```
-
-```ts [tempo.config.ts]
-import { Accounts } from 'accounts'
-import { viem } from 'accounts/plugins'
-import { react } from 'accounts/react'
-
-export const accounts = Accounts.create({
-  chain: 'testnet',
-  guest: 'auto', // [!code hl]
-  plugins: [react(), viem()],
-})
-```
-
-:::
-
 ### Offer a guest in each sign-in flow
 
-With `guest: 'offer'`, each sign-in of a page or a CLI offers Continue as guest, and resolves with a guest session when the visitor selects it.
+With `guest: true`, each sign-in of a page or a CLI offers Continue as guest, and resolves with a guest session when the visitor selects it.
 
 | Sign-in                                                                                                    | Returns the selection                                                                  |
 | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -248,7 +200,7 @@ import { device } from 'accounts/plugins'
 export const accounts = Accounts.create({
   chain: 'testnet',
   clientId: 'cli:acme-example',
-  guest: 'offer', // [!code hl]
+  guest: true, // [!code hl]
   plugins: [
     device({
       onCode: (code) =>
@@ -299,7 +251,7 @@ import { device } from 'accounts/plugins'
 export const accounts = Accounts.create({
   chain: 'testnet',
   clientId: 'cli:acme-example',
-  guest: 'offer',
+  guest: true,
   plugins: [
     device({
       // Shows the sign-in code, and the funding code of a short guest account.
@@ -358,7 +310,7 @@ import { react } from 'accounts/react'
 
 export const accounts = Accounts.create({
   chain: 'testnet',
-  guest: 'offer',
+  guest: true,
   plugins: [react(), viem()],
 })
 ```
@@ -406,7 +358,7 @@ import { react } from 'accounts/react'
 
 export const accounts = Accounts.create({
   chain: 'testnet',
-  guest: 'offer',
+  guest: true,
   // Each payment session holds at most 1 OUSD.
   plugins: [mpp({ maxDeposit: '1' }), react()],
 })
@@ -449,7 +401,7 @@ import { react } from 'accounts/react'
 
 export const accounts = Accounts.create({
   chain: 'testnet',
-  guest: 'offer',
+  guest: true,
   plugins: [react(), viem()],
 })
 ```

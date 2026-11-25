@@ -328,8 +328,8 @@ import { react } from 'accounts/react'
 
 export const accounts = Accounts.create({
   chain: 'testnet',
-  // Without a session, a payment starts a guest session, with no screen.
-  guest: 'auto', // [!code hl]
+  // Without a session, the payment page offers Continue as guest.
+  guest: true, // [!code hl]
   plugins: [react(), viem()],
 })
 ```

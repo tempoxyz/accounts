@@ -20,10 +20,11 @@ import {
 import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
 import * as AccessKey from '../internal/AccessKey.js'
+import * as SignIn from '../internal/SignIn.js'
+import * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
 import { backend } from './backend.js'
-import { device } from './device.js'
 import { machines, viem } from './viem.js'
 
 describe('viem', () => {
@@ -1146,12 +1147,22 @@ describe('viem', () => {
     const accounts = Accounts.create({
       chain: 4217,
       clientId: 'cli:guest-example',
-      guest: 'auto',
-      plugins: [device({ onCode: () => {} }), viem()],
+      guest: true,
+      plugins: [
+        viem(),
+        // Starts the guest session, as a sign-in that selects "Continue as guest" does.
+        Plugin.from({
+          actions: (context) => ({
+            guest: () =>
+              SignIn.guest(context, { change: context.session.change() }),
+          }),
+          id: 'pick',
+        }),
+      ],
       store: Store.memory(),
       url: 'http://127.0.0.1:9',
     })
-    const session = await accounts.device.signIn()
+    const session = await accounts.pick.guest()
 
     // A transaction whose fields are all given fills nothing, so the signature sends no request.
     const signed = await accounts.viem.account.signTransaction({

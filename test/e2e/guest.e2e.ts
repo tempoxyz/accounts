@@ -1,7 +1,7 @@
 /**
- * Tests guest sessions in a browser page: an automatic guest sign-in on a store that keeps its
- * values only in the page, such as `Store.memory`, rejects before it creates a guest account, since a
- * page load would lose its key pair and its funds.
+ * Tests guest sessions in a browser page: a selection of "Continue as guest" on a store that keeps
+ * its values only in the page, such as `Store.memory`, rejects before it creates a guest account,
+ * since a page load would lose its key pair and its funds.
  * @module
  */
 import Esbuild from 'esbuild'
@@ -11,12 +11,12 @@ import { expect, test } from '../Playwright.js'
 const origin = 'https://app.example.com'
 
 test.describe('guest', () => {
-  test('rejects an automatic guest sign-in on `Store.memory` in a page, and creates no guest session', async ({
+  test('rejects a guest sign-in on `Store.memory` in a page, and creates no guest session', async ({
     capture,
     page,
   }) => {
-    // The page bundles the package, and starts the dialog's sign-in of an instance with `guest:
-    // 'auto'`. Nothing listens at its Tempo ID, and the automatic guest sign-in sends no request.
+    // The page bundles the package, and starts the guest session of an instance with `guest: true`,
+    // as a sign-in that selects "Continue as guest" does. The start sends no request.
     const output = await Esbuild.build({
       bundle: true,
       format: 'iife',
@@ -25,17 +25,25 @@ test.describe('guest', () => {
       stdin: {
         contents: [
           "import * as Accounts from '../../src/Accounts.ts'",
-          "import { dialog } from '../../src/plugins/index.ts'",
+          "import * as SignIn from '../../src/internal/SignIn.ts'",
+          "import * as Plugin from '../../src/Plugin.ts'",
           "import * as Store from '../../src/Store.ts'",
           'const accounts = Accounts.create({',
           "  clientId: 'https://app.example.com',",
-          "  guest: 'auto',",
-          '  plugins: [dialog()],',
+          '  guest: true,',
+          '  plugins: [',
+          '    Plugin.from({',
+          '      actions: (context) => ({',
+          '        guest: () => SignIn.guest(context, { change: context.session.change() }),',
+          '      }),',
+          "      id: 'pick',",
+          '    }),',
+          '  ],',
           '  store: Store.memory(),',
           "  url: 'http://127.0.0.1:9',",
           '})',
           'window.outcome = (async () => {',
-          '  const error = await accounts.dialog.signIn().then(',
+          '  const error = await accounts.pick.guest().then(',
           '    () => undefined,',
           '    (error) => error.message,',
           '  )',

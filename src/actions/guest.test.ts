@@ -254,6 +254,19 @@ describe('Actions.guest.check', () => {
   })
 })
 
+/**
+ * Returns a plugin whose `pick.guest` starts the instance's guest session, as a sign-in that selects
+ * "Continue as guest" does.
+ */
+function pick() {
+  return Plugin.from({
+    actions: (context) => ({
+      guest: () => SignIn.guest(context, { change: context.session.change() }),
+    }),
+    id: 'pick',
+  })
+}
+
 /** Returns the configuration of an app whose Tempo ID never answers, with `store`. */
 function config(store: Store.Store = Store.memory()) {
   return Accounts.from({
@@ -585,21 +598,37 @@ describe('Actions.guest.session in other processes', () => {
     }
   }
 
+  /**
+   * The `plugins` option of a program's instance, whose `pick.guest` starts the guest session as a
+   * selection of "Continue as guest" does.
+   */
+  const picks = [
+    '  plugins: [',
+    '    Plugin.from({',
+    '      actions: (context) => ({',
+    '        guest: () => SignIn.guest(context, { change: context.session.change() }),',
+    '      }),',
+    "      id: 'pick',",
+    '    }),',
+    '  ],',
+  ]
+
   test("creates and saves the guest account in a `cli:` client's default store, whose instance in another process adopts it", async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     // Each process reads `TEMPO_HOME` at its first store call, so the default store is the file in
     // the folder.
     const program = await bundle([
       "import * as Accounts from '../Accounts.ts'",
-      "import { device } from '../plugins/index.ts'",
+      "import * as SignIn from '../internal/SignIn.ts'",
+      "import * as Plugin from '../Plugin.ts'",
       `process.env.TEMPO_HOME = ${JSON.stringify(directory)}`,
       'const accounts = Accounts.create({',
       "  clientId: 'cli:test',",
-      "  guest: 'auto',",
-      '  plugins: [device({ onCode: () => {} })],',
+      '  guest: true,',
+      ...picks,
       '})',
       'const held = await accounts.session.get()',
-      'const session = held ?? (await accounts.device.signIn())',
+      'const session = held ?? (await accounts.pick.guest())',
       'process.stdout.write(JSON.stringify([session.address, await accounts.guest.get()]))',
       'process.exit(0)',
     ])
@@ -632,7 +661,7 @@ describe('Actions.guest.session in other processes', () => {
     const accounts = Accounts.create({
       chain: 4217,
       clientId: 'cli:guest-example',
-      guest: 'auto',
+      guest: true,
       plugins: [
         Plugin.from({
           actions: (context) => ({
@@ -659,19 +688,20 @@ describe('Actions.guest.session in other processes', () => {
     // The other process sends this one no message, so only a reload reads its session.
     const program = await bundle([
       "import * as Accounts from '../Accounts.ts'",
-      "import { device } from '../plugins/index.ts'",
+      "import * as SignIn from '../internal/SignIn.ts'",
+      "import * as Plugin from '../Plugin.ts'",
       "import * as Store from '../Store.ts'",
       'const accounts = Accounts.create({',
       '  chain: 4217,',
       "  clientId: 'cli:guest-example',",
-      "  guest: 'auto',",
-      '  plugins: [device({ onCode: () => {} })],',
+      '  guest: true,',
+      ...picks,
       `  store: Store.file(${JSON.stringify(path)}),`,
       "  url: 'http://127.0.0.1:9',",
       '})',
       'await accounts.session.get()',
       'await accounts.signOut()',
-      'const session = await accounts.device.signIn()',
+      'const session = await accounts.pick.guest()',
       'process.stdout.write(String(session.revision))',
       'process.exit(0)',
     ])
@@ -903,7 +933,8 @@ describe('Accounts.pay of a guest session outside a page', () => {
     const accounts = Accounts.create({
       chain: 4217,
       clientId: 'cli:guest-example',
-      guest: 'auto',
+      guest: true,
+      plugins: [pick()],
       // The second read of the key pair after the prepare signs the guest request of the send, and
       // the instance signs out during it.
       store: Store.from({
@@ -917,6 +948,7 @@ describe('Accounts.pay of a guest session outside a page', () => {
       url: `http://127.0.0.1:${port}`,
     })
 
+    await accounts.pick.guest()
     const error = await accounts.pay(payment).catch((error: unknown) => error)
 
     expect([error, reads, routes]).toMatchInlineSnapshot(`
@@ -1018,21 +1050,21 @@ describe('Accounts.create with guest', () => {
         return globalThis.fetch(input, init)
       },
       guest,
-      plugins: [device({ onCode: () => {} })],
+      plugins: [device({ onCode: () => {} }), pick()],
       store: Store.memory(),
       url: 'http://127.0.0.1:9',
     })
     return { accounts, requests }
   }
 
-  test('`auto` starts the guest session at a sign-in without a session, with no request, and `signOut` keeps the guest account', async () => {
-    const { accounts, requests } = create('auto')
+  test('a selection of "Continue as guest" starts the guest session, with no request, and `signOut` keeps the guest account', async () => {
+    const { accounts, requests } = create(true)
 
-    const session = await accounts.device.signIn()
+    const session = await accounts.pick.guest()
     const status = accounts.session.status.get().status
     await accounts.signOut()
     const kept = await accounts.guest.get()
-    const again = await accounts.device.signIn()
+    const again = await accounts.pick.guest()
 
     expect([
       Session.guest(session),
@@ -1052,13 +1084,13 @@ describe('Accounts.create with guest', () => {
   })
 
   test('`guest.disconnect` forgets the guest account, and signs out its session', async () => {
-    const { accounts } = create('auto')
-    const session = await accounts.device.signIn()
+    const { accounts } = create(true)
+    const session = await accounts.pick.guest()
 
     await accounts.guest.disconnect()
     const status = accounts.session.status.get().status
     const address = await accounts.guest.get()
-    const next = await accounts.device.signIn()
+    const next = await accounts.pick.guest()
 
     expect([status, address, next.address === session.address])
       .toMatchInlineSnapshot(`
@@ -1084,14 +1116,15 @@ describe('Accounts.create with guest', () => {
 
     const session = await Accounts.create({
       ...options,
-      guest: 'auto',
-    }).device.signIn()
+      guest: true,
+      plugins: [...options.plugins, pick()],
+    }).pick.guest()
     // The instance on the same store hears the saved change, and reads the store again.
     const adopted = await plain.session.get()
     const hydrated = await Accounts.create(options).session.get()
     const restored = await Accounts.create({
       ...options,
-      guest: 'auto',
+      guest: true,
     }).session.get()
 
     expect([
@@ -1109,8 +1142,8 @@ describe('Accounts.create with guest', () => {
     `)
   })
 
-  test('`pay` of `offer` without a session outside a page rejects with `SignedOutError`, and starts no guest session', async () => {
-    const { accounts, requests } = create('offer')
+  test('`pay` of `guest: true` without a session outside a page rejects with `SignedOutError`, and starts no guest session', async () => {
+    const { accounts, requests } = create(true)
 
     // Only a page shows the signed-out payment page, which offers Continue as guest.
     const error = await accounts.pay(payment).catch((error: unknown) => error)
@@ -1125,8 +1158,8 @@ describe('Accounts.create with guest', () => {
       `)
   })
 
-  test('`offer` adds `guest=offer` to the code request', async () => {
-    const { accounts, requests } = create('offer')
+  test('`guest: true` adds `guest=offer` to the code request', async () => {
+    const { accounts, requests } = create(true)
 
     await accounts.device.signIn().catch(() => undefined)
 
@@ -1146,10 +1179,14 @@ describe('Accounts.create with guest', () => {
       url: 'http://127.0.0.1:9',
     } as const
     const plain = Accounts.create(options)
-    const guest = Accounts.create({ ...options, guest: 'offer' })
+    const off = Accounts.create({ ...options, guest: false })
+    const guest = Accounts.create({ ...options, guest: true })
 
     expectTypeOf<
       Awaited<ReturnType<typeof plain.device.signIn>>
+    >().toEqualTypeOf<Session.Session>()
+    expectTypeOf<
+      Awaited<ReturnType<typeof off.device.signIn>>
     >().toEqualTypeOf<Session.Session>()
     expectTypeOf<
       Awaited<ReturnType<typeof plain.redirect.signIn>>
@@ -1171,29 +1208,6 @@ describe('Accounts.create with guest', () => {
     >()
   })
 
-  test('`auto` honors an aborted signal, and starts no guest session', async () => {
-    const { accounts, requests } = create('auto')
-    const reason = new Error('Cancelled.')
-
-    const error = await accounts.device
-      .signIn({ signal: AbortSignal.abort(reason) })
-      .catch((error: unknown) => error)
-
-    expect([
-      error === reason,
-      await accounts.session.get(),
-      await accounts.guest.get(),
-      requests,
-    ]).toMatchInlineSnapshot(`
-      [
-        true,
-        undefined,
-        undefined,
-        [],
-      ]
-    `)
-  })
-
   test("`pay` of a new instance reads the stored session first, so a signed-in user's payment takes no guest path", async () => {
     const store = Store.memory()
     await store.setItem(
@@ -1212,13 +1226,13 @@ describe('Accounts.create with guest', () => {
     const accounts = Accounts.create({
       chain: 4217,
       clientId: 'cli:guest-example',
-      guest: 'auto',
+      guest: true,
       store,
       url: 'http://127.0.0.1:9',
     })
 
-    // Node holds no page, so the payment of the signed-in user rejects. A guest payment would start
-    // the guest session, and create its key pair, first.
+    // Node holds no page, so the payment of the signed-in user rejects. A guest payment would read
+    // the guest account's key pair.
     await accounts.pay(payment).catch(() => undefined)
 
     expect([
@@ -1232,74 +1246,14 @@ describe('Accounts.create with guest', () => {
     `)
   })
 
-  test('`pay` of `auto` with an aborted signal rejects with its reason, and starts no guest session', async () => {
-    const { accounts, requests } = create('auto')
-    const reason = new Error('Cancelled.')
-
-    const error = await accounts
-      .pay({ ...payment, signal: AbortSignal.abort(reason) })
-      .catch((error: unknown) => error)
-
-    expect([
-      error === reason,
-      await accounts.session.get(),
-      await accounts.guest.get(),
-      requests,
-    ]).toMatchInlineSnapshot(`
-      [
-        true,
-        undefined,
-        undefined,
-        [],
-      ]
-    `)
-  })
-
-  test("`pay` of `auto` starts no guest session when a plugin's challenge signs the user in with the payment", async () => {
-    const accounts = Accounts.create({
-      chain: 4217,
-      clientId: 'cli:guest-example',
-      guest: 'auto',
-      // A challenge hook, as the `siwe` plugin's in a page, whose message the app's routes issue.
-      plugins: [
-        Plugin.from({
-          hooks: {
-            challenge: () => ({
-              message: () => Promise.resolve('Sign in to Example.'),
-              settle: () => Promise.resolve({}),
-            }),
-          },
-          id: 'challenge',
-        }),
-      ],
-      store: Store.memory(),
-      url: 'http://127.0.0.1:9',
-    })
-
-    // Node holds no page, so the payment with the challenge rejects before it opens.
-    const error = await accounts.pay(payment).catch((error: unknown) => error)
-
-    expect([
-      error instanceof Error && error.name,
-      await accounts.session.get(),
-      await accounts.guest.get(),
-    ]).toMatchInlineSnapshot(`
-      [
-        "Actions.account.PageRequiredError",
-        undefined,
-        undefined,
-      ]
-    `)
-  })
-
-  test('`pay` of `offer` rejects after a sign-out during the read of the stored session, and starts no guest session', async () => {
+  test('`pay` of `guest: true` rejects after a sign-out during the read of the stored session, and starts no guest session', async () => {
     const memory = Store.memory()
     const gate = Promise.withResolvers<void>()
     const reading = Promise.withResolvers<void>()
     const accounts = Accounts.create({
       chain: 4217,
       clientId: 'cli:guest-example',
-      guest: 'offer',
+      guest: true,
       // The first read of the stored session waits for the gate.
       store: Store.from({
         ...memory,
@@ -1338,11 +1292,11 @@ describe('Accounts.create with guest', () => {
     const accounts = Accounts.create({
       chain: 4217,
       clientId: 'cli:guest-example',
-      guest: 'offer',
+      guest: true,
       plugins: [
         Plugin.from({
           actions: (context) => ({
-            /** Starts a change, as `pay` of `offer` does before its read of the stored session. */
+            /** Starts a change, as `pay` of `guest: true` does before its read of the stored session. */
             start: () => context.session.change(),
           }),
           id: 'offer',
@@ -1372,129 +1326,6 @@ describe('Accounts.create with guest', () => {
     `)
   })
 
-  test('`pay` of `auto` starts no guest session after a sign-out during the read of the stored session', async () => {
-    const memory = Store.memory()
-    const gate = Promise.withResolvers<void>()
-    const reading = Promise.withResolvers<void>()
-    const accounts = Accounts.create({
-      chain: 4217,
-      clientId: 'cli:guest-example',
-      guest: 'auto',
-      // The first read of the stored session waits for the gate.
-      store: Store.from({
-        ...memory,
-        getItem: async (key) => {
-          if (!key.startsWith('tempo-id:guest:')) {
-            reading.resolve()
-            await gate.promise
-          }
-          return await memory.getItem(key)
-        },
-      }),
-      url: 'http://127.0.0.1:9',
-    })
-
-    const pending = accounts.pay(payment).catch((error: unknown) => error)
-    await reading.promise
-    const signedOut = accounts.signOut()
-    gate.resolve()
-    await signedOut
-    const error = await pending
-
-    expect([
-      error instanceof Error ? error.name : error,
-      accounts.session.status.get().status,
-      await accounts.session.get(),
-    ]).toMatchInlineSnapshot(`
-      [
-        "Accounts.SupersededError",
-        "signedOut",
-        undefined,
-      ]
-    `)
-  })
-
-  test('`auto` starts no guest session for a sign-in with a challenge, which signs in through Tempo ID', async () => {
-    const { accounts, requests } = create('auto')
-    const shown = DefaultAccounts.create({
-      chain: 4217,
-      clientId: 'cli:guest-example',
-      guest: 'auto',
-      store: Store.memory(),
-      url: 'http://127.0.0.1:9',
-    })
-
-    // Nothing listens at Tempo ID's URL, so the device sign-in rejects after its request. Node holds
-    // no page, so the dialog's sign-in rejects before it opens.
-    const device = await accounts.device
-      .signIn({ challenge: 'Sign in to Example.' })
-      .catch((error: unknown) => error)
-    const dialog = await shown.dialog
-      .signIn({ challenge: 'Sign in to Example.' })
-      .catch((error: unknown) => error)
-
-    expect([
-      device instanceof Error && device.name,
-      requests.map((entry) => entry.split(' ')[0]),
-      dialog instanceof Error && dialog.name,
-      await accounts.session.get(),
-      await shown.session.get(),
-    ]).toMatchInlineSnapshot(`
-      [
-        "Accounts.RequestError",
-        [
-          "/device/code",
-        ],
-        "Actions.dialog.PageRequiredError",
-        undefined,
-        undefined,
-      ]
-    `)
-  })
-
-  test('`auto` starts no guest session after a sign-out during the read of the stored session', async () => {
-    const memory = Store.memory()
-    const gate = Promise.withResolvers<void>()
-    const reading = Promise.withResolvers<void>()
-    const accounts = Accounts.create({
-      chain: 4217,
-      clientId: 'cli:guest-example',
-      guest: 'auto',
-      plugins: [device({ onCode: () => {} })],
-      // The first read of the stored session waits for the gate.
-      store: Store.from({
-        ...memory,
-        getItem: async (key) => {
-          if (!key.startsWith('tempo-id:guest:')) {
-            reading.resolve()
-            await gate.promise
-          }
-          return await memory.getItem(key)
-        },
-      }),
-      url: 'http://127.0.0.1:9',
-    })
-
-    const pending = accounts.device.signIn().catch((error: unknown) => error)
-    await reading.promise
-    const signedOut = accounts.signOut()
-    gate.resolve()
-    await signedOut
-    const error = await pending
-
-    expect([
-      error instanceof Error ? error.name : error,
-      accounts.session.status.get().status,
-      await accounts.session.get(),
-    ]).toMatchInlineSnapshot(`
-      [
-        "Accounts.SupersededError",
-        "signedOut",
-        undefined,
-      ]
-    `)
-  })
-
   test('a guest session aborted during the creation of its key pair rejects with the reason, and commits nothing', async () => {
     const memory = Store.memory()
     const controller = new AbortController()
@@ -1502,7 +1333,7 @@ describe('Accounts.create with guest', () => {
     const accounts = Accounts.create({
       chain: 4217,
       clientId: 'cli:guest-example',
-      guest: 'offer',
+      guest: true,
       plugins: [device({ onCode: () => {} })],
       // The read of the guest account's entry aborts the sign-in.
       store: Store.from({
@@ -1531,20 +1362,20 @@ describe('Accounts.create with guest', () => {
   })
 
   test.for([
-    ['the default dialog', []],
-    ['dialog()', [dialog()]],
+    ['the default dialog', [pick()]],
+    ['dialog()', [dialog(), pick()]],
   ] as const)(
     '`dialog.session` of %s returns no guest session',
     async ([, plugins]) => {
       const accounts = DefaultAccounts.create({
         chain: 4217,
         clientId: 'cli:guest-example',
-        guest: 'auto',
+        guest: true,
         plugins,
         store: Store.memory(),
         url: 'http://127.0.0.1:9',
       })
-      const session = await accounts.dialog.signIn()
+      const session = await accounts.pick.guest()
 
       const shown = await accounts.dialog.session()
 

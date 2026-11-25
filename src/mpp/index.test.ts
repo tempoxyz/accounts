@@ -917,7 +917,7 @@ describe('mpp', () => {
     const accounts = DefaultAccounts.create({
       chain: 42431,
       clientId: 'https://app.example.com',
-      guest: 'offer',
+      guest: true,
       plugins: [viem({ transport: http('http://127.0.0.1:9') }), renew()],
       store,
       url: 'http://127.0.0.1:9',
@@ -983,7 +983,7 @@ describe('mpp', () => {
           'const accounts = Accounts.create({',
           '  chain: 42431,',
           "  clientId: 'https://app.example.com',",
-          "  guest: 'offer',",
+          '  guest: true,',
           '  plugins: [',
           '    Plugin.from({',
           '      actions: (context) => ({ commit: (value) => context.session.change().commit(value) }),',
@@ -1820,7 +1820,7 @@ function instance(
     chain: options.chain ?? 42431,
     clientId: 'https://app.example.com',
     ...(options.dpop ? { dpop: options.dpop } : {}),
-    guest: 'offer',
+    guest: true,
     ...(options.store ? { store: options.store } : {}),
     plugins: [
       viem({ transport: options.transport ?? http('http://127.0.0.1:9') }),
