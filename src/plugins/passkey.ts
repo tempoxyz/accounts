@@ -246,7 +246,9 @@ export function passkey(options: passkey.Options = {}) {
          * @throws {Accounts.SupersededError} When a sign-out completes during the call, before the
          *   proof's assertion. If it completes before the creation prompt, the call shows no prompt.
          *   If it completes later, the call sends no verify request, so Tempo ID stores no passkey,
-         *   and the authenticator drops the new passkey.
+         *   and the authenticator drops the new passkey. With `accessKey`, a sign-out that completes
+         *   after the proof's assertion also throws it. Tempo ID then holds the passkey, and the call
+         *   revokes the new tokens, so the user can sign in with the new passkey.
          * @throws {TypeError} On a page, when the instance's `store` has `json`, such as
          *   `Store.redis`, and the call generates an access key. The call throws before any
          *   request.
