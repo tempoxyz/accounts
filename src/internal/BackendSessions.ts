@@ -350,18 +350,20 @@ export function create(
     Api.checkBound(auth, { accessToken: stored.accessToken })
 
     unknown.add(refreshToken)
-    const tokens = await (async () => {
+    const outcome = await (async () => {
       try {
         // Another process that shares the store can refresh the same token at once. Tempo ID refuses
         // the overlap, and replays the other's tokens to a retry, which `Actions.refresh` sends.
         // Otherwise `refreshes` shares the only refresh of the session, so a refusal is final.
-        if (shared) return await Actions.refresh(auth, { refreshToken })
-        return await Api.refresh(auth, { refreshToken })
+        const tokens = shared
+          ? await Actions.refresh(auth, { refreshToken })
+          : await Api.refresh(auth, { refreshToken })
+        return { tokens }
       } catch (error) {
         // A refused refresh token is revoked or expired, so the session ends.
         if (error instanceof RequestError && error.code === 'invalid_grant') {
           unknown.delete(refreshToken)
-          return undefined
+          return { tokens: undefined }
         }
         // Any other refusal returns before a rotation, so the session stays for the next request.
         if (error instanceof RequestError && keeps(error)) {
@@ -369,12 +371,16 @@ export function create(
           throw error
         }
         // Without a response, or after a server error, Tempo ID may have rotated the token, so the
-        // session ends without a second send.
-        await settle(undefined)
+        // session ends without a second send. A session that replaced it during the refresh, such as
+        // another process's refresh on a shared store, stays, and the read returns it.
+        const current = await settle(undefined)
         unknown.delete(refreshToken)
+        if (current) return { current }
         throw error
       }
     })()
+    if ('current' in outcome) return outcome.current
+    const { tokens } = outcome
     if (!tokens) return settle(undefined)
 
     const { idToken: _, ...rest } = tokens
@@ -1410,7 +1416,8 @@ function viewTempoId(stored: StoredTempoId, id: string): BackendSession {
 /**
  * Returns whether a session stays after its refresh throws `error`: a refusal with a 4xx status, or a
  * refused redirect, which sent no refresh token on. Without a response, or after a 5xx status, Tempo
- * ID may have rotated the refresh token, so the refresh ends the session.
+ * ID may have rotated the refresh token, so the refresh ends the session. A session that replaced it
+ * during the refresh stays, and the read returns it without an error.
  *
  * @example
  * ```ts

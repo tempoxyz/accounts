@@ -1408,6 +1408,55 @@ describe('fetch', () => {
     )
   })
 
+  test('GET /session returns the session that another process stored on a shared store while the refresh received no response, and keeps the cookie', async () => {
+    const store = Store.memory()
+    const key = (id: string) => `tempo-id:session:${id}`
+    let id = ''
+    const accounts = Accounts.create({
+      clientId: origin,
+      // Another process on the shared store refreshes the session while this refresh is in flight.
+      fetch: async (input, init) => {
+        const stored = (await store.getItem(key(id))) as Record<string, unknown>
+        await store.setItem(key(id), {
+          ...stored,
+          accessToken: 'access-token-2',
+          expiresAt: Date.now() + 3_600_000,
+          refreshToken: 'refresh-token-2',
+        })
+        return fetch(input, init)
+      },
+      handler: { basePath: '/accounts' },
+      plugins: [backend({ store })],
+      url: 'http://127.0.0.1:9',
+    })
+    ;({ id } = await accounts.backend.save({
+      session: Session.from({
+        ...session(),
+        expiresAt: 0,
+        refreshToken: 'refresh-token',
+      }),
+    }))
+
+    const response = await accounts.handler.fetch(
+      new Request(`${origin}/accounts/auth/session`, {
+        headers: { cookie: `__Host-tempo-id.sid=${id}` },
+      }),
+    )
+
+    expect({
+      cookies: response.headers.getSetCookie(),
+      method: ((await response.json()) as { session?: { method?: string } })
+        .session?.method,
+      status: response.status,
+    }).toMatchInlineSnapshot(`
+      {
+        "cookies": [],
+        "method": "tempo-id",
+        "status": 200,
+      }
+    `)
+  })
+
   test('GET /session ends the session, returns null, and deletes the cookie, for a session whose tokens a DPoP key binds that the instance lacks', async () => {
     const requests: string[] = []
     const accounts = Accounts.create({
