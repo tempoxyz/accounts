@@ -452,6 +452,16 @@ export const accounts = Accounts.create({
 })
 ```
 
+### Match the page's color scheme
+
+The dialog and Tempo ID's page in its frame draw in the color scheme that the app's page declares, on its root element or in its `color-scheme` meta tag. A page that declares both schemes, or none, takes the browser's preference. A frame keeps the scheme that it loads with. If the page changes its scheme, the next sign-in or deposit loads a new frame.
+
+```css [app.css]
+:root {
+  color-scheme: dark; /* [!code hl] */
+}
+```
+
 ### Isolate the page from popups
 
 A page that sends the `Cross-Origin-Opener-Policy: same-origin` header cuts the popup off from the page. <SourceLink name="dialog.crossOriginOpenerPolicy" path="src/plugins/dialog.ts">`crossOriginOpenerPolicy: 'same-origin'`</SourceLink> then has the page redeem each sign-in's code itself.
