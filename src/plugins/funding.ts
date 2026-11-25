@@ -13,6 +13,22 @@ import * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
 
 /**
+ * A third-party app holds no address of the user's Tempo Account on the deposit's chain, so the
+ * deposit page has no account to fund. `funding.open` and `funding.preload` throw it before any
+ * popup or request, since Tempo ID returns accounts only to a first-party app. The fix is a sign-in
+ * with an access key on the chain, whose response names the account, or an `address`.
+ */
+export class AddressRequiredError extends Error {
+  override readonly name = 'Plugins.funding.AddressRequiredError'
+
+  constructor() {
+    super(
+      'No account address: a third-party app reads no account from Tempo ID. Sign in with an access key on the deposit chain, or pass `address`.',
+    )
+  }
+}
+
+/**
  * The session holds no user, so the deposit page has no account to fund. `funding.open` throws it
  * when the instance holds no session, or the read of the session's account returns none. The fix is
  * a sign-in before the call.
@@ -68,8 +84,8 @@ export function funding(options: funding.Options = {}) {
       /**
        * Returns the session's Tempo Account on `chainId`, or the read that returns it. The
        * session's account belongs to the instance's chain, and each access key to its own chain, so
-       * a chain without either reads its own account. A third-party app reads none, and the read
-       * returns `undefined`, so the deposit page chooses the account.
+       * a chain without either reads its own account. A third-party app reads none, so for a loaded
+       * session without either, it throws {@link AddressRequiredError}.
        */
       const resolve = (chainId: number) => {
         const own = (session: Session.Any | undefined) => {
@@ -86,29 +102,33 @@ export function funding(options: funding.Options = {}) {
           return undefined
         }
 
+        const held = context.session.get()
+        const found = own(held)
+        if (found) return found
+        // Tempo ID refuses a third-party app's access token on the account read, and grants its page
+        // no CORS for it, so the call throws before any popup or request.
+        if (held && ClientId.thirdParty(context.config.clientId)) {
+          if (Session.local(held)) throw new LocalSessionError()
+          throw new AddressRequiredError()
+        }
+
         // The store loads the session, and a sign-in that read no account, such as through a
         // redirect, reads it with a live access token.
-        return (
-          own(context.session.get()) ??
-          (async () => {
-            const session =
-              context.session.get() ?? (await context.session.load())
-            if (!session) throw new SignedOutError()
-            const found = own(session)
-            if (found) return found
-            // Tempo ID refuses a third-party app's access token on the account read, and grants its
-            // page no CORS for the read. The deposit page holds the user's session, so it chooses.
-            if (ClientId.thirdParty(context.config.clientId)) return undefined
+        return async () => {
+          const session =
+            context.session.get() ?? (await context.session.load())
+          if (!session) throw new SignedOutError()
+          const found = own(session)
+          if (found) return found
 
-            const account = await AccountActions.get(context.config, {
-              accessToken: await accessToken(context, { session }),
-              chain: chainId,
-            })
-            if (!account) throw new SignedOutError()
-            read = { address: account.address, chainId, session }
-            return account.address
+          const account = await AccountActions.get(context.config, {
+            accessToken: await accessToken(context, { session }),
+            chain: chainId,
           })
-        )
+          if (!account) throw new SignedOutError()
+          read = { address: account.address, chainId, session }
+          return account.address
+        }
       }
 
       return {
@@ -141,9 +161,12 @@ export function funding(options: funding.Options = {}) {
          * Otherwise, after the popup opens, `open` loads the stored session and reads the account
          * on the call's chain with a live access token. It refreshes a token that expires within 30
          * seconds. A third-party app, such as one whose client ID is its origin, reads no account,
-         * since Tempo ID returns accounts only to a first-party app. Its deposit page then funds the
-         * user's oldest account that receives deposits. A popup that the user closes before the
-         * address loads returns `closed`.
+         * since Tempo ID returns accounts only to a first-party app. Without an address, it throws
+         * {@link AddressRequiredError} before any popup or request, once the stored session loads. A
+         * popup that the user closes before the address loads returns `closed`.
+         * @throws {AddressRequiredError} For a third-party app without `address`, without the
+         *   session's account on the instance's chain, and without an access key on the call's
+         *   chain. Sign in with an access key on the chain, or pass `address`.
          * @throws {SignedOutError} When the instance holds no session, or the read of the session's
          *   account returns none. Sign the user in first.
          * @throws {Actions.funding.BlockedError} When the browser blocks the popup, such as for a
@@ -161,20 +184,43 @@ export function funding(options: funding.Options = {}) {
         open(
           parameters: funding.open.Parameters = {},
         ): Promise<funding.open.ReturnType> {
+          const chainId = parameters.chainId ?? context.config.chainId
+          // Outside a page, the action throws `PageRequiredError` before it reads any session.
+          const page = typeof document !== 'undefined'
+          /** Opens the page for the address of `parameters`, else the session's. */
+          const start = () =>
+            FundingActions.open(context.config, {
+              address: page
+                ? (parameters.address ?? resolve(chainId))
+                : parameters.address,
+              amount: parameters.amount,
+              chainId: parameters.chainId,
+              currency: parameters.currency,
+              mode: parameters.mode ?? options.mode,
+              redirectUri: parameters.redirectUri ?? options.redirectUri,
+              signal: parameters.signal,
+              token: parameters.token,
+            })
+
+          // A third-party app reads no account, so its stored session decides before any popup. A
+          // session already in memory decides at once.
+          if (
+            page &&
+            parameters.address === undefined &&
+            ClientId.thirdParty(context.config.clientId) &&
+            !context.session.get()
+          )
+            return context.session.load().then((session) => {
+              if (!session) throw new SignedOutError()
+              return start()
+            })
           // A known address opens the page at once. Any other resolves after the action's checks pass
-          // and the popup opens.
-          return FundingActions.open(context.config, {
-            address:
-              parameters.address ??
-              resolve(parameters.chainId ?? context.config.chainId),
-            amount: parameters.amount,
-            chainId: parameters.chainId,
-            currency: parameters.currency,
-            mode: parameters.mode ?? options.mode,
-            redirectUri: parameters.redirectUri ?? options.redirectUri,
-            signal: parameters.signal,
-            token: parameters.token,
-          })
+          // and the popup opens. A refusal of `resolve` rejects before the action runs.
+          try {
+            return start()
+          } catch (error) {
+            return Promise.reject(error)
+          }
         },
         /**
          * Loads the deposit page of a later `open` in `frame` mode, in a hidden dialog, for the
@@ -192,6 +238,9 @@ export function funding(options: funding.Options = {}) {
          *
          * The frame loads the page as `open` does. So it reads the account, and on Tempo mainnet
          * the universal deposit address, which Tempo ID creates on its first read.
+         *
+         * @throws {AddressRequiredError} For a third-party app with a session, where `open` throws
+         *   it. Sign in with an access key on the chain, or pass `address`.
          *
          * @example
          * ```ts
@@ -227,7 +276,8 @@ export function funding(options: funding.Options = {}) {
           if (!(await context.session.load().catch(() => undefined))) return
           const found = parameters.address ?? resolve(chainId)
           // A preload is an optimization, so a failed read of the account loads nothing, and `open`
-          // reports the failure.
+          // reports the failure. A third-party app without an address throws at `resolve`, before
+          // any read.
           const address =
             typeof found === 'string' ? found : await found().catch(() => null)
           if (address === null) return
@@ -319,9 +369,8 @@ export declare namespace funding {
       /**
        * The Tempo Account that receives the deposit. It must be one of the signed-in user's
        * accounts in the `default` realm, or the page shows that it found no wallet. Defaults to the
-       * session's account, else the account of the access key on the deposit's chain. For a
-       * third-party app without either, the page funds the user's oldest account that receives
-       * deposits.
+       * session's account, else the account of the access key on the deposit's chain. A
+       * third-party app without either throws {@link AddressRequiredError}.
        */
       address?: `0x${string}` | undefined
     }

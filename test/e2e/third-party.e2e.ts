@@ -477,6 +477,61 @@ test.describe('third-party app', () => {
     })
   })
 
+  test('rejects `funding.open` with `AddressRequiredError` after a sign-in without an access key, before any page or account read', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    await test.step('signs in through the dialog without an access key', async () => {
+      await page.goto(
+        Web.url({
+          accessKey: false,
+          origin,
+          path: Apps.thirdParty.paths.dialog,
+        }),
+      )
+      await Playwright.start(page, { name: 'Sign in' })
+      await Playwright.signIn(await Playwright.dialog(page), {
+        code,
+        email,
+        held: true,
+      })
+
+      expect((await Playwright.outcome(page, { name: 'Sign in' })).state).toBe(
+        'fulfilled',
+      )
+      await capture('signed in')
+    })
+
+    await test.step('rejects the deposit with no deposit page, no popup, and no read of the account', async () => {
+      const requests: string[] = []
+      page.on('request', (request) => {
+        const url = new URL(request.url())
+        if (
+          url.origin === new URL(TempoId.url).origin &&
+          ['/embed/deposit', '/v1/account'].includes(url.pathname)
+        )
+          requests.push(`${request.method()} ${url.pathname}`)
+      })
+      const popups: string[] = []
+      page.on('popup', (popup) => popups.push(popup.url()))
+      const deposit = await Playwright.run(page, { name: 'Deposit' })
+
+      expect(deposit).toEqual({
+        state: 'rejected',
+        value: expect.objectContaining({
+          message:
+            'No account address: a third-party app reads no account from Tempo ID. Sign in with an access key on the deposit chain, or pass `address`.',
+          name: 'Plugins.funding.AddressRequiredError',
+        }),
+      })
+      expect(requests).toEqual([])
+      expect(popups).toEqual([])
+      await capture('address required')
+    })
+  })
+
   test('ends a session whose access key expired at a mount, with no authorization request', async ({
     capture,
     code,

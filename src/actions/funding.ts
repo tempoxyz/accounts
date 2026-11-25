@@ -250,7 +250,7 @@ export async function open(
 
   const redirectUri =
     options.redirectUri ?? auth.redirectUri ?? `${window.location.origin}/`
-  /** Returns the deposit page's URL for the account at `address`, or the page's choice. */
+  /** Returns the deposit page's URL for the account at `address`, if any. */
   const toUrl = (
     address: string | undefined,
     entry: toUrl.Options = { mode },
@@ -425,7 +425,7 @@ export declare namespace preload {
   > & {
     /**
      * The Tempo Account that receives the deposit: one of the signed-in user's accounts. Absent,
-     * the page funds the user's oldest account that receives deposits.
+     * the URL names no account, and the page shows that it found no wallet.
      */
     address?: `0x${string}` | undefined
   }
@@ -503,8 +503,8 @@ async function watch(
 declare namespace watch {
   type Options = {
     /**
-     * The Tempo Account that receives the deposit, or the read that returns it. `undefined` lets
-     * the page choose the account.
+     * The Tempo Account that receives the deposit, or the read that returns it. `undefined` for a
+     * URL that names none.
      */
     address: open.Address | Promise<open.Address>
     /** The open popup, which holds the deposit page, or `about:blank` until `address` resolves. */
@@ -513,14 +513,14 @@ declare namespace watch {
     redirectUri: string
     /** Rejects the call with the signal's reason, and closes the popup. */
     signal: AbortSignal | undefined
-    /** Returns the deposit page's URL for the account at `address`, or the page's choice. */
+    /** Returns the deposit page's URL for the account at `address`, if any. */
     toUrl: (address: open.Address) => string
   }
 }
 
 /**
- * Returns the URL of the deposit page for the account at `options.address`. Without one, the page
- * funds the user's oldest account that receives deposits.
+ * Returns the URL of the deposit page for the account at `options.address`. Without one, the URL
+ * names no account.
  */
 function pageUrl(auth: Config, options: pageUrl.Options) {
   const { amount, currency, entry, token } = options
@@ -552,7 +552,7 @@ declare namespace pageUrl {
     open.Options,
     'amount' | 'chainId' | 'currency' | 'token'
   > & {
-    /** The Tempo Account that receives the deposit. Absent, the page chooses the account. */
+    /** The Tempo Account that receives the deposit. Absent, the URL names none. */
     address?: string | undefined
     /** The mode that loads the page, and the method that it opens. */
     entry: toUrl.Options
@@ -600,7 +600,7 @@ declare namespace toUrl {
 }
 
 export declare namespace open {
-  /** The address of a Tempo Account, or `undefined` for the account that the page chooses. */
+  /** The address of a Tempo Account, or `undefined` for a URL that names none. */
   type Address = `0x${string}` | undefined
 
   type Options = {
@@ -609,8 +609,7 @@ export declare namespace open {
      * such as a read of the account, resolves after the popup opens, so the popup still opens
      * within the gesture. A function that returns one runs only after the options pass their checks
      * and the popup opens, so a refused call starts no read. Absent, or for a promise that resolves
-     * to `undefined`, the page funds the user's oldest account that receives deposits, as an app
-     * that holds no account address needs.
+     * to `undefined`, the URL names no account, and the page shows that it found no wallet.
      */
     address?: Address | Promise<Address> | (() => Promise<Address>)
     /**
@@ -818,15 +817,15 @@ async function frame(
 declare namespace frame {
   type Options = {
     /**
-     * The Tempo Account that receives the deposit, or the read that returns it. `undefined` lets
-     * the page choose the account.
+     * The Tempo Account that receives the deposit, or the read that returns it. `undefined` for a
+     * URL that names none.
      */
     address: open.Address | Promise<open.Address>
     /** The registered redirect URI of the deposit page. */
     redirectUri: string
     /** Rejects the call with the signal's reason, and closes the dialog. */
     signal: AbortSignal | undefined
-    /** Returns the deposit page's URL for the account at `address`, or the page's choice. */
+    /** Returns the deposit page's URL for the account at `address`, if any. */
     toUrl: (address: open.Address, entry?: toUrl.Options) => string
   }
 }
