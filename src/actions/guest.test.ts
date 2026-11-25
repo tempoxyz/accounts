@@ -585,6 +585,47 @@ describe('Actions.guest.session in other processes', () => {
     }
   }
 
+  test("creates and saves the guest account in a `cli:` client's default store, whose instance in another process adopts it", async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    // Each process reads `TEMPO_HOME` at its first store call, so the default store is the file in
+    // the folder.
+    const program = await bundle([
+      "import * as Accounts from '../Accounts.ts'",
+      "import { device } from '../plugins/index.ts'",
+      `process.env.TEMPO_HOME = ${JSON.stringify(directory)}`,
+      'const accounts = Accounts.create({',
+      "  clientId: 'cli:test',",
+      "  guest: 'auto',",
+      '  plugins: [device({ onCode: () => {} })],',
+      '})',
+      'const held = await accounts.session.get()',
+      'const session = held ?? (await accounts.device.signIn())',
+      'process.stdout.write(JSON.stringify([session.address, await accounts.guest.get()]))',
+      'process.exit(0)',
+    ])
+
+    const [created, stored] = JSON.parse(await run(program))
+    const [adopted, kept] = JSON.parse(await run(program))
+    const text = await Fs.readFile(
+      Path.join(directory, 'id', 'store.json'),
+      'utf8',
+    )
+
+    expect({
+      adopted: adopted === created,
+      kept: kept === created,
+      p256: text.includes('"type":"p256"'),
+      stored: stored === created,
+    }).toMatchInlineSnapshot(`
+      {
+        "adopted": true,
+        "kept": true,
+        "p256": true,
+        "stored": true,
+      }
+    `)
+  })
+
   test('gives a new guest session a later revision than a stored one ahead of the clock, which an instance on `Store.file` in another process adopts', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const path = Path.join(directory, 'store.json')

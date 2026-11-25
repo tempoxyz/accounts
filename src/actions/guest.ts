@@ -785,6 +785,7 @@ export declare namespace request {
  */
 export async function session(auth: Config): Promise<Session.GuestSession> {
   const store = storeOf(auth)
+  persists(store)
   const key = keyOf(auth)
   // The key pair and the revision share one lock, so two starts never take one revision.
   const [held, revision] = await exclusive(store, { key }, async (check) => {
@@ -881,10 +882,7 @@ declare namespace exclusive {
  */
 async function load(auth: Config): Promise<Key> {
   const store = storeOf(auth)
-  if (store.local && typeof document !== 'undefined')
-    throw new Error(
-      'Invalid `store`: it keeps the guest account only in the page, which a page load loses with its funds. Use a store that persists, such as the default IndexedDB store.',
-    )
+  persists(store)
   const key = keyOf(auth)
   return await exclusive(store, { key }, (check) =>
     create(store, { check, key }),
@@ -950,6 +948,18 @@ async function advance(store: Store, options: create.Options): Promise<number> {
   const value = next(await store.getItem(key))
   await store.setItem(key, value)
   return value
+}
+
+/**
+ * Throws in a browser page for a store that keeps its values only in the page, such as
+ * `Store.memory`, since a page load would lose the guest account and its funds. Outside a page, such
+ * as in Node, the process holds the store for its lifetime, so the store passes.
+ */
+function persists(store: Store) {
+  if (store.local && typeof document !== 'undefined')
+    throw new Error(
+      'Invalid `store`: it keeps the guest account only in the page, which a page load loses with its funds. Use a store that persists, such as the default IndexedDB store.',
+    )
 }
 
 /** Returns the public key of `key`. */
