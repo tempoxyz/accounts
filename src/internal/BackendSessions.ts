@@ -363,13 +363,8 @@ export function create(
           unknown.delete(refreshToken)
           return undefined
         }
-        // Any other refusal returns before a rotation, so the session stays for the next request. A
-        // refused redirect sent no refresh token on, so it rotated nothing either.
-        if (
-          error instanceof RequestError &&
-          (Api.redirectRefused(error) ||
-            (error.status >= 400 && error.status < 500))
-        ) {
+        // Any other refusal returns before a rotation, so the session stays for the next request.
+        if (error instanceof RequestError && keeps(error)) {
           unknown.delete(refreshToken)
           throw error
         }
@@ -1410,6 +1405,22 @@ function viewTempoId(stored: StoredTempoId, id: string): BackendSession {
     id,
     method: 'tempo-id',
   }
+}
+
+/**
+ * Returns whether a session stays after its refresh throws `error`: a refusal with a 4xx status, or a
+ * refused redirect, which sent no refresh token on. Without a response, or after a 5xx status, Tempo
+ * ID may have rotated the refresh token, so the refresh ends the session.
+ *
+ * @example
+ * ```ts
+ * if (!BackendSessions.keeps(error)) return Response.json({ session: null })
+ * ```
+ */
+export function keeps(error: RequestError) {
+  return (
+    Api.redirectRefused(error) || (error.status >= 400 && error.status < 500)
+  )
 }
 
 /**

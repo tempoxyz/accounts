@@ -1365,8 +1365,9 @@ describe('fetch', () => {
     ).toMatchInlineSnapshot(`4217`)
   })
 
-  test('GET /session answers 503 temporarily_unavailable, and keeps the cookie, when the refresh of its session fails', async () => {
-    const accounts = instance()
+  test('GET /session returns null and deletes the cookie in one read, when a refresh without a response ends its session', async () => {
+    const store = Store.memory()
+    const accounts = instance({ store })
     const { id } = await accounts.backend.save({
       session: Session.from({
         ...session(),
@@ -1374,35 +1375,37 @@ describe('fetch', () => {
         refreshToken: 'refresh-token',
       }),
     })
-
-    // Nothing listens at the URL, so the refresh of the expired access token receives no response.
-    const response = await accounts.handler
-      .fetch(
+    const read = () =>
+      accounts.handler.fetch(
         new Request(`${origin}/accounts/auth/session`, {
           headers: { cookie: `__Host-tempo-id.sid=${id}` },
         }),
       )
-      .catch((error: Error) => error.name)
 
-    expect(
-      response instanceof Response
-        ? {
-            body: await response.json(),
-            cacheControl: response.headers.get('cache-control'),
-            cookies: response.headers.getSetCookie(),
-            status: response.status,
-          }
-        : response,
-    ).toMatchInlineSnapshot(`
+    // Nothing listens at the URL, so the refresh of the expired access token receives no response.
+    // Tempo ID may have rotated the refresh token, so the read ends the session.
+    const response = await read()
+
+    expect({
+      body: await response.json(),
+      cacheControl: response.headers.get('cache-control'),
+      cookies: response.headers.getSetCookie(),
+      status: response.status,
+    }).toMatchInlineSnapshot(`
       {
         "body": {
-          "error": "temporarily_unavailable",
+          "session": null,
         },
         "cacheControl": "no-store",
-        "cookies": [],
-        "status": 503,
+        "cookies": [
+          "__Host-tempo-id.sid=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+        ],
+        "status": 200,
       }
     `)
+    expect(await store.getItem(`tempo-id:session:${id}`)).toMatchInlineSnapshot(
+      `undefined`,
+    )
   })
 
   test('GET /session ends the session, returns null, and deletes the cookie, for a session whose tokens a DPoP key binds that the instance lacks', async () => {
