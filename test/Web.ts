@@ -213,6 +213,8 @@ export declare namespace url {
     chains?: string
     /** Another app of `Apps.registrations`, in place of the build's. */
     clientId?: string
+    /** `1` for the dialog page's default dialog, with no sign-in plugin. */
+    default?: '1'
     /** The options of the page's "Deposit" and "Preload the deposit page" controls. */
     deposit?: Deposit
     /** The expiry of each access key, such as `10s`. Defaults to a day. */
