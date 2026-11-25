@@ -11,19 +11,7 @@ describe('create', () => {
   test("empties the session of an instance on another preset's store at once, as `Store.memory` does", async () => {
     const name =
       'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
-    // The platform capability that `expo-secure-store` provides on a device: strings at keys.
-    const values = new Map<string, string>()
-    const secureStore = {
-      deleteItemAsync(key: string) {
-        values.delete(key)
-        return Promise.resolve()
-      },
-      getItemAsync: (key: string) => Promise.resolve(values.get(key) ?? null),
-      setItemAsync(key: string, value: string) {
-        values.set(key, value)
-        return Promise.resolve()
-      },
-    } satisfies DeviceStore.create.SecureStore
+    const secureStore = memory()
     // Each instance creates its own store, as two `expo` presets of one app do.
     const create = () =>
       Accounts.create({
@@ -55,4 +43,37 @@ describe('create', () => {
       .toBe('signedOut')
     expect(await other.session.get()).toMatchInlineSnapshot(`undefined`)
   })
+
+  test('sets local, since only the app reads its secure store, so a refusal of a refresh token is final', () => {
+    const store = DeviceStore.create(memory())
+
+    expect({
+      local: store.local,
+      lock: typeof store.lock,
+    }).toMatchInlineSnapshot(`
+      {
+        "local": true,
+        "lock": "function",
+      }
+    `)
+  })
 })
+
+/**
+ * Returns the platform capability that `expo-secure-store` provides on a device: strings at keys, in
+ * memory.
+ */
+function memory() {
+  const values = new Map<string, string>()
+  return {
+    deleteItemAsync(key: string) {
+      values.delete(key)
+      return Promise.resolve()
+    },
+    getItemAsync: (key: string) => Promise.resolve(values.get(key) ?? null),
+    setItemAsync(key: string, value: string) {
+      values.set(key, value)
+      return Promise.resolve()
+    },
+  } satisfies DeviceStore.create.SecureStore
+}
