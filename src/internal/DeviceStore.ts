@@ -64,8 +64,6 @@ export function create(secureStore: create.SecureStore): Store.Store {
       const text = await secureStore.getItemAsync(encode(key))
       return text === null ? undefined : StoreValue.parse(text)
     },
-    // Only the app's process reads its secure store, and the lock serializes every refresh there,
-    // so a refusal of the refresh token is final, as for `Store.durableObject`.
     local: true,
     lock,
     removeItem: (key) => secureStore.deleteItemAsync(encode(key)),
