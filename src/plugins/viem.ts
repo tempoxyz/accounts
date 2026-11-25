@@ -1640,8 +1640,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           // An instance without `accessKey` renews an expired access key that the sign-in named for
           // the same lifetime, as `authorize` does, so the new access key lives no longer than the first.
           // A duration counts from the request, which a popup's Continue prompt can delay, so the
-          // request starts no earlier than now.
-          if (previous.lifetime && previous.lifetime > 0)
+          // request starts no earlier than now. A lifetime within `approvalTime` can end while the
+          // screen waits, so Tempo ID fills the expiry in its place.
+          if (previous.lifetime && previous.lifetime > approvalTime)
             return {
               expiry: `${previous.lifetime}s` as Permissions.Duration,
               kept: Math.floor(Date.now() / 1000) + previous.lifetime,
@@ -2863,7 +2864,8 @@ export declare namespace viem {
      * the expiry of the instance's `accessKey`. Without it, the replacement
      * takes the expired access key's lifetime, counted from the retry's request, as
      * `accounts.authorize` renews it, so it lives no longer than the first. An access key without a
-     * lifetime, such as one that never expires, takes the expiry that Tempo ID fills. A sign-in
+     * lifetime, such as one that never expires, or with a lifetime of 10 minutes or less, takes the
+     * expiry that Tempo ID fills. A sign-in
      * that returns another user or Tempo Account sets no session, and the call rejects with
      * {@link RetryAccountError}.
      */
