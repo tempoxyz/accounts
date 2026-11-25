@@ -912,9 +912,12 @@ function local(sessions: BackendSessions.create.ReturnType): backend.Sessions {
   }
 }
 
-/** Returns the access token of the headers that send it: the credentials of `Authorization`. */
+/**
+ * Returns the access token of the headers that send it: the credentials of `Authorization`, in any
+ * case of the header's name.
+ */
 function accessTokenOf(headers: Record<string, string>) {
-  return headers.authorization?.split(' ')[1]
+  return new Headers(headers).get('authorization')?.split(' ')[1]
 }
 
 /**

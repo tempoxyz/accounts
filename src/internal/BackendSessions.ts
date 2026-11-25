@@ -132,10 +132,6 @@ export function create(
   const saving = new Map<string, Promise<unknown>>()
   // One refresh for each session ID, which concurrent reads of that session await.
   const refreshes = new Map<string, Promise<Stored | undefined>>()
-  // The access token that the last refresh for a refused token issued, for each session ID. An API
-  // that refuses that token too refuses it for another reason, such as its audience, so a refusal
-  // of it starts no refresh, and each call adds no round trip.
-  const forced = new Map<string, string>()
   // Refresh tokens sent without a known outcome. Tempo ID may have rotated each, so a second send
   // can be a reuse, which revokes every refresh token of the app for the user.
   const unknown = new Set<string>()
@@ -389,8 +385,13 @@ export function create(
     if (!tokens) return settle(undefined)
 
     const { idToken: _, ...rest } = tokens
+    const { renewed: __, ...base } = stored
     // If the write fails, store still holds the rotated token, which `unknown` keeps unsent.
-    const next = await settle({ ...stored, ...rest })
+    const next = await settle({
+      ...base,
+      ...rest,
+      ...(refused === undefined ? {} : { renewed: true }),
+    })
     unknown.delete(refreshToken)
     return next
   }
@@ -420,7 +421,7 @@ export function create(
     const refused =
       stored.method !== 'siwe' &&
       stored.accessToken === options.refused &&
-      forced.get(id) !== options.refused
+      !stored.renewed
     if (!refused && usable(stored)) return view(stored, id)
     // A session without a refresh token never refreshes, so it takes no refresh lock: it serves
     // until its access token expires, as `refresh` serves it, and otherwise `expire` ends it.
@@ -436,8 +437,6 @@ export function create(
       ).finally(() => refreshes.delete(id))
     refreshes.set(id, refreshing)
     const next = await refreshing
-    if (refused && next && next.method !== 'siwe')
-      forced.set(id, next.accessToken)
     return next && view(next, id)
   }
 
@@ -682,7 +681,6 @@ export function create(
           if (refreshToken) revoked.delete(refreshToken)
         })().finally(() => {
           ending.delete(id)
-          forced.delete(id)
           endingIssuedAt.delete(id)
           endingSid.delete(id)
           unrevoked.delete(id)
@@ -1241,6 +1239,12 @@ type StoredTempoId = Omit<BackendSession, 'account' | 'id' | 'method'> & {
   method?: undefined
   /** Exchanges for new tokens, and rotates on each refresh. Absent without `offline_access`. */
   refreshToken?: string | undefined
+  /**
+   * Whether a refresh for an access token that an API refused issued the access token. An API that
+   * refuses it too refuses it for another reason, such as its audience, so its refusal starts no
+   * refresh. Absent after a sign-in or a refresh at expiry.
+   */
+  renewed?: true | undefined
 }
 
 /** Returns whether `session` is a SIWE session, whose stored form is itself. */
@@ -1434,7 +1438,13 @@ function view(stored: Stored, id: string): BackendSession | SiweSession {
 
 /** Returns the Tempo ID session `id` without its refresh token. */
 function viewTempoId(stored: StoredTempoId, id: string): BackendSession {
-  const { account, method: _, refreshToken: __, ...session } = stored
+  const {
+    account,
+    method: _,
+    refreshToken: __,
+    renewed: ___,
+    ...session
+  } = stored
   return {
     ...session,
     ...(account ? { account: TempoAccount.deserialize(account) } : {}),
