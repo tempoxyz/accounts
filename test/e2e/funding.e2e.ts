@@ -126,6 +126,68 @@ test.describe('funding', () => {
       })
     })
 
+    test.describe('with the preference of the browser', () => {
+      // Playwright's emulation of a scheme also overrides the scheme that a frame receives.
+      test.use({ colorScheme: null })
+
+      test("draws the dialog and the deposit page in the scheme of the app's page, not the browser's", async ({
+        capture,
+        code,
+        email,
+        page,
+      }) => {
+        await Web.enter_dialog(page, { capture, code, email, fund: false })
+        // The page's own theme is dark, and the browser prefers light.
+        await page.evaluate(() => {
+          document.documentElement.style.colorScheme = 'dark'
+        })
+        expect(
+          await page.evaluate(
+            () => matchMedia('(prefers-color-scheme: dark)').matches,
+          ),
+        ).toBe(false)
+
+        await test.step('draws the skeleton dark', async () => {
+          let release = () => {}
+          const released = new Promise<void>((resolve) => {
+            release = resolve
+          })
+          await page.route(`${TempoId.url}/embed/deposit?*`, async (route) => {
+            await released
+            await route.continue()
+          })
+          await Playwright.start(page, { name: 'Deposit' })
+          await expect(
+            Playwright.prompt(page).getByRole('progressbar', {
+              name: 'Loading',
+            }),
+          ).toBeVisible()
+
+          expect(
+            await Playwright.prompt(page).evaluate(
+              (element) => getComputedStyle(element).backgroundColor,
+            ),
+          ).toBe('rgb(26, 26, 26)')
+          await capture('dark skeleton')
+          release()
+        })
+
+        await test.step('draws the deposit page dark', async () => {
+          const frame = await Playwright.dialog(page)
+          await Playwright.deposit(frame)
+
+          expect(
+            await frame
+              .locator('html')
+              .evaluate(
+                () => matchMedia('(prefers-color-scheme: dark)').matches,
+              ),
+          ).toBe(true)
+          await capture('dark deposit page')
+        })
+      })
+    })
+
     test('funds the account in a popup with `mode`', async ({
       capture,
       code,

@@ -88,7 +88,8 @@ const payment = {
  * degree point, as the design system draws them. A click on the backdrop
  * targets the dialog, so the dialog takes no selection, which repeated clicks would draw over the
  * frame. The dialog's fill is the design system's `background.elevated`, which the frame's page
- * draws too, so the dialog shows no seam while the frame loads. IntersectionObserver v2 reports the
+ * draws too, so the dialog shows no seam while the frame loads. {@link scheme} sets the dialog's
+ * color scheme, and the frame inherits it, so its page draws in the same scheme. IntersectionObserver v2 reports the
  * frame not visible under an opacity below 1 or a scale, and `/embed` waits for a visible frame
  * before it acts. So the card's entrance translates without a scale, and its fade takes 120
  * milliseconds of the 320 that the translate takes.
@@ -100,7 +101,6 @@ dialog[${attribute}] {
   border-radius: 20px;
   box-shadow: 0 16px 48px rgb(0 0 0 / 0.24);
   color: CanvasText;
-  color-scheme: light dark;
   margin: auto;
   max-height: min(680px, calc(100dvh - 32px));
   max-width: calc(100vw - 32px);
@@ -124,7 +124,7 @@ dialog[${attribute}]::backdrop {
 }
 dialog[${attribute}] iframe {
   border: 0;
-  color-scheme: normal;
+  color-scheme: inherit;
   display: block;
   max-height: inherit;
   width: 100%;
@@ -303,6 +303,7 @@ export function create(options: create.Options): create.ReturnType {
   // shows.
   dialog.setAttribute('aria-hidden', 'true')
   dialog.inert = true
+  dialog.style.colorScheme = scheme()
 
   const frame = document.createElement('iframe')
   // The frame runs the passkey ceremonies for Tempo ID's origin, a sign-in and a new user's passkey
@@ -439,6 +440,8 @@ export function create(options: create.Options): create.ReturnType {
         },
         reveal: () => {
           if (dialog.open) return
+          // The app's page can change its scheme while the frame loads hidden.
+          dialog.style.colorScheme = scheme()
           dialog.removeAttribute('aria-hidden')
           dialog.inert = false
           dialog.showModal()
@@ -652,6 +655,7 @@ export function waiting(options: waiting.Options): waiting.ReturnType {
   const dialog = document.createElement('dialog')
   dialog.setAttribute(attribute, '')
   dialog.setAttribute('aria-label', 'Continue with Tempo')
+  dialog.style.colorScheme = scheme()
 
   const panel = document.createElement('div')
   panel.setAttribute('data-panel', '')
@@ -724,6 +728,7 @@ export function prompt(options: prompt.Options): prompt.ReturnType {
   const dialog = document.createElement('dialog')
   dialog.setAttribute(attribute, '')
   dialog.setAttribute('aria-label', label)
+  dialog.style.colorScheme = scheme()
 
   const panel = document.createElement('div')
   panel.setAttribute('data-panel', '')
@@ -805,6 +810,7 @@ export function load(options: load.Options): load.ReturnType {
   dialog.setAttribute('aria-hidden', 'true')
   dialog.setAttribute('aria-label', options.label)
   dialog.inert = true
+  dialog.style.colorScheme = scheme()
 
   const element = document.createElement('iframe')
   // The frame may never navigate this page.
@@ -1021,6 +1027,8 @@ export function load(options: load.Options): load.ReturnType {
     show: (value) => {
       if (state.phase !== 'hidden') return
       state = { handlers: value, phase: 'shown' }
+      // The app's page can change its scheme while a preloaded frame waits.
+      dialog.style.colorScheme = scheme()
       dialog.removeAttribute('aria-hidden')
       dialog.inert = false
       dialog.showModal()
@@ -1193,6 +1201,27 @@ function address(funding: unknown) {
   if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(value))
     return undefined
   return value as `0x${string}`
+}
+
+/**
+ * Returns the color scheme of the app's page, which the dialog takes. A browser gives a frame the
+ * scheme of its `iframe` element as the preferred scheme, so Tempo ID's page draws in it too. A
+ * page that declares one scheme, on its root or in its `color-scheme` meta tag, decides it. A page
+ * that declares both or none takes the user's preference.
+ */
+function scheme() {
+  const root = getComputedStyle(document.documentElement).colorScheme
+  const declared =
+    root === 'normal'
+      ? (document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]')
+          ?.content ?? '')
+      : root
+  const names = declared.split(/\s+/)
+  const dark = names.includes('dark')
+  if (dark !== names.includes('light')) return dark ? 'dark' : 'light'
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light'
 }
 
 /** Returns whether the dialog plays its entrance and exit, which reduced motion turns off. */
