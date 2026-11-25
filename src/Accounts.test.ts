@@ -33,6 +33,307 @@ import * as Store from './Store.js'
 import { local } from './plugins/local.js'
 import { viem } from './plugins/viem.js'
 
+describe('account.get', () => {
+  test('refreshes once when Tempo ID refuses the live access token, and signs out when it refuses the refresh token too', async () => {
+    const memory = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      // The user's Tempo ID session ended elsewhere, so Tempo ID refuses both tokens.
+      fetch: ((input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        requests.push(`${request.method} ${pathname}`)
+        if (pathname === '/oauth2/token')
+          return Promise.resolve(
+            Response.json(
+              {
+                error: 'invalid_grant',
+                error_description: 'invalid refresh token',
+              },
+              { status: 400 },
+            ),
+          )
+        return Promise.resolve(
+          Response.json(
+            {
+              error: 'invalid_token',
+              error_description: 'Invalid access token',
+              reason: 'invalid_token',
+            },
+            { status: 401 },
+          ),
+        )
+      }) as typeof globalThis.fetch,
+      store: memory,
+      url: 'http://127.0.0.1:9',
+    })
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const error = await accounts.account.get().catch((error: unknown) => error)
+
+    expect(error).toMatchInlineSnapshot(
+      `[Accounts.SignedOutError: The client's account is signed out. Sign in before sending.]`,
+    )
+    expect({
+      requests,
+      status: accounts.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          "GET /v1/account",
+          "POST /oauth2/token",
+        ],
+        "status": "signedOut",
+      }
+    `)
+  })
+
+  test('throws SignedOutError at each of two overlapping reads that Tempo ID refuses, after one refresh', async () => {
+    const memory = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    // The reads of the account, which answer at their release.
+    const reads: (() => void)[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      // The user's Tempo ID session ended elsewhere, so Tempo ID refuses both tokens.
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        requests.push(`${request.method} ${pathname}`)
+        if (pathname === '/oauth2/token')
+          return Response.json(
+            {
+              error: 'invalid_grant',
+              error_description: 'invalid refresh token',
+            },
+            { status: 400 },
+          )
+        await new Promise<void>((resolve) => reads.push(resolve))
+        return Response.json(
+          {
+            error: 'invalid_token',
+            error_description: 'Invalid access token',
+            reason: 'invalid_token',
+          },
+          { status: 401 },
+        )
+      }) as typeof globalThis.fetch,
+      store: memory,
+      url: 'http://127.0.0.1:9',
+    })
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const first = accounts.account.get().catch((error: unknown) => error)
+    const second = accounts.account.get().catch((error: unknown) => error)
+    await expect.poll(() => reads.length).toBe(2)
+    // The first refusal ends the session before the second one arrives.
+    reads[0]!()
+    await expect
+      .poll(() => accounts.session.status.get().status)
+      .toBe('signedOut')
+    reads[1]!()
+
+    expect([await first, await second]).toMatchInlineSnapshot(`
+      [
+        [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+      ]
+    `)
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        "GET /v1/account",
+        "GET /v1/account",
+        "POST /oauth2/token",
+      ]
+    `)
+  })
+
+  test('throws SignedOutError, and reads no account of another user, when another context signs in another user during the refused read', async () => {
+    const memory = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    let release = () => {}
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        requests.push(
+          `${request.method} ${pathname} ${new URLSearchParams(await request.text()).get('refresh_token') ?? ''}`.trim(),
+        )
+        // The other user's refresh token is live.
+        if (pathname === '/oauth2/token')
+          return Response.json({
+            access_token: 'other-new',
+            expires_in: 300,
+            refresh_token: 'other-refresh-new',
+            token_type: 'Bearer',
+          })
+        if (pathname !== '/v1/account')
+          return new Response(null, { status: 200 })
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+        return Response.json(
+          {
+            error: 'invalid_token',
+            error_description: 'Invalid access token',
+            reason: 'invalid_token',
+          },
+          { status: 401 },
+        )
+      }) as typeof globalThis.fetch,
+      store: memory,
+      url: 'http://127.0.0.1:9',
+    })
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const read = accounts.account.get().catch((error: unknown) => error)
+    await expect.poll(() => requests.length).toBe(1)
+    // Another context, such as another tab, signs in another user before the refusal arrives.
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'other-access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'other-refresh-token',
+          user: { email: 'other@example.com', id: 'user_2' },
+        }),
+      },
+      version: 1,
+    })
+    release()
+
+    const error = await read
+    // The adoption of the other user's session revokes the dropped refresh token beside the call.
+    await expect.poll(() => requests.length).toBe(3)
+
+    expect(error).toMatchInlineSnapshot(
+      `[Accounts.SignedOutError: The client's account is signed out. Sign in before sending.]`,
+    )
+    expect({
+      requests,
+      user: (await accounts.session.get())?.user?.id,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          "GET /v1/account",
+          "POST /oauth2/token other-refresh-token",
+          "POST /oauth2/revoke",
+        ],
+        "user": "user_2",
+      }
+    `)
+  })
+
+  test('throws SignedOutError, and reads no account without a token, when another context signs out during the refused read', async () => {
+    const memory = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    let release = () => {}
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        requests.push(`${request.method} ${pathname}`)
+        if (pathname !== '/v1/account')
+          return new Response(null, { status: 200 })
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+        return Response.json(
+          {
+            error: 'invalid_token',
+            error_description: 'Invalid access token',
+            reason: 'invalid_token',
+          },
+          { status: 401 },
+        )
+      }) as typeof globalThis.fetch,
+      store: memory,
+      url: 'http://127.0.0.1:9',
+    })
+    await memory.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const read = accounts.account.get().catch((error: unknown) => error)
+    await expect.poll(() => requests.length).toBe(1)
+    // Another context, such as another process on the store, signs out before the refusal arrives.
+    await memory.setItem(name, { state: { session: undefined }, version: 1 })
+    release()
+
+    expect(await read).toMatchInlineSnapshot(
+      `[Accounts.SignedOutError: The client's account is signed out. Sign in before sending.]`,
+    )
+    expect({
+      requests,
+      status: accounts.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          "GET /v1/account",
+        ],
+        "status": "signedOut",
+      }
+    `)
+  })
+})
+
 describe('authorize', () => {
   test('rejects with `rejected`, and sends no request, for a third-party client ID', async () => {
     const requests: string[] = []
