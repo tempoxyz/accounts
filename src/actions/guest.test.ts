@@ -1202,6 +1202,66 @@ describe('Actions.guest.requote', () => {
   })
 })
 
+describe('Actions.guest.retryFunding', () => {
+  const unavailable = new Accounts.RequestError({
+    code: 'server_error',
+    message: 'The balance read failed.',
+    reason: 'upstream_unavailable',
+    status: 503,
+  })
+  const refused = new Accounts.RequestError({
+    code: 'invalid_request',
+    message: 'The app is disabled.',
+    reason: 'rejected',
+    status: 400,
+  })
+  const offline = new Accounts.RequestError({
+    code: 'server_error',
+    message: 'No response.',
+    status: 0,
+  })
+
+  test.for([
+    [
+      'requests again after 1 second at the first `upstream_unavailable`',
+      { attempt: 1, error: unavailable },
+      'retry 1000',
+    ],
+    [
+      'requests again after 2 seconds at the second `upstream_unavailable`',
+      { attempt: 2, error: unavailable },
+      'retry 2000',
+    ],
+    [
+      'rejects with `upstream_unavailable` at the third request',
+      { attempt: 3, error: unavailable },
+      'throw upstream_unavailable',
+    ],
+    [
+      'rejects with another refusal at once',
+      { attempt: 1, error: refused },
+      'throw rejected',
+    ],
+    [
+      'rejects with a request without a response at once',
+      { attempt: 1, error: offline },
+      'throw undefined',
+    ],
+    [
+      'rejects with an error other than a refusal at once',
+      { attempt: 1, error: new Error('Aborted.') },
+      'throw undefined',
+    ],
+  ] as const)('%s', ([, options, expected]) => {
+    const step = Guest.retryFunding(options)
+    expect(
+      step.type === 'retry'
+        ? `retry ${step.delay}`
+        : `throw ${step.error instanceof Accounts.RequestError ? step.error.reason : undefined}`,
+    ).toBe(expected)
+  })
+})
+
 describe('Actions.guest.settlement', () => {
   /** The time of each row, in Unix milliseconds: 100 seconds after the transaction's window. */
   const now = 1_700_000_100_000

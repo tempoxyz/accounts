@@ -193,7 +193,9 @@ export function device(options: device.Options = {}) {
          * CLI's `pay`, calls it for a guest account that holds less than the payment on a chain
          * without a faucet, then waits for the funds. An aborted call shows no code.
          *
-         * @throws {Accounts.RequestError} As `Actions.device.fund` throws it.
+         * @throws {Accounts.RequestError} As `Actions.device.fund` throws it, such as with
+         *   `upstream_unavailable` and status 503 when Tempo ID cannot read the guest account's
+         *   balance. Retry later.
          * @throws {Plugins.device.OnCodeRequiredError} Without the plugin's `onCode`, before any
          *   request.
          *

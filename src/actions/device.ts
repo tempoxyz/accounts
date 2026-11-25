@@ -286,6 +286,8 @@ export declare namespace authorize {
  * @throws {RequestError} When Tempo ID refuses the code request, or with `server_error` and status 0
  *   when it receives no response. A malformed `funding` throws `invalid_field` with status 0, before
  *   any request.
+ * @throws {RequestError} With `upstream_unavailable` and status 503 when Tempo ID cannot read the
+ *   guest account's balance. The request moves no funds, so a retry later is safe.
  *
  * @example
  * ```ts

@@ -64,6 +64,12 @@ const attodollars = 1_000_000_000_000n
 const quoteAttempts = 3
 
 /**
+ * The funding code requests of one shortfall at most. A refusal with `upstream_unavailable`, such as
+ * a failed read of the guest account's balance, requests again after 1 second, then 2 seconds.
+ */
+const fundAttempts = 3
+
+/**
  * The time after a transfer's validity window during which the payment still reads its checkout's
  * status, since a transfer can land in the last block of its window, in milliseconds.
  */
@@ -732,7 +738,8 @@ type Refused = { cancel: string; refusal: Refusal }
  *
  * A shortfall on a chain whose faucet drips the token requests the faucet. Otherwise `fund` shows a
  * funding code, such as the `device` plugin's `fundGuest`, and the call waits for the funds until
- * the code expires.
+ * the code expires. A funding code request that Tempo ID refuses with `upstream_unavailable`
+ * repeats after 1 second, then 2 seconds, as {@link retryFunding} decides.
  *
  * The prepare names the quoted cost: the sponsor, or the fee that the guest account pays. Tempo ID
  * refuses a fill above it with `quote_changed`, and the call quotes again and prepares at the new
@@ -755,7 +762,9 @@ type Refused = { cancel: string; refusal: Refusal }
  * @throws {RequestError} With the reason of Tempo ID's refusal, such as `recipient_not_permitted`.
  *   With `insufficient_balance` and status 0 for a shortfall without a faucet or `fund`, after the
  *   funding code expired, or for a new quote with a shortfall. With `quote_changed` when the third
- *   prepare's fill still costs more than its quote.
+ *   prepare's fill still costs more than its quote. With `upstream_unavailable` when Tempo ID
+ *   refuses the third funding code request of a shortfall with it, such as when it cannot read the
+ *   guest account's balance. Retry later.
  * @throws {RequestError} With `invalid_request` at `transaction`, for a prepared transaction other
  *   than the requested transfer, or whose fee exceeds the quoted fee, which the key pair never
  *   signs.
@@ -1167,12 +1176,23 @@ export async function pay(
     for (;;) {
       const hint = funding({ amount, quote: lacking })
       funded.push(hint.token.toLowerCase())
-      const code = await fund({
-        chainId,
-        funding: hint,
-        guest: await guest({ redirectUri: '' }),
-        signal,
-      })
+      const code = await (async () => {
+        for (let attempt = 1; ; attempt++) {
+          try {
+            return await fund({
+              chainId,
+              funding: hint,
+              guest: await guest({ redirectUri: '' }),
+              signal,
+            })
+          } catch (error) {
+            if (signal?.aborted) throw error
+            const step = retryFunding({ attempt, error })
+            if (step.type === 'throw') throw step.error
+            await wait(step.delay, { aborted, signal })
+          }
+        }
+      })()
       const next = await covered({
         deadline: Date.now() + code.expiresIn * 1_000,
         funded,
@@ -1600,6 +1620,57 @@ export declare namespace requote {
       }
     | {
         /** The prepare's error, which the payment rejects with. */
+        error: unknown
+        type: 'throw'
+      }
+}
+
+/**
+ * Returns the next step of `Actions.guest.pay` after a funding code request rejects. Tempo ID
+ * refuses the request with `upstream_unavailable` when it cannot read the guest account's balance,
+ * and a later request can succeed. The request moves no funds, so a repeat is safe. The payment
+ * requests at most 3 times.
+ *
+ * | Error                                       | Step                                               |
+ * | ------------------------------------------- | -------------------------------------------------- |
+ * | `upstream_unavailable` before the third try | `retry` after 1 second, then 2 seconds.            |
+ * | `upstream_unavailable` at the third try     | `throw` with the error.                            |
+ * | Any other error                             | `throw` with the error.                            |
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const step = Actions.guest.retryFunding({ attempt: 1, error })
+ * ```
+ */
+export function retryFunding(
+  options: retryFunding.Options,
+): retryFunding.ReturnType {
+  const { attempt, error } = options
+  const unavailable =
+    error instanceof RequestError && error.reason === 'upstream_unavailable'
+  if (unavailable && attempt < fundAttempts)
+    return { delay: 1_000 * 2 ** (attempt - 1), type: 'retry' }
+  return { error, type: 'throw' }
+}
+
+export declare namespace retryFunding {
+  type Options = {
+    /** The number of the funding code request, from 1. */
+    attempt: number
+    /** The request's error. */
+    error: unknown
+  }
+
+  type ReturnType =
+    | {
+        /** The time before the next request, in milliseconds. */
+        delay: number
+        type: 'retry'
+      }
+    | {
+        /** The error that the payment rejects with. */
         error: unknown
         type: 'throw'
       }
