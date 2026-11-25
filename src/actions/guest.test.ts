@@ -627,13 +627,25 @@ describe('Actions.guest.session in other processes', () => {
 
   /**
    * Starts a stand-in of Tempo ID's guest payment routes, which records each route with the
-   * checkout ID of its guest request. The first send never answers, as a response lost on the
-   * network. `status` answers each status read.
+   * checkout ID of its guest request. With `first: 'lost'`, the default, the first send never
+   * answers, as a response lost on the network. With `first: 'held'`, it answers once a second send
+   * arrives. `status` answers each status read: a body, or a refusal with its status code.
    */
   async function routes(options: {
-    status: { paid: { transaction: `0x${string}` } | null; pending: boolean }
+    first?: 'held' | 'lost' | undefined
+    /** Whether the chain holds a receipt of each transaction. Defaults to `false`. */
+    receipt?: boolean | undefined
+    /** The seconds from the prepare to the end of the transaction's window. Defaults to 290. */
+    window?: number | undefined
+    status:
+      | { paid: { transaction: `0x${string}` } | null; pending: boolean }
+      | { refusal: { reason: string; status: number } }
   }) {
-    const recorded: { checkout: string; route: string }[] = []
+    const recorded: {
+      checkout: string
+      route: string
+      transaction?: `0x${string}` | undefined
+    }[] = []
     const sent = Promise.withResolvers<void>()
     const held: Http.ServerResponse[] = []
     const checkoutOf = (guest: unknown) =>
@@ -654,14 +666,55 @@ describe('Actions.guest.session in other processes', () => {
         text += chunk.toString()
       })
       request.on('end', () => {
-        const guest =
-          url.searchParams.get('guest') ??
-          (text ? (JSON.parse(text) as { guest?: string }).guest : undefined)
-        recorded.push({ checkout: checkoutOf(guest), route })
-        const reply = (body: unknown) => {
-          response.writeHead(200, { 'content-type': 'application/json' })
-          response.end(JSON.stringify(body))
+        const body = text
+          ? (JSON.parse(text) as {
+              guest?: string
+              id?: number
+              method?: string
+              params?: readonly string[]
+              transaction?: `0x${string}`
+            })
+          : {}
+        const reply = (body: unknown, target = response, status = 200) => {
+          target.writeHead(status, { 'content-type': 'application/json' })
+          target.end(JSON.stringify(body))
         }
+        // The chain's RPC answers only the receipt read, with a receipt or none.
+        if (route === 'POST /rpc') {
+          recorded.push({ checkout: '', route: `RPC ${body.method}` })
+          const hash = body.params?.[0]
+          return reply({
+            id: body.id,
+            jsonrpc: '2.0',
+            result:
+              body.method === 'eth_getTransactionReceipt' && options.receipt
+                ? {
+                    blockHash: `0x${'11'.repeat(32)}`,
+                    blockNumber: '0x1',
+                    contractAddress: null,
+                    cumulativeGasUsed: '0x1',
+                    effectiveGasPrice: '0x1',
+                    from: to,
+                    gasUsed: '0x1',
+                    logs: [],
+                    logsBloom: `0x${'00'.repeat(256)}`,
+                    status: '0x1',
+                    to: ousd,
+                    transactionHash: hash,
+                    transactionIndex: '0x0',
+                    type: '0x76',
+                  }
+                : body.method === 'eth_chainId'
+                  ? '0x107d'
+                  : null,
+          })
+        }
+        const guest = url.searchParams.get('guest') ?? body.guest
+        recorded.push({
+          checkout: checkoutOf(guest),
+          route,
+          transaction: body.transaction,
+        })
         if (route === 'GET /i/guest/pay')
           return reply({
             faucet: false,
@@ -675,7 +728,8 @@ describe('Actions.guest.session in other processes', () => {
           return reply({
             tag: 'tag-1',
             transaction: transaction({
-              validBefore: Math.floor(Date.now() / 1_000) + 290,
+              validBefore:
+                Math.floor(Date.now() / 1_000) + (options.window ?? 290),
             }),
           })
         if (route === 'POST /i/guest/pay/send') {
@@ -683,9 +737,23 @@ describe('Actions.guest.session in other processes', () => {
             held.push(response)
             return sent.resolve()
           }
+          if (options.first === 'held')
+            for (const first of held.splice(0))
+              reply({ paid: { transaction: `0x${'ef'.repeat(32)}` } }, first)
           return reply({ paid: { transaction: `0x${'cd'.repeat(32)}` } })
         }
-        if (route === 'GET /i/guest/pay/status') return reply(options.status)
+        if (route === 'GET /i/guest/pay/status')
+          return 'refusal' in options.status
+            ? reply(
+                {
+                  error: 'invalid_request',
+                  error_description: 'Invalid request: refused.',
+                  reason: options.status.refusal.reason,
+                },
+                response,
+                options.status.refusal.status,
+              )
+            : reply(options.status)
         if (route === 'POST /i/guest/pay/cancel')
           return reply({ cancelled: true })
         response.writeHead(404).end()
@@ -703,18 +771,44 @@ describe('Actions.guest.session in other processes', () => {
     return { recorded, sent: sent.promise, url: `http://127.0.0.1:${port}` }
   }
 
+  /**
+   * Ends the lease of each stored checkout in the file at `path`, as the lease of a process that
+   * exited ends once its time passes.
+   */
+  async function expire(path: string) {
+    const entries = JSON.parse(await Fs.readFile(path, 'utf8')) as Record<
+      string,
+      { value: Record<string, { leaseUntil: number }> }
+    >
+    for (const [key, entry] of Object.entries(entries))
+      if (key.includes(':payment:'))
+        for (const checkout of Object.values(entry.value))
+          checkout.leaseUntil = 0
+    await Fs.writeFile(path, JSON.stringify(entries))
+  }
+
   /** Returns a program that pays `payment` from the guest account of the file at `path`. */
   function payer(options: { path: string; url: string }) {
     return bundle([
       "import * as Accounts from '../Accounts.ts'",
       "import * as SignIn from '../internal/SignIn.ts'",
       "import * as Plugin from '../Plugin.ts'",
+      "import { viem } from '../plugins/viem.ts'",
       "import * as Store from '../Store.ts'",
+      "import { http } from 'viem'",
       'const accounts = Accounts.create({',
       '  chain: 4217,',
       "  clientId: 'cli:guest-example',",
       '  guest: true,',
-      ...picks,
+      '  plugins: [',
+      '    Plugin.from({',
+      '      actions: (context) => ({',
+      '        guest: () => SignIn.guest(context, { change: context.session.change() }),',
+      '      }),',
+      "      id: 'pick',",
+      '    }),',
+      `    viem({ transport: http(${JSON.stringify(`${options.url}/rpc`)}) }),`,
+      '  ],',
       `  store: Store.file(${JSON.stringify(options.path)}),`,
       `  url: ${JSON.stringify(options.url)},`,
       '})',
@@ -740,6 +834,7 @@ describe('Actions.guest.session in other processes', () => {
     await tempoId.sent
     first.kill()
     await exited
+    await expire(path)
     const resumed = JSON.parse(await run(program))
     const stored = JSON.parse(await Fs.readFile(path, 'utf8'))
 
@@ -771,10 +866,84 @@ describe('Actions.guest.session in other processes', () => {
     `)
   })
 
-  test('cancels the stored checkout of a send that can no longer land, and pays once with a new checkout', async () => {
+  test('keeps the lost checkout of two payments of the same terms that run at once, and resumes it after a restart while the other one paid', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const path = Path.join(directory, 'store.json')
-    const tempoId = await routes({ status: { paid: null, pending: false } })
+    const transaction = `0x${'ab'.repeat(32)}` as const
+    // The lost transfer landed, so its checkout's status reads paid.
+    const tempoId = await routes({
+      status: { paid: { transaction }, pending: false },
+    })
+    await Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: true,
+      plugins: [pick()],
+      store: Store.file(path),
+      url: tempoId.url,
+    }).pick.guest()
+    const program = await payer({ path, url: tempoId.url })
+
+    // The first send that arrives gets no response, and the other one pays.
+    const payments = [start(program), start(program)]
+    const outputs = payments.map((payment) =>
+      payment.output.catch(() => undefined),
+    )
+    await tempoId.sent
+    await expect
+      .poll(
+        () =>
+          tempoId.recorded.filter(
+            (entry) => entry.route === 'POST /i/guest/pay/send',
+          ).length,
+      )
+      .toBe(2)
+    const finished = await Promise.race(outputs)
+    for (const payment of payments) payment.kill()
+    await Promise.all(outputs)
+    await expire(path)
+    const before = tempoId.recorded.length
+    const resumed = JSON.parse(await run(program))
+
+    const sends = tempoId.recorded.filter(
+      (entry) => entry.route === 'POST /i/guest/pay/send',
+    )
+    const lost = sends[0]?.checkout
+    expect({
+      // The payment that paid returned the other checkout's transaction.
+      finished: finished === JSON.stringify(`0x${'cd'.repeat(32)}`),
+      resumed: resumed === transaction,
+      restart: tempoId.recorded
+        .slice(before)
+        .map(
+          (entry) =>
+            `${entry.route} ${entry.checkout === lost ? 'lost' : 'other'}`,
+        ),
+      stored: Object.keys(JSON.parse(await Fs.readFile(path, 'utf8'))).some(
+        (key) => key.includes(':payment:'),
+      ),
+    }).toMatchInlineSnapshot(`
+      {
+        "finished": true,
+        "restart": [
+          "GET /i/guest/pay/status lost",
+        ],
+        "resumed": true,
+        "stored": false,
+      }
+    `)
+  })
+
+  test("returns the landed transfer of a stored checkout whose payment Tempo ID forgot, from the chain's receipt, with no second send", async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    // Tempo ID forgets a paid checkout a day after its receipt, so its status reads unpaid, and no
+    // transaction can land. The chain still holds the receipt.
+    const tempoId = await routes({
+      receipt: true,
+      status: { paid: null, pending: false },
+      window: -1,
+    })
     const program = await payer({ path, url: tempoId.url })
 
     const first = start(program)
@@ -782,13 +951,141 @@ describe('Actions.guest.session in other processes', () => {
     await tempoId.sent
     first.kill()
     await exited
+    await expire(path)
+    const before = tempoId.recorded.length
+    const resumed = JSON.parse(await run(program))
+
+    const signed = tempoId.recorded.find(
+      (entry) => entry.route === 'POST /i/guest/pay/send',
+    )?.transaction
+    expect({
+      resumed: !!signed && resumed === Hash.keccak256(signed),
+      restart: tempoId.recorded.slice(before).map((entry) => entry.route),
+    }).toMatchInlineSnapshot(`
+      {
+        "restart": [
+          "GET /i/guest/pay/status",
+          "RPC eth_getTransactionReceipt",
+        ],
+        "resumed": true,
+      }
+    `)
+  })
+
+  test('skips the stored checkout of a payment of the same terms that still runs, so each of the two payments pays once', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    // A status read or a cancellation of the running payment's checkout would show in the routes.
+    const tempoId = await routes({
+      first: 'held',
+      status: { paid: null, pending: false },
+    })
+    const program = await payer({ path, url: tempoId.url })
+
+    // The first payment waits for its send's response while the second one starts.
+    const first = start(program)
+    await tempoId.sent
+    const second = await run(program)
+    const output = await first.output
+
+    const [opened] = tempoId.recorded
+    expect({
+      outputs: [output, second].map((value) => JSON.parse(value) as string),
+      routes: tempoId.recorded.map(
+        (entry) =>
+          `${entry.route} ${entry.checkout === opened?.checkout ? 'first' : 'second'}`,
+      ),
+      stored: Object.keys(JSON.parse(await Fs.readFile(path, 'utf8'))).some(
+        (key) => key.includes(':payment:'),
+      ),
+    }).toMatchInlineSnapshot(`
+      {
+        "outputs": [
+          "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+          "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        ],
+        "routes": [
+          "GET /i/guest/pay first",
+          "POST /i/guest/pay first",
+          "POST /i/guest/pay/send first",
+          "GET /i/guest/pay second",
+          "POST /i/guest/pay second",
+          "POST /i/guest/pay/send second",
+        ],
+        "stored": false,
+      }
+    `)
+  })
+
+  test('removes a stored checkout whose status Tempo ID refuses for good, and pays once with a new checkout', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    // The chain holds no receipt, and the transaction's window passed.
+    const tempoId = await routes({
+      status: { refusal: { reason: 'invalid_field', status: 400 } },
+      window: -1,
+    })
+    const program = await payer({ path, url: tempoId.url })
+
+    const first = start(program)
+    const exited = first.output.catch(() => undefined)
+    await tempoId.sent
+    first.kill()
+    await exited
+    await expire(path)
+    await run(program)
+
+    const [opened] = tempoId.recorded
+    expect({
+      routes: tempoId.recorded.map((entry) =>
+        entry.checkout
+          ? `${entry.route} ${entry.checkout === opened?.checkout ? 'first' : 'new'}`
+          : entry.route,
+      ),
+      stored: Object.keys(JSON.parse(await Fs.readFile(path, 'utf8'))).some(
+        (key) => key.includes(':payment:'),
+      ),
+    }).toMatchInlineSnapshot(`
+      {
+        "routes": [
+          "GET /i/guest/pay first",
+          "POST /i/guest/pay first",
+          "POST /i/guest/pay/send first",
+          "GET /i/guest/pay/status first",
+          "RPC eth_getTransactionReceipt",
+          "GET /i/guest/pay new",
+          "POST /i/guest/pay new",
+          "POST /i/guest/pay/send new",
+        ],
+        "stored": false,
+      }
+    `)
+  })
+
+  test('cancels the stored checkout of a send that can no longer land, and pays once with a new checkout', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    // The chain holds no receipt, and the transaction's window passed.
+    const tempoId = await routes({
+      status: { paid: null, pending: false },
+      window: -1,
+    })
+    const program = await payer({ path, url: tempoId.url })
+
+    const first = start(program)
+    const exited = first.output.catch(() => undefined)
+    await tempoId.sent
+    first.kill()
+    await exited
+    await expire(path)
     await run(program)
 
     const [opened] = tempoId.recorded
     expect(
-      tempoId.recorded.map(
-        (entry) =>
-          `${entry.route} ${entry.checkout === opened?.checkout ? 'first' : 'new'}`,
+      tempoId.recorded.map((entry) =>
+        entry.checkout
+          ? `${entry.route} ${entry.checkout === opened?.checkout ? 'first' : 'new'}`
+          : entry.route,
       ),
     ).toMatchInlineSnapshot(`
       [
@@ -796,6 +1093,7 @@ describe('Actions.guest.session in other processes', () => {
         "POST /i/guest/pay first",
         "POST /i/guest/pay/send first",
         "GET /i/guest/pay/status first",
+        "RPC eth_getTransactionReceipt",
         "POST /i/guest/pay/cancel first",
         "GET /i/guest/pay new",
         "POST /i/guest/pay new",
@@ -1131,7 +1429,12 @@ describe('Accounts.pay of a guest session outside a page', () => {
       store: Store.from({
         ...memory,
         getItem: async (key) => {
-          if (armed && key.startsWith('tempo-id:guest:') && ++reads === 2)
+          if (
+            armed &&
+            key.startsWith('tempo-id:guest:') &&
+            !key.includes(':payment:') &&
+            ++reads === 2
+          )
             await accounts.signOut()
           return await memory.getItem(key)
         },

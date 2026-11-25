@@ -41,6 +41,7 @@ import * as Payment from './internal/Payment.js'
 import type { Permissions } from './Permissions.js'
 import * as Plugin from './Plugin.js'
 import type { backend } from './plugins/backend.js'
+import type { viem } from './plugins/viem.js'
 import type * as React from './react/index.js'
 import * as Session from './Session.js'
 import * as SignIn from './internal/SignIn.js'
@@ -2452,12 +2453,32 @@ export function create<
                 device?: { fundGuest?: GuestActions.pay.Options['fund'] }
               }
             ).device
-            const Guest = await import('./actions/guest.js')
+            const [Guest, Viem, { createClient }] = await Promise.all([
+              import('./actions/guest.js'),
+              import('./plugins/viem.js'),
+              import('viem'),
+            ])
+            // The `viem` plugin's settings, or its defaults, name the chain and its RPC, which read
+            // the receipt of the guest account's transfer.
+            const namespace =
+              (instance as { viem?: viem.Namespace }).viem ??
+              (Viem.viem().actions!(context) as viem.Namespace)
+            const settings = namespace[
+              Viem.settings as never
+            ] as unknown as viem.Settings
             return await Guest.pay(config, {
               amount: parameters.amount,
               chainId: chainOf(),
               current: () => context.session.get(),
               fund: device?.fundGuest,
+              getClient: (options) => {
+                const chain = settings.chain(options.chainId)
+                if (!chain) return undefined
+                return createClient({
+                  chain,
+                  transport: settings.rpc(options.chainId),
+                })
+              },
               memo,
               session: held,
               signal: parameters.signal,
