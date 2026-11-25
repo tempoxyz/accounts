@@ -116,7 +116,7 @@ describe('resolve', () => {
   test('raises the minor number, not the breaking number, for a breaking title or body', () => {
     const { commit, cwd } = repository()
     const first = commit('feat: add Tab (#1)')
-    const title = commit('feat(web)!: rename Tab (#2)')
+    const title = commit('fix(web)!: rename Tab (#2)')
     const body = commit('refactor: drop Tab (#3)\n\nBREAKING CHANGE: use Tabs.')
 
     expect(
@@ -140,7 +140,7 @@ describe('resolve', () => {
   test('reads a breaking title past its dogfood prefix', () => {
     const { commit, cwd } = repository()
     const base = commit('dogfood: fix: pad Tab (#1)')
-    const sha = commit('dogfood: feat(dialog)!: rename Tab (#2)')
+    const sha = commit('dogfood: fix(dialog)!: rename Tab (#2)')
 
     expect(
       Release.resolve({ base, cwd, latest: '1.0.20261118190100', sha })
@@ -222,7 +222,7 @@ describe('resolve', () => {
     const { commit, cwd } = repository()
     const base = commit('feat: add Tab (#1)')
     const sha = commit('fix: pad Tab (#2)')
-    const breaking = commit('feat!: rename Tab (#3)')
+    const breaking = commit('fix!: rename Tab (#3)')
 
     expect(
       Release.resolve({ base, cwd, latest: '1.1.20261118190200', sha })
