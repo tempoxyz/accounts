@@ -1532,7 +1532,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * which each call of the screen waits for. With `options.raise`, the limit of its token adds
        * its amount, and the sign-in
        * always shows, also for an expired access key. The new access key keeps the old one's
-       * expiry while it is in the future. Otherwise it takes the instance's `accessKey` expiry.
+       * expiry while it is more than {@link approvalTime} ahead. Otherwise it takes the instance's
+       * `accessKey` expiry.
        * Without one, it takes the old one's lifetime from now, as a renewal does, or else the
        * expiry that Tempo ID fills. A sign-in that returns another user or account sets no
        * session, and rejects.
@@ -1624,12 +1625,14 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           !!authorization.expiry &&
           authorization.expiry >= Request_internal.millisecondExpiry
         // `kept`: the earliest granted expiry, in Unix seconds, at which the new access key keeps the
-        // old one's lifetime. An earlier expiry means that Tempo ID shortened the request.
+        // old one's lifetime. An earlier expiry means that Tempo ID shortened the request. Tempo ID
+        // refuses an approval after the requested expiry, so an old expiry that can pass while the
+        // screen waits counts as expired.
         const { expiry, kept } = (() => {
           if (
             authorization.expiry &&
             !milliseconds &&
-            authorization.expiry * 1000 > Date.now()
+            authorization.expiry > Math.floor(Date.now() / 1000) + approvalTime
           )
             return { expiry: authorization.expiry, kept: authorization.expiry }
           if (resolved) return { expiry: resolved.expiry, kept: undefined }
@@ -2854,8 +2857,10 @@ export declare namespace viem {
      * resource. The sign-in requests the resources and the API scopes of the session's access token
      * again.
      *
-     * The new access key keeps the old one's expiry while it is in the future. An expired access
-     * key's replacement takes the expiry of the instance's `accessKey`. Without it, the replacement
+     * The new access key keeps the old one's expiry while it is more than 10 minutes ahead, the
+     * longest wait of a device code. Tempo ID refuses an approval after the requested expiry. An
+     * access key that expires sooner counts as expired. An expired access key's replacement takes
+     * the expiry of the instance's `accessKey`. Without it, the replacement
      * takes the expired access key's lifetime, counted from the retry's request, as
      * `accounts.authorize` renews it, so it lives no longer than the first. An access key without a
      * lifetime, such as one that never expires, takes the expiry that Tempo ID fills. A sign-in
@@ -3338,6 +3343,13 @@ type Screen = {
  * milliseconds.
  */
 const depositLimit = 600_000
+
+/**
+ * How long a retry's screen can wait for the user's approval, in seconds: the longest lifetime of a
+ * device code. Tempo ID refuses an approval after the requested expiry, so a new access key keeps
+ * the old one's expiry only if that expiry is later.
+ */
+const approvalTime = 600
 
 /** How often a retry outside a page reads the balance while it waits for a deposit, in milliseconds. */
 const depositInterval = 2_000
