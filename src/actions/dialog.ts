@@ -469,15 +469,6 @@ async function authorize<
   } = options
   signal?.throwIfAborted()
   cancel?.throwIfAborted()
-  // Without a connection, the frame and the popup load no page of Tempo ID, so the dialog would
-  // offer a popup at its timeout that fails too. The call fails as a request without a response.
-  if (navigator.onLine === false)
-    throw new RequestError({
-      code: 'server_error',
-      message:
-        'The browser is offline, so the sign-in receives no response. Check the connection, then sign in again.',
-      status: 0,
-    })
   // Tempo ID redeems the code and posts the authorization, unless the page severs the popup's
   // opener, which then receives nothing, or the instance binds its tokens with DPoP, whose proof
   // only the page signs. A pushed request and a funding hint redeem on the page too, since Tempo ID
@@ -513,6 +504,16 @@ async function authorize<
   // either mode ends when the next one starts.
   const actor = slot(auth)
   actor.send({ type: 'replace' })
+  // Without a connection, the frame and the popup load no page of Tempo ID, so the dialog would
+  // offer a popup at its timeout that fails too. The call fails as a request without a response,
+  // after the checks of its options and after it replaced the pending sign-in.
+  if (navigator.onLine === false)
+    throw new RequestError({
+      code: 'server_error',
+      message:
+        'The browser is offline, so the sign-in receives no response. Check the connection, then sign in again.',
+      status: 0,
+    })
   const entry = machines.entry(actor.getSnapshot())
   const mode =
     requested === 'iframe' &&
