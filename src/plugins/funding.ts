@@ -120,6 +120,10 @@ export function funding(options: funding.Options = {}) {
           if (!session) throw new SignedOutError()
           const found = own(session)
           if (found) return found
+          if (ClientId.thirdParty(context.config.clientId)) {
+            if (Session.local(session)) throw new LocalSessionError()
+            throw new AddressRequiredError()
+          }
 
           const account = await AccountActions.get(context.config, {
             accessToken: await accessToken(context, { session }),
@@ -162,8 +166,10 @@ export function funding(options: funding.Options = {}) {
          * on the call's chain with a live access token. It refreshes a token that expires within 30
          * seconds. A third-party app, such as one whose client ID is its origin, reads no account,
          * since Tempo ID returns accounts only to a first-party app. Without an address, it throws
-         * {@link AddressRequiredError} before any popup or request, once the stored session loads. A
-         * popup that the user closes before the address loads returns `closed`.
+         * {@link AddressRequiredError} with no request. With the session in memory, it throws before
+         * any popup. A session that loads from the store after the click loads in a blank popup, to
+         * keep the gesture, which closes at the error. A popup that the user closes before the
+         * address loads returns `closed`.
          * @throws {AddressRequiredError} For a third-party app without `address`, without the
          *   session's account on the instance's chain, and without an access key on the call's
          *   chain. Sign in with an access key on the chain, or pass `address`.
@@ -187,9 +193,11 @@ export function funding(options: funding.Options = {}) {
           const chainId = parameters.chainId ?? context.config.chainId
           // Outside a page, the action throws `PageRequiredError` before it reads any session.
           const page = typeof document !== 'undefined'
-          /** Opens the page for the address of `parameters`, else the session's. */
-          const start = () =>
-            FundingActions.open(context.config, {
+          // A known address opens the page at once. Any other resolves after the action's checks pass
+          // and the popup opens, so a popup still opens within the gesture. A session in memory
+          // without an address refuses at `resolve`, before the action runs.
+          try {
+            return FundingActions.open(context.config, {
               address: page
                 ? (parameters.address ?? resolve(chainId))
                 : parameters.address,
@@ -201,23 +209,6 @@ export function funding(options: funding.Options = {}) {
               signal: parameters.signal,
               token: parameters.token,
             })
-
-          // A third-party app reads no account, so its stored session decides before any popup. A
-          // session already in memory decides at once.
-          if (
-            page &&
-            parameters.address === undefined &&
-            ClientId.thirdParty(context.config.clientId) &&
-            !context.session.get()
-          )
-            return context.session.load().then((session) => {
-              if (!session) throw new SignedOutError()
-              return start()
-            })
-          // A known address opens the page at once. Any other resolves after the action's checks pass
-          // and the popup opens. A refusal of `resolve` rejects before the action runs.
-          try {
-            return start()
           } catch (error) {
             return Promise.reject(error)
           }
