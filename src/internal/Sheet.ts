@@ -1211,12 +1211,13 @@ function address(funding: unknown) {
  */
 function scheme() {
   const root = getComputedStyle(document.documentElement).colorScheme
+  // HTML matches the meta tag's name, and CSS its keywords, without regard to case.
   const declared =
     root === 'normal'
-      ? (document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]')
+      ? (document.querySelector<HTMLMetaElement>('meta[name="color-scheme" i]')
           ?.content ?? '')
       : root
-  const names = declared.split(/\s+/)
+  const names = declared.toLowerCase().split(/\s+/)
   const dark = names.includes('dark')
   if (dark !== names.includes('light')) return dark ? 'dark' : 'light'
   return window.matchMedia('(prefers-color-scheme: dark)').matches
