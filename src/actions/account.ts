@@ -743,19 +743,18 @@ export async function pay_guest(
         return value
       },
       session: options.session,
-      sign: async (transaction, held) => {
-        const Guest = await holding(held)
-        const envelope = Guest.check(transaction, {
+      // The instance's session must hold the guest session before and after the signature.
+      sign: async (transaction, held) =>
+        (await loading).transfer(auth, {
           amount,
           chainId,
+          current: options.current,
           memo,
+          session: held,
           to,
           token,
-        })
-        return await Guest.sign(envelope, {
-          account: Guest.account(auth, { session: held }),
-        })
-      },
+          transaction,
+        }),
       state,
     },
     label: 'Pay with Tempo',

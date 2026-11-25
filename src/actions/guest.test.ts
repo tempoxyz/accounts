@@ -267,7 +267,7 @@ describe('Actions.guest.check', () => {
 
 /**
  * Returns a plugin whose `pick.guest` starts the instance's guest session, as a sign-in that selects
- * "Continue as guest" does, and whose `pick.reload` reads the stored session again, as each send of
+ * "Continue as guest" does, whose `pick.current` returns the instance's session, and whose `pick.reload` reads the stored session again, as each send of
  * `Accounts.pay` for a guest session does.
  */
 function pick() {
@@ -278,6 +278,7 @@ function pick() {
           change: context.session.change(),
           signal: options.signal,
         }),
+      current: () => context.session.get(),
       reload: () => context.session.reload(),
     }),
     id: 'pick',
@@ -1003,6 +1004,67 @@ describe('Actions.guest.claims', () => {
   })
 })
 
+describe('Actions.guest.coverage', () => {
+  const token: `0x${string}` = '0x20C0000000000000000000000000000000000000'
+  const fee: `0x${string}` = '0x20C0000000000000000000000000000000000001'
+  const now = 1_700_000_000_000
+  const lacking = (address?: `0x${string}`) => ({
+    shortfall: {
+      amount: '1',
+      formatted: '0.000001',
+      listed: true,
+      symbol: 'T',
+      ...(address ? { token: address } : {}),
+    },
+    token,
+  })
+
+  test.for([
+    [
+      'returns `covered` without a shortfall',
+      { quote: { shortfall: null, token } },
+      'covered',
+    ],
+    [
+      'waits for a shortfall of the funded token before the deadline',
+      { funded: [token.toLowerCase()], quote: lacking(token) },
+      'wait',
+    ],
+    [
+      'expires a shortfall of the funded token at the deadline',
+      { deadline: now, funded: [token.toLowerCase()], quote: lacking(token) },
+      'expired',
+    ],
+    [
+      'asks for a funding code of a second token that no code named, also after the deadline',
+      { deadline: now, funded: [token.toLowerCase()], quote: lacking(fee) },
+      'fund',
+    ],
+    [
+      'waits once each token received a code, so the funding ends',
+      {
+        funded: [token.toLowerCase(), fee.toLowerCase()],
+        quote: lacking(fee),
+      },
+      'wait',
+    ],
+    [
+      "reads a shortfall without a token, from an earlier Tempo ID, as the payment's token",
+      { funded: [token.toLowerCase()], quote: lacking() },
+      'wait',
+    ],
+    [
+      'never asks for a code without `funded`, such as for the faucet',
+      { quote: lacking(fee) },
+      'wait',
+    ],
+  ] as const)('%s', ([, options, expected]) => {
+    expect(Guest.coverage({ deadline: now + 1, now, ...options }).type).toBe(
+      expected,
+    )
+  })
+})
+
 describe('Actions.guest.funding', () => {
   const ousd = '0x20C0000000000000000000000000000000000000'
   const fee = '0x20C0000000000000000000000000000000000001'
@@ -1585,6 +1647,58 @@ describe('Accounts.create with guest', () => {
     } finally {
       await Fs.rm(directory, { force: true, recursive: true })
     }
+  })
+
+  test("`Actions.guest.transfer` releases no signature after a sign-out during the read of the guest account's key pair", async () => {
+    const memory = Store.memory()
+    let armed = false
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: true,
+      plugins: [device({ onCode: () => {} }), pick()],
+      // The signature's read of the key pair signs the instance out first, once armed.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (armed && key.startsWith('tempo-id:guest:')) {
+            armed = false
+            await accounts.signOut()
+          }
+          return await memory.getItem(key)
+        },
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+    const session = await accounts.pick.guest()
+    const options = {
+      ...payment,
+      current: () => accounts.pick.current(),
+      session,
+      transaction: transaction(),
+    }
+    const before = await Guest.transfer(accounts.config, options)
+    armed = true
+
+    const error = await Guest.transfer(accounts.config, options).catch(
+      (error: unknown) => error,
+    )
+
+    expect([
+      typeof before,
+      error instanceof Accounts.SignedOutError,
+      armed,
+      accounts.pick.current(),
+      (await accounts.guest.get()) === session.address,
+    ]).toMatchInlineSnapshot(`
+      [
+        "string",
+        true,
+        false,
+        undefined,
+        true,
+      ]
+    `)
   })
 
   test('`guest.disconnect` forgets the guest account, and signs out its session', async () => {

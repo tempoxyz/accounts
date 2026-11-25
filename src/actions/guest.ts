@@ -466,37 +466,47 @@ export declare namespace claims {
 }
 
 /**
- * Returns the funding hint of a guest payment's funding code: the amount and the token that the
- * guest account lacks, as `quote.shortfall` names them. Without a shortfall token, such as from an
- * earlier Tempo ID, it returns the payment's amount and token.
+ * Returns the next step of a guest payment that waits for its funds, from its latest quote.
+ *
+ * | Step      | When                                                                                  |
+ * | --------- | ------------------------------------------------------------------------------------- |
+ * | `covered` | The quote names no shortfall.                                                         |
+ * | `fund`    | With `funded`, the shortfall names a token that no funding code named. Each token receives one code. |
+ * | `expired` | The shortfall remains at `deadline`.                                                  |
+ * | `wait`    | The shortfall remains before `deadline`.                                              |
  *
  * @example
  * ```ts
  * import { Actions } from 'accounts/internal'
  *
- * const hint = Actions.guest.funding({ amount: '5', quote })
+ * const step = Actions.guest.coverage({ deadline, funded: [token], now: Date.now(), quote })
  * ```
  */
-export function funding(options: funding.Options): funding.ReturnType {
-  const { amount, quote } = options
-  if (quote.shortfall?.token)
-    return { amount: quote.shortfall.formatted, token: quote.shortfall.token }
-  return { amount, token: quote.token }
+export function coverage(options: coverage.Options): coverage.ReturnType {
+  const { deadline, funded, now, quote } = options
+  if (!quote.shortfall) return { type: 'covered' }
+  const token = (quote.shortfall.token ?? quote.token).toLowerCase()
+  if (funded && !funded.includes(token)) return { type: 'fund' }
+  return now >= deadline ? { type: 'expired' } : { type: 'wait' }
 }
 
-export declare namespace funding {
+export declare namespace coverage {
   type Options = {
-    /** The payment's amount, in whole units of the payment's token. */
-    amount: string
-    /** The payment's quote, from `GET /i/guest/pay`. */
+    /** The end of the wait, in Unix milliseconds, such as the funding code's expiry. */
+    deadline: number
+    /**
+     * The lowercase addresses of the tokens that a funding code named. Absent, such as for the
+     * faucet, no shortfall asks for a funding code.
+     */
+    funded?: readonly string[] | undefined
+    /** The time, in Unix milliseconds. */
+    now: number
+    /** The latest quote of the payment, from `GET /i/guest/pay`. */
     quote: Pick<Quoted, 'shortfall' | 'token'>
   }
 
   type ReturnType = {
-    /** The amount to fund, in whole units of `token`. */
-    amount: string
-    /** The token's address. */
-    token: `0x${string}`
+    type: 'covered' | 'expired' | 'fund' | 'wait'
   }
 }
 
@@ -581,6 +591,41 @@ export declare namespace forget {
     to: string
     /** The token: its symbol that the chain lists, or the address of any TIP-20 token. */
     token: string
+  }
+}
+
+/**
+ * Returns the funding hint of a guest payment's funding code: the amount and the token that the
+ * guest account lacks, as `quote.shortfall` names them. Without a shortfall token, such as from an
+ * earlier Tempo ID, it returns the payment's amount and token.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const hint = Actions.guest.funding({ amount: '5', quote })
+ * ```
+ */
+export function funding(options: funding.Options): funding.ReturnType {
+  const { amount, quote } = options
+  if (quote.shortfall?.token)
+    return { amount: quote.shortfall.formatted, token: quote.shortfall.token }
+  return { amount, token: quote.token }
+}
+
+export declare namespace funding {
+  type Options = {
+    /** The payment's amount, in whole units of the payment's token. */
+    amount: string
+    /** The payment's quote, from `GET /i/guest/pay`. */
+    quote: Pick<Quoted, 'shortfall' | 'token'>
+  }
+
+  type ReturnType = {
+    /** The amount to fund, in whole units of `token`. */
+    amount: string
+    /** The token's address. */
+    token: `0x${string}`
   }
 }
 
@@ -1065,19 +1110,29 @@ export async function pay(
     }
   }
 
-  /** Reads the payment until no shortfall remains, and returns it, or the paid checkout. */
+  /**
+   * Reads the payment until no shortfall remains, and returns it, or the paid checkout. With
+   * `funded`, it also returns a payment whose shortfall names a token that no funding code named.
+   */
   const covered = async (options: {
     deadline: number
+    funded?: readonly string[] | undefined
     interval: number
   }): Promise<Paid | Quoted> => {
     for (;;) {
       const next = await quote()
       if ('paid' in next) return next
       if (!('shortfall' in next)) throw refused(next.refusal)
-      if (!next.shortfall) return next
-      if (Date.now() >= options.deadline)
+      const step = coverage({
+        deadline: options.deadline,
+        funded: options.funded,
+        now: Date.now(),
+        quote: next,
+      })
+      if (step.type === 'covered' || step.type === 'fund') return next
+      if (step.type === 'expired')
         throw short(
-          `Insufficient balance: the guest account ${session.address} still lacks ${next.shortfall.formatted} ${next.shortfall.symbol}. Fund the guest account, then pay again.`,
+          `Insufficient balance: the guest account ${session.address} still lacks ${next.shortfall?.formatted} ${next.shortfall?.symbol}. Fund the guest account, then pay again.`,
         )
       await wait(options.interval, { aborted, signal })
     }
@@ -1104,17 +1159,28 @@ export async function pay(
       )
     // The funding hint names what the guest account lacks, by the exact token's address, also an
     // unlisted one, since a deposit of another token covers nothing. The device form names no
-    // redirect URI, so its guest request names none either.
-    const code = await fund({
-      chainId,
-      funding: funding({ amount, quote: read }),
-      guest: await guest({ redirectUri: '' }),
-      signal,
-    })
-    return await covered({
-      deadline: Date.now() + code.expiresIn * 1_000,
-      interval: code.interval * 1_000,
-    })
+    // redirect URI, so its guest request names none either. A guest account that lacks a second
+    // token, such as the fee token after the payment's token arrived, receives one more funding
+    // code for it. Each token receives one code, so the funding ends.
+    const funded: string[] = []
+    let lacking = read
+    for (;;) {
+      const hint = funding({ amount, quote: lacking })
+      funded.push(hint.token.toLowerCase())
+      const code = await fund({
+        chainId,
+        funding: hint,
+        guest: await guest({ redirectUri: '' }),
+        signal,
+      })
+      const next = await covered({
+        deadline: Date.now() + code.expiresIn * 1_000,
+        funded,
+        interval: code.interval * 1_000,
+      })
+      if ('paid' in next || !next.shortfall) return next
+      lacking = next
+    }
   })()
   if ('paid' in quoted) return await settled(quoted.paid.transaction)
 
@@ -1623,6 +1689,58 @@ export declare namespace sign {
   type Options = {
     /** The guest session's account, from {@link account}. */
     account: Account.RootAccount
+  }
+}
+
+/**
+ * Checks the transaction that a guest payment's page posts against the payment, as {@link check}
+ * does, and returns it signed by the guest session's account, as {@link sign} does. The instance's
+ * session must hold `session`, as {@link active} decides, before the signature and after it, so a
+ * sign-out or another session during the key pair's read or the signature releases no signature.
+ *
+ * @throws {SignedOutError} When the instance's session no longer holds `session`, or the store holds
+ *   another key pair or none.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const signed = await Actions.guest.transfer(accounts.config, {
+ *   amount: '5',
+ *   chainId: 4217,
+ *   current: () => accounts.session.get(),
+ *   session,
+ *   to: '0x…',
+ *   token: 'ousd',
+ *   transaction,
+ * })
+ * ```
+ */
+export async function transfer(
+  auth: Config,
+  options: transfer.Options,
+): Promise<`0x${string}`> {
+  const { current, session, transaction, ...terms } = options
+  const held = () => {
+    if (current && !active({ current: current(), started: session }))
+      throw new SignedOutError()
+  }
+
+  held()
+  const envelope = check(transaction, terms)
+  const signed = await sign(envelope, { account: account(auth, { session }) })
+  held()
+  return signed
+}
+
+export declare namespace transfer {
+  type Options = check.Options & {
+    /** Returns the instance's session. Absent, only the stored key pair counts. */
+    current?: (() => Session.Any | undefined) | undefined
+    /** The guest session whose guest account signs. */
+    session: Session.GuestSession
+    /** The transaction that the page posts. */
+    transaction: unknown
   }
 }
 
