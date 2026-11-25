@@ -8,6 +8,7 @@ import { PGlite } from '@electric-sql/pglite'
 import * as Esbuild from 'esbuild'
 import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs/promises'
+import * as Http from 'node:http'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
 import {
@@ -632,6 +633,77 @@ describe('Actions.guest.session in other processes', () => {
       }
     `)
   }, 60_000)
+})
+
+describe('Accounts.pay of a guest session outside a page', () => {
+  test('sends no transfer after a sign-out during the signature of the guest request of the send, and rejects with `SignedOutError`', async () => {
+    // Tempo ID's guest routes, as a local server that records each request and answers the read
+    // and the prepare of a covered payment.
+    const routes: string[] = []
+    const server = Http.createServer((request, response) => {
+      const route = `${request.method} ${new URL(request.url ?? '/', 'http://127.0.0.1').pathname}`
+      routes.push(route)
+      request.resume()
+      request.on('end', () => {
+        const body = (() => {
+          if (route === 'GET /i/guest/pay')
+            return {
+              faucet: false,
+              fee: null,
+              refusal: null,
+              shortfall: null,
+              sponsored: true,
+              token: ousd,
+            }
+          if (route === 'POST /i/guest/pay') {
+            // The next reads of the key pair sign the transfer, then the guest request of the send.
+            armed = true
+            return { tag: 'tag-1', transaction: transaction() }
+          }
+          return { paid: { transaction: `0x${'ab'.repeat(32)}` } }
+        })()
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify(body))
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    onTestFinished(
+      () => new Promise<void>((resolve) => server.close(() => resolve())),
+    )
+    const { port } = server.address() as { port: number }
+    const memory = Store.memory()
+    let armed = false
+    let reads = 0
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: 'auto',
+      // The second read of the key pair after the prepare signs the guest request of the send, and
+      // the instance signs out during it.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (armed && key.startsWith('tempo-id:guest:') && ++reads === 2)
+            await accounts.signOut()
+          return await memory.getItem(key)
+        },
+      }),
+      url: `http://127.0.0.1:${port}`,
+    })
+
+    const error = await accounts.pay(payment).catch((error: unknown) => error)
+
+    expect([error, reads, routes]).toMatchInlineSnapshot(`
+      [
+        [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        2,
+        [
+          "GET /i/guest/pay",
+          "POST /i/guest/pay",
+        ],
+      ]
+    `)
+  })
 })
 
 describe('Actions.guest.active', () => {

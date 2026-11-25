@@ -414,6 +414,8 @@ export async function pay(
       redirectUri: target,
     })
     if (!Address.isEqual(address, session.address)) throw new SignedOutError()
+    // A sign-out during the signature ends the payment too.
+    held()
     return value
   }
   /** Sends a request to Tempo ID, and returns its JSON. */
@@ -539,10 +541,14 @@ export async function pay(
   const deadline = Date.now() + 2 * 60_000
   for (;;) {
     try {
+      const value = await guest()
+      // The send starts in the same task as the check, so no sign-out lands between them. A send
+      // that already left settles as Tempo ID's claim of the checkout decides.
+      held()
       const paid = await post<Paid>('/i/guest/pay/send', {
         chain_id: chainId,
         client_id: auth.clientId,
-        guest: await guest(),
+        guest: value,
         redirect_uri: redirectUri,
         tag: prepared.tag,
         transaction,
