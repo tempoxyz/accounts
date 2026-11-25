@@ -3,10 +3,11 @@
  * store, at a Tempo ID URL where nothing listens, so a route that sends a request to Tempo ID fails.
  * @module
  */
+import * as Http from 'node:http'
 import { Base64 } from 'ox'
 import { custom } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
-import { describe, expect, test } from 'vite-plus/test'
+import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 import * as Accounts from '../../Accounts.js'
 import { backend } from '../../plugins/backend.js'
 import { siwe } from '../../plugins/siwe.js'
@@ -1410,24 +1411,39 @@ describe('fetch', () => {
 
   test('GET /session returns the session that another process stored on a shared store while the refresh received no response, and keeps the cookie', async () => {
     const store = Store.memory()
-    const key = (id: string) => `tempo-id:session:${id}`
-    let id = ''
-    const accounts = Accounts.create({
+    const options = {
       clientId: origin,
-      // Another process on the shared store refreshes the session while this refresh is in flight.
-      fetch: async (input, init) => {
-        const stored = (await store.getItem(key(id))) as Record<string, unknown>
-        await store.setItem(key(id), {
-          ...stored,
-          accessToken: 'access-token-2',
-          expiresAt: Date.now() + 3_600_000,
-          refreshToken: 'refresh-token-2',
-        })
-        return fetch(input, init)
-      },
       handler: { basePath: '/accounts' },
+    } as const
+    // Another process on the shared store signs the user in again under the same session ID while
+    // this process's refresh is in flight. The token endpoint then drops the connection, so the
+    // refresh receives no response.
+    const other = Accounts.create({
+      ...options,
       plugins: [backend({ store })],
       url: 'http://127.0.0.1:9',
+    })
+    let id = ''
+    const server = Http.createServer((request) => {
+      void other.backend
+        .save({
+          id,
+          session: Session.from({
+            ...session(),
+            accessToken: 'access-token-2',
+            expiresAt: Date.now() + 3_600_000,
+            refreshToken: 'refresh-token-2',
+          }),
+        })
+        .finally(() => request.socket.destroy())
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    onTestFinished(() => new Promise((resolve) => server.close(resolve)))
+    const { port } = server.address() as { port: number }
+    const accounts = Accounts.create({
+      ...options,
+      plugins: [backend({ store })],
+      url: `http://127.0.0.1:${port}`,
     })
     ;({ id } = await accounts.backend.save({
       session: Session.from({
