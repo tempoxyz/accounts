@@ -325,3 +325,65 @@ describe('machines.automatic', () => {
     expect(automatic).toBe(row.expected)
   })
 })
+
+describe('machines.frames', () => {
+  test.each([
+    {
+      expected: true,
+      name: 'a request without a resource, in a browser that reports cover',
+      resource: false,
+      resources: undefined,
+      trusted: undefined,
+      visibility: true,
+    },
+    {
+      expected: false,
+      name: 'a request with a resource, before the frame loads',
+      resource: true,
+      resources: undefined,
+      trusted: undefined,
+      visibility: true,
+    },
+    {
+      expected: false,
+      name: 'a request with a resource, for a frame without support of resources',
+      resource: true,
+      resources: false,
+      trusted: true,
+      visibility: true,
+    },
+    {
+      expected: true,
+      name: 'a request with a resource, for a frame with support of resources',
+      resource: true,
+      resources: true,
+      trusted: false,
+      visibility: true,
+    },
+    {
+      expected: false,
+      name: 'a request with a resource, for an untrusted frame, in a browser without cover reports',
+      resource: true,
+      resources: true,
+      trusted: false,
+      visibility: false,
+    },
+    {
+      expected: true,
+      name: 'a request with a resource, for a trusted frame, in a browser without cover reports',
+      resource: true,
+      resources: true,
+      trusted: true,
+      visibility: false,
+    },
+  ] as const)('returns $expected for $name', (row) => {
+    const frames = machines.frames({
+      resource: row.resource,
+      resources: row.resources,
+      trusted: row.trusted,
+      visibility: row.visibility,
+    })
+
+    expect(frames).toBe(row.expected)
+  })
+})

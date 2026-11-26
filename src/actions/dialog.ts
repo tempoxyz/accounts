@@ -526,11 +526,15 @@ async function authorize<
       })
     ) &&
     !pushed &&
+    framed(auth, { redirectUri }) &&
     // A frame issues tokens for a registered resource only if its loaded page reports it. An older
     // Tempo ID's frame sets the request's resource to its own origin, so a popup issues them there.
-    (resources(auth, rest).length === 0 || entry?.sheet.resources() === true) &&
-    framed(auth, { redirectUri }) &&
-    (visibility() || entry?.sheet.trusted() === true)
+    Sheet.machines.frames({
+      resource: resources(auth, rest).length > 0,
+      resources: entry?.sheet.resources(),
+      trusted: entry?.sheet.trusted(),
+      visibility: visibility(),
+    })
       ? 'iframe'
       : 'popup'
 
