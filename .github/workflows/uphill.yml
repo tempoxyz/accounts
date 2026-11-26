@@ -39,10 +39,11 @@ jobs:
       # The packs' scripts run on Bun. The organization allows only GitHub-owned actions, so Bun and
       # Uphill come from their registries at pinned versions. Uphill's `packs` key is newer than its
       # latest release, so Cargo builds the commit that pins the packs.
-      - name: Install Bun and Uphill
-        run: |
-          npm install --global bun@1.4.4 # zizmor: ignore[adhoc-packages]
-          cargo install --locked --git https://github.com/wevm/uphill --rev 7a2f0f10e05dfbf2744a104154cddbd10832e207 uphill
+      - name: Install Bun
+        run: npm install --global bun@1.4.4 # zizmor: ignore[adhoc-packages]
+
+      - name: Install Uphill
+        run: cargo install --locked --git https://github.com/wevm/uphill --rev 7a2f0f10e05dfbf2744a104154cddbd10832e207 uphill # zizmor: ignore[adhoc-packages]
 
       # The library metrics of the typescript pack read the build.
       - name: Build
