@@ -2190,6 +2190,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       InternalSession.machines.loaded(session.actor.getSnapshot()),
     read: () => readSession({}),
   })
+  session.subscribe(() => sessionRead.change())
 
   /**
    * Returns the access token that authenticates a read of the user's own data, such as

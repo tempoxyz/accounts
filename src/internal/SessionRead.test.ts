@@ -3,7 +3,7 @@
  * reads of the page, and the runner that keeps a failure for the page's next read.
  * @module
  */
-import { createActor, fromPromise } from 'xstate'
+import { createActor, fromPromise, waitFor } from 'xstate'
 import { getShortestPaths } from 'xstate/graph'
 import { describe, expect, test } from 'vite-plus/test'
 import * as SessionRead from './SessionRead.js'
@@ -154,6 +154,7 @@ describe('machines.read', () => {
       snapshot.matches('unreported') || snapshot.context.pages > 0
         ? []
         : [{ type: 'page.start' }],
+    'session.change': () => [{ type: 'session.change' }],
     'xstate.done.actor.read': (snapshot) =>
       snapshot.matches('reading') ? [done] : [],
     'xstate.error.actor.read': (snapshot) =>
@@ -173,27 +174,78 @@ describe('machines.read', () => {
 })
 
 describe('create', () => {
-  test("throws the failure of a subscription's read at the next read of the page, once", async () => {
+  /** Returns reads whose subscription's read fails, as `refusal` describes, once. */
+  function refusing(refusal: 'hook' | 'store') {
+    let loaded = false
     let refused = false
     const reads = SessionRead.create({
-      loaded: () => false,
+      loaded: () => loaded,
       read: () => {
         if (refused) return Promise.resolve()
         refused = true
+        // A restore hook fails after the store read, which loads the session.
+        if (refusal === 'hook') loaded = true
         return Promise.reject(new Error('Refused.'))
       },
     })
+    return reads
+  }
 
-    reads.follow()
-    await new Promise<void>((resolve) => queueMicrotask(resolve))
+  /** Runs two reads of the page, and returns their results. */
+  async function page(reads: SessionRead.create.ReturnType) {
     const first = await reads
       .run(() => Promise.resolve('read'))
       .catch((error: Error) => error.message)
     const second = await reads.run(() => Promise.resolve('read'))
+    return { first, second }
+  }
 
-    expect({ first, second }).toMatchInlineSnapshot(`
+  /** Waits for the subscription's read, which starts after the code that subscribes, to settle. */
+  const settled = async (reads: SessionRead.create.ReturnType) => {
+    await Promise.resolve()
+    await waitFor(reads.actor, (snapshot) => !snapshot.matches('reading'), {
+      timeout: 1_000,
+    })
+  }
+
+  test("throws a restore hook's failure in a subscription's read at the next read of the page, once", async () => {
+    const reads = refusing('hook')
+
+    reads.follow()
+    await settled(reads)
+
+    expect(await page(reads)).toMatchInlineSnapshot(`
       {
         "first": "Refused.",
+        "second": "read",
+      }
+    `)
+  })
+
+  test("keeps no failure of the store's read, so the next read of the page reads again", async () => {
+    const reads = refusing('store')
+
+    reads.follow()
+    await settled(reads)
+
+    expect(await page(reads)).toMatchInlineSnapshot(`
+      {
+        "first": "read",
+        "second": "read",
+      }
+    `)
+  })
+
+  test('drops the failure at a change of the session, such as a sign-in', async () => {
+    const reads = refusing('hook')
+
+    reads.follow()
+    await settled(reads)
+    reads.change()
+
+    expect(await page(reads)).toMatchInlineSnapshot(`
+      {
+        "first": "read",
         "second": "read",
       }
     `)

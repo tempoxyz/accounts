@@ -24,11 +24,24 @@ export function create(options: create.Options): create.ReturnType {
   const { loaded, read } = options
   const actor = createActor(
     machines.read.provide({
-      actors: { read: fromPromise(() => read()) },
+      actors: {
+        // A failed read of the store leaves the session unread, so the page's next read reads it
+        // again, and the machine keeps nothing. A restore hook's failure leaves the session loaded.
+        read: fromPromise(() =>
+          read().catch((error: unknown) => {
+            if (!loaded()) return undefined
+            throw error
+          }),
+        ),
+      },
     }),
   ).start()
 
   return {
+    actor,
+    change() {
+      actor.send({ type: 'session.change' })
+    },
     follow() {
       queueMicrotask(() =>
         actor.send({ loaded: loaded(), type: 'follow.start' }),
@@ -55,6 +68,10 @@ export declare namespace create {
   }
 
   type ReturnType = {
+    /** The machine of the reads, for reads of its state only. */
+    actor: machines.read.Actor
+    /** Records a change of the session, such as a sign-in, after which a kept failure is stale. */
+    change: () => void
     /** Starts the read of a status subscription, if the session is unread and no read of the page runs. */
     follow: () => void
     /**
@@ -74,7 +91,7 @@ export namespace machines {
    * | `idle`              | No subscription's read runs, and no failure waits.                      |
    * | `reading.alone`     | The subscription's read runs, and no read of the page started beside it. |
    * | `reading.shared`    | The subscription's read runs, and a read of the page started beside it. |
-   * | `unreported`        | The subscription's read failed alone, and the next read of the page throws it. |
+   * | `unreported`        | A restore hook failed in the subscription's read alone, and the next read of the page throws it, unless the session changes first. |
    */
   export const read = setup({
     actions: {
@@ -148,7 +165,11 @@ export namespace machines {
         },
       },
       unreported: {
-        on: { 'failure.take': { actions: 'forget', target: 'idle' } },
+        on: {
+          'failure.take': { actions: 'forget', target: 'idle' },
+          // A sign-in or a sign-out since the failure makes it stale.
+          'session.change': { actions: 'forget', target: 'idle' },
+        },
       },
     },
   })
@@ -181,6 +202,10 @@ export namespace machines {
       | {
           /** A read of the page started. */
           type: 'page.start'
+        }
+      | {
+          /** The session changed, such as at a sign-in or a sign-out. */
+          type: 'session.change'
         }
 
     /** A running machine. */
