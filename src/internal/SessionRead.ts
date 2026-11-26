@@ -12,6 +12,7 @@ import {
   fromPromise,
   type SnapshotFrom,
   setup,
+  stateIn,
 } from 'xstate'
 
 /**
@@ -102,7 +103,8 @@ export namespace machines {
    * | State        | Meaning                                                                                          |
    * | ------------ | ------------------------------------------------------------------------------------------------ |
    * | `idle`       | No subscription's read runs, and no failure waits.                                               |
-   * | `reading`    | The subscription's read runs. `delivered` holds the failures of the reads of the page beside it. |
+   * | `reading.current`   | The subscription's read runs. `delivered` holds the failures of the reads of the page beside it. |
+   * | `reading.overtaken` | The session changed during the read, so its failure is stale.                                    |
    * | `unreported` | A restore hook failed in the subscription's read, no caller received the failure, and the next read of the page throws it, unless the session changes first. |
    */
   export const read = setup({
@@ -133,6 +135,8 @@ export namespace machines {
       read: fromPromise<unknown>(() => Promise.resolve(undefined)),
     },
     guards: {
+      /** Whether the session changed since the subscription's read started. */
+      overtaken: stateIn({ reading: 'overtaken' }),
       /** Whether a read of the page rejected with the error itself, so a caller received it. */
       delivered: (args, params: { error: unknown }) =>
         args.context.delivered.includes(params.error),
@@ -181,6 +185,8 @@ export namespace machines {
               },
               target: 'idle',
             },
+            // A sign-in or a sign-out during the read made its failure stale.
+            { actions: 'forget', guard: 'overtaken', target: 'idle' },
             {
               actions: {
                 params: (args) => ({ error: args.event.error }),
@@ -191,7 +197,12 @@ export namespace machines {
           ],
           src: 'read',
         },
+        initial: 'current',
         on: { 'page.end': { actions: ['uncount', 'deliver'] } },
+        states: {
+          current: { on: { 'session.change': { target: 'overtaken' } } },
+          overtaken: {},
+        },
       },
       unreported: {
         on: {

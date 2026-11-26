@@ -100,6 +100,26 @@ describe('machines.read', () => {
     expect(actor.getSnapshot().value).toMatchInlineSnapshot(`"idle"`)
   })
 
+  test('keeps no failure of a read that a change of the session overtook, such as a sign-in', async () => {
+    const settle = Promise.withResolvers<unknown>()
+    const actor = createActor(
+      SessionRead.machines.read.provide({
+        actors: {
+          read: fromPromise(() => settle.promise),
+        },
+      }),
+    ).start()
+
+    actor.send({ loaded: false, type: 'follow.start' })
+    actor.send({ type: 'session.change' })
+    settle.reject(new Error('Superseded.'))
+    await expect.poll(() => actor.getSnapshot().value).toBe('idle')
+
+    expect(
+      SessionRead.machines.failure(actor.getSnapshot()),
+    ).toMatchInlineSnapshot(`undefined`)
+  })
+
   test('starts no read for a loaded session, or beside a read of the page', () => {
     const reads: string[] = []
     const actor = createActor(
@@ -146,8 +166,9 @@ describe('machines.read', () => {
     expect([...reached].sort()).toMatchInlineSnapshot(`
       [
         ""idle"",
-        ""reading"",
         ""unreported"",
+        "{"reading":"current"}",
+        "{"reading":"overtaken"}",
       ]
     `)
     expect([...handled].sort()).toEqual(Object.keys(events).sort())
