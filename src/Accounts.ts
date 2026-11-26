@@ -1230,8 +1230,9 @@ export type Accounts<
      * guest". That selection starts the guest session, and the same page pays from the guest
      * account. A sign-in on the page pays from the user's account, as without `guest`. Outside a
      * page, a guest session pays through Tempo ID's routes, as `Actions.guest.pay` describes. An
-     * outcome that Tempo ID does not confirm rejects with `Actions.guest.PendingError`, which names
-     * the checkout, and a later call of the same payment resumes it and pays at most once.
+     * outcome that Tempo ID does not confirm within the call rejects with
+     * `Actions.guest.PendingError`, which names the checkout. The store keeps nothing of it, and a
+     * later call of the same payment opens a new checkout.
      *
      * With the `siwe` plugin's `auth`, a payment without `account`, while the instance holds no
      * session, signs the user in to the app's routes in the same way, and the call

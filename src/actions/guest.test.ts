@@ -30,8 +30,6 @@ import {
   onTestFinished,
   test,
 } from 'vite-plus/test'
-import { createActor } from 'xstate'
-import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
 import * as DefaultAccounts from '../internal/DefaultAccounts.js'
 import * as DeviceStore from '../internal/DeviceStore.js'
@@ -911,99 +909,6 @@ describe('Actions.guest.session in other processes', () => {
   }, 60_000)
 })
 
-describe('Actions.guest.canonical', () => {
-  const base = {
-    amount: '1',
-    chainId,
-    to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
-    token: 'ousd',
-  } as const
-
-  test.for([
-    ['an amount with trailing zeros', { amount: '1.00' }, true],
-    ['an amount with a leading zero', { amount: '01' }, true],
-    ['another amount', { amount: '1.000001' }, false],
-    ['a recipient in lowercase', { to: base.to.toLowerCase() }, true],
-    [
-      'a recipient in uppercase hex',
-      { to: `0x${base.to.slice(2).toUpperCase()}` },
-      true,
-    ],
-    ["the token's symbol in uppercase", { token: 'OUSD' }, true],
-    ["the token's address", { token: ousd }, true],
-    [
-      "the token's address in uppercase hex",
-      { token: `0x${ousd.slice(2).toUpperCase()}` },
-      true,
-    ],
-    [
-      'another token',
-      { token: '0x20c0000000000000000000000000000000000001' },
-      false,
-    ],
-    ['another chain', { chainId: 42431 }, false],
-  ] as const)('names one payment for %s: %s', ([, change, same]) => {
-    const value = Guest.canonical({ ...base, ...change })
-
-    expect(value === Guest.canonical(base)).toBe(same)
-  })
-
-  test('names one payment for a memo in any hex case, and another one without a memo', () => {
-    const memo = '0x696E762D31303432'
-
-    const values = [
-      Guest.canonical({ ...base, memo }),
-      Guest.canonical({ ...base, memo: memo.toLowerCase() as `0x${string}` }),
-      Guest.canonical(base),
-    ]
-
-    expect([values[0] === values[1], values[0] === values[2]]).toEqual([
-      true,
-      false,
-    ])
-  })
-})
-
-describe('Actions.guest.claims', () => {
-  const address: `0x${string}` = '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326'
-  const now = 1_700_000_000_000
-  const entry = (validBefore: number, leaseUntil = 0) => ({
-    address,
-    leaseUntil,
-    validBefore,
-  })
-
-  test.for([
-    [
-      'claims each paid or unknown checkout oldest first, so a call returns the oldest paid one and the store keeps the rest',
-      { a: entry(30), b: entry(10), c: entry(20) },
-      { claimed: ['b', 'c', 'a'], live: false },
-    ],
-    [
-      'skips a checkout whose lease another running call holds, and waits for it',
-      { a: entry(10, now + 1), b: entry(20) },
-      { claimed: ['b'], live: true },
-    ],
-    [
-      "skips another guest account's checkout",
-      {
-        a: {
-          ...entry(10),
-          address: '0x000000000000000000000000000000000000dEaD' as const,
-        },
-        b: entry(20),
-      },
-      { claimed: ['b'], live: false },
-    ],
-  ] as const)('%s', ([, entries, expected]) => {
-    const result = Guest.claims({ address, entries, now })
-    expect({
-      claimed: result.claimed.map(([id]) => id),
-      live: result.live,
-    }).toEqual(expected)
-  })
-})
-
 describe('Actions.guest.coverage', () => {
   const token: `0x${string}` = '0x20C0000000000000000000000000000000000000'
   const fee: `0x${string}` = '0x20C0000000000000000000000000000000000001'
@@ -1267,124 +1172,48 @@ describe('Actions.guest.settlement', () => {
   const now = 1_700_000_100_000
   const hash = `0x${'ab'.repeat(32)}` as const
   const paid = `0x${'cd'.repeat(32)}` as const
-  /** A stored checkout of a call that ended, whose window ended at `now` minus 100 seconds. */
-  const ended = { hash, leaseUntil: 0, validBefore: 1_700_000_000 }
-  /** A stored checkout whose window ended at `now` minus 30 seconds, within `settleMargin`. */
-  const recent = { hash, leaseUntil: 0, validBefore: 1_700_000_070 }
-  /** A stored checkout whose window ends 100 seconds after `now`. */
-  const open = { hash, leaseUntil: 0, validBefore: 1_700_000_200 }
+  /** A checkout whose window ended at `now` minus 100 seconds, past `settleMargin`. */
+  const ended = { hash, validBefore: 1_700_000_000 }
+  /** A checkout whose window ended at `now` minus 30 seconds, within `settleMargin`. */
+  const recent = { hash, validBefore: 1_700_000_070 }
+  /** A checkout whose window ends 100 seconds after `now`. */
+  const open = { hash, validBefore: 1_700_000_200 }
   const unpaid = { paid: null, pending: false } as const
-  const day = 24 * 60 * 60
 
   test.for([
-    [
-      'waits for a checkout whose call still holds its lease, such as a payment of the same terms that runs',
-      {
-        entry: { ...ended, leaseUntil: now + 1 },
-        receipt: 'unknown',
-        status: 'unknown',
-      },
-      'held',
-    ],
-    [
-      'settles a checkout whose lease expired, such as after its process exited',
-      {
-        entry: { ...ended, leaseUntil: now - 1 },
-        receipt: 'missing',
-        status: unpaid,
-      },
-      'cancel',
-    ],
     [
       "returns the paid transaction of Tempo ID's status, nested as the route returns it",
       { entry: ended, receipt: 'unknown', status: { paid, pending: false } },
       `paid ${paid}`,
     ],
     [
-      'returns the signed transaction that the chain holds a receipt of, though Tempo ID forgot it',
-      {
-        entry: { ...ended, validBefore: ended.validBefore - day },
-        receipt: 'success',
-        status: unpaid,
-      },
+      'returns the signed transaction that the chain holds a receipt of, though Tempo ID refuses the status',
+      { entry: ended, receipt: 'success', status: 'refused' },
       `paid ${hash}`,
     ],
     [
-      'cancels a checkout that Tempo ID still remembers as unpaid after the window, without a receipt',
-      { entry: ended, receipt: 'missing', status: unpaid },
+      'cancels a checkout that Tempo ID reads as unpaid after the window, without a receipt',
+      { entry: recent, receipt: 'missing', status: unpaid },
       'cancel',
     ],
     [
-      'cancels a sponsored checkout that Tempo ID still remembers as unpaid after the window, with no known hash',
+      'cancels a sponsored checkout that Tempo ID reads as unpaid after the window, with no known hash',
       {
-        entry: { ...ended, hash: undefined },
+        entry: { ...recent, hash: undefined },
         receipt: 'unreadable',
         status: unpaid,
       },
       'cancel',
-    ],
-    [
-      'leaves a sponsored checkout undecidable after Tempo ID forgets paid checkouts, with no known hash',
-      {
-        entry: {
-          ...ended,
-          hash: undefined,
-          validBefore: ended.validBefore - day,
-        },
-        receipt: 'unreadable',
-        status: unpaid,
-      },
-      'undecidable',
-    ],
-    [
-      'cancels a checkout that Tempo ID forgot, whose transaction the chain holds no receipt of after the window',
-      {
-        entry: { ...ended, validBefore: ended.validBefore - day },
-        receipt: 'missing',
-        status: unpaid,
-      },
-      'cancel',
-    ],
-    [
-      'leaves a checkout that Tempo ID forgot undecidable without a client of the chain',
-      {
-        entry: { ...ended, validBefore: ended.validBefore - day },
-        receipt: 'unreadable',
-        status: unpaid,
-      },
-      'undecidable',
-    ],
-    [
-      'rejects as pending a checkout that Tempo ID forgot after a failed receipt read, which a retry can decide',
-      {
-        entry: { ...ended, validBefore: ended.validBefore - day },
-        receipt: 'unknown',
-        status: unpaid,
-      },
-      'pending',
-    ],
-    [
-      'waits after a failed receipt read within the window',
-      { entry: open, receipt: 'unknown', status: unpaid },
-      'wait',
-    ],
-    [
-      'rejects as pending an unreadable checkout that Tempo ID forgot, whose status read failed',
-      {
-        entry: {
-          ...ended,
-          hash: undefined,
-          validBefore: ended.validBefore - day,
-        },
-        receipt: 'unreadable',
-        status: 'unknown',
-      },
-      'pending',
     ],
     [
       'cancels a checkout whose transaction reverted',
       { entry: open, receipt: 'reverted', status: unpaid },
       'cancel',
+    ],
+    [
+      'waits after a failed receipt read within the window',
+      { entry: open, receipt: 'unknown', status: unpaid },
+      'wait',
     ],
     [
       'waits for a checkout within its window, whose transaction can still land',
@@ -1403,22 +1232,32 @@ describe('Actions.guest.settlement', () => {
     [
       'rejects as pending a send that can still land after the window and its margin',
       {
-        entry: { ...ended, validBefore: ended.validBefore - 60 },
+        entry: ended,
         receipt: 'missing',
         status: { paid: null, pending: true },
       },
       'pending',
     ],
     [
-      'forgets a checkout that Tempo ID refuses for good, whose transaction never landed',
-      { entry: ended, receipt: 'missing', status: 'refused' },
-      'forget',
+      'returns a checkout that Tempo ID refuses for good as unpaid, whose transaction reverted',
+      { entry: ended, receipt: 'reverted', status: 'refused' },
+      'unpaid',
     ],
     [
-      'keeps a checkout that Tempo ID refuses for good unknown without a receipt read',
+      'waits for a checkout that Tempo ID refuses for good without a receipt, since the node can lag behind the chain',
+      { entry: recent, receipt: 'missing', status: 'refused' },
+      'wait',
+    ],
+    [
+      'rejects as pending a checkout that Tempo ID refuses for good without a receipt, past the margin',
+      { entry: ended, receipt: 'missing', status: 'refused' },
+      'pending',
+    ],
+    [
+      'rejects as pending a sponsored checkout that Tempo ID refuses for good, past the margin',
       {
-        entry: { ...ended, validBefore: ended.validBefore - 60 },
-        receipt: 'unknown',
+        entry: { ...ended, hash: undefined },
+        receipt: 'unreadable',
         status: 'refused',
       },
       'pending',
@@ -1429,21 +1268,26 @@ describe('Actions.guest.settlement', () => {
       'wait',
     ],
     [
-      'forgets a checkout whose cancellation Tempo ID refuses for good, whose transaction never landed',
+      'rejects as pending after failed status reads, past the margin',
+      { entry: ended, receipt: 'missing', status: 'unknown' },
+      'pending',
+    ],
+    [
+      'returns a checkout whose cancellation Tempo ID refuses for good as unpaid, whose transaction reverted',
+      {
+        cancellation: 'refused',
+        entry: ended,
+        receipt: 'reverted',
+        status: unpaid,
+      },
+      'unpaid',
+    ],
+    [
+      'rejects as pending a checkout whose cancellation Tempo ID refuses for good, without a receipt, past the margin',
       {
         cancellation: 'refused',
         entry: ended,
         receipt: 'missing',
-        status: unpaid,
-      },
-      'forget',
-    ],
-    [
-      'keeps a checkout unknown whose cancellation Tempo ID refuses for good, without a receipt read',
-      {
-        cancellation: 'refused',
-        entry: { ...ended, hash: undefined },
-        receipt: 'unknown',
         status: unpaid,
       },
       'pending',
@@ -1468,16 +1312,6 @@ describe('Actions.guest.settlement', () => {
       },
       'pending',
     ],
-    [
-      "settles the call's own checkout, which its own lease holds",
-      {
-        entry: { ...ended, leaseUntil: now + 1 },
-        own: true,
-        receipt: 'missing',
-        status: unpaid,
-      },
-      'cancel',
-    ],
   ] as const)('%s', ([, options, expected]) => {
     const step = Guest.settlement({
       now,
@@ -1487,147 +1321,6 @@ describe('Actions.guest.settlement', () => {
     expect(step.type === 'paid' ? `paid ${step.transaction}` : step.type).toBe(
       expected,
     )
-  })
-})
-
-describe('machines.lease', () => {
-  /** Returns the events that the runner sends from `snapshot`, keyed by every event type. */
-  function events(snapshot: Guest.machines.lease.Snapshot) {
-    const all: Record<
-      Guest.machines.lease.Event['type'],
-      Guest.machines.lease.Event | undefined
-    > = {
-      'lease.end': snapshot.matches('released')
-        ? undefined
-        : { type: 'lease.end' },
-      'lease.free': snapshot.matches('waiting')
-        ? { type: 'lease.free' }
-        : undefined,
-      'lease.hold': snapshot.matches('idle')
-        ? { type: 'lease.hold' }
-        : undefined,
-      'lease.wait': snapshot.matches('idle')
-        ? { type: 'lease.wait' }
-        : undefined,
-    }
-    return Object.values(all).filter((event) => event !== undefined)
-  }
-
-  test('reaches each state along its shortest paths', () => {
-    const paths = getShortestPaths(Guest.machines.lease, { events })
-
-    expect(
-      [
-        ...new Set(paths.map((path) => JSON.stringify(path.state.value))),
-      ].sort(),
-    ).toMatchInlineSnapshot(`
-      [
-        ""holding"",
-        ""idle"",
-        ""released"",
-        ""waiting"",
-      ]
-    `)
-  })
-
-  test('handles every event type in some state', () => {
-    const actor = createActor(Guest.machines.lease).start()
-    const handled = new Set<string>()
-    const record = () => {
-      for (const type of [
-        'lease.end',
-        'lease.free',
-        'lease.hold',
-        'lease.wait',
-      ] as const)
-        if (actor.getSnapshot().can({ type })) handled.add(type)
-    }
-
-    record()
-    actor.send({ type: 'lease.wait' })
-    record()
-    actor.send({ type: 'lease.free' })
-    actor.send({ type: 'lease.hold' })
-    record()
-
-    expect([...handled].sort()).toMatchInlineSnapshot(`
-      [
-        "lease.end",
-        "lease.free",
-        "lease.hold",
-        "lease.wait",
-      ]
-    `)
-  })
-
-  test('renews the lease while it holds it, and releases it once at the end', async () => {
-    const calls: string[] = []
-    const actor = createActor(
-      Guest.machines.lease.provide({
-        actions: {
-          release: () => void calls.push('release'),
-          renew: () => void calls.push('renew'),
-        },
-        delays: { renewal: 1 },
-      }),
-    ).start()
-
-    actor.send({ type: 'lease.hold' })
-    await expect.poll(() => calls.length).toBeGreaterThanOrEqual(2)
-    actor.send({ type: 'lease.end' })
-
-    expect({
-      calls: calls.slice(0, 2),
-      last: calls.at(-1),
-      releases: calls.filter((call) => call === 'release').length,
-      state: actor.getSnapshot().value,
-    }).toMatchInlineSnapshot(`
-      {
-        "calls": [
-          "renew",
-          "renew",
-        ],
-        "last": "release",
-        "releases": 1,
-        "state": "released",
-      }
-    `)
-  })
-
-  test('checks the store while it waits for another call, and holds its own lease after the other ends', async () => {
-    const calls: string[] = []
-    const actor = createActor(
-      Guest.machines.lease.provide({
-        actions: {
-          check: () => {
-            calls.push('check')
-            // The second check finds the other call's lease ended.
-            if (calls.length === 2) actor.send({ type: 'lease.free' })
-          },
-          renew: () => void calls.push('renew'),
-        },
-        delays: { check: 1, renewal: 1 },
-      }),
-    ).start()
-
-    actor.send({ type: 'lease.wait' })
-    await expect
-      .poll(() => Guest.machines.waiting(actor.getSnapshot()))
-      .toBe(false)
-    const freed = actor.getSnapshot().value
-    actor.send({ type: 'lease.hold' })
-    await expect.poll(() => calls.includes('renew')).toBe(true)
-
-    expect({ calls: calls.slice(0, 3), freed }).toMatchInlineSnapshot(`
-      {
-        "calls": [
-          "check",
-          "check",
-          "renew",
-        ],
-        "freed": "idle",
-      }
-    `)
   })
 })
 

@@ -18,13 +18,6 @@ import {
 import { SignatureEnvelope, TokenId, TxEnvelopeTempo } from 'ox/tempo'
 import { type Client, parseUnits, TransactionReceiptNotFoundError } from 'viem'
 import { getTransactionReceipt } from 'viem/actions'
-import {
-  type ActorRefFrom,
-  createActor,
-  type SnapshotFrom,
-  setup,
-  waitFor,
-} from 'xstate'
 import { Account } from 'viem/tempo'
 import { token as TokenActions } from 'viem/tempo/actions'
 import { type Config, RequestError, SignedOutError } from '../Accounts.js'
@@ -36,19 +29,20 @@ import * as Session from '../Session.js'
 import type { Store } from '../Store.js'
 
 /**
- * A guest payment whose transfer can still land, or whose outcome Tempo ID did not confirm before
- * the call stopped, such as after its connection failed past the transfer's window. The store keeps
- * its checkout, so a later `pay` of the same payment, also from another process, resumes it and pays
- * at most once. `checkout` names it.
+ * A guest payment whose outcome the call did not decide before it stopped, 60 seconds after the
+ * transfer's window: its transfer can still land, or Tempo ID and the chain did not confirm whether
+ * it landed. The store keeps nothing of the checkout, and a later `pay` of the same payment opens a
+ * new checkout, which can pay again. `checkout` names the undecided checkout, so the app can decide
+ * it, such as from Tempo ID's status or the chain, before it pays again.
  */
 export class PendingError extends Error {
   override readonly name = 'Actions.guest.PendingError'
-  /** The checkout ID of the unresolved payment, which a later `pay` of the same payment resumes. */
+  /** The checkout ID of the undecided payment. */
   readonly checkout: string
 
   constructor(options: { checkout: string }) {
     super(
-      `Pending payment: the transfer of checkout ${options.checkout} can still land, or its outcome is unknown. Call \`pay\` again with the same payment, which resumes the checkout and pays at most once.`,
+      `Pending payment: the outcome of checkout ${options.checkout} is unknown, and its transfer can still land. Confirm whether it paid before paying again, since another payment opens a new checkout.`,
     )
     this.checkout = options.checkout
   }
@@ -74,21 +68,6 @@ const fundAttempts = 3
  * status, since a transfer can land in the last block of its window, in milliseconds.
  */
 const settleMargin = 60_000
-
-/**
- * The lease of a running payment on its stored checkout, in milliseconds. The call renews it every
- * third of it, and releases it when the call ends. A later call of the same payment waits until the
- * lease is released or expires, such as after the call's process exited.
- */
-const leaseDuration = 15_000
-
-/**
- * The time after a transaction's window during which Tempo ID still holds a paid checkout, in
- * milliseconds. Tempo ID keeps a paid checkout at least 24 hours after its receipt, which lands
- * within the window. Within it, Tempo ID's status of an unpaid checkout with no send that can land
- * is final.
- */
-const retention = 23 * 60 * 60_000
 
 /** The time between the guest request's signature and its expiry, in seconds. */
 const lifetime = 4 * 60
@@ -181,69 +160,6 @@ export declare namespace active {
     current: Session.Any | undefined
     /** The guest session that started the action. */
     started: Session.GuestSession
-  }
-}
-
-/**
- * Returns the canonical terms of a guest payment, under which the store keeps its unresolved
- * checkouts: the chain, the amount in base units, the recipient, the token's address, and the memo,
- * with addresses and hex in lowercase. So `1` and `1.00`, a token's symbol and its address, and hex
- * in any case name one payment. A token that the chain does not list keeps its lowercase symbol.
- *
- * @example
- * ```ts
- * import { Actions } from 'accounts/internal'
- *
- * Actions.guest.canonical({
- *   amount: '1.00',
- *   chainId: 4217,
- *   to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
- *   token: 'ousd',
- * })
- * ```
- */
-export function canonical(options: canonical.Options): string {
-  const { chainId, memo } = options
-  // Each TIP-20 token has 6 decimals.
-  const amount = parseUnits(options.amount, 6).toString()
-  const token = (() => {
-    if (Address.validate(options.token, { strict: false }))
-      return options.token.toLowerCase()
-    const [resolved] =
-      Permissions.resolve(
-        {
-          limits: [
-            {
-              limit: options.amount as `${number}`,
-              token: options.token as Permissions.Token,
-            },
-          ],
-        },
-        { chainId },
-      ).limits ?? []
-    return (resolved?.token ?? options.token).toLowerCase()
-  })()
-  return JSON.stringify([
-    chainId,
-    amount,
-    options.to.toLowerCase(),
-    token,
-    memo?.toLowerCase() ?? null,
-  ])
-}
-
-export declare namespace canonical {
-  type Options = {
-    /** The amount, as a decimal string in whole units of the token. */
-    amount: string
-    /** The payment's chain. */
-    chainId: number
-    /** The transfer's memo, as hex. Absent for a transfer without one. */
-    memo?: `0x${string}` | undefined
-    /** The recipient's address. */
-    to: string
-    /** The token: its symbol that the chain lists, or the address of any TIP-20 token. */
-    token: string
   }
 }
 
@@ -427,51 +343,6 @@ export declare namespace check {
 }
 
 /**
- * Returns the stored checkouts of an unresolved payment that a call of `Actions.guest.pay` claims
- * before it opens its own: the guest account's checkouts whose lease expired, oldest first. The
- * call settles them in this order, and returns the first paid one. The store keeps the rest, so a
- * later call of the same payment returns each paid one.
- *
- * @example
- * ```ts
- * import { Actions } from 'accounts/internal'
- *
- * const { claimed, live } = Actions.guest.claims({ address, entries, now: Date.now() })
- * ```
- */
-export function claims(options: claims.Options): claims.ReturnType {
-  const { address, entries, now } = options
-  const claimed = Object.entries(entries).filter(
-    ([, entry]) =>
-      Address.isEqual(entry.address, address) && entry.leaseUntil <= now,
-  )
-  const live = Object.values(entries).some(
-    (entry) =>
-      Address.isEqual(entry.address, address) && entry.leaseUntil > now,
-  )
-  claimed.sort(([, a], [, b]) => a.validBefore - b.validBefore)
-  return { claimed, live }
-}
-
-export declare namespace claims {
-  type Options = {
-    /** The guest account that pays. */
-    address: `0x${string}`
-    /** The stored checkouts of the payment, by checkout ID. */
-    entries: Unresolved
-    /** The time, in Unix milliseconds. */
-    now: number
-  }
-
-  type ReturnType = {
-    /** The claimed checkouts, as checkout ID and stored checkout, oldest window first. */
-    claimed: [string, Unresolved[string]][]
-    /** Whether another running call holds the lease of a checkout of the guest account. */
-    live: boolean
-  }
-}
-
-/**
  * Returns the next step of a guest payment that waits for its funds, from its latest quote.
  *
  * | Step      | When                                                                                  |
@@ -533,71 +404,6 @@ export async function disconnect(auth: Config): Promise<void> {
   const key = keyOf(auth)
   // The removal waits for a creation in progress, which would otherwise save the key pair after it.
   await exclusive(store, { key }, () => store.removeItem(key))
-}
-
-/**
- * Removes the unresolved checkout `checkout` of a guest payment from the store, such as after the
- * app confirmed its outcome by hand. A later `pay` of the same payment then neither settles nor
- * waits for it. A checkout that Tempo ID no longer holds, and whose transaction has no known hash,
- * such as a sponsored one, stays in the store until this call, since no read decides it.
- *
- * @example
- * ```ts
- * import { Actions } from 'accounts/internal'
- *
- * try {
- *   await accounts.pay({ amount: '5', to, token: 'ousd' })
- * } catch (error) {
- *   if (error instanceof Actions.guest.PendingError)
- *     await Actions.guest.forget(accounts.config, {
- *       amount: '5',
- *       checkout: error.checkout,
- *       to,
- *       token: 'ousd',
- *     })
- * }
- * ```
- */
-export async function forget(
-  auth: Config,
-  options: forget.Options,
-): Promise<void> {
-  const store = storeOf(auth)
-  const memo =
-    options.memo === undefined ? undefined : Payment.memo(options.memo)
-  const key = `${keyOf(auth)}:payment:${canonical({
-    amount: Payment.amount(options.amount),
-    chainId: options.chainId ?? auth.chainId,
-    memo,
-    to: Payment.to(options.to),
-    token: options.token,
-  })}`
-  await exclusive(store, { key }, async (check) => {
-    const value = ((await store.getItem(key)) ?? {}) as Unresolved
-    const next = Object.fromEntries(
-      Object.entries(value).filter(([id]) => id !== options.checkout),
-    )
-    await check?.()
-    if (Object.keys(next).length === 0) await store.removeItem(key)
-    else await store.setItem(key, next)
-  })
-}
-
-export declare namespace forget {
-  type Options = {
-    /** The payment's amount, as a decimal string in whole units of the token. */
-    amount: string
-    /** The payment's chain. Defaults to the instance's. */
-    chainId?: number | undefined
-    /** The checkout ID, such as `PendingError`'s `checkout`. */
-    checkout: string
-    /** The transfer's memo: a string, or hex of at most 32 bytes. Absent, the transfer has none. */
-    memo?: string | undefined
-    /** The recipient's address. */
-    to: string
-    /** The token: its symbol that the chain lists, or the address of any TIP-20 token. */
-    token: string
-  }
 }
 
 /**
@@ -695,30 +501,6 @@ type Quoted = {
   token: `0x${string}`
 }
 
-/**
- * The unresolved checkouts of one guest payment, by checkout ID, which the store keeps under the
- * payment's terms.
- */
-type Unresolved = Record<
-  string,
-  {
-    /** The guest account that pays. */
-    address: `0x${string}`
-    /**
-     * The hash of the checkout's signed transaction, which the chain's receipt names. Absent for a
-     * sponsored transaction, whose sponsor's signature gives the transfer that lands another hash.
-     */
-    hash?: `0x${string}` | undefined
-    /**
-     * The end of the lease of the call that owns the checkout, in Unix milliseconds. A later call
-     * resumes the checkout only after it.
-     */
-    leaseUntil: number
-    /** The end of the prepared transaction's window, in Unix seconds. */
-    validBefore: number
-  }
->
-
 /** A guest payment's paid checkout, which each route returns for a checkout that paid. */
 type Paid = { paid: { transaction: `0x${string}` } }
 
@@ -745,19 +527,15 @@ type Refused = { cancel: string; refusal: Refusal }
  * refuses a fill above it with `quote_changed`, and the call quotes again and prepares at the new
  * quote, up to three prepares. The key pair signs only a fill whose fee is within the quote.
  *
- * Before the first send, the store keeps the checkout under the payment's terms: the chain, amount,
- * recipient, token, and memo. A send without an answer repeats until the prepared transaction's
- * window ends. Then {@link settlement} decides from the checkout's status and the chain's receipt:
- * a paid checkout, or a signed transaction whose receipt the chain holds, returns its transaction,
- * and a checkout whose transaction can no longer land is cancelled, which fences it. A later call of
- * the same payment, also in another process, settles each stored checkout the same way before it
- * opens a new one, so each checkout pays at most once. Calls that run at once each keep their own
- * checkout, under a lock that spans the processes on the store, and each changes only its own. A
- * running call holds a lease of 15 seconds on its checkout, which `machines.lease` renews, and a
- * later call of the same payment waits until it is released or expires, then claims the checkout
- * under the lock. A later call rejects with `PendingError` only while Tempo ID still holds the
- * checkout's outcome. After that, a checkout that no read decides stays in the store, blocks no
- * payment, and {@link forget} removes it. The terms compare as {@link canonical} values.
+ * The call settles its checkout before it returns, and the store keeps nothing of it. A send
+ * without an answer repeats until the prepared transaction's window ends. Then {@link settlement}
+ * decides from the checkout's status and the chain's receipt: a paid checkout, or a signed
+ * transaction whose receipt the chain holds, returns its transaction, and a checkout whose
+ * transaction can no longer land is cancelled, which fences it. Each request ends at the window's
+ * end, or 60 seconds after it for a status read or a cancellation, so a stalled response cannot
+ * hold the call. If the outcome is still unknown then, the call rejects with `PendingError`. Each
+ * call opens its own checkout, so a later call of the same payment neither resumes nor waits for an
+ * earlier one.
  *
  * @throws {RequestError} With the reason of Tempo ID's refusal, such as `recipient_not_permitted`.
  *   With `insufficient_balance` and status 0 for a shortfall without a faucet or `fund`, after the
@@ -768,9 +546,9 @@ type Refused = { cancel: string; refusal: Refusal }
  * @throws {RequestError} With `invalid_request` at `transaction`, for a prepared transaction other
  *   than the requested transfer, or whose fee exceeds the quoted fee, which the key pair never
  *   signs.
- * @throws {PendingError} When the transfer can still land, or Tempo ID does not confirm its
- *   outcome, 60 seconds after the transaction's window. The store keeps the checkout, which a later
- *   call of the same payment resumes.
+ * @throws {PendingError} When the transfer can still land, or Tempo ID and the chain do not
+ *   confirm its outcome, 60 seconds after the transaction's window. The error names the checkout,
+ *   and the store keeps nothing of it.
  * @throws {SignedOutError} When the store holds another key pair than the session's, or once
  *   `current` no longer holds the session, such as after a sign-out.
  *
@@ -796,32 +574,6 @@ export async function pay(
   const memo =
     options.memo === undefined ? undefined : Payment.memo(options.memo)
   const chainId = options.chainId ?? auth.chainId
-  const store = storeOf(auth)
-  // The store keeps each unresolved checkout of a payment under its terms, so a later call of the
-  // same payment, also in another process, resumes each one, and Tempo ID pays each once.
-  const unresolved = `${keyOf(auth)}:payment:${canonical({ amount, chainId, memo, to, token })}`
-  /** Returns the stored checkouts of the payment, by checkout ID. */
-  const outstanding = async (): Promise<Unresolved> => {
-    const value = (await store.getItem(unresolved)) as Unresolved | undefined
-    if (!value || typeof value !== 'object') return {}
-    return value
-  }
-  /**
-   * Changes the stored checkouts of the payment under the payment's lock, which spans the processes
-   * on the store, so two calls that change them at once each keep the other's checkout.
-   */
-  const record = async (fn: (value: Unresolved) => Unresolved) =>
-    exclusive(store, { key: unresolved }, async (check) => {
-      const next = fn(await outstanding())
-      await check?.()
-      if (Object.keys(next).length === 0) await store.removeItem(unresolved)
-      else await store.setItem(unresolved, next)
-    })
-  /** Removes the stored checkout `id`, whose outcome is final, and keeps the others. */
-  const forget = (id: string) =>
-    record((value) =>
-      Object.fromEntries(Object.entries(value).filter(([key]) => key !== id)),
-    )
   // One checkout ID for the call, so each retry pays the same checkout, and Tempo ID pays it once.
   // `Bytes.random` needs only `crypto.getRandomValues`, which React Native polyfills, and the
   // URL-safe Base64 holds only letters, digits, `-`, and `_`.
@@ -851,14 +603,12 @@ export async function pay(
    * Signs a fresh guest request of the checkout, which the key pair signs with no request. It names
    * `target`, which defaults to the redirect URI of the payment's routes.
    */
-  const guest = async (
-    options: { checkout?: string; redirectUri?: string } = {},
-  ) => {
+  const guest = async (options: { redirectUri?: string } = {}) => {
     if (signal?.aborted) throw aborted()
     held()
     const { address, value } = await request(auth, {
       chainId,
-      checkout: options.checkout ?? checkout,
+      checkout,
       redirectUri: options.redirectUri ?? redirectUri,
     })
     if (!Address.isEqual(address, session.address)) throw new SignedOutError()
@@ -866,27 +616,72 @@ export async function pay(
     held()
     return value
   }
-  /** Sends a request to Tempo ID, and returns its JSON. */
-  const send = async <value>(path: string, init: RequestInit) => {
-    const response = await (auth.fetch ?? fetch)(new URL(path, auth.url), {
-      ...init,
-      redirect: 'manual',
-      signal: signal ?? null,
-    }).catch((error: unknown) => {
-      if (signal?.aborted) throw aborted()
-      throw new RequestError({
-        cause: error,
-        code: 'server_error',
-        message:
-          'The guest payment request received no response. Check the connection, and try again.',
-        status: 0,
-      })
+  const unanswered = (cause: unknown) =>
+    new RequestError({
+      cause,
+      code: 'server_error',
+      message:
+        'The guest payment request received no response. Check the connection, and try again.',
+      status: 0,
     })
-    return await Api.json<value>(response)
+  /**
+   * Sends a request to Tempo ID, and returns its JSON. With `deadline`, in Unix milliseconds, the
+   * request aborts at it and rejects as unanswered, also when its response or body stalls.
+   */
+  const send = async <value>(
+    path: string,
+    options: RequestInit & { deadline?: number | undefined },
+  ) => {
+    const { deadline, ...init } = options
+    const controller = new AbortController()
+    const abort = () => controller.abort()
+    if (signal?.aborted) abort()
+    signal?.addEventListener('abort', abort, { once: true })
+    const response = (async () => {
+      const response = await (auth.fetch ?? fetch)(new URL(path, auth.url), {
+        ...init,
+        redirect: 'manual',
+        signal: controller.signal,
+      }).catch((error: unknown) => {
+        if (signal?.aborted) throw aborted()
+        throw unanswered(error)
+      })
+      return await Api.json<value>(response)
+    })()
+    // The timer also rejects when a `fetch` ignores the abort, so the call never waits past it.
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const expired =
+      deadline === undefined
+        ? undefined
+        : new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => {
+                abort()
+                reject(unanswered(new Error('The request timed out.')))
+              },
+              Math.max(0, deadline - Date.now()),
+            )
+          })
+    try {
+      return await (expired ? Promise.race([response, expired]) : response)
+    } catch (error) {
+      if (signal?.aborted) throw aborted()
+      throw error
+    } finally {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
+      // A response that loses the race to the deadline rejects later, with no reader.
+      response.catch(() => undefined)
+    }
   }
-  const post = async <value>(path: string, body: object) =>
+  /** Posts `options.body` to Tempo ID as JSON, as {@link send} does, and returns its JSON. */
+  const post = async <value>(
+    path: string,
+    options: { body: object; deadline?: number | undefined },
+  ) =>
     send<value>(path, {
-      body: JSON.stringify(body),
+      body: JSON.stringify(options.body),
+      deadline: options.deadline,
       headers: { 'content-type': 'application/json' },
       method: 'POST',
     })
@@ -910,25 +705,41 @@ export async function pay(
       status: 0,
     })
 
-  /** Returns the paid result, and removes the call's checkout, which no later call resumes. */
-  const settled = async (transaction: `0x${string}`) => {
-    await forget(checkout)
-    return { address: session.address, transaction }
-  }
+  /** Returns the paid result. */
+  const settled = (transaction: `0x${string}`) => ({
+    address: session.address,
+    transaction,
+  })
   /**
-   * Returns what the chain holds of the signed transaction `hash`: its receipt's status, `missing`
-   * for no receipt, `unreadable` without a hash or a client, or `unknown` after a failed read.
+   * Returns what the chain holds of the signed transaction `hash` by `deadline`, in Unix
+   * milliseconds: its receipt's status, `missing` for no receipt, `unreadable` without a hash or a
+   * client, or `unknown` after a failed read or one still open at `deadline`.
    */
   const landed = async (
     hash: `0x${string}` | undefined,
+    deadline: number,
   ): Promise<settlement.Options['receipt']> => {
     const client = hash ? options.getClient?.({ chainId }) : undefined
     if (!hash || !client) return 'unreadable'
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      return (await getTransactionReceipt(client, { hash })).status
-    } catch (error) {
-      if (error instanceof TransactionReceiptNotFoundError) return 'missing'
-      return 'unknown'
+      return await Promise.race([
+        getTransactionReceipt(client, { hash }).then(
+          (receipt) => receipt.status,
+          (error: unknown) =>
+            error instanceof TransactionReceiptNotFoundError
+              ? ('missing' as const)
+              : ('unknown' as const),
+        ),
+        new Promise<'unknown'>((resolve) => {
+          timer = setTimeout(
+            () => resolve('unknown'),
+            Math.max(0, deadline - Date.now()),
+          )
+        }),
+      ])
+    } finally {
+      clearTimeout(timer)
     }
   }
   /** Returns whether `error` is Tempo ID's definitive refusal: not a network, server, rate limit, or held send's. */
@@ -938,13 +749,18 @@ export async function pay(
     error.status < 500 &&
     error.status !== 429 &&
     error.reason !== 'payment_pending'
-  /** Reads the status of the checkout `id`: the paid transaction and whether a send can land. */
-  const status = async (id: string): Promise<settlement.Options['status']> => {
+  /**
+   * Reads the status of the call's checkout by `deadline`, in Unix milliseconds: the paid
+   * transaction and whether a send can land.
+   */
+  const status = async (
+    deadline: number,
+  ): Promise<settlement.Options['status']> => {
     try {
       // The route nests the paid result, as the other routes return it, beside `pending`.
       const value = await send<{ paid: Paid | null; pending: boolean }>(
-        `/i/guest/pay/status?${new URLSearchParams({ ...terms, chain_id: String(chainId), guest: await guest({ checkout: id }) })}`,
-        { method: 'GET' },
+        `/i/guest/pay/status?${new URLSearchParams({ ...terms, chain_id: String(chainId), guest: await guest() })}`,
+        { deadline, method: 'GET' },
       )
       return {
         paid: value.paid?.paid.transaction ?? null,
@@ -957,37 +773,40 @@ export async function pay(
     }
   }
   /**
-   * Reads the outcome of the checkout `id` until {@link settlement} decides it, and returns the paid
-   * transaction, or `undefined` once no transaction of it can land, after its cancellation where
-   * Tempo ID admits it. The cancellation stores a fence, so no later send pays the checkout. An
-   * outcome that stays unknown rejects with `PendingError`, and the store keeps the checkout.
+   * Reads the outcome of the call's checkout until {@link settlement} decides it, and returns the
+   * paid transaction, or `undefined` once no transaction of it can land, after its cancellation
+   * where Tempo ID admits it. The cancellation stores a fence, so no later send pays the checkout.
+   * Each read and cancellation ends 60 seconds after the transaction's window, and an outcome that
+   * is still unknown then rejects with `PendingError`.
    */
-  const settle = async (id: string, entry: settlement.Options['entry']) => {
+  const settle = async (entry: settlement.Options['entry']) => {
+    const deadline = entry.validBefore * 1_000 + settleMargin
     let cancellation: settlement.Options['cancellation']
     for (;;) {
-      const read = await status(id)
+      const read = await status(deadline)
       const receipt =
         typeof read === 'object' && read.paid
           ? ('unknown' as const)
-          : await landed(entry.hash)
+          : await landed(entry.hash, deadline)
       const step = settlement({
         cancellation,
         entry,
         now: Date.now(),
-        own: true,
         receipt,
         status: read,
       })
       if (step.type === 'paid') return step.transaction
-      if (step.type === 'forget') return undefined
-      if (step.type === 'pending') throw new PendingError({ checkout: id })
-      if (step.type === 'undecidable') return step
+      if (step.type === 'unpaid') return undefined
+      if (step.type === 'pending') throw new PendingError({ checkout })
       if (step.type === 'cancel') {
         cancellation = await post('/i/guest/pay/cancel', {
-          chain_id: chainId,
-          client_id: auth.clientId,
-          guest: await guest({ checkout: id }),
-          redirect_uri: redirectUri,
+          body: {
+            chain_id: chainId,
+            client_id: auth.clientId,
+            guest: await guest(),
+            redirect_uri: redirectUri,
+          },
+          deadline,
         }).then(
           () => undefined,
           (error: unknown) => {
@@ -1000,122 +819,6 @@ export async function pay(
         if (cancellation === undefined) return undefined
       }
       await wait(2_000, { aborted, signal })
-    }
-  }
-  /** Returns the stored checkouts of the payment that the guest account pays. */
-  const mine = async () =>
-    Object.entries(await outstanding()).filter(([, entry]) =>
-      Address.isEqual(entry.address, session.address),
-    )
-  /**
-   * Claims each stored checkout of the payment whose lease expired, in one step under the payment's
-   * lock, with the call's own lease, so no other call settles it at once. Returns the claimed
-   * checkouts, and whether another call still holds the lease of one.
-   */
-  const claim = async () => {
-    let result: claims.ReturnType = { claimed: [], live: false }
-    await record((value) => {
-      const now = Date.now()
-      result = claims({ address: session.address, entries: value, now })
-      const next = { ...value }
-      for (const [id, entry] of result.claimed)
-        next[id] = { ...entry, leaseUntil: now + leaseDuration }
-      return next
-    })
-    return result
-  }
-  /** Sets the lease of each checkout of `ids` that the store still keeps to end at `until`. */
-  const lend = (ids: readonly string[], until: number) =>
-    record((value) => {
-      const next = { ...value }
-      for (const id of ids) {
-        const entry = next[id]
-        if (entry) next[id] = { ...entry, leaseUntil: until }
-      }
-      return next
-    })
-
-  // Each stored checkout of the same payment settles before the payment opens its own: its
-  // transfer paid, or can still land, or no longer lands. A running call of the same payment holds
-  // a lease on its checkout, so the payment waits until the call releases it, which removes a
-  // settled checkout, or until the lease expires, such as after the call's process exited. The
-  // lease machine polls the store, and renews the leases of the claimed checkouts.
-  for (;;) {
-    const { claimed, live } = await claim()
-    if (claimed.length > 0) {
-      const held = new Set(claimed.map(([id]) => id))
-      let released: Promise<void> | undefined
-      const holder = createActor(
-        machines.lease.provide({
-          actions: {
-            release: () => {
-              released = lend([...held], 0).catch(() => undefined)
-            },
-            renew: () =>
-              void lend([...held], Date.now() + leaseDuration).catch(
-                () => undefined,
-              ),
-          },
-        }),
-      ).start()
-      holder.send({ type: 'lease.hold' })
-      let paid: `0x${string}` | undefined
-      let unknown: string | undefined
-      try {
-        for (const [id, entry] of claimed) {
-          try {
-            const transaction = await settle(id, entry)
-            // A checkout that no read can decide blocks no later payment. The store keeps it, and
-            // `forget` removes it.
-            if (typeof transaction === 'object') continue
-            held.delete(id)
-            await forget(id)
-            // The call returns one paid checkout. The store keeps the rest of the claimed ones, so a
-            // later call of the same payment returns each one.
-            if (transaction) {
-              paid = transaction
-              break
-            }
-          } catch (error) {
-            if (!(error instanceof PendingError)) throw error
-            unknown ??= id
-          }
-        }
-      } finally {
-        holder.send({ type: 'lease.end' })
-        holder.stop()
-        await released
-      }
-      if (paid) return { address: session.address, transaction: paid }
-      if (unknown) throw new PendingError({ checkout: unknown })
-    }
-    if (!live) break
-    const waiter = createActor(
-      machines.lease.provide({
-        actions: {
-          check: () =>
-            void mine().then(
-              (entries) => {
-                if (!entries.some(([, entry]) => entry.leaseUntil > Date.now()))
-                  waiter.send({ type: 'lease.free' })
-              },
-              () => undefined,
-            ),
-        },
-      }),
-    ).start()
-    waiter.send({ type: 'lease.wait' })
-    try {
-      await waitFor(
-        waiter,
-        (snapshot) => !machines.waiting(snapshot),
-        signal ? { signal } : {},
-      )
-    } catch (error) {
-      if (signal?.aborted) throw aborted()
-      throw error
-    } finally {
-      waiter.stop()
     }
   }
 
@@ -1148,17 +851,19 @@ export async function pay(
   }
 
   const read = await quote()
-  if ('paid' in read) return await settled(read.paid.transaction)
+  if ('paid' in read) return settled(read.paid.transaction)
   if (!('shortfall' in read)) throw refused(read.refusal)
   if (read.refusal && !read.shortfall) throw refused(read.refusal)
   const quoted = await (async () => {
     if (!read.shortfall) return read
     if (read.faucet) {
       await post('/i/guest/fund', {
-        chain_id: chainId,
-        client_id: auth.clientId,
-        guest: await guest(),
-        redirect_uri: redirectUri,
+        body: {
+          chain_id: chainId,
+          client_id: auth.clientId,
+          guest: await guest(),
+          redirect_uri: redirectUri,
+        },
       })
       return await covered({ deadline: Date.now() + 60_000, interval: 1_000 })
     }
@@ -1202,7 +907,7 @@ export async function pay(
       lacking = next
     }
   })()
-  if ('paid' in quoted) return await settled(quoted.paid.transaction)
+  if ('paid' in quoted) return settled(quoted.paid.transaction)
 
   // The prepare names the quoted cost, which bounds the fill: the sponsor, or the fee that the
   // guest pays, also `0` for a sponsored quote. A cost above it receives `quote_changed`, and the
@@ -1210,14 +915,16 @@ export async function pay(
   // names none, and the check below refuses a fill whose fee the guest pays.
   const prepare = async (quote: Quoted) =>
     post<Paid | { tag: string; transaction: string }>('/i/guest/pay', {
-      ...terms,
-      ...(quote.sponsored
-        ? { fee: '0' }
-        : quote.fee
-          ? { fee: quote.fee.amount }
-          : {}),
-      guest: await guest(),
-      sponsored: quote.sponsored,
+      body: {
+        ...terms,
+        ...(quote.sponsored
+          ? { fee: '0' }
+          : quote.fee
+            ? { fee: quote.fee.amount }
+            : {}),
+        guest: await guest(),
+        sponsored: quote.sponsored,
+      },
     })
   const { approved, prepared } = await (async () => {
     let approved = quoted
@@ -1243,7 +950,7 @@ export async function pay(
       if (next.type === 'prepare') approved = next.quote
     }
   })()
-  if ('paid' in prepared) return await settled(prepared.paid.transaction)
+  if ('paid' in prepared) return settled(prepared.paid.transaction)
   const envelope = check(prepared.transaction, {
     amount,
     chainId,
@@ -1262,104 +969,54 @@ export async function pay(
   // of it lands after it.
   const validBefore =
     envelope.validBefore ?? Math.floor(Date.now() / 1_000) + lifetime
-  // The store keeps the checkout before the first send, so a later call resumes it, also after the
-  // process exits before the outcome.
   // Each send repeats the one signed transaction. Without a sponsor, its hash is the hash of the
   // transfer that lands. A sponsor's signature gives the transfer that lands another hash, which
-  // the call does not know, so the store keeps none.
+  // the call does not know.
   const hash =
     envelope.feePayerSignature === null
       ? undefined
       : Hash.keccak256(transaction)
-  await record((value) => ({
-    ...value,
-    [checkout]: {
-      address: session.address,
-      ...(hash ? { hash } : {}),
-      leaseUntil: Date.now() + leaseDuration,
-      validBefore,
-    },
-  }))
-  /** Sets the lease of the call's checkout to end at `until`, if the store still keeps it. */
-  const renew = (until: number) =>
-    record((value) => {
-      const entry = value[checkout]
-      return entry
-        ? { ...value, [checkout]: { ...entry, leaseUntil: until } }
-        : value
-    })
-  // The call ended, so a later call of the payment resumes a checkout that it kept, such as after
-  // `PendingError` or an abort. A failed renewal keeps the earlier lease, which the next one extends.
-  let released: Promise<void> | undefined
-  const holder = createActor(
-    machines.lease.provide({
-      actions: {
-        release: () => {
-          released = renew(0).catch(() => undefined)
-        },
-        renew: () =>
-          void renew(Date.now() + leaseDuration).catch(() => undefined),
-      },
-    }),
-  ).start()
-  holder.send({ type: 'lease.hold' })
 
-  try {
-    return await sent()
-  } finally {
-    holder.send({ type: 'lease.end' })
-    holder.stop()
-    await released
-  }
-
-  /** Sends the signed transfer until the checkout's outcome is final, and returns the payment. */
-  async function sent() {
-    // A send without a response, or of a held payment, sends the same transaction again, which pays
-    // the checkout once, until the transaction's window ends. Then the checkout's status decides.
-    for (;;) {
-      try {
-        // Another process on the same store, such as another CLI command, can sign out or forget
-        // the guest account, so each send reads the store's session beside the guest request,
-        // whose signature reads the key pair.
-        const [value] = await Promise.all([guest(), reload?.()])
-        // The send starts in the same task as the check, so no sign-out lands between them. A send
-        // that already left settles as Tempo ID's claim of the checkout decides.
-        held()
-        const paid = await post<Paid>('/i/guest/pay/send', {
+  // A send without a response, or of a held payment, sends the same transaction again, which pays
+  // the checkout once, until the transaction's window ends. Then the checkout's status decides.
+  for (;;) {
+    try {
+      // Another process on the same store, such as another CLI command, can sign out or forget
+      // the guest account, so each send reads the store's session beside the guest request,
+      // whose signature reads the key pair.
+      const [value] = await Promise.all([guest(), reload?.()])
+      // The send starts in the same task as the check, so no sign-out lands between them. A send
+      // that already left settles as Tempo ID's claim of the checkout decides.
+      held()
+      const paid = await post<Paid>('/i/guest/pay/send', {
+        body: {
           chain_id: chainId,
           client_id: auth.clientId,
           guest: value,
           redirect_uri: redirectUri,
           tag,
           transaction,
-        })
-        return await settled(paid.paid.transaction)
-      } catch (error) {
-        if (signal?.aborted) throw aborted()
-        const retried =
-          error instanceof RequestError &&
-          ((error.status === 0 && error.code === 'server_error') ||
-            error.status >= 500 ||
-            error.reason === 'payment_pending')
-        if (retried && Date.now() < validBefore * 1_000) {
-          await wait(1_000, { aborted, signal })
-          continue
-        }
-        // The send's outcome is unknown, or Tempo ID refused it. The status tells a landed transfer
-        // from one that can no longer land, which the cancellation fences.
-        const transaction = await settle(checkout, {
-          hash,
-          leaseUntil: 0,
-          validBefore,
-        })
-        // The call owns the checkout, so an outcome that no read decides rejects with
-        // `PendingError`.
-        if (typeof transaction === 'object')
-          throw new PendingError({ checkout })
-        if (transaction) return await settled(transaction)
-        await forget(checkout)
-        throw error
+        },
+        // A send that stalls ends with the window, and the checkout's status decides its outcome.
+        deadline: validBefore * 1_000,
+      })
+      return settled(paid.paid.transaction)
+    } catch (error) {
+      if (signal?.aborted) throw aborted()
+      const retried =
+        error instanceof RequestError &&
+        ((error.status === 0 && error.code === 'server_error') ||
+          error.status >= 500 ||
+          error.reason === 'payment_pending')
+      if (retried && Date.now() < validBefore * 1_000) {
+        await wait(1_000, { aborted, signal })
+        continue
       }
+      // The send's outcome is unknown, or Tempo ID refused it. The status tells a landed transfer
+      // from one that can no longer land, which the cancellation fences.
+      const transaction = await settle({ hash, validBefore })
+      if (transaction) return settled(transaction)
+      throw error
     }
   }
 }
@@ -1378,8 +1035,8 @@ export declare namespace pay {
     current?: (() => Session.Any | undefined) | undefined
     /**
      * Returns a client of the chain of `chainId`, which reads the receipt of a checkout's signed
-     * transaction. `Accounts.pay` passes one from the `viem` plugin's settings. Absent, the call
-     * reads only Tempo ID's status, which forgets a paid checkout a day after its receipt.
+     * transaction. `Accounts.pay` passes one from the `viem` plugin's settings. Absent, only Tempo
+     * ID's status decides the checkout's outcome.
      */
     getClient?:
       | ((options: { chainId: number }) => Client | undefined)
@@ -1713,28 +1370,26 @@ export async function session(auth: Config): Promise<Session.GuestSession> {
 }
 
 /**
- * Returns the next step of `Actions.guest.pay` for a stored checkout of an unresolved payment, from
- * its lease, Tempo ID's status, and the chain's receipt of its signed transaction.
+ * Returns the next step of `Actions.guest.pay` for its checkout, after a send whose outcome is
+ * unknown or refused, from Tempo ID's status and the chain's receipt of its signed transaction.
  *
  * | Step      | When                                                                                          |
  * | --------- | --------------------------------------------------------------------------------------------- |
- * | `held`    | Another running call holds the checkout's lease. The payment waits until it ends.             |
  * | `paid`    | Tempo ID's status names the paid transaction, or the chain holds a receipt of the signed one. |
- * | `cancel`  | No transaction of it can land: a reverted receipt, or after the window no receipt, or Tempo ID still holds paid checkouts and reads it unpaid with no send that can land. |
- * | `forget`  | Tempo ID refuses the checkout or its cancellation for good, and the chain shows that it did not land. |
+ * | `cancel`  | Tempo ID reads it unpaid with no send that can land, after the window or with a reverted receipt. |
+ * | `unpaid`  | Tempo ID refuses the checkout or its cancellation for good, and the receipt shows a revert.  |
  * | `wait`    | The outcome is not known yet, before the window's end and `settleMargin`.                     |
  * | `pending` | The outcome is still unknown after the window's end and `settleMargin`, also after cancellations or reads that failed. |
- * | `undecidable` | Tempo ID no longer holds the outcome, and no receipt can be read: the checkout has no known hash, or the call no client. |
  *
- * Tempo ID's status is a fast path: it forgets a paid checkout a day after its receipt, and a
- * sponsored transaction has no known hash, so after that time only a receipt decides.
+ * Without Tempo ID's status, a missing receipt decides nothing, since the node that reads it can
+ * lag behind the chain. Only a reverted receipt shows that the transfer did not land.
  *
  * @example
  * ```ts
  * import { Actions } from 'accounts/internal'
  *
  * const step = Actions.guest.settlement({
- *   entry: { leaseUntil: 0, validBefore: 1_700_000_000 },
+ *   entry: { validBefore: 1_700_000_000 },
  *   now: Date.now(),
  *   receipt: 'unknown',
  *   status: { paid: null, pending: false },
@@ -1743,38 +1398,24 @@ export async function session(auth: Config): Promise<Session.GuestSession> {
  */
 export function settlement(options: settlement.Options): settlement.ReturnType {
   const { cancellation, entry, now, receipt, status } = options
-  if (!options.own && entry.leaseUntil > now) return { type: 'held' }
   if (typeof status === 'object' && status.paid)
     return { transaction: status.paid, type: 'paid' }
   if (receipt === 'success' && entry.hash)
     return { transaction: entry.hash, type: 'paid' }
 
   const ended = now >= entry.validBefore * 1_000
-  // A reverted transaction spent its nonce, and a transaction without a receipt after its window
-  // never lands.
-  const landless = receipt === 'reverted' || (ended && receipt === 'missing')
   const late = now >= entry.validBefore * 1_000 + settleMargin
-  if (typeof status === 'object' && !status.pending) {
-    const remembered = now < entry.validBefore * 1_000 + retention
-    if (landless || (ended && remembered)) {
-      if (cancellation === undefined) return { type: 'cancel' }
-      // A cancellation that failed on the network or the server tries again until the margin.
-      if (cancellation === 'unknown')
-        return late ? { type: 'pending' } : { type: 'cancel' }
-      // Tempo ID refuses the cancellation for good, so the chain decides, as for a refused status.
-    }
+  // A reverted transaction spent its nonce, so no transaction of the checkout lands.
+  const reverted = receipt === 'reverted'
+  if (typeof status === 'object' && !status.pending && (ended || reverted)) {
+    if (cancellation === undefined) return { type: 'cancel' }
+    // A cancellation that failed on the network or the server tries again until the margin.
+    if (cancellation === 'unknown')
+      return late ? { type: 'pending' } : { type: 'cancel' }
+    // Tempo ID refuses the cancellation for good, so the chain decides, as for a refused status.
   }
-  if ((status === 'refused' || cancellation === 'refused') && landless)
-    return { type: 'forget' }
-  // Only a receipt that no read can return leaves the outcome undecidable for good. A failed read
-  // tries again, then rejects as pending.
-  const forgotten = now >= entry.validBefore * 1_000 + retention
-  if (
-    forgotten &&
-    receipt === 'unreadable' &&
-    (status === 'refused' || (typeof status === 'object' && !status.pending))
-  )
-    return { type: 'undecidable' }
+  if ((status === 'refused' || cancellation === 'refused') && reverted)
+    return { type: 'unpaid' }
   return late ? { type: 'pending' } : { type: 'wait' }
 }
 
@@ -1785,19 +1426,15 @@ export declare namespace settlement {
      * refusal, or `unknown` after a network or server failure. Absent before a cancellation.
      */
     cancellation?: 'refused' | 'unknown' | undefined
-    /** The stored checkout. */
+    /** The call's checkout. */
     entry: {
       /** The hash of its signed transaction. Absent for a sponsored one, whose hash is unknown. */
       hash?: `0x${string}` | undefined
-      /** The end of the lease of the call that owns it, in Unix milliseconds. */
-      leaseUntil: number
       /** The end of its transaction's window, in Unix seconds. */
       validBefore: number
     }
     /** The time, in Unix milliseconds. */
     now: number
-    /** Whether the checkout is the call's own, which no lease holds back. Defaults to `false`. */
-    own?: boolean | undefined
     /**
      * The chain's receipt of the signed transaction: its status, `missing` for none, `unreadable`
      * without a hash or a client, or `unknown` after a failed read.
@@ -1820,15 +1457,13 @@ export declare namespace settlement {
 
   type ReturnType =
     | { type: 'cancel' }
-    | { type: 'forget' }
-    | { type: 'held' }
     | {
         /** The hash of the transaction that paid. */
         transaction: `0x${string}`
         type: 'paid'
       }
     | { type: 'pending' }
-    | { type: 'undecidable' }
+    | { type: 'unpaid' }
     | { type: 'wait' }
 }
 
@@ -2145,100 +1780,5 @@ declare namespace wait {
     aborted: () => unknown
     /** Rejects the wait once it aborts. */
     signal?: AbortSignal | undefined
-  }
-}
-
-/** The state machines that this module runs. */
-export namespace machines {
-  /**
-   * The lease of a guest payment on a stored checkout, which `pay` runs. In `holding`, the call
-   * renews the lease of its own checkout every third of its time. In `waiting`, the call checks the
-   * store until another call's lease ends.
-   *
-   * | State      | Meaning                                                                  |
-   * | ---------- | ------------------------------------------------------------------------ |
-   * | `idle`     | The call holds no lease, and waits for none.                             |
-   * | `waiting`  | Another call holds the lease of a checkout of the same payment.          |
-   * | `holding`  | The call holds the lease of its own checkout, and renews it.             |
-   * | `released` | The call ended, and released its lease.                                  |
-   */
-  export const lease = setup({
-    actions: {
-      /** Reads the store, and sends `lease.free` once no other call holds a lease. `pay` provides it. */
-      check: () => {},
-      /** Ends the call's lease, so a later call resumes its checkout. `pay` provides it. */
-      release: () => {},
-      /** Extends the call's lease by its time. `pay` provides it. */
-      renew: () => {},
-    },
-    delays: {
-      /** The time between two checks of another call's lease, in milliseconds. */
-      check: 1_000,
-      /** The time between two renewals of the call's lease, in milliseconds. */
-      renewal: leaseDuration / 3,
-    },
-    types: {
-      events: {} as lease.Event,
-    },
-  }).createMachine({
-    id: 'lease',
-    initial: 'idle',
-    states: {
-      holding: {
-        after: {
-          renewal: { actions: 'renew', reenter: true, target: 'holding' },
-        },
-        on: { 'lease.end': { actions: 'release', target: 'released' } },
-      },
-      idle: {
-        on: {
-          'lease.end': { target: 'released' },
-          'lease.hold': { target: 'holding' },
-          'lease.wait': { target: 'waiting' },
-        },
-      },
-      released: { type: 'final' },
-      waiting: {
-        after: {
-          check: { actions: 'check', reenter: true, target: 'waiting' },
-        },
-        on: {
-          'lease.end': { target: 'released' },
-          'lease.free': { target: 'idle' },
-        },
-      },
-    },
-  })
-
-  export declare namespace lease {
-    /** An event of the call. */
-    type Event =
-      | {
-          /** The call ended. */
-          type: 'lease.end'
-        }
-      | {
-          /** No other call holds a lease of the payment. */
-          type: 'lease.free'
-        }
-      | {
-          /** The call stored its own checkout, and holds its lease. */
-          type: 'lease.hold'
-        }
-      | {
-          /** Another call holds the lease of a checkout of the same payment. */
-          type: 'lease.wait'
-        }
-
-    /** A running machine. */
-    type Actor = ActorRefFrom<typeof lease>
-
-    /** A snapshot of the machine. */
-    type Snapshot = SnapshotFrom<typeof lease>
-  }
-
-  /** Returns whether the call waits for another call's lease. */
-  export function waiting(snapshot: lease.Snapshot) {
-    return snapshot.matches('waiting')
   }
 }
