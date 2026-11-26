@@ -305,6 +305,7 @@ The page's query sets the options that a spec varies. Tempo ID matches a redirec
 | `reauthorize=0`    | `useSession` authorizes no Tempo ID session of the browser at a mount           |
 | `resource`         | The registered resource that the tokens of "Sign in" are for                    |
 | `retry=0`          | The Viem client shows no screen for a refused transaction, and rejects the call |
+| `scope`            | The scopes beyond the instance's that the tokens of "Sign in" hold              |
 | `second=1`         | On `/wagmi/`, the connector's config also holds the second node's chain         |
 | `typedData`        | The typed data that "Sign typed data as the owner" signs, as `Json.stringify`   |
 

@@ -305,6 +305,19 @@ export function dialog<const options extends dialog.Options = {}>(
             loginHint: page.loginHint,
             mode: page.mode ?? (popup ? 'popup' : 'iframe'),
             resource: page.resource,
+            // Each ID token needs `openid` and `email`, so the call's scopes add to the instance's,
+            // as the device grant's do.
+            scope:
+              page.scope === undefined
+                ? undefined
+                : [
+                    ...new Set([
+                      ...context.config.scope.split(' '),
+                      ...page.scope.split(' '),
+                    ]),
+                  ]
+                    .filter(Boolean)
+                    .join(' '),
             // A sign-out cancels only the wait for the approval. Tokens that Tempo ID issued before
             // it reach the commit, whose cleanup of the overtaken change revokes them.
             cancel: controller.signal,
@@ -1065,12 +1078,21 @@ export declare namespace dialog {
        * most one. An unknown or disabled resource fails with
        * [`invalid_target`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_target).
        * The sign-in runs in the frame if the preloaded frame reports that it issues tokens for a
-       * resource, and in a popup otherwise. A frame that cannot serve the request, such as for an
-       * app that no resource's scopes link, offers the popup. After the sign-in,
+       * resource, and in a popup otherwise. A frame that cannot serve the request offers the popup,
+       * such as for an app that no resource's scopes link, or for an access key or a `challenge`
+       * beside the resource's scopes. After the sign-in,
        * `accounts.session.accessToken()` returns the resource's access token. Defaults to the
        * instance's `resource`, or else Tempo ID's origin.
        */
       resource?: Accounts.Config['resource']
+      /**
+       * The space-separated scopes of the tokens beyond the instance's `scope`, such as a
+       * resource's own scopes, `rpc-relay:read rpc-relay:sponsor`. The call adds them to the
+       * instance's `scope`. An unknown scope, or a resource's scope without its `resource`, fails
+       * with [`invalid_scope`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_scope).
+       * Absent, the tokens hold the instance's `scope`.
+       */
+      scope?: string | undefined
       /**
        * Rejects the sign-in with the signal's reason, such as on a cancel button, and closes the
        * dialog or the popup.
