@@ -2046,13 +2046,15 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   })
 
   // A page reads the hint at startup, before the instance reads IndexedDB, which has no synchronous
-  // read. A restore without a session, such as after an expired access key, removes it.
+  // read. A restore without a session, such as after an expired access key, removes it. An access
+  // key that expires in an open page leaves its session in the instance and the store, which the
+  // next load renews, so the hint stays.
   if (hint && typeof document !== 'undefined') {
     const cookie = hint.cookie === true ? Hint.cookie : hint.cookie
     session.status.subscribe((status) => {
       if (status.status === 'signedIn')
         document.cookie = Hint.serialize({ cookie })
-      if (status.status === 'signedOut')
+      if (status.status === 'signedOut' && !session.get())
         document.cookie = Hint.expire({ cookie })
     })
   }
@@ -2963,7 +2965,8 @@ export declare namespace create {
        * instance only for a returning visitor. `Hint.has` of `accounts/hint` reads it. A session in
        * IndexedDB has no synchronous read. In a browser, the instance sets the cookie for 30 days at
        * each sign-in or restore, and removes it at each sign-out, and when it reads no saved session.
-       * The cookie holds only `1`, on the path `/`, and no token. `cookie: true` names it
+       * An access key that expires in an open page keeps it, since the store keeps the session, which
+       * the next load renews. The cookie holds only `1`, on the path `/`, and no token. `cookie: true` names it
        * `tempo_session`. Defaults to no hint.
        */
       hint?:

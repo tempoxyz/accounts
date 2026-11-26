@@ -281,7 +281,7 @@ export const accounts = Accounts.create({ chain: 'testnet' })
 
 The instance reads the saved session from IndexedDB, which has no synchronous read. With <SourceLink name="create.hint" path="src/Accounts.ts">`hint`</SourceLink>, the instance keeps a cookie while it holds a session. <SourceLink name="has" path="src/internal/Hint.ts">`Hint.has`</SourceLink> of `accounts/hint`, which imports no other module, reads it at startup, so the page loads the instance only for a returning visitor.
 
-A page that loads no instance renews no session from the browser's Tempo ID session at startup.
+A page that loads no instance renews no session from the browser's Tempo ID session at startup. If the access key expires in an open page, the cookie stays, so the next load renews the session.
 
 :::code-group
 
