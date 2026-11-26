@@ -7,17 +7,17 @@
  * A failed test still records the traces of the tests that ran, so the script reads the traces
  * whatever the suite's status, and exits with an error only when no trace exists.
  *
- * Usage: node .agents/metrics/waterfall.ts
+ * Usage: node .agents/uphill/metrics/waterfall.ts
  * @module
  */
 import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
-import type * as Report from '../../test/waterfall/Report.ts'
+import type * as Report from '../../../test/waterfall/Report.ts'
 
 /** The repository's root. */
-const root = Path.resolve(import.meta.dirname, '../..')
+const root = Path.resolve(import.meta.dirname, '../../..')
 
 /** Quotes an item or a note for a metric line. */
 function quote(value: string) {

@@ -1354,6 +1354,18 @@ describe('machines.session', () => {
     const dpop = Session.from({ ...expired, accessToken: bound('first') })
     const cases = [
       ['later tokens of the same user', expired, renewed, true],
+      [
+        'a later receipt of tokens that expire sooner, such as a sign-in sent before a refresh',
+        Session.from({ ...renewed, receivedAt: 1 }),
+        Session.from({ ...expired, receivedAt: 2 }),
+        true,
+      ],
+      [
+        'an earlier receipt of tokens that expire later, which an earlier release adopts',
+        Session.from({ ...expired, receivedAt: 2 }),
+        Session.from({ ...renewed, receivedAt: 1 }),
+        true,
+      ],
       ['the same expiry of the same user', renewed, renewed, false],
       ['earlier tokens of the same user', renewed, expired, false],
       ["another user's session", renewed, other, false],
@@ -1387,6 +1399,37 @@ describe('machines.session', () => {
     for (const [name, kept, overwritten, expected] of cases)
       test(`returns ${expected} for ${name}`, () => {
         const result = machines.yields({ kept, overwritten })
+
+        expect(result).toBe(expected)
+      })
+  })
+
+  describe('revokesKept', () => {
+    const cases = [
+      [
+        'a later receipt and a later expiry',
+        Session.from({ ...expired, receivedAt: 1 }),
+        Session.from({ ...renewed, receivedAt: 2 }),
+        true,
+      ],
+      [
+        'a later receipt of an earlier expiry, which an earlier release rejects',
+        Session.from({ ...renewed, receivedAt: 1 }),
+        Session.from({ ...expired, receivedAt: 2 }),
+        false,
+      ],
+      [
+        'an earlier receipt of a later expiry, which this release can adopt back',
+        Session.from({ ...expired, receivedAt: 2 }),
+        Session.from({ ...renewed, receivedAt: 1 }),
+        false,
+      ],
+      ['a later expiry without receipts', expired, renewed, true],
+    ] as const
+
+    for (const [name, kept, overwritten, expected] of cases)
+      test(`returns ${expected} for ${name}`, () => {
+        const result = machines.revokesKept({ kept, overwritten })
 
         expect(result).toBe(expected)
       })
@@ -1479,6 +1522,73 @@ describe('machines.session', () => {
       })
 
       expect(result).toBe(false)
+    })
+
+    describe('with receipts', () => {
+      const received = {
+        expiresAt: 1_000,
+        receivedAt: 100,
+        refreshToken: 'R0',
+        user: { id: 'a' },
+      } as never
+      const rotated = [{ at: 200, expiresAt: 1_500, from: 'digest', to: 'R1' }]
+      const cases = [
+        [
+          'the held token, and a later receipt and expiry',
+          'R0',
+          2_000,
+          300,
+          true,
+        ],
+        [
+          'the held token, and a later receipt of an earlier expiry, which an earlier release keeps',
+          'R0',
+          500,
+          300,
+          false,
+        ],
+        [
+          'the held token, and an earlier receipt of a later expiry, which this release keeps',
+          'R0',
+          2_000,
+          50,
+          false,
+        ],
+        ['a successor, and a receipt after its save', 'R1', 2_000, 300, true],
+        [
+          "a successor, and a receipt after the held token's but before the successor's save",
+          'R1',
+          2_000,
+          150,
+          false,
+        ],
+        [
+          'a successor, and an earlier receipt of a later expiry',
+          'R1',
+          2_000,
+          50,
+          false,
+        ],
+        [
+          'a successor, and a later receipt of an earlier expiry',
+          'R1',
+          1_200,
+          300,
+          false,
+        ],
+      ] as const
+
+      for (const [name, refreshToken, expiresAt, receivedAt, expected] of cases)
+        test(`returns ${expected} for ${name}`, () => {
+          const result = machines.adopts({
+            entries: rotated,
+            held: received,
+            refreshToken,
+            stored: { expiresAt, receivedAt, user: { id: 'a' } } as never,
+          })
+
+          expect(result).toBe(expected)
+        })
     })
   })
 
