@@ -2200,6 +2200,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     read: () => readSession({}),
     refused: (error) =>
       typeof error === 'object' && error !== null && refusals.has(error),
+    version: () => session.actor?.getSnapshot().context.version ?? 0,
   })
   session.subscribe(() => sessionRead.change())
 
@@ -2930,7 +2931,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       throw new EverywhereNotAllowedError()
     // A sign-out of a session that is already empty changes no session, so it drops a kept failure
     // of a status subscription's read itself.
-    sessionRead.change()
+    sessionRead.signOut()
     // The hooks start before the session's sign-out, which starts at once, so a sign-in that starts
     // after this call meets both. The sign-out's own rejection wins over a hook's.
     const before = (async () => {

@@ -18,7 +18,7 @@ describe('machines.read', () => {
       }),
     ).start()
 
-    actor.send({ loaded: false, type: 'follow.start' })
+    actor.send({ loaded: false, type: 'follow.start', version: 0 })
     await expect.poll(() => actor.getSnapshot().value).toBe('unreported')
     const failure = SessionRead.machines.failure(actor.getSnapshot())
     actor.send({ type: 'failure.take' })
@@ -45,7 +45,7 @@ describe('machines.read', () => {
       }),
     ).start()
 
-    actor.send({ loaded: false, type: 'follow.start' })
+    actor.send({ loaded: false, type: 'follow.start', version: 0 })
     actor.send({ type: 'page.start' })
     actor.send({ failure: { error: refusal }, type: 'page.end' })
     settle.reject(refusal)
@@ -56,6 +56,7 @@ describe('machines.read', () => {
         "delivered": [],
         "failure": undefined,
         "pages": 0,
+        "started": 0,
       }
     `)
   })
@@ -70,7 +71,7 @@ describe('machines.read', () => {
       }),
     ).start()
 
-    actor.send({ loaded: false, type: 'follow.start' })
+    actor.send({ loaded: false, type: 'follow.start', version: 0 })
     actor.send({ type: 'page.start' })
     actor.send({ type: 'page.end' })
     settle.reject(new Error('Refused.'))
@@ -92,7 +93,7 @@ describe('machines.read', () => {
       }),
     ).start()
 
-    actor.send({ loaded: false, type: 'follow.start' })
+    actor.send({ loaded: false, type: 'follow.start', version: 0 })
     actor.send({ type: 'page.start' })
     await expect.poll(() => actor.getSnapshot().value).toBe('unreported')
     actor.send({ failure: { error: refusal }, type: 'page.end' })
@@ -110,14 +111,25 @@ describe('machines.read', () => {
       }),
     ).start()
 
-    actor.send({ loaded: false, type: 'follow.start' })
-    actor.send({ type: 'session.change' })
+    actor.send({ loaded: false, type: 'follow.start', version: 0 })
+    // The read of the saved session notifies the change with the same count, and overtakes nothing.
+    actor.send({ type: 'session.change', version: 0 })
+    const read = actor.getSnapshot().value
+    actor.send({ type: 'session.change', version: 1 })
     settle.reject(new Error('Superseded.'))
     await expect.poll(() => actor.getSnapshot().value).toBe('idle')
 
-    expect(
-      SessionRead.machines.failure(actor.getSnapshot()),
-    ).toMatchInlineSnapshot(`undefined`)
+    expect({
+      failure: SessionRead.machines.failure(actor.getSnapshot()),
+      read,
+    }).toMatchInlineSnapshot(`
+      {
+        "failure": undefined,
+        "read": {
+          "reading": "current",
+        },
+      }
+    `)
   })
 
   test('starts no read for a loaded session, or beside a read of the page', () => {
@@ -133,9 +145,9 @@ describe('machines.read', () => {
       }),
     ).start()
 
-    actor.send({ loaded: true, type: 'follow.start' })
+    actor.send({ loaded: true, type: 'follow.start', version: 0 })
     actor.send({ type: 'page.start' })
-    actor.send({ loaded: false, type: 'follow.start' })
+    actor.send({ loaded: false, type: 'follow.start', version: 0 })
 
     expect({ reads, value: actor.getSnapshot().value }).toMatchInlineSnapshot(`
       {
@@ -201,8 +213,8 @@ describe('machines.read', () => {
     'failure.take': (snapshot) =>
       snapshot.matches('unreported') ? [{ type: 'failure.take' }] : [],
     'follow.start': () => [
-      { loaded: false, type: 'follow.start' },
-      { loaded: true, type: 'follow.start' },
+      { loaded: false, type: 'follow.start', version: 0 },
+      { loaded: true, type: 'follow.start', version: 0 },
     ],
     // The runner ends only a read that started, and starts none while a failure waits.
     'page.end': (snapshot) =>
@@ -216,7 +228,11 @@ describe('machines.read', () => {
       snapshot.matches('unreported') || snapshot.context.pages > 0
         ? []
         : [{ type: 'page.start' }],
-    'session.change': () => [{ type: 'session.change' }],
+    'session.change': () => [
+      { type: 'session.change', version: 0 },
+      { type: 'session.change', version: 1 },
+    ],
+    'signOut.start': () => [{ type: 'signOut.start' }],
     'xstate.done.actor.read': (snapshot) =>
       snapshot.matches('reading') ? [done] : [],
     'xstate.error.actor.read': (snapshot) =>
@@ -243,6 +259,8 @@ describe('create', () => {
   /** Returns reads whose subscription's read fails, as `refusal` describes, once. */
   function refusing(refusal: 'hook' | 'store') {
     let refused = false
+    // The count of the session's changes, which `change` raises, as a sign-in does.
+    let changes = 0
     const failure = new Error('Refused.')
     const reads = SessionRead.create({
       // The session stays unread, also for a hook's failure beside a failed read of the store.
@@ -253,8 +271,15 @@ describe('create', () => {
         return Promise.reject(failure)
       },
       refused: (error) => refusal === 'hook' && error === failure,
+      version: () => changes,
     })
-    return reads
+    return {
+      ...reads,
+      change() {
+        changes++
+        reads.change()
+      },
+    }
   }
 
   /** Runs two reads of the page, and returns their results. */

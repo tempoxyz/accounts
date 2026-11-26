@@ -3604,6 +3604,51 @@ describe('session.status', () => {
 
     expect(await accounts.session.get()).toMatchInlineSnapshot(`undefined`)
   })
+  test("throws a restore hook's failure from the subscription's read beside a saved session, whose read overtakes nothing", async () => {
+    const store = Store.memory()
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",1337]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 3_600_000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    let refused = false
+    const accounts = Accounts.create({
+      chain: 1337,
+      clientId: 'client_1',
+      plugins: [
+        Plugin.from({
+          hooks: {
+            restore() {
+              if (refused) return Promise.resolve()
+              refused = true
+              return Promise.reject(new Error('Refused callback.'))
+            },
+          },
+          id: 'test',
+        }),
+      ],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    accounts.session.status.subscribe(() => {})
+    await expect
+      .poll(() => accounts.session.status.get().status, { timeout: 2_000 })
+      .toBe('signedIn')
+
+    const first = await accounts.session
+      .get()
+      .catch((error: Error) => error.message)
+
+    expect(first).toMatchInlineSnapshot(`"Refused callback."`)
+  })
   test("follows another instance's sign-in on the same store, such as another tab's, as it follows that instance's sign-out", async () => {
     const store = Store.memory()
     const create = () =>

@@ -21,7 +21,7 @@ import {
  * in that code settles the status first.
  */
 export function create(options: create.Options): create.ReturnType {
-  const { loaded, read, refused } = options
+  const { loaded, read, refused, version } = options
   const actor = createActor(
     machines.read.provide({
       actors: {
@@ -40,12 +40,19 @@ export function create(options: create.Options): create.ReturnType {
   return {
     actor,
     change() {
-      actor.send({ type: 'session.change' })
+      actor.send({ type: 'session.change', version: version() })
     },
     follow() {
       queueMicrotask(() =>
-        actor.send({ loaded: loaded(), type: 'follow.start' }),
+        actor.send({
+          loaded: loaded(),
+          type: 'follow.start',
+          version: version(),
+        }),
       )
+    },
+    signOut() {
+      actor.send({ type: 'signOut.start' })
     },
     run(fn) {
       const failure = machines.failure(actor.getSnapshot())
@@ -76,6 +83,11 @@ export declare namespace create {
     read: () => Promise<unknown>
     /** Returns whether `error` is a restore hook's failure, such as a refused callback. */
     refused: (error: unknown) => boolean
+    /**
+     * Returns the count of the session's changes, such as sign-ins. The read of the saved session
+     * changes none.
+     */
+    version: () => number
   }
 
   type ReturnType = {
@@ -85,6 +97,8 @@ export declare namespace create {
     change: () => void
     /** Starts the read of a status subscription, if the session is unread and no read of the page runs. */
     follow: () => void
+    /** Records a sign-out, also of an empty session, after which a kept failure is stale. */
+    signOut: () => void
     /**
      * Runs `fn`, a read of the page. Rejects first with the failure of a subscription's read that no
      * caller received, once.
@@ -109,6 +123,11 @@ export namespace machines {
    */
   export const read = setup({
     actions: {
+      /** Records the count of the session's changes when the subscription's read starts. */
+      begin: assign((args) => {
+        assertEvent(args.event, 'follow.start')
+        return { started: args.event.version }
+      }),
       /** Counts a read of the page that starts. */
       count: assign((args) => ({ pages: args.context.pages + 1 })),
       /** Records the failure of a read of the page beside the subscription's read. */
@@ -135,6 +154,11 @@ export namespace machines {
       read: fromPromise<unknown>(() => Promise.resolve(undefined)),
     },
     guards: {
+      /** Whether the session changed since the subscription's read started, not only its read. */
+      changed: (args) => {
+        assertEvent(args.event, 'session.change')
+        return args.event.version !== args.context.started
+      },
       /** Whether the session changed since the subscription's read started. */
       overtaken: stateIn({ reading: 'overtaken' }),
       /** Whether a read of the page rejected with the error itself, so a caller received it. */
@@ -159,7 +183,7 @@ export namespace machines {
       events: {} as read.Event,
     },
   }).createMachine({
-    context: { delivered: [], failure: undefined, pages: 0 },
+    context: { delivered: [], failure: undefined, pages: 0, started: 0 },
     id: 'read',
     initial: 'idle',
     on: {
@@ -169,7 +193,11 @@ export namespace machines {
     states: {
       idle: {
         on: {
-          'follow.start': { guard: 'startable', target: 'reading' },
+          'follow.start': {
+            actions: 'begin',
+            guard: 'startable',
+            target: 'reading',
+          },
         },
       },
       reading: {
@@ -200,7 +228,13 @@ export namespace machines {
         initial: 'current',
         on: { 'page.end': { actions: ['uncount', 'deliver'] } },
         states: {
-          current: { on: { 'session.change': { target: 'overtaken' } } },
+          current: {
+            on: {
+              // The read of the saved session notifies the change too, which overtakes nothing.
+              'session.change': { guard: 'changed', target: 'overtaken' },
+              'signOut.start': { target: 'overtaken' },
+            },
+          },
           overtaken: {},
         },
       },
@@ -218,7 +252,12 @@ export namespace machines {
             { actions: 'uncount' },
           ],
           // A sign-in or a sign-out since the failure makes it stale.
-          'session.change': { actions: 'forget', target: 'idle' },
+          'session.change': {
+            actions: 'forget',
+            guard: 'changed',
+            target: 'idle',
+          },
+          'signOut.start': { actions: 'forget', target: 'idle' },
         },
       },
     },
@@ -233,6 +272,8 @@ export namespace machines {
       failure: { error: unknown } | undefined
       /** The count of the reads of the page that run. */
       pages: number
+      /** The count of the session's changes when the subscription's read started. */
+      started: number
     }
 
     /** An event of the reads. */
@@ -242,6 +283,8 @@ export namespace machines {
           loaded: boolean
           /** A status subscription asks for a read. */
           type: 'follow.start'
+          /** The count of the session's changes. */
+          version: number
         }
       | {
           /** A read of the page took the kept failure. */
@@ -258,8 +301,14 @@ export namespace machines {
           type: 'page.start'
         }
       | {
-          /** The session changed, such as at a sign-in or a sign-out. */
+          /** The session changed, such as at a sign-in or a sign-out, or its saved copy loaded. */
           type: 'session.change'
+          /** The count of the session's changes, which the load of the saved copy leaves. */
+          version: number
+        }
+      | {
+          /** A sign-out started, also of an empty session. */
+          type: 'signOut.start'
         }
 
     /** A running machine. */
