@@ -1195,6 +1195,50 @@ describe('mpp', () => {
     expect(error).toMatchInlineSnapshot(`[TypeError: fetch failed]`)
   })
 
+  test('sends the identity to an origin of `identity.scope` that the app names with a trailing slash or in capitals', async () => {
+    const store = Store.memory()
+    await store.setItem(name, {
+      state: { session: { ...session({ expiry: 3600 }), idToken: 'id-token' } },
+      version: 0,
+    })
+    const requests: Request[] = []
+    const accounts = instance({
+      fetch: (input, init) => {
+        requests.push(new Request(input, init))
+        return Promise.resolve(new Response('free'))
+      },
+      // An origin read from the environment often ends with a slash, such as `API_URL`.
+      identity: { scope: ['https://API.example.com/'] },
+      store,
+    })
+
+    await accounts.mpp().fetch('https://api.example.com/fortune')
+
+    expect(
+      requests.map((request) => [
+        request.url,
+        request.headers.get('authorization'),
+        request.headers.get('tempo-id-token'),
+      ]),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          "https://api.example.com/fortune",
+          "Bearer access-token",
+          "id-token",
+        ],
+      ]
+    `)
+  })
+
+  test('refuses an entry of `identity.scope` with a path, before any request', () => {
+    expect(() =>
+      mpp({ identity: { scope: ['https://api.example.com/v1'] } }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[TypeError: Invalid identity scope: \`https://api.example.com/v1\` is no origin. Name its origin, such as \`https://api.example.com\`.]`,
+    )
+  })
+
   test("sends the access token and the ID token of the instance's session to the origins of `identity.scope`, and none to another origin", async () => {
     const store = Store.memory()
     await store.setItem(name, {
