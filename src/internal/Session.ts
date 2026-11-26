@@ -2729,6 +2729,21 @@ function later(session: Session.Any, other: Session.Any) {
 }
 
 /**
+ * Returns whether `session` holds later tokens than `other` by both orders: by {@link order}, and by
+ * no earlier `receivedAt` where both hold it. A revocation of the tokens of `other` follows it, so
+ * no context of this release or an earlier one adopts them again, as {@link later} decides.
+ */
+function laterByBoth(session: Session.Any, other: Session.Any) {
+  if (order(session) <= order(other)) return false
+  const { receivedAt } = session
+  return (
+    receivedAt === undefined ||
+    other.receivedAt === undefined ||
+    receivedAt >= other.receivedAt
+  )
+}
+
+/**
  * The clock of the session's actor, whose timers keep no dropped instance alive, such as a server's
  * instance for each request. The actor holds each pending timer, which it receives as the timer's
  * ID, and the platform's timer holds it only weakly. A delay above a timer's limit, about 24.8 days,
@@ -3704,17 +3719,20 @@ export namespace machines {
     const { entries, held, refreshToken, stored } = options
     // A local session holds no tokens that another context rotates.
     if (Session.local(held)) return false
-    const expiresAt =
-      refreshToken === held.refreshToken
-        ? held.expiresAt
-        : entries.find((entry) => entry.to === refreshToken)?.expiresAt
+    const own = refreshToken === held.refreshToken
+    const entry = own
+      ? undefined
+      : entries.find((entry) => entry.to === refreshToken)
+    const expiresAt = own ? held.expiresAt : entry?.expiresAt
     if (!stored || expiresAt === undefined) return false
-    // A context of an earlier release adopts `stored` only by the `expiresAt` order, so a
-    // revocation follows that order alone. Every context adopts a session that it rates later.
-    return newer(stored, {
+    if (Session.subject(stored) !== Session.subject(held)) return true
+    // A context of an earlier release adopts `stored` only by the `expiresAt` order, and this
+    // release by either order, so only a session later by both orders revokes the token. The save
+    // of a successor's rotation follows its receipt, so its time stands for that receipt.
+    return laterByBoth(stored, {
       ...held,
       expiresAt,
-      receivedAt: undefined,
+      receivedAt: own ? held.receivedAt : entry?.at,
       refreshToken,
     })
   }
@@ -4214,16 +4232,16 @@ export namespace machines {
   }
 
   /**
-   * Returns whether a sign-in that yielded to `overwritten` revokes the refresh token of `kept`. A
-   * context of an earlier release orders by `expiresAt` alone, so it adopts `overwritten` only by
-   * that order. Otherwise `kept` stays live, since such a context can still hold it, and a
-   * revocation of it counts as a reuse at its next refresh.
+   * Returns whether a sign-in that yielded to `overwritten` revokes the refresh token of `kept`, only
+   * where `overwritten` is later by both orders. A context of an earlier release adopts by
+   * `expiresAt` alone, and this release by either order. Otherwise `kept` stays live, since a
+   * context can still hold it, and a revocation of it counts as a reuse at its next refresh.
    */
   export function revokesKept(
     options: machines.revokesKept.Options,
   ): machines.revokesKept.ReturnType {
     const { kept, overwritten } = options
-    return newer(overwritten, { ...kept, receivedAt: undefined })
+    return laterByBoth(overwritten, kept)
   }
 
   export declare namespace revokesKept {

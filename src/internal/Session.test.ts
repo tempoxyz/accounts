@@ -1418,6 +1418,12 @@ describe('machines.session', () => {
         Session.from({ ...expired, receivedAt: 2 }),
         false,
       ],
+      [
+        'an earlier receipt of a later expiry, which this release can adopt back',
+        Session.from({ ...expired, receivedAt: 2 }),
+        Session.from({ ...renewed, receivedAt: 1 }),
+        false,
+      ],
       ['a later expiry without receipts', expired, renewed, true],
     ] as const
 
@@ -1542,19 +1548,26 @@ describe('machines.session', () => {
           false,
         ],
         [
-          'the held token, and an earlier receipt of a later expiry',
+          'the held token, and an earlier receipt of a later expiry, which this release keeps',
           'R0',
           2_000,
           50,
-          true,
+          false,
         ],
         ['a successor, and a receipt after its save', 'R1', 2_000, 300, true],
+        [
+          "a successor, and a receipt after the held token's but before the successor's save",
+          'R1',
+          2_000,
+          150,
+          false,
+        ],
         [
           'a successor, and an earlier receipt of a later expiry',
           'R1',
           2_000,
           50,
-          true,
+          false,
         ],
         [
           'a successor, and a later receipt of an earlier expiry',
