@@ -1113,9 +1113,10 @@ export function create(options: create.Options): create.ReturnType {
 
   /**
    * Saves `overwritten`, the session of another context's sign-in that this instance's sign-in of
-   * `kept` replaced in the store, and holds it, and then revokes the refresh token of `kept`. The
-   * other context keeps `overwritten`, as `machines.yields` decides, so both hold one session, and
-   * no live token stays out of the store. Under the lock, a change since the save of `kept`, here
+   * `kept` replaced in the store, and holds it, and then revokes the refresh token of `kept`, unless
+   * `machines.revokesKept` is false. The other context keeps `overwritten`, as `machines.yields`
+   * decides, so both hold one session. Where `machines.revokesKept` is false, a context of an
+   * earlier release can still hold `kept`, so its refresh token stays live out of the store. Under the lock, a change since the save of `kept`, here
    * or in the store, keeps everything as it is. If a context rotated the refresh token of
    * `overwritten` since `since`, or the rotations are unknown, {@link revokeReplaced} decides in
    * place of the yield. The session takes the instance's chain, as a sign-in's commit does. A failed
