@@ -6,7 +6,13 @@ const ignorePatterns = ['**/dist/**', '**/node_modules/**', '.changeset/**']
 
 export default defineConfig({
   fmt: {
-    ignorePatterns: [...ignorePatterns, 'CHANGELOG.md', 'pnpm-lock.yaml'],
+    // `uphill --update` writes the baseline file.
+    ignorePatterns: [
+      ...ignorePatterns,
+      '.agents/uphill.baseline.yaml',
+      'CHANGELOG.md',
+      'pnpm-lock.yaml',
+    ],
     overrides: [
       {
         // A code fence of a page holds `// [!code ++]` notation at the end of a line, which a

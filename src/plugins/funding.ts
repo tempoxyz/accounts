@@ -5,7 +5,7 @@
  */
 import * as AccountActions from '../actions/account.js'
 import * as FundingActions from '../actions/funding.js'
-import { LocalSessionError } from '../Accounts.js'
+import { GuestSessionError, LocalSessionError } from '../Accounts.js'
 import * as ClientId from '../internal/ClientId.js'
 import * as Core from '../internal/Core.js'
 import * as Popup from '../internal/Popup.js'
@@ -317,6 +317,7 @@ async function accessToken(
   options: accessToken.Options,
 ) {
   const { session } = options
+  if (Session.guest(session)) throw new GuestSessionError()
   if (Session.local(session)) throw new LocalSessionError()
   if (session.expiresAt - refreshMargin > Date.now()) return session.accessToken
   if (!session.refreshToken) {

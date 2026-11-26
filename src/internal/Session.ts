@@ -164,7 +164,9 @@ export function create(options: create.Options): create.ReturnType {
     store,
   } = options
 
-  const writes = store ? queue(store, { getFn: options.getFn }) : undefined
+  const writes = store
+    ? queue(store, { getFn: options.getFn, guest: options.guest === true })
+    : undefined
   // The lock of `exclusive` without Web Locks, for a store without a `lock` of its own.
   // The store's `lock` runs with the store as its receiver, as its other members do.
   const lock: NonNullable<Store['lock']> = store?.lock
@@ -2338,6 +2340,11 @@ export declare namespace create {
      */
     getFn?: TempoAccount.deserialize.Options['getFn']
     /**
+     * Whether the instance holds guest sessions. Without it, a stored guest session reads as signed
+     * out, and stays in the store, so an instance with `guest` restores it.
+     */
+    guest?: boolean | undefined
+    /**
      * Reads the stored chain selection, which the first read of the session awaits, so a restored
      * session selects the access key of the instance's chain. Absent, the chain is the configured one.
      */
@@ -2709,7 +2716,7 @@ function fromSaved(
  * local session's access keys are no order, since a sign-in can add one that expires sooner.
  */
 function order(session: Session.Any) {
-  return Session.local(session) ? session.revision : session.expiresAt
+  return Session.tempoId(session) ? session.expiresAt : session.revision
 }
 
 /**
@@ -2768,7 +2775,7 @@ function settle(promise: Promise<unknown> | undefined) {
  * a non-extractable `CryptoKey`. Writes run in order, and `flush` resolves when every earlier write
  * completed.
  */
-function queue(store: Store, options: TempoAccount.deserialize.Options = {}) {
+function queue(store: Store, options: queue.Options = {}) {
   let pending: Promise<void> = Promise.resolve()
   // Whether the last write failed, which leaves an earlier copy in the store.
   let failed = false
@@ -2802,7 +2809,12 @@ function queue(store: Store, options: TempoAccount.deserialize.Options = {}) {
     /** Decodes a value that `read` returns. Throws for a record that holds no valid session. */
     decode(value: Saved | null | undefined) {
       if (value == null) return undefined
-      return { session: fromSaved(value.state?.session, options) }
+      const session = fromSaved(value.state?.session, options)
+      // An instance without `guest` reads a guest session that another configuration saved as
+      // signed out, so its session never holds a kind that its type excludes.
+      if (session && Session.guest(session) && !options.guest)
+        return { session: undefined }
+      return { session }
     },
     /** Reads the stored session. A custom store may return `null` for a missing item. */
     async getItem(name: string) {
@@ -2839,6 +2851,13 @@ function queue(store: Store, options: TempoAccount.deserialize.Options = {}) {
         session,
       ),
     storage,
+  }
+}
+
+declare namespace queue {
+  type Options = TempoAccount.deserialize.Options & {
+    /** Whether the instance holds guest sessions. Without it, a stored guest session reads as signed out. */
+    guest?: boolean | undefined
   }
 }
 
@@ -3686,8 +3705,8 @@ export namespace machines {
     options: machines.adopts.Options,
   ): machines.adopts.ReturnType {
     const { entries, held, refreshToken, stored } = options
-    // A local session holds no tokens that another context rotates.
-    if (Session.local(held)) return false
+    // A local or guest session holds no tokens that another context rotates.
+    if (!Session.tempoId(held)) return false
     const expiresAt =
       refreshToken === held.refreshToken
         ? held.expiresAt
@@ -4119,8 +4138,8 @@ export namespace machines {
     options: machines.yields.Options,
   ): machines.yields.ReturnType {
     const { kept, overwritten } = options
-    // A local session holds no tokens, so neither yields to the other.
-    if (Session.local(kept) || Session.local(overwritten)) return false
+    // A local or guest session holds no tokens, so neither yields to the other.
+    if (!Session.tempoId(kept) || !Session.tempoId(overwritten)) return false
     // A DPoP key binds each access token, and the instance holds only the key that bound `kept`, so
     // a session that another key binds is of no use to it.
     if (Api.jkt(kept.accessToken) !== Api.jkt(overwritten.accessToken))
@@ -4271,6 +4290,8 @@ export namespace machines {
     options: machines.arranged.Options,
   ): machines.arranged.ReturnType {
     const { chainId, current, stored } = options
+    // A guest session holds no access keys to arrange.
+    if (stored && Session.guest(stored)) return stored
 
     // One public key can act on several chains, so the chain and the key ID identify an entry.
     const id = (entry: NonNullable<Session.Any['accessKey']>) =>
@@ -4559,8 +4580,8 @@ export namespace machines {
     options: machines.rotated.Options,
   ): machines.rotated.ReturnType {
     const { current, lifetime, now, started, startedAt } = options
-    // A local session holds no tokens to refresh.
-    if (Session.local(current)) return false
+    // A local or guest session holds no tokens to refresh.
+    if (!Session.tempoId(current)) return false
     // An instance that held no session when the call started, such as one that has not read the
     // store yet, decides by the time alone.
     if (started && !started.refreshToken) return false
@@ -4764,7 +4785,9 @@ export namespace machines {
       ...(session.accessKeys ?? []),
     ].map((key) => AccessKey.expiry(key) ?? Infinity)
     // Without an access key, the access token's expiry counts too, unless a refresh token renews it.
-    if (!session.accessKey && !Session.local(session))
+    // A guest session's key pair signs as long as the store keeps it.
+    if (Session.guest(session)) return Infinity
+    if (!session.accessKey && Session.tempoId(session))
       times.push(session.refreshToken ? Infinity : session.expiresAt)
     // A session that holds no expiry, such as a local one without an access key, expired already.
     return Math.max(0, ...times)

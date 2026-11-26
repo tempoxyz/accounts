@@ -1,0 +1,145 @@
+# Uphill scores `accounts` against the targets in uphill.baseline.yaml, and names the fixes worth the
+# most points. The package's own categories measure what an app pays for each use: the bundle of
+# its initial load, the work of each request, and the round trips of each action. The packs measure
+# the conventions of AGENTS.md, the cost of each export, and the prose of the docs.
+#
+# The library metrics read the build, so run `pnpm build` before `uphill`, and `pnpm exec zile dev`
+# after it. Each target names its source: a physical floor, a measured dependency, or a rule of
+# AGENTS.md.
+
+# Prepares each checkout that `uphill --compare` and `uphill blame` create.
+setup: pnpm install --frozen-lockfile && pnpm build
+
+footprint:
+  run: node .agents/metrics/footprint.ts
+  # Brotli bytes of the initial load of each case of `scripts/size.ts`, a small app of one typical
+  # use, such as `Accounts.create` with the `dialog` plugin. The target is 20 kB, the floor of a
+  # session that the XState machines of AGENTS.md hold: XState's `setup` and `createActor` bundle to
+  # 11.1 kB, and ox's Base64 and SHA-256 to 3.6 kB, as measured on 2026-11-26. `accounts/hint` reads
+  # a cookie, so it keeps its 200 B. The viem plugin targets 40 kB: it adds a Viem client, 6.1 kB,
+  # and the Tempo actions it calls. The core cases load 110 kB, so `poor` sits there and each
+  # removed kilobyte raises the score. A note names the packages of the initial load with the most
+  # bytes.
+  initial-size: { poor: 110kB }
+  # Brotli bytes of every chunk of each case, including each chunk that a dynamic import reaches,
+  # such as the passkey ceremony. The target is 60 kB, the initial floor and the lazy flows; every
+  # core case bundles about 340 kB now.
+  total-size: { poor: 340kB }
+  # Runtime dependencies in package.json. No target: the baseline records the count, so an added
+  # dependency shows in review.
+  dependencies: {}
+  # Required peer dependencies in package.json, which every app installs. No target, as above.
+  peer-dependencies: {}
+  # The typescript pack's gzipped bytes of each export, which targets the pack's 10 kB. The worst
+  # tenth bundle 94 kB now.
+  entry-size: { poor: 94kB }
+  # The same for the hot items of local/config.ts, such as `Accounts.create`, whose floor is the
+  # session's: 25 kB gzipped. They bundle up to 280 kB now.
+  hot-entry-size: { poor: 120kB }
+
+speed:
+  run: node --expose-gc --single-threaded .agents/metrics/requests.ts
+  # CPU time per call of the work that each request repeats: an API's `AccessToken.verify` of a
+  # Bearer or DPoP token with the key set in memory, and a client's `Dpop.proof`. Each target is the
+  # WebCrypto floor of its signatures, measured on the same machine on 2026-11-26: one RS256
+  # verification takes 78 µs (target 80 µs), one RS256 and one ES256 verification 220 µs (target
+  # 230 µs, so the proof's key imports once per key, not once per request), and one ES256 signature
+  # 86 µs (target 90 µs).
+  request-time: {}
+  # Heap bytes that each of those calls allocates. A faster verification that allocates more costs
+  # an API's garbage collector on every request. A token and a proof are under 1 kB each, so a call
+  # targets 4 kB beside its signatures, and a DPoP verification, which checks two JWTs, 10 kB. The
+  # calls allocate up to 52 kB now, and `poor` scales with each item's target.
+  request-memory: { poor: 25kB, varies: true }
+  # The typescript pack's import of each entry in a fresh Node process. The barrel entries take
+  # about 800 ms and hold about 30 MB now. The targets of 60 ms and 3.5 MB are a tenth, near the
+  # time to parse and run their modules once.
+  import-time: { poor: 800ms }
+  import-memory: { poor: 30MB }
+  hot-import-time: { poor: 800ms }
+  hot-import-memory: { poor: 30MB }
+  # The pack replays calls that its recorder takes from a `vitest` install. This repository runs
+  # Vitest through Vite+, so the replay finds no calls, and these metrics leave the category.
+  call-time: false
+  call-memory: false
+  hot-call-time: false
+  hot-call-memory: false
+
+# The typescript pack's type-checking cost of each export. Most exports of a typical library cost
+# under 200 instantiations and check in 1 ms, so the targets are 300 instantiations, 2 ms, and 1 MB.
+# The worst tenth cost 3,100 instantiations, 19 ms, and 8.7 MB now. The hot items, which infer the
+# instance's type, target 1,000 instantiations, and cost up to 140,000 now.
+types:
+  instantiations: { poor: 3000 }
+  check-time: { poor: 20ms }
+  check-memory: { poor: 9MB }
+  hot-instantiations: { poor: 120000, score: max }
+
+# The typescript pack's type-checking cost at the first call that this repository's tests write
+# to each public function. A typical call costs under 200 instantiations, the target. The worst
+# tenth cost 264 now, and the call of `Accounts.create` that every app writes costs 115,740, against
+# the hot target of 1,000.
+call-types:
+  hot-instantiations: { poor: 120000, score: max }
+
+# The writing-docs pack's prose checks. The site and the docs use sentence-case headings, as
+# AGENTS.md requires, and the pack checks Title Case. AGENTS.md limits only a guide's label to three
+# words, and a section heading is a noun phrase of any length.
+documentation:
+  heading-case: false
+  heading-words: false
+
+# The git pack's repository checks. `.changeset/` keeps the notes written for 1.0.0, which no
+# workflow reads, and the examples track their `.env.example` files on purpose.
+commits:
+  changeset-sentences: false
+  tracked-output: false
+
+# The async calls of each public action, recorded by the waterfall of this repository's own tests
+# (`pnpm waterfall --local src`). AGENTS.md: "Never add a round trip to a flow." Tempo ID's
+# integration suite in `tempoxyz/id` records more flows than these tests drive.
+waterfall:
+  run: node .agents/metrics/waterfall.ts
+  timeout: 15m
+  # The median rounds of each action and outcome: the longest chain of calls where each call opens
+  # after the previous one settled. The target of each line is its ideal rounds, the longest chain
+  # over data dependencies alone, which is the floor of its round trips. A note names the sequential
+  # reads that wait for a call they do not depend on.
+  rounds: {}
+  # Whether each action's traces hold no call with the same label and arguments as an earlier call
+  # of the trace, with no write between them. The note names the calls.
+  duplicate-calls: {}
+  # The median calls of each action before it settles. No target: the baseline records each count,
+  # so an added store read or request shows in review.
+  calls: {}
+
+# The packs' categories run after these, and merge with the categories of the same name. The
+# typescript pack reads its project inputs from .agents/uphill/typescript/config.ts. Its
+# `coverage` and `fuzz` categories read the calls of the replay above, so they stay out.
+packs:
+  - {
+      pack: wevm/uphill/packs/typescript@19cdac7a0f0f500d227f2bbf74b684af17478fd3,
+      categories:
+        [
+          architecture,
+          call-types,
+          configuration,
+          correctness,
+          documentation,
+          footprint,
+          speed,
+          style,
+          testing,
+          type-coverage,
+          types,
+        ],
+      install: true,
+    } # main
+  - {
+      pack: wevm/uphill/packs/writing-docs@19cdac7a0f0f500d227f2bbf74b684af17478fd3,
+      install: true,
+    } # main
+  - {
+      pack: wevm/uphill/packs/git@19cdac7a0f0f500d227f2bbf74b684af17478fd3,
+      install: true,
+    } # main

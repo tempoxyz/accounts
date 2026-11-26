@@ -248,7 +248,10 @@ export function create(path?: string): Store.Store {
       const hash = Array.from(digest, (byte) =>
         byte.toString(16).padStart(2, '0'),
       ).join('')
-      return await locked(`${target}.${hash}`, () => fn(), { renew: true })
+      // `fn` receives the lock's check, so a holder that paused past a takeover writes nothing.
+      return await locked(`${target}.${hash}`, (check) => fn(check), {
+        renew: true,
+      })
     },
     removeItem: (key) =>
       update(
@@ -298,6 +301,23 @@ export function create(path?: string): Store.Store {
         },
         { skip: (entries) => !(key in entries) },
       ),
+    // The read and the write hold the file's lock, and a write whose lock another process took over
+    // runs `fn` again on the new entries, so the write lands only on the value that `fn` read.
+    async update(key, fn) {
+      while (true) {
+        const done = await update((entries) => {
+          const entry = entries[key]
+          const next = fn(
+            entry && !Expiry.expired(entry) ? entry.value : undefined,
+          )
+          if (next.value === undefined) delete entries[key]
+          else entries[key] = { expiresAt: next.expiresAt, value: next.value }
+          return { result: next.result }
+        })
+        // Another process took the lock over before the rename, so its write runs on its own read.
+        if (done) return done.result
+      }
+    },
   }
 }
 

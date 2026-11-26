@@ -1054,6 +1054,23 @@ describe('backend', () => {
     `)
   })
 
+  test('start offers no guest on an instance with `guest`, since no backend sign-in starts a guest session', async () => {
+    const accounts = Accounts.create({
+      clientId: 'https://app.example.com',
+      guest: true,
+      plugins: [backend({ store: Store.memory() })],
+      url: 'http://127.0.0.1:9',
+    })
+
+    const { url } = await accounts.backend.start({
+      accessKey: false,
+      par: false,
+      redirectUri: 'https://app.example.com/callback',
+    })
+
+    expect(new URL(url).searchParams.get('guest')).toMatchInlineSnapshot(`null`)
+  })
+
   test('complete redeems no callback of a redirect in progress under an ID that is no session ID', async () => {
     const store = Store.memory()
     const accounts = instance({ store })
