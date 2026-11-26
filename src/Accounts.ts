@@ -42,7 +42,6 @@ import * as Plugin from './Plugin.js'
 import type { backend } from './plugins/backend.js'
 import type * as React from './react/index.js'
 import * as Session from './Session.js'
-import * as SessionRead from './internal/SessionRead.js'
 import type { Store } from './Store.js'
 import type * as TempoAccount from './internal/TempoAccount.js'
 
@@ -1444,10 +1443,11 @@ export type Accounts<
        * an instance without a session, such as a backend's, which never calls the listener. `get`
        * returns the same object while the status is unchanged, so the pair fits
        * `useSyncExternalStore` as it is. `accounts.useSession()` reads it in React. The first
-       * `subscribe` before any read reads the session as `session.get` does, with the restore
-       * hooks, after the code that subscribes, so the status leaves `pending` with no other call. A
-       * `session.get` in that code holds the status first, and the hooks run once. If the store
-       * rejects the read, the status stays `pending`.
+       * `subscribe` before any read loads the saved session, after the code that subscribes, so the
+       * status leaves `pending` with no other call. A `session.get` in that code reads first. The
+       * load runs no restore hook, so an instance with a plugin that restores, such as `redirect`,
+       * loads nothing at a subscription, and its status leaves `pending` at the page's
+       * `session.get`. If the store rejects the read, the status stays `pending`.
        *
        * @example
        * ```ts
@@ -1866,6 +1866,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   }
   const config = from(merged)
   const plugins: readonly Plugin.Plugin[] = named
+  // Whether a plugin restores at a read, such as the `redirect` plugin's callback, which a status
+  // subscription's load leaves to the page's `session.get`.
+  const restores = plugins.some((plugin) => plugin.hooks?.restore !== undefined)
   // A store of one user's, a CLI's shared file, or a browser's IndexedDB holds the session. A
   // backend's instance passes no store, since it serves many users.
   const enabled = merged.store !== undefined || typeof indexedDB !== 'undefined'
@@ -2128,82 +2131,6 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   // The `session.get` call with `reauthorize: true` in progress, which every overlapping call
   // with `reauthorize: true` awaits, so a page that restores from two places sends one authorization.
   let restoring: Promise<Session.Any | undefined> | undefined
-  // The restore hooks in progress, which every overlapping read awaits, such as the read of a status
-  // subscription beside the page's own, so a redirect's callback completes once.
-  let hooks: Promise<void> | undefined
-  // The failures of the restore hooks, so a status subscription's read keeps a refused callback and
-  // drops a failed read of the store.
-  const refusals = new WeakSet<object>()
-  /** Reads the session for `session.get`, as a read of the page or of a status subscription. */
-  function readSession(parameters: Core.getSession.Parameters) {
-    const read = (reauthorize: Core.getSession.Parameters['reauthorize']) =>
-      Core.getSession(context, {
-        ...parameters,
-        declined: () =>
-          session.actor !== undefined &&
-          InternalSession.machines.declined(session.actor.getSnapshot()),
-        delegate: session.delegate,
-        reauthorize,
-        renew: accessKey_option === undefined && merged.account !== false,
-        restore() {
-          // A restore, such as a redirect's callback, completes on the selected chain, so the
-          // stored selection loads first. A failed read runs no hook, so a later read restores.
-          // The stored session reads beside it, so a restore waits for one round trip of the
-          // store. A hook's change keeps its session over the read's.
-          hooks ??= (async () => {
-            const [loaded] = await Promise.all([
-              chain.load().then(
-                () => true,
-                () => false,
-              ),
-              session.preload(),
-            ])
-            if (!loaded) return
-            for (const plugin of plugins) await plugin.hooks?.restore?.(context)
-          })()
-            .catch((error: unknown) => {
-              if (typeof error === 'object' && error !== null)
-                refusals.add(error)
-              throw error
-            })
-            .finally(() => {
-              hooks = undefined
-            })
-          return hooks
-        },
-        signedOut: session.signedOut,
-      })
-    // Only calls with `reauthorize: true` share, since another call's own parameters or
-    // function decide its authorization. An instance without a session, such as a backend's,
-    // serves many users, so each of its calls authorizes on its own.
-    if (parameters.reauthorize !== true || !session.actor)
-      return read(parameters.reauthorize)
-    // A sign-in or a sign-out can complete while the shared call runs, so its result can be
-    // stale. A joining call then reads the current session, without a second authorization.
-    if (restoring)
-      return restoring.then(
-        () => read(undefined),
-        (error: unknown) => {
-          if (error instanceof SupersededError) return read(undefined)
-          throw error
-        },
-      )
-    return (restoring = read(true).finally(() => {
-      restoring = undefined
-    }))
-  }
-  // The reads of the session, so a status subscription reads it once beside no read of the page.
-  const sessionRead = SessionRead.create({
-    loaded: () =>
-      session.actor === undefined ||
-      InternalSession.machines.loaded(session.actor.getSnapshot()),
-    read: () => readSession({}),
-    refused: (error) =>
-      typeof error === 'object' && error !== null && refusals.has(error),
-    version: () => session.actor?.getSnapshot().context.version ?? 0,
-  })
-  session.subscribe(() => sessionRead.change())
-
   /**
    * Returns the access token that authenticates a read of the user's own data, such as
    * `account.get`, in place of the session cookie. Tempo ID's own pages send its session cookie, with
@@ -2696,7 +2623,51 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
                 ] as { token?: boolean } | undefined
               )?.token === true,
           })
-        return sessionRead.run(() => readSession(parameters))
+        const read = (reauthorize: Core.getSession.Parameters['reauthorize']) =>
+          Core.getSession(context, {
+            ...parameters,
+            declined: () =>
+              session.actor !== undefined &&
+              InternalSession.machines.declined(session.actor.getSnapshot()),
+            delegate: session.delegate,
+            reauthorize,
+            renew: accessKey_option === undefined && merged.account !== false,
+            async restore() {
+              // A restore, such as a redirect's callback, completes on the selected chain, so the
+              // stored selection loads first. A failed read runs no hook, so a later read restores.
+              // The stored session reads beside it, so a restore waits for one round trip of the
+              // store. A hook's change keeps its session over the read's.
+              const [loaded] = await Promise.all([
+                chain.load().then(
+                  () => true,
+                  () => false,
+                ),
+                session.preload(),
+              ])
+              if (!loaded) return
+              for (const plugin of plugins)
+                await plugin.hooks?.restore?.(context)
+            },
+            signedOut: session.signedOut,
+          })
+        // Only calls with `reauthorize: true` share, since another call's own parameters or
+        // function decide its authorization. An instance without a session, such as a backend's,
+        // serves many users, so each of its calls authorizes on its own.
+        if (parameters.reauthorize !== true || !session.actor)
+          return read(parameters.reauthorize)
+        // A sign-in or a sign-out can complete while the shared call runs, so its result can be
+        // stale. A joining call then reads the current session, without a second authorization.
+        if (restoring)
+          return restoring.then(
+            () => read(undefined),
+            (error: unknown) => {
+              if (error instanceof SupersededError) return read(undefined)
+              throw error
+            },
+          )
+        return (restoring = read(true).finally(() => {
+          restoring = undefined
+        }))
       },
       refresh,
       status: {
@@ -2704,11 +2675,19 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         subscribe(listener: Parameters<typeof session.status.subscribe>[0]) {
           const unsubscribe = session.status.subscribe(listener)
           // A subscriber that reads no session, such as a router guard, still sees the status leave
-          // `pending`, since the first subscription reads the session as `session.get` does, with the
-          // restore hooks. The read starts after the code that subscribes, so a page's own read in
-          // that code, such as with `reauthorize`, holds the status first, and the hooks run once.
-          // A failure, such as a refused redirect callback, stays for the page's next read.
-          sessionRead.follow()
+          // `pending`, since the first subscription loads the saved session after the code that
+          // subscribes, where a page's own `session.get` reads first. The load runs no restore hook,
+          // such as a redirect's callback, which only `session.get` completes and reports, so an
+          // instance with one loads nothing here. A failed read keeps `pending`, as `session.get`
+          // does.
+          if (!restores)
+            queueMicrotask(() => {
+              if (
+                session.actor &&
+                !InternalSession.machines.loaded(session.actor.getSnapshot())
+              )
+                void session.load().catch(() => undefined)
+            })
           return unsubscribe
         },
       },
@@ -2929,9 +2908,6 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     // call ends no session.
     if (options.everywhere && ClientId.thirdParty(config.clientId))
       throw new EverywhereNotAllowedError()
-    // A sign-out of a session that is already empty changes no session, so it drops a kept failure
-    // of a status subscription's read itself.
-    sessionRead.signOut()
     // The hooks start before the session's sign-out, which starts at once, so a sign-in that starts
     // after this call meets both. The sign-out's own rejection wins over a hook's.
     const before = (async () => {
