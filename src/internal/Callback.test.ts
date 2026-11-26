@@ -413,6 +413,49 @@ describe('Callback.checkRedirectUri', () => {
   })
 })
 
+describe('Callback.error', () => {
+  test('returns `guest_selected` for a return with `guest=1` and no code', () => {
+    const error = Callback.error(
+      new URL('https://app.example/callback?guest=1&state=s'),
+      { redirectUri: 'https://app.example/callback' },
+    )
+
+    expect([error?.code, error?.reason, Callback.denied(error)])
+      .toMatchInlineSnapshot(`
+      [
+        "access_denied",
+        "guest_selected",
+        false,
+      ]
+    `)
+  })
+
+  test("returns nothing for the registered redirect URI's own `guest`", () => {
+    const error = Callback.error(
+      new URL('https://app.example/callback?guest=1&code=c&state=s'),
+      { redirectUri: 'https://app.example/callback?guest=1' },
+    )
+
+    expect(error).toMatchInlineSnapshot(`undefined`)
+  })
+})
+
+describe('Callback.received', () => {
+  test("returns the guest's choice of a result in the web message mode", () => {
+    const received = Callback.received(
+      { guest: true, state: 's', type: 'tempo-id:popup.result' },
+      { prefix: 'tempo-id:popup' },
+    )
+
+    expect(received).toMatchInlineSnapshot(`
+      {
+        "guest": true,
+        "state": "s",
+      }
+    `)
+  })
+})
+
 describe('Callback.denied', () => {
   const redirectUri = 'https://app.example.com/'
 

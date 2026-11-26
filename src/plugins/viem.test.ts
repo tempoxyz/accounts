@@ -21,6 +21,8 @@ import {
 import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
 import * as AccessKey from '../internal/AccessKey.js'
+import * as SignIn from '../internal/SignIn.js'
+import * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
 import { backend } from './backend.js'
@@ -1279,6 +1281,54 @@ describe('viem', () => {
           },
         ]
       `)
+  })
+
+  test("signs a transaction of a guest session outside a page as the guest account, with the key pair's P256 envelope", async () => {
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: true,
+      plugins: [
+        viem(),
+        // Starts the guest session, as a sign-in that selects "Continue as guest" does.
+        Plugin.from({
+          actions: (context) => ({
+            guest: () =>
+              SignIn.guest(context, { change: context.session.change() }),
+          }),
+          id: 'pick',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const session = await accounts.pick.guest()
+
+    // A transaction whose fields are all given fills nothing, so the signature sends no request.
+    const signed = await accounts.viem.account.signTransaction({
+      calls: [
+        { data: '0x01', to: '0x0000000000000000000000000000000000000001' },
+      ],
+      chainId: 4217,
+      gas: 100_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 1n,
+      nonce: 0,
+      type: 'tempo',
+    } as never)
+    const envelope = TxEnvelopeTempo.deserialize(
+      signed as TxEnvelopeTempo.Serialized,
+    )
+
+    expect([
+      accounts.viem.account.address === session.address,
+      envelope.signature?.type,
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        "p256",
+      ]
+    `)
   })
 
   test("sends a payment of `pay` with the session's access key to the node, and opens no payment page", async () => {
