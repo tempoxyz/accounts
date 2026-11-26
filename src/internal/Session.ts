@@ -1117,8 +1117,9 @@ export function create(options: create.Options): create.ReturnType {
    * Saves `overwritten`, the session of another context's sign-in that this instance's sign-in of
    * `kept` replaced in the store, and holds it, and then revokes the refresh token of `kept`, unless
    * `machines.revokesKept` is false. The other context keeps `overwritten`, as `machines.yields`
-   * decides, so both hold one session. Where `machines.revokesKept` is false, a context of an
-   * earlier release can still hold `kept`, so its refresh token stays live out of the store. Under the lock, a change since the save of `kept`, here
+   * decides, so both hold one session. Where `machines.revokesKept` is false, a context can
+   * still hold `kept`, so its refresh token stays live out of the store, and the next sign-out
+   * revokes it. Under the lock, a change since the save of `kept`, here
    * or in the store, keeps everything as it is. If a context rotated the refresh token of
    * `overwritten` since `since`, or the rotations are unknown, {@link revokeReplaced} decides in
    * place of the yield. The session takes the instance's chain, as a sign-in's commit does. A failed
@@ -1190,10 +1191,12 @@ export function create(options: create.Options): create.ReturnType {
         if (context().session === next) set(kept)
         return 'kept' as const
       }
-      // A context of an earlier release that holds `kept` can reject `overwritten`, so `kept`
-      // stays live, as `machines.revokesKept` decides.
-      if (!machines.revokesKept({ kept, overwritten }))
+      // A context can still hold `kept` and reject `overwritten`, so `kept` stays live, as
+      // `machines.revokesKept` decides. No store holds it, so the next sign-out revokes it.
+      if (!machines.revokesKept({ kept, overwritten })) {
+        await retain(kept.refreshToken!, { logouts: obtainedLogouts })
         return 'yielded' as const
+      }
       // The list marks the token before its revocation, so a context that still holds it never
       // revokes it again, also if the revoked digests fail. A failed write leaves the token live.
       const marked = await rotations
