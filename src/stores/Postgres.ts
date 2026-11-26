@@ -9,11 +9,13 @@ import type * as Store from '../Store.js'
 import * as Redis from './Redis.js'
 
 /**
- * Returns a store in a Postgres table. On first use, it creates the table and an index on
- * `expires_at` unless the table exists. The table holds `key text primary key`,
+ * Returns a store in a Postgres table. If a query finds no table, the store creates the table and
+ * an index on `expires_at`, and runs the query again, so a store on a table that exists sends no
+ * other query. The table holds `key text primary key`,
  * `value text not null`, and `expires_at bigint`, in whole milliseconds, so a fraction of `expiresAt`
- * rounds up. Replicas that first use a new table at the same time all succeed, also in
- * transactions, though only one of them creates it.
+ * rounds up. Replicas that first use a new table at the same time all succeed, though only one of
+ * them creates it. A client in a transaction whose first query finds no table rejects, since
+ * Postgres aborts the transaction at the refusal. Create the table before such a client uses it.
  * Each value is stored as ox's `Json`, so a `bigint` survives. A write with an expiry deletes the
  * expired rows in a query beside it, and a read skips them. `takeItem` reads and deletes in one
  * `delete … returning`, so replicas that share the table take each value once. `update` writes only
@@ -27,7 +29,8 @@ import * as Redis from './Redis.js'
  * session of every instance in the process at once. An instance in another process reads the
  * sign-out from the table at its next refresh.
  *
- * `client` is any client with `query(text, values)`, such as a `pg` pool.
+ * `client` is any client with `query(text, values)`, such as a `pg` pool, whose refusals hold
+ * the SQLSTATE in `code`.
  *
  * Do not expose the table to other roles. Each row holds a refresh token, and an access key's
  * private key.
@@ -73,31 +76,40 @@ export function create(
   const table = parts.map((part) => `"${part}"`).join('.')
   const index = `"${parts.at(-1)}_expires_at_idx"`
 
-  // One check for each store, which every operation awaits. A table that exists needs no `create`,
-  // so a role with only read and write rights on it works.
+  // The creation of the table, which the first query that finds no table starts, and which the
+  // queries of the store that find no table share. A table that exists needs no `create`, so a role
+  // with only read and write rights on it works.
   let created: Promise<unknown> | undefined
-  function ready() {
-    created ??= (async () => {
-      const { rows } = await client.query(
-        'select to_regclass($1) is not null as exists',
-        [table],
-      )
-      const [row] = rows as readonly { exists: boolean }[]
-      if (row?.exists) return
-      // One block creates the table and its index. Its lock, which holds until the transaction
-      // ends, makes the creates of replicas run in turn, since creates that run at once refuse each
-      // other or deadlock, also with `if not exists`. A refusal from a store without the lock is
-      // caught in the database, so a client in a transaction keeps its transaction. The table name
-      // is a checked identifier, so the block holds no input.
-      await client.query(
+  function createTable() {
+    // One block creates the table and its index. Its lock, which holds until the transaction ends,
+    // makes the creates of replicas run in turn, since creates that run at once refuse each other or
+    // deadlock, also with `if not exists`. A refusal from a store without the lock is caught in the
+    // database. The table name is a checked identifier, so the block holds no input.
+    created ??= client
+      .query(
         `do $$ begin perform pg_advisory_xact_lock(hashtext('${table}')); begin create table if not exists ${table} (key text primary key, value text not null, expires_at bigint); exception when duplicate_object or duplicate_table or unique_violation then null; end; begin create index if not exists ${index} on ${table} (expires_at) where expires_at is not null; exception when duplicate_object or duplicate_table or unique_violation then null; end; end $$`,
         [],
       )
-    })().catch((error: unknown) => {
-      created = undefined
-      throw error
-    })
+      .catch((error: unknown) => {
+        created = undefined
+        throw error
+      })
     return created
+  }
+
+  /**
+   * Runs the query. If it finds no table, it creates the table and runs the query again. A store on
+   * a table that exists thus sends no query before its first operation, such as the store that a
+   * Worker creates for each request.
+   */
+  async function query(text: string, values: readonly unknown[]) {
+    try {
+      return await client.query(text, values)
+    } catch (error) {
+      if (!undefinedTable(error)) throw error
+      await createTable()
+      return client.query(text, values)
+    }
   }
 
   return {
@@ -106,8 +118,7 @@ export function create(
     // instead.
     ...(typeof WeakRef === 'function' ? { connect: Broadcast.create() } : {}),
     async getItem(key) {
-      await ready()
-      const { rows } = await client.query(
+      const { rows } = await query(
         `select value from ${table} where key = $1 and (expires_at is null or expires_at > $2)`,
         [key, Date.now()],
       )
@@ -119,7 +130,6 @@ export function create(
     // as two refreshes of one session's token. The lock is a row whose value holds a token and a
     // lease, which a hold takes only once no other lease holds it.
     async lock(key, fn) {
-      await ready()
       const name = `${key}:lock`
       // The lease uses the database's clock at execution, so clock skew between replicas and a wait
       // for a pooled connection extend no lease. Its row has no `expires_at`, so the sweep of
@@ -138,7 +148,7 @@ export function create(
         // rows that match, and the insert does nothing on a conflict. One statement runs both, so
         // each attempt of a waiter is one round trip. The insert runs only if the `update` took no
         // row.
-        const taken = await client.query(
+        const taken = await query(
           `with updated as (update ${table} set value = ${value}, expires_at = null where key = $1 and coalesce((value::json->>'until')::bigint, 0) <= ${now} returning key), inserted as (insert into ${table} (key, value, expires_at) select $1, ${value}, null where not exists (select 1 from updated) on conflict (key) do nothing returning key) select key from updated union all select key from inserted`,
           [name, token, lease, holdLimit],
         )
@@ -181,8 +191,7 @@ export function create(
       }
     },
     async removeItem(key) {
-      await ready()
-      await client.query(`delete from ${table} where key = $1`, [key])
+      await query(`delete from ${table} where key = $1`, [key])
     },
     async setItem(key, value, options = {}) {
       const { expiresAt } = options
@@ -194,9 +203,8 @@ export function create(
         expiresAt === undefined ? null : Math.ceil(expiresAt),
       ]
       const upsert = `insert into ${table} (key, value, expires_at) values ($1, $2, $3) on conflict (key) do update set value = excluded.value, expires_at = excluded.expires_at`
-      await ready()
       if (expiresAt === undefined) {
-        await client.query(upsert, values)
+        await query(upsert, values)
         return
       }
       // Only entries with an expiry, such as redirects in progress, expire, so their writes sweep.
@@ -205,22 +213,19 @@ export function create(
       // runs the sweep first, with the written key, so every transaction locks rows in the order
       // of the sweep. A failed sweep fails no write, since a read skips the rows that it leaves.
       const [, write] = await Promise.allSettled([
-        client.query(`delete from ${table} where expires_at <= $1`, [
-          Date.now(),
-        ]),
-        client.query(upsert, values),
+        query(`delete from ${table} where expires_at <= $1`, [Date.now()]),
+        query(upsert, values),
       ])
       if (write.status === 'rejected') throw write.reason
     },
     async update(key, fn) {
-      await ready()
       // The text of the row that the previous attempt read, or `null` for no row.
       let previous: string | null | undefined
       // The attempts in a row whose write matched no row while the read value stayed the same.
       let unchanged = 0
       while (true) {
         const now = Date.now()
-        const { rows } = await client.query(
+        const { rows } = await query(
           `select value from ${table} where key = $1 and (expires_at is null or expires_at > $2)`,
           [key, now],
         )
@@ -257,19 +262,19 @@ export function create(
         const written = await (async () => {
           const now = Date.now()
           if (row && next === undefined)
-            return client.query(
+            return query(
               `delete from ${table} where key = $1 and value = $2 and (expires_at is null or expires_at > $3) returning key`,
               [key, row.value, now],
             )
           if (row)
-            return client.query(
+            return query(
               `update ${table} set value = $2, expires_at = $3 where key = $1 and value = $4 and (expires_at is null or expires_at > $5) returning key`,
               [key, next, expires, row.value, now],
             )
           if (next === undefined)
             // An absent entry that stays absent is already written.
             return { rows: [key] }
-          return client.query(
+          return query(
             `insert into ${table} (key, value, expires_at) values ($1, $2, $3) on conflict (key) do update set value = excluded.value, expires_at = excluded.expires_at where ${table}.expires_at <= $4 returning key`,
             [key, next, expires, now],
           )
@@ -279,9 +284,8 @@ export function create(
       }
     },
     async takeItem(key) {
-      await ready()
       // One statement reads and deletes the row, so of concurrent calls only one returns it.
-      const { rows } = await client.query(
+      const { rows } = await query(
         `delete from ${table} where key = $1 returning value, expires_at`,
         [key],
       )
@@ -309,13 +313,25 @@ const lease = 30_000
  */
 const holdLimit = 120_000
 
+/** Returns whether `error` is Postgres's refusal of a query that names no table (`42P01`). */
+function undefinedTable(error: unknown) {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === '42P01'
+  )
+}
+
 export declare namespace create {
   /**
    * A Postgres client with positional parameters, such as a `pg` pool or client. For `postgres`,
    * pass `{ query: async (text, values) => ({ rows: await sql.unsafe(text, values) }) }`.
    */
   type Client = {
-    /** Runs `text` with the positional `values`, and resolves with the rows. */
+    /**
+     * Runs `text` with the positional `values`, and resolves with the rows. Rejects with an error
+     * whose `code` holds the SQLSTATE, such as `42P01` for a table that does not exist.
+     */
     query: (
       text: string,
       values: readonly unknown[],

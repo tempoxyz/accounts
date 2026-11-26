@@ -8,6 +8,7 @@ import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
 import * as BackendSessions from '../internal/BackendSessions.js'
 import * as Session from '../Session.js'
+import type * as Store from '../Store.js'
 import * as Postgres from './Postgres.js'
 
 describe('Store.postgres', () => {
@@ -52,6 +53,85 @@ describe('Store.postgres', () => {
           "key": "session",
         },
       ]
+    `)
+  })
+
+  test('behavior: a store on a table that exists sends no check before its first query, as the store of each request of a Worker', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    await Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    }).setItem('session', 'kept')
+    // A Worker connects a client for each request, so each request creates its store.
+    const queries: string[] = []
+    const store = Postgres.create({
+      query(text, values) {
+        queries.push(text.split(' ').slice(0, 2).join(' '))
+        return database.query(text, [...values])
+      },
+    })
+
+    const value = await store.getItem('session')
+
+    expect({ queries, value }).toMatchInlineSnapshot(`
+      {
+        "queries": [
+          "select value",
+        ],
+        "value": "kept",
+      }
+    `)
+  })
+
+  test('behavior: the first operations of two replicas on a missing table each land, with one creation for each replica', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    // Each replica holds a store of its own, and records the statements that start with `do`.
+    const creates = [0, 0]
+    const [a, b] = [0, 1].map((index) =>
+      Postgres.create({
+        query(text, values) {
+          if (text.startsWith('do ')) creates[index]! += 1
+          return database.query(text, [...values])
+        },
+      }),
+    ) as [Store.Store, Store.Store]
+
+    await Promise.all([
+      a.setItem('a', 'kept'),
+      a.setItem('pending', 'new', { expiresAt: Date.now() + 60_000 }),
+      b.setItem('b', 'kept'),
+      b.getItem('a'),
+    ])
+
+    expect({
+      creates,
+      rows: (
+        await database.query(
+          'select key, value from tempo_id_store order by key',
+        )
+      ).rows,
+    }).toMatchInlineSnapshot(`
+      {
+        "creates": [
+          1,
+          1,
+        ],
+        "rows": [
+          {
+            "key": "a",
+            "value": ""kept"",
+          },
+          {
+            "key": "b",
+            "value": ""kept"",
+          },
+          {
+            "key": "pending",
+            "value": ""new"",
+          },
+        ],
+      }
     `)
   })
 
