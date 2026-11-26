@@ -1,0 +1,43 @@
+# Commit messages and repository hygiene. commitlint reads each of the last 50 commits with the
+# conventional rules, and `git diff --check` reads whitespace. `UPHILL_GIT_COMMITS` sets how many
+# commits to read. Each commit or file is an item.
+
+# commitlint is the pack's dependency. It installs from the pack's lockfile when the project's
+# entry sets `install: true`.
+
+# Every category reads the lines of this one script, which runs once.
+run: bun metrics/git.ts
+
+style:
+  # Whether each tracked text file passes `git diff --check`: no trailing whitespace, no blank lines
+  # at the end, and no conflict markers.
+  whitespace: {}
+  # Whether each GitHub workflow starts with `name` and `on`, then lists its other top-level keys in
+  # alphabetical order.
+  workflow-keys: {}
+
+commits:
+  # Whether each commit names a conventional type, such as `feat:` or `fix:`, and a subject, by
+  # commitlint's type and subject rules.
+  commit-type: {}
+  # Whether each subject starts lowercase, by commitlint's `subject-case`.
+  subject-case: {}
+  # Whether each subject ends without a period, by commitlint's `subject-full-stop`.
+  subject-full-stop: {}
+  # Whether each header has 100 characters or fewer, by commitlint's `header-max-length`.
+  header-length: {}
+  # Whether each body and footer follows a blank line and wraps at 100 characters, by commitlint.
+  message-body: {}
+  # Whether each subject states the change, not the reason: no "because", "so that", or
+  # "in order to".
+  subject-reasons: {}
+  # Whether the opening verb has a known base form, such as "add", not "adds" or "added".
+  # Words without a verb entry in the English lexicon skip.
+  imperative-subjects: {}
+  # Whether each `fix:` commit adds or edits a test source path, excluding fixtures and snapshots.
+  # A changed path does not prove a test ran or covered the fix.
+  fix-tests: {}
+  # Whether each changeset is one sentence whose opening verb has a known past-tense form.
+  changeset-sentences: {}
+  # Whether Git tracks no build output, installed packages, or `.env` files.
+  tracked-output: {}
