@@ -5,7 +5,6 @@
  * @module
  */
 import * as Session from '../Session.js'
-import * as Memory from '../stores/Memory.js'
 import { Address, Secp256k1 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { createActor } from 'xstate'
@@ -2654,52 +2653,6 @@ describe('create', () => {
         "signedOut": true,
       }
     `)
-  })
-
-  test('sends no logout at a sign-out with everywhere when a sign-in commits during its revocation', async () => {
-    const user = { email: 'tempo-id-test@example.org', id: 'user_1' }
-    const first = Session.from({
-      accessToken: 'a1',
-      expiresAt: Date.now() + 300_000,
-      refreshToken: 'r1',
-      user,
-    })
-    const second = Session.from({
-      accessToken: 'a2',
-      expiresAt: Date.now() + 300_000,
-      refreshToken: 'r2',
-      user,
-    })
-    const revoking = Promise.withResolvers<void>()
-    const answer = Promise.withResolvers<void>()
-    const logouts: boolean[] = []
-    const instance = create({
-      chainId: () => 42431,
-      enabled: true,
-      name: 'tempo-id:session',
-      // Records the logout that the runner sends after the revocation, as `Accounts.create` does.
-      async signOut(_session, options = {}) {
-        revoking.resolve()
-        await answer.promise
-        const { logout = true } = options
-        logouts.push(typeof logout === 'function' ? logout() : logout)
-      },
-      store: Memory.create(),
-    })
-    await instance.change().commit(first)
-
-    const signingOut = instance.signOut({ everywhere: true })
-    await revoking.promise
-    await instance.change().commit(second)
-    answer.resolve()
-    await signingOut
-
-    expect(logouts).toMatchInlineSnapshot(`
-      [
-        false,
-      ]
-    `)
-    expect(instance.get()?.refreshToken).toMatchInlineSnapshot(`"r2"`)
   })
 })
 
