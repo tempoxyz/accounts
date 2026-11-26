@@ -1244,6 +1244,32 @@ describe('mpp', () => {
     )
   })
 
+  test('refuses a malformed entry of `identity.scope` without the entry in the error', () => {
+    const error = (() => {
+      try {
+        mpp({
+          identity: {
+            scope: ['https://user:secret@api.example.com:invalid/?key=secret'],
+          },
+        })
+      } catch (error) {
+        return error as Error
+      }
+    })()
+
+    expect({
+      cause: error?.cause,
+      error,
+      secret: JSON.stringify({ ...error }).includes('secret'),
+    }).toMatchInlineSnapshot(`
+      {
+        "cause": undefined,
+        "error": [TypeError: Invalid identity scope: an entry is no URL. Name each origin, such as \`https://api.example.com\`.],
+        "secret": false,
+      }
+    `)
+  })
+
   test("sends the access token and the ID token of the instance's session to the origins of `identity.scope`, and none to another origin", async () => {
     const store = Store.memory()
     await store.setItem(name, {

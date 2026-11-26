@@ -339,8 +339,8 @@ type Turn = {
  * sends one transfer, so a charge of zero, a charge with splits, and a charge of an endpoint or a
  * payer that permits only `pull` need the access key.
  *
- * @throws {TypeError} For an entry of `identity.scope` with a path, a query, or a fragment. Name its
- *   origin, such as `https://api.example.com`.
+ * @throws {TypeError} For an entry of `identity.scope` that is no URL, or one with a path, a query, or
+ *   a fragment. Name its origin, such as `https://api.example.com`.
  *
  * @example
  * ```ts
@@ -1752,14 +1752,24 @@ export declare namespace mpp {
  * `https://API.example.com/`, or `'*'`. mppx compares each entry with the request's origin as a
  * string, so an entry in another form matches no request.
  *
- * @throws {TypeError} For an entry with a path, a query, or a fragment, since every path of its
- * origin receives the tokens. The message names only the origin, since the query or the user
- * information of an entry can hold a secret.
+ * @throws {TypeError} For an entry that is no URL, or one with a path, a query, or a fragment, since
+ * every path of its origin receives the tokens. The error names at most the origin, since the
+ * query or the user information of an entry can hold a secret.
  */
 function origins(scope: mpp.Identity['scope']) {
   if (scope === '*') return scope
   return scope.map((entry) => {
-    const url = new URL(entry)
+    // A malformed entry fails the parse, whose error holds the whole entry as its `input` in
+    // Node, so the plugin throws its own error, without that cause.
+    const url = (() => {
+      try {
+        return new URL(entry)
+      } catch {
+        throw new TypeError(
+          'Invalid identity scope: an entry is no URL. Name each origin, such as `https://api.example.com`.',
+        )
+      }
+    })()
     if (url.pathname !== '/' || url.search || url.hash)
       throw new TypeError(
         `Invalid identity scope: an entry of \`${url.origin}\` names a path, a query, or a fragment. Name the origin alone.`,
