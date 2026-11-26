@@ -3503,6 +3503,78 @@ describe('session.status', () => {
       }
     `)
   })
+  test("throws a restore hook's failure from the subscription's read at the page's next `session.get`, such as a refused redirect callback", async () => {
+    // The hook fails once, as the `redirect` plugin's refused callback does.
+    let refused = false
+    const accounts = Accounts.create({
+      chain: 1337,
+      clientId: 'client_1',
+      plugins: [
+        Plugin.from({
+          hooks: {
+            restore() {
+              if (refused) return Promise.resolve()
+              refused = true
+              return Promise.reject(new Error('Refused callback.'))
+            },
+          },
+          id: 'test',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    accounts.session.status.subscribe(() => {})
+    await expect
+      .poll(() => accounts.session.status.get().status, { timeout: 2_000 })
+      .toBe('signedOut')
+
+    // The page reads the session later, such as in an effect.
+    const first = await accounts.session
+      .get()
+      .catch((error: Error) => error.message)
+    const second = await accounts.session.get()
+
+    // A page that reads beside the subscription receives the failure from its own read only.
+    refused = false
+    const overlapping = Accounts.create({
+      chain: 1337,
+      clientId: 'client_1',
+      plugins: [
+        Plugin.from({
+          hooks: {
+            restore() {
+              if (refused) return Promise.resolve()
+              refused = true
+              return Promise.reject(new Error('Refused callback.'))
+            },
+          },
+          id: 'test',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    overlapping.session.status.subscribe(() => {})
+    const own = await overlapping.session
+      .get()
+      .catch((error: Error) => error.message)
+    const next = await overlapping.session.get()
+
+    expect({
+      first,
+      next,
+      own,
+      second,
+    }).toMatchInlineSnapshot(`
+      {
+        "first": "Refused callback.",
+        "next": undefined,
+        "own": "Refused callback.",
+        "second": undefined,
+      }
+    `)
+  })
   test("follows another instance's sign-in on the same store, such as another tab's, as it follows that instance's sign-out", async () => {
     const store = Store.memory()
     const create = () =>
