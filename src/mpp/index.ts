@@ -135,8 +135,9 @@ export class ConfigurableAccountError extends Error {
  * `fees`, pays only network fees, so its token counts as one that the limits do not name. Only such
  * a charge reads the chain's limits, since `updateLimit` can raise them.
  * In a browser, Tempo ID's payment page pays such a charge of the instance's session, so only a
- * charge that the page does not pay throws it. Its `amount`, `limit`, and `token` name the limit
- * that a new access key needs, such as for a sign-in with `permissions`.
+ * charge that the page does not pay throws it. Its `amount` and `token` name the charge that a new
+ * access key pays, such as for a sign-in with `permissions`. If the token also pays network fees,
+ * the new limit covers `amount` and the fees. `limit` describes only the current access key.
  */
 export class LimitError extends Error {
   override readonly name = 'mpp.LimitError'
@@ -145,7 +146,7 @@ export class LimitError extends Error {
   /** The access key's limit of the token that is left, in its units. Absent for a token that the limits do not name. */
   readonly limit: string | undefined
   /** The charge's token. */
-  readonly token: string
+  readonly token: Address.Address
 
   constructor(options: LimitError.Options) {
     super(
@@ -169,7 +170,7 @@ export declare namespace LimitError {
     /** The access key's limit of the token that is left, in its units. Absent for a token that the limits do not name. */
     limit?: string | undefined
     /** The charge's token. */
-    token: string
+    token: Address.Address
   }
 }
 
