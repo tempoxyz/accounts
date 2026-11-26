@@ -1612,6 +1612,9 @@ async function approve<held = never>(
     throw new OriginError({ origin: window.location.origin, redirectUri })
 
   const origin = new URL(auth.url).origin
+  /** Returns the message of `error` that the page shows. */
+  const fault = (error: unknown) =>
+    error instanceof Error ? error.message : 'Signing failed.'
   // The values of the page's URL, the guest requests of the payment, and the guest account's one
   // signature, which the machine holds.
   // A guest offer opens the signed-out page, whose URL waits for no guest request. The guest
@@ -1619,6 +1622,28 @@ async function approve<held = never>(
   const actor = createActor(
     machines.approval.provide({
       actors: {
+        // The machine's end aborts the signature, such as at a close of the dialog or an abort of
+        // the payment, so the page receives no signature that the call no longer awaits.
+        sign: fromPromise<void, machines.approval.Signature>(async (args) => {
+          const { id, source, transaction } = args.input
+          const post = (message: object) => {
+            if (args.signal.aborted) return
+            source.postMessage(
+              { id, type: 'tempo-id:guest.signature', ...message },
+              origin,
+            )
+          }
+          if (!guest) throw new Error('No guest payment.')
+          try {
+            post({
+              transaction: await guest.sign(transaction, await session()),
+            })
+          } catch (error) {
+            // No signature exists, so the page can post the transaction again.
+            post({ error: fault(error) })
+            throw error
+          }
+        }),
         start: fromPromise((args) =>
           typeof guest?.session === 'function'
             ? guest.session({ signal: args.signal })
@@ -1838,8 +1863,6 @@ async function approve<held = never>(
     )
       return
     const source = event.source as Window
-    const fault = (error: unknown) =>
-      error instanceof Error ? error.message : 'Signing failed.'
     if (data.type === 'tempo-id:guest.request') {
       renew().then(
         (value) =>
@@ -1872,30 +1895,12 @@ async function approve<held = never>(
       )
       return
     }
-    actor.send({ type: 'sign.start' })
-    session()
-      .then((held) => guest.sign(data.transaction, held))
-      .then(
-        (transaction) => {
-          actor.send({ type: 'sign.end' })
-          source.postMessage(
-            { id: data.id, transaction, type: 'tempo-id:guest.signature' },
-            origin,
-          )
-        },
-        (error: unknown) => {
-          // No signature exists, so the page can post the transaction again.
-          actor.send({ type: 'sign.fail' })
-          source.postMessage(
-            {
-              error: fault(error),
-              id: data.id,
-              type: 'tempo-id:guest.signature',
-            },
-            origin,
-          )
-        },
-      )
+    actor.send({
+      id: data.id,
+      source,
+      transaction: data.transaction,
+      type: 'sign.start',
+    })
   }
   if (guest) window.addEventListener('message', listener)
   try {
@@ -2321,7 +2326,7 @@ export namespace machines {
    * | `page`  | `settling`   | Transient. Routes to the status that {@link select} returns.             |
    * | `page`  | `waiting`    | The challenge's message or the first guest request has not arrived.      |
    * | `page`  | `ready`      | The page's URL holds its values. The guest account signs no transaction. |
-   * | `page`  | `signing`    | The guest account signs a transaction, and refuses another.              |
+   * | `page`  | `signing`    | The guest account signs a transaction, and refuses another. The machine's end aborts the signature. |
    * | `page`  | `signed`     | The guest account signed the payment's transaction, and signs no other.  |
    * | `offer` | `settling`   | Transient. Routes to `idle` for a guest offer, or `none`.                |
    * | `offer` | `none`       | No guest offer: a held guest session, or no guest payment.               |
@@ -2360,6 +2365,13 @@ export namespace machines {
       })),
     },
     actors: {
+      /**
+       * Signs the page's transaction as the guest session, and posts the signature or the failure
+       * to the page, unless the machine ended. `approve` provides it from `guest.sign`.
+       */
+      sign: fromPromise<void, approval.Signature>(() =>
+        Promise.reject(new Error('No guest payment.')),
+      ),
       /** Starts the guest session of a guest offer. `approve` provides it from `guest.session`. */
       start: fromPromise<Session.GuestSession>(() =>
         Promise.reject(new Error('No guest offer.')),
@@ -2466,12 +2478,19 @@ export namespace machines {
             tags: 'ready',
           },
           signing: {
-            on: {
-              'guest.resolve': { actions: 'addRequest' },
-              'sign.end': { target: 'signed' },
+            invoke: {
+              id: 'sign',
+              input: (args) => {
+                assertEvent(args.event, 'sign.start')
+                const { id, source, transaction } = args.event
+                return { id, source, transaction }
+              },
+              onDone: { target: 'signed' },
               // No signature exists, so the page can post a transaction again.
-              'sign.fail': { target: 'ready' },
+              onError: { target: 'ready' },
+              src: 'sign',
             },
+            on: { 'guest.resolve': { actions: 'addRequest' } },
             tags: 'ready',
           },
           waiting: {
@@ -2524,20 +2543,22 @@ export namespace machines {
           /** The user selected Continue as guest, which starts the guest offer's guest session. */
           type: 'offer.start'
         }
-      | {
-          /** The guest account signed the transaction. */
-          type: 'sign.end'
-        }
-      | {
-          /** The check or the signature of the transaction failed. */
-          type: 'sign.fail'
-        }
-      | {
+      | (Signature & {
           /** The page posted a transaction for the guest account to sign. */
           type: 'sign.start'
-        }
+        })
 
     type Input = Pick<Context, 'challenge' | 'guest' | 'offer'>
+
+    /** A transaction that the page posted for the guest account to sign. */
+    type Signature = {
+      /** The ID of the page's message, which the answer names. */
+      id: unknown
+      /** The page that posted the transaction, which receives the answer. */
+      source: Pick<Window, 'postMessage'>
+      /** The transaction, as the page posted it. */
+      transaction: unknown
+    }
 
     /** The readiness of the page's URL. */
     type Status = 'ready' | 'waiting'
@@ -2638,7 +2659,7 @@ export namespace machines {
 
   /** Returns whether the guest account signs a transaction that the page posts now. */
   export function signs(snapshot: approval.Snapshot) {
-    return snapshot.can({ type: 'sign.start' })
+    return snapshot.matches({ page: 'ready' })
   }
 
   /** Returns the values of the page's URL: the challenge's message, and the latest guest request. */

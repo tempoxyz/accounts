@@ -1231,8 +1231,11 @@ export type Accounts<
      * account. A sign-in on the page pays from the user's account, as without `guest`. Outside a
      * page, a guest session pays through Tempo ID's routes, as `Actions.guest.pay` describes. An
      * outcome that Tempo ID does not confirm within the call rejects with
-     * `Actions.guest.PendingError`, which names the checkout. The store keeps nothing of it, and a
-     * later call of the same payment opens a new checkout.
+     * `Actions.guest.PendingError`, which names the checkout, as does an abort or a sign-out after a
+     * send may have reached Tempo ID. The store keeps nothing of it, and a later call of the same
+     * payment opens a new checkout, which can pay again. A call that ends without an error, such
+     * as when its process exits during a send, has no recovery, so the app confirms the outcome of
+     * an interrupted payment before it pays again.
      *
      * With the `siwe` plugin's `auth`, a payment without `account`, while the instance holds no
      * session, signs the user in to the app's routes in the same way, and the call
@@ -2312,6 +2315,10 @@ export function create<
     return attached
   }
 
+  // The `viem` plugin's defaults, for a guest payment outside a page on an instance without the
+  // plugin. One namespace serves every payment, since each subscribes to the session's status.
+  let fallback: viem.Namespace | undefined
+
   // The router loads at the first request, so a page's bundle holds none of it.
   let server: Promise<Handler.Handler> | undefined
   const relaying = plugins.some((plugin) => plugin.id === 'relay')
@@ -2531,7 +2538,7 @@ export function create<
             // the receipt of the guest account's transfer.
             const namespace =
               (instance as { viem?: viem.Namespace }).viem ??
-              (Viem.viem().actions!(context) as viem.Namespace)
+              (fallback ??= Viem.viem().actions!(context) as viem.Namespace)
             const settings = namespace[
               Viem.settings as never
             ] as unknown as viem.Settings

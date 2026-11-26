@@ -970,6 +970,53 @@ describe('Actions.guest.coverage', () => {
   })
 })
 
+describe('Actions.guest.expiry', () => {
+  /** The local time when the prepare returned, in Unix milliseconds. */
+  const returned = 1_700_000_000_000
+
+  test.for([
+    [
+      "times the window from Tempo ID's time at the prepare, whatever the local clock reads",
+      { now: 1_699_990_000, validBefore: 1_699_990_290 },
+      290,
+    ],
+    [
+      "bounds the window from Tempo ID's time to the longest window",
+      { now: 1_700_000_000, validBefore: 1_700_001_000 },
+      300,
+    ],
+    [
+      "bounds a window from Tempo ID's time that already ended to 0",
+      { now: 1_700_000_000, validBefore: 1_699_999_990 },
+      0,
+    ],
+    [
+      "times the window from the local time at the prepare without Tempo ID's time",
+      { validBefore: 1_700_000_290 },
+      290,
+    ],
+    [
+      'gives the longest window to a local clock ahead of Tempo ID by more than the window',
+      { validBefore: 1_699_999_000 },
+      300,
+    ],
+    [
+      'gives the longest window to a local clock behind Tempo ID by more than the window',
+      { validBefore: 1_700_001_000 },
+      300,
+    ],
+    [
+      'gives the guest request lifetime to a transaction without a window',
+      {},
+      240,
+    ],
+  ] as const)('%s', ([, options, seconds]) => {
+    const end = Guest.expiry({ returned, ...options })
+
+    expect((end - returned) / 1_000).toBe(seconds)
+  })
+})
+
 describe('Actions.guest.funding', () => {
   const ousd = '0x20C0000000000000000000000000000000000000'
   const fee = '0x20C0000000000000000000000000000000000001'
@@ -1173,11 +1220,11 @@ describe('Actions.guest.settlement', () => {
   const hash = `0x${'ab'.repeat(32)}` as const
   const paid = `0x${'cd'.repeat(32)}` as const
   /** A checkout whose window ended at `now` minus 100 seconds, past `settleMargin`. */
-  const ended = { hash, validBefore: 1_700_000_000 }
+  const ended = { expiry: 1_700_000_000_000, hash }
   /** A checkout whose window ended at `now` minus 30 seconds, within `settleMargin`. */
-  const recent = { hash, validBefore: 1_700_000_070 }
+  const recent = { expiry: 1_700_000_070_000, hash }
   /** A checkout whose window ends 100 seconds after `now`. */
-  const open = { hash, validBefore: 1_700_000_200 }
+  const open = { expiry: 1_700_000_200_000, hash }
   const unpaid = { paid: null, pending: false } as const
 
   test.for([

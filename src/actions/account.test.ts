@@ -124,9 +124,14 @@ describe('machines.approval', () => {
     publicKey: '0x04',
     revision: 1,
   })
-  /** The machine with a start of the guest session that never settles, for the traversal. */
+  /** The page that posts each transaction, which the machine passes to the signature. */
+  const source = { postMessage: () => {} }
+  /** The transaction that the page posts. */
+  const signature = { id: 1, source, transaction: '0x76' } as const
+  /** The machine with a start and a signature that never settle, for the traversal. */
   const traversed = machines.approval.provide({
     actors: {
+      sign: fromPromise(() => new Promise<void>(() => {})),
       start: fromPromise(() => new Promise<Session.GuestSession>(() => {})),
     },
   })
@@ -151,18 +156,18 @@ describe('machines.approval', () => {
       'offer.start': snapshot.context.offer
         ? { type: 'offer.start' }
         : undefined,
-      'sign.end': snapshot.matches({ page: 'signing' })
-        ? { type: 'sign.end' }
-        : undefined,
-      'sign.fail': snapshot.matches({ page: 'signing' })
-        ? { type: 'sign.fail' }
-        : undefined,
       'sign.start':
         machines.values(snapshot).guest !== undefined &&
         machines.signs(snapshot)
-          ? { type: 'sign.start' }
+          ? { ...signature, type: 'sign.start' }
           : undefined,
     }
+    const signed = snapshot.matches({ page: 'signing' })
+      ? ([
+          { output: undefined, type: 'xstate.done.actor.sign' },
+          { error: new Error('Failed.'), type: 'xstate.error.actor.sign' },
+        ] as never[])
+      : []
     const started = snapshot.matches({ offer: 'starting' })
       ? ([
           { output: session, type: 'xstate.done.actor.start' },
@@ -175,6 +180,7 @@ describe('machines.approval', () => {
       : []
     return [
       ...Object.values(all).filter((event) => event !== undefined),
+      ...signed,
       ...started,
     ]
   }
@@ -296,9 +302,7 @@ describe('machines.approval', () => {
         { message: 'm', type: 'challenge.resolve' },
         { type: 'guest.resolve', value: 'v' },
         { type: 'offer.start' },
-        { type: 'sign.end' },
-        { type: 'sign.fail' },
-        { type: 'sign.start' },
+        { ...signature, type: 'sign.start' },
       ] as const)
         if (actor.getSnapshot().can(event)) handled.add(event.type)
     }
@@ -314,7 +318,7 @@ describe('machines.approval', () => {
     actor.send({ message: 'Sign in', type: 'challenge.resolve' })
     actor.send({ type: 'guest.resolve', value: 'first' })
     record(actor)
-    actor.send({ type: 'sign.start' })
+    actor.send({ ...signature, type: 'sign.start' })
     record(actor)
 
     expect([...handled].sort()).toMatchInlineSnapshot(`
@@ -322,8 +326,6 @@ describe('machines.approval', () => {
         "challenge.resolve",
         "guest.resolve",
         "offer.start",
-        "sign.end",
-        "sign.fail",
         "sign.start",
       ]
     `)
@@ -372,6 +374,7 @@ describe('machines.approval', () => {
     const actor = createActor(
       machines.approval.provide({
         actors: {
+          sign: fromPromise(() => Promise.resolve()),
           start: fromPromise((args) => {
             starts.push(args.signal)
             return Promise.resolve(session)
@@ -391,8 +394,8 @@ describe('machines.approval', () => {
     actor.send({ type: 'offer.start' })
     actor.send({ type: 'guest.resolve', value: 'first' })
     const selected = actor.getSnapshot()
-    actor.send({ type: 'sign.start' })
-    actor.send({ type: 'sign.end' })
+    actor.send({ ...signature, type: 'sign.start' })
+    await waitFor(actor, (snapshot) => snapshot.matches({ page: 'signed' }))
 
     expect([
       opened,
@@ -515,30 +518,82 @@ describe('machines.approval', () => {
     `)
   })
 
-  test('signs one transaction for each payment, and another after a failed signature', () => {
-    const actor = createActor(machines.approval, {
-      input: { challenge: false, guest: true, offer: false },
-    }).start()
+  test('signs one transaction for each payment, and another after a failed signature', async () => {
+    const inputs: unknown[] = []
+    const results = [Promise.reject(new Error('Failed.')), Promise.resolve()]
+    results[0]!.catch(() => {})
+    const actor = createActor(
+      machines.approval.provide({
+        actors: {
+          sign: fromPromise((args) => {
+            inputs.push(args.input.transaction)
+            return results[inputs.length - 1]!
+          }),
+        },
+      }),
+      { input: { challenge: false, guest: true, offer: false } },
+    ).start()
     actor.send({ type: 'guest.resolve', value: 'first' })
 
-    actor.send({ type: 'sign.start' })
+    actor.send({ ...signature, transaction: '0x01', type: 'sign.start' })
     const concurrent = machines.signs(actor.getSnapshot())
-    actor.send({ type: 'sign.fail' })
+    await waitFor(actor, (snapshot) => snapshot.matches({ page: 'ready' }))
     const retry = machines.signs(actor.getSnapshot())
-    actor.send({ type: 'sign.start' })
-    actor.send({ type: 'sign.end' })
+    actor.send({ ...signature, transaction: '0x02', type: 'sign.start' })
+    await waitFor(actor, (snapshot) => snapshot.matches({ page: 'signed' }))
     const after = machines.signs(actor.getSnapshot())
 
-    expect([concurrent, retry, actor.getSnapshot().value, after])
+    expect([inputs, concurrent, retry, actor.getSnapshot().value, after])
+      .toMatchInlineSnapshot(`
+        [
+          [
+            "0x01",
+            "0x02",
+          ],
+          false,
+          true,
+          {
+            "offer": "none",
+            "page": "signed",
+          },
+          false,
+        ]
+      `)
+  })
+
+  test("aborts the signature at the machine's end, so its runner posts no signature", async () => {
+    const signals: AbortSignal[] = []
+    let resolve: (() => void) | undefined
+    const actor = createActor(
+      machines.approval.provide({
+        actors: {
+          sign: fromPromise((args) => {
+            signals.push(args.signal)
+            return new Promise<void>((settle) => {
+              resolve = settle
+            })
+          }),
+        },
+      }),
+      { input: { challenge: false, guest: true, offer: false } },
+    ).start()
+    actor.send({ type: 'guest.resolve', value: 'first' })
+    actor.send({ ...signature, type: 'sign.start' })
+
+    actor.stop()
+    resolve?.()
+    await Promise.resolve()
+
+    expect([signals.map((signal) => signal.aborted), actor.getSnapshot().value])
       .toMatchInlineSnapshot(`
       [
-        false,
-        true,
+        [
+          true,
+        ],
         {
           "offer": "none",
-          "page": "signed",
+          "page": "signing",
         },
-        false,
       ]
     `)
   })
