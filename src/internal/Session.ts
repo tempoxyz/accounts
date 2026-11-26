@@ -2725,7 +2725,8 @@ function order(session: Session.Any) {
  * receive its tokens after it, so its access token expires sooner. A context of an earlier release
  * orders by {@link order} alone, and can revoke a token by that order, so that order still counts.
  */
-function later(session: Session.Any, other: Session.Any) {
+function later(session: Session.Any, options: { other: Session.Any }) {
+  const { other } = options
   if (order(session) > order(other)) return true
   const { receivedAt } = session
   return (
@@ -2740,7 +2741,8 @@ function later(session: Session.Any, other: Session.Any) {
  * no earlier `receivedAt` where both hold it. A revocation of the tokens of `other` follows it, so
  * no context of this release or an earlier one adopts them again, as {@link later} decides.
  */
-function laterByBoth(session: Session.Any, other: Session.Any) {
+function laterByBoth(session: Session.Any, options: { other: Session.Any }) {
+  const { other } = options
   if (order(session) <= order(other)) return false
   const { receivedAt } = session
   return (
@@ -3749,10 +3751,12 @@ export namespace machines {
     // release by either order, so only a session later by both orders revokes the token. The save
     // of a successor's rotation follows its receipt, so its time stands for that receipt.
     return laterByBoth(stored, {
-      ...held,
-      expiresAt,
-      receivedAt: own ? held.receivedAt : entry?.at,
-      refreshToken,
+      other: {
+        ...held,
+        expiresAt,
+        receivedAt: own ? held.receivedAt : entry?.at,
+        refreshToken,
+      },
     })
   }
 
@@ -4140,7 +4144,7 @@ export namespace machines {
   ) {
     if (!stored || !current) return stored !== current
     if (Session.subject(stored) !== Session.subject(current)) return true
-    return later(stored, current)
+    return later(stored, { other: current })
   }
 
   /**
@@ -4193,7 +4197,7 @@ export namespace machines {
     // never switches the instance to another Tempo Account of the user.
     if (kept.address?.toLowerCase() !== overwritten.address?.toLowerCase())
       return false
-    return later(overwritten, kept)
+    return later(overwritten, { other: kept })
   }
 
   /**
@@ -4260,7 +4264,7 @@ export namespace machines {
     options: machines.revokesKept.Options,
   ): machines.revokesKept.ReturnType {
     const { kept, overwritten } = options
-    return laterByBoth(overwritten, kept)
+    return laterByBoth(overwritten, { other: kept })
   }
 
   export declare namespace revokesKept {
@@ -4439,7 +4443,7 @@ export namespace machines {
     if (!failed) return machines.newer(stored, current)
     if (!stored || !current) return false
     if (Session.subject(stored) !== Session.subject(current)) return false
-    return later(stored, current)
+    return later(stored, { other: current })
   }
 
   export declare namespace replaces {
