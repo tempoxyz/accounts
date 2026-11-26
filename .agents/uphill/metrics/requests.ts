@@ -7,7 +7,7 @@
  * - `request-memory`: heap bytes that each call allocates: the growth of the used heap over a batch,
  *   plus what each garbage collection in the batch freed, as `v8.GCProfiler` reports it.
  *
- * Usage: node --expose-gc --single-threaded .agents/metrics/requests.ts
+ * Usage: node --expose-gc --single-threaded .agents/uphill/metrics/requests.ts
  * @module
  */
 import * as Fs from 'node:fs'
