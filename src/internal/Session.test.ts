@@ -1354,6 +1354,18 @@ describe('machines.session', () => {
     const dpop = Session.from({ ...expired, accessToken: bound('first') })
     const cases = [
       ['later tokens of the same user', expired, renewed, true],
+      [
+        'a later receipt of tokens that expire sooner, such as a sign-in sent before a refresh',
+        Session.from({ ...renewed, receivedAt: 1 }),
+        Session.from({ ...expired, receivedAt: 2 }),
+        true,
+      ],
+      [
+        'an earlier receipt of tokens that expire later',
+        Session.from({ ...expired, receivedAt: 2 }),
+        Session.from({ ...renewed, receivedAt: 1 }),
+        false,
+      ],
       ['the same expiry of the same user', renewed, renewed, false],
       ['earlier tokens of the same user', renewed, expired, false],
       ["another user's session", renewed, other, false],

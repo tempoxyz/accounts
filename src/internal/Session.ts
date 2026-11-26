@@ -2708,6 +2708,23 @@ function order(session: Session.Any) {
 }
 
 /**
+ * Returns whether `session` holds later tokens than `other`. Where both hold `receivedAt`, the later
+ * receipt decides, since another context's sign-in can send its request before a refresh here and
+ * receive its tokens after it. That sign-in's access token then expires sooner. Otherwise
+ * {@link order} decides.
+ */
+function later(session: Session.Any, other: Session.Any) {
+  const { receivedAt } = session
+  if (
+    receivedAt !== undefined &&
+    other.receivedAt !== undefined &&
+    receivedAt !== other.receivedAt
+  )
+    return receivedAt > other.receivedAt
+  return order(session) > order(other)
+}
+
+/**
  * The clock of the session's actor, whose timers keep no dropped instance alive, such as a server's
  * instance for each request. The actor holds each pending timer, which it receives as the timer's
  * ID, and the platform's timer holds it only weakly. A delay above a timer's limit, about 24.8 days,
@@ -3683,12 +3700,20 @@ export namespace machines {
     const { entries, held, refreshToken, stored } = options
     // A local session holds no tokens that another context rotates.
     if (Session.local(held)) return false
-    const expiresAt =
-      refreshToken === held.refreshToken
-        ? held.expiresAt
-        : entries.find((entry) => entry.to === refreshToken)?.expiresAt
+    // The save of a successor's rotation follows its receipt, so a `stored` session that this order
+    // rates newer is newer for the context that received the successor too.
+    const own = refreshToken === held.refreshToken
+    const entry = own
+      ? undefined
+      : entries.find((entry) => entry.to === refreshToken)
+    const expiresAt = own ? held.expiresAt : entry?.expiresAt
     if (!stored || expiresAt === undefined) return false
-    return newer(stored, { ...held, expiresAt, refreshToken })
+    return newer(stored, {
+      ...held,
+      expiresAt,
+      receivedAt: own ? held.receivedAt : entry?.at,
+      refreshToken,
+    })
   }
 
   export declare namespace adopts {
@@ -4066,7 +4091,8 @@ export namespace machines {
 
   /**
    * Returns whether the stored session is newer than the instance's: another tab's sign-out, another
-   * user's session, or the same user's session with later tokens, which a refresh issues.
+   * user's session, or the same user's session with later tokens, such as a refresh's, or another
+   * tab's sign-in that received its tokens later.
    */
   export function newer(
     stored: Session.Any | undefined,
@@ -4074,7 +4100,7 @@ export namespace machines {
   ) {
     if (!stored || !current) return stored !== current
     if (Session.subject(stored) !== Session.subject(current)) return true
-    return order(stored) > order(current)
+    return later(stored, current)
   }
 
   /**
@@ -4106,8 +4132,8 @@ export namespace machines {
   /**
    * Returns whether a sign-in of `kept` yields to `overwritten`, the session of another context's
    * sign-in that its save replaced in the store. That context adopts `kept` only as `newer` decides,
-   * so only a session of the same user whose tokens Tempo ID issued later, such as from a request
-   * that was sent later and answered first, takes the place of `kept`. A session whose access token another DPoP key binds
+   * so only a session of the same user whose tokens the other context received later takes the place
+   * of `kept`. A session whose access token another DPoP key binds
    * never takes the place of `kept`.
    */
   export function yields(
@@ -4121,13 +4147,13 @@ export namespace machines {
     if (Api.jkt(kept.accessToken) !== Api.jkt(overwritten.accessToken))
       return false
     // Another context that loaded `kept` adopts `overwritten` only if it is newer, so an equal
-    // expiry keeps `kept`, whose token that context can still hold.
+    // order keeps `kept`, whose token that context can still hold.
     if (Session.subject(kept) !== Session.subject(overwritten)) return false
     // A call in progress, such as a retry after a limit, checked the account of `kept`, so the yield
     // never switches the instance to another Tempo Account of the user.
     if (kept.address?.toLowerCase() !== overwritten.address?.toLowerCase())
       return false
-    return overwritten.expiresAt > kept.expiresAt
+    return later(overwritten, kept)
   }
 
   /**
@@ -4347,7 +4373,7 @@ export namespace machines {
     if (!failed) return machines.newer(stored, current)
     if (!stored || !current) return false
     if (Session.subject(stored) !== Session.subject(current)) return false
-    return order(stored) > order(current)
+    return later(stored, current)
   }
 
   export declare namespace replaces {
