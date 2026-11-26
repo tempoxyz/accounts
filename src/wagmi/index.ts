@@ -851,28 +851,28 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
               )
             : defaultSignIn
         if (!signIn && !fallback) throw new SignInRequiredError()
-        // Whether the sign-in set a session. A sign-out can end it before the read below, which
-        // overtakes the sign-in, as a sign-out during the account read does.
-        let set = false
-        const unsubscribe = instance.session.subscribe((session) => {
-          if (session && session.accessToken !== current?.accessToken)
-            set = true
-        })
-        try {
-          if (signIn)
-            await signIn(instance as tempoId.Instance<plugins>, { accessKey })
-          else
-            await (instance as unknown as Record<string, SignInFn>)[
-              fallback!
-            ]!.signIn({ accessKey })
-        } finally {
-          unsubscribe()
-        }
+        // The session machine counts each sign-in, so a count that grew shows a sign-in that set a
+        // session, which a sign-out can end before the read below.
+        const signIns = InternalSession.machines.signIns(
+          instance.session.actor.getSnapshot(),
+        )
+        if (signIn)
+          await signIn(instance as tempoId.Instance<plugins>, { accessKey })
+        else
+          await (instance as unknown as Record<string, SignInFn>)[
+            fallback!
+          ]!.signIn({ accessKey })
         // A sign-in that returned without a session, such as at the email step of a passkey, leaves
-        // the held session as it was, so only a new session completes it.
+        // the held session as it was, so only a new session completes it. A sign-out that ended the
+        // sign-in's session overtakes it, as a sign-out during the account read does.
         const next = await instance.session.get()
         if (next && next !== current) return next
-        if (set) throw new Accounts.SupersededError()
+        if (
+          InternalSession.machines.signIns(
+            instance.session.actor.getSnapshot(),
+          ) > signIns
+        )
+          throw new Accounts.SupersededError()
         return undefined
       })().catch((error: unknown) => {
         // wagmi and EIP-1193 read a refused request as code 4001, which a closed dialog or popup

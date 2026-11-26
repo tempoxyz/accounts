@@ -4425,6 +4425,14 @@ export namespace machines {
   }
 
   /**
+   * Returns the number of sign-ins that set the instance's session. A count that grew during a
+   * sign-in shows that the sign-in set its session, also after a sign-out ended it.
+   */
+  export function signIns(snapshot: machines.session.Snapshot): number {
+    return snapshot.context.signIns
+  }
+
+  /**
    * Returns whether the instance holds a session whose access keys expired while it held it, which
    * the status shows as signed out until a read empties it.
    */
