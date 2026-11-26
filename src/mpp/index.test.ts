@@ -1591,6 +1591,81 @@ describe('mpp', () => {
     expect(error).toMatchInlineSnapshot(`[TypeError: fetch failed]`)
   })
 
+  test('sends the identity to an origin of `identity.scope` that the app names with a trailing slash', async () => {
+    const store = Store.memory()
+    await store.setItem(name, {
+      state: { session: { ...session({ expiry: 3600 }), idToken: 'id-token' } },
+      version: 0,
+    })
+    // A free API records the headers of each request that it receives.
+    const headers: Http.IncomingHttpHeaders[] = []
+    const api = Http.createServer((request, response) => {
+      headers.push(request.headers)
+      response.end('free')
+    })
+    await new Promise<void>((resolve) => api.listen(0, '127.0.0.1', resolve))
+    const address = api.address()
+    if (!address || typeof address === 'string') throw new Error('No port.')
+    const origin = `http://127.0.0.1:${address.port}`
+    const accounts = instance({
+      // An origin read from the environment often ends with a slash, such as `API_URL`.
+      identity: { scope: [`${origin}/`] },
+      store,
+    })
+
+    await accounts.mpp().fetch(`${origin}/fortune`)
+    await new Promise((resolve) => api.close(resolve))
+
+    expect(
+      headers.map((entry) => [entry.authorization, entry['tempo-id-token']]),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          "Bearer access-token",
+          "id-token",
+        ],
+      ]
+    `)
+  })
+
+  test('refuses an entry of `identity.scope` with a path, without its secrets in the error, before any request', () => {
+    expect(() =>
+      mpp({
+        identity: {
+          scope: ['https://user:secret@api.example.com/v1?key=secret'],
+        },
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[TypeError: Invalid identity scope: an entry of \`https://api.example.com\` names a path, a query, or a fragment. Name the origin alone.]`,
+    )
+  })
+
+  test('refuses a malformed entry of `identity.scope` without the entry in the error', () => {
+    const error = (() => {
+      try {
+        mpp({
+          identity: {
+            scope: ['https://user:secret@api.example.com:invalid/?key=secret'],
+          },
+        })
+      } catch (error) {
+        return error as Error
+      }
+    })()
+
+    expect({
+      cause: error?.cause,
+      error,
+      secret: JSON.stringify({ ...error }).includes('secret'),
+    }).toMatchInlineSnapshot(`
+      {
+        "cause": undefined,
+        "error": [TypeError: Invalid identity scope: an entry is no URL. Name each origin, such as \`https://api.example.com\`.],
+        "secret": false,
+      }
+    `)
+  })
+
   test("sends the access token and the ID token of the instance's session to the origins of `identity.scope`, and none to another origin", async () => {
     const store = Store.memory()
     await store.setItem(name, {
