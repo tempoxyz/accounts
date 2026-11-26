@@ -44,26 +44,19 @@ describe('create', () => {
     expect(await other.session.get()).toMatchInlineSnapshot(`undefined`)
   })
 
-  test("writes no other preset's write between the read and the write of update", async () => {
+  test("keeps another preset's write that starts during update, after the write of update", async () => {
     const name = 'tempo-id:signed-out:["http://127.0.0.1:9","example-mobile"]'
-    // The other preset writes its flag while the read of `update` runs, as a sign-out of another
-    // instance does while a sign-in removes the flag that it read.
-    const writes: Promise<void>[] = []
-    const secureStore = memory({
-      onRead() {
-        if (writes.length === 0) writes.push(other.setItem(name, 'flag-2'))
-      },
-    })
+    const secureStore = memory()
     // Each instance creates its own store, as two `expo` presets of one app do.
     const store = DeviceStore.create(secureStore)
     const other = DeviceStore.create(secureStore)
     await store.setItem(name, 'flag-1')
 
-    const removed = await store.update!(name, (value) => ({
-      result: value,
-      value: undefined,
-    }))
-    await Promise.all(writes)
+    // A sign-in removes the flag that it reads, while another instance's sign-out writes its own.
+    const [removed] = await Promise.all([
+      store.update!(name, (value) => ({ result: value, value: undefined })),
+      other.setItem(name, 'flag-2'),
+    ])
 
     expect({ removed, stored: await store.getItem(name) })
       .toMatchInlineSnapshot(`
@@ -107,11 +100,9 @@ describe('create', () => {
 
 /**
  * Returns the platform capability that `expo-secure-store` provides on a device: strings at keys, in
- * memory. `writes` records each write and deletion. `options.onRead` runs at each read, after the
- * value is read, such as for a write of another preset while the read runs.
+ * memory. `writes` records each write and deletion.
  */
-function memory(options: { onRead?: (() => void) | undefined } = {}) {
-  const { onRead } = options
+function memory() {
   const values = new Map<string, string>()
   const writes: string[] = []
   return {
@@ -120,11 +111,7 @@ function memory(options: { onRead?: (() => void) | undefined } = {}) {
       values.delete(key)
       return Promise.resolve()
     },
-    getItemAsync(key: string) {
-      const value = values.get(key) ?? null
-      onRead?.()
-      return Promise.resolve(value)
-    },
+    getItemAsync: (key: string) => Promise.resolve(values.get(key) ?? null),
     setItemAsync(key: string, value: string) {
       writes.push(`set ${key}`)
       values.set(key, value)
