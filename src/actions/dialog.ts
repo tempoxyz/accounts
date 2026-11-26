@@ -709,6 +709,9 @@ async function authorize<
                 return rest.challenge
               })(),
               display: 'popup',
+              // A guest session signs no challenge, so a request whose challenge arrives later
+              // offers no guest.
+              ...(deferred ? { guest: false } : {}),
               redirectUri,
               ...(responseMode ? { responseMode } : {}),
             }))().then((value) => ({ ...value, state: value.pending.state })),
@@ -831,6 +834,19 @@ async function authorize<
     // redeems.
     unblock?.()
 
+    // The user selected "Continue as guest" on a request in the web message mode, which issues no
+    // tokens. A sign-in plugin starts the guest session.
+    if ('guest' in callback) {
+      if (callback.state !== state)
+        throw new RequestError({
+          code: 'invalid_request',
+          field: 'state',
+          message:
+            'Invalid `state` in the posted result. Start sign-in again from this app.',
+          status: 400,
+        })
+      throw Callback.guestSelected()
+    }
     // Tempo ID redeemed the code of a request in the web message mode, and posted its authorization.
     if ('authorization' in callback) {
       const authorization = await (async () => {

@@ -328,8 +328,12 @@ export function dialog<const options extends dialog.Options = {}>(
             // send a second logout after a sign-out with `everywhere`.
             if (controller.signal.aborted && error === controller.signal.reason)
               throw error
+            // The user selected "Continue as guest", which issues no tokens.
+            if (SignIn.guestSelected(context, error)) return undefined
             return change.fail(error)
           })
+          if (!result)
+            return await SignIn.guest(context, { change, signal: page.signal })
           const session = SignIn.toSession(result)
           // A refused verification fails the sign-in, and revokes the refresh token that no change
           // saves.
@@ -462,9 +466,9 @@ export function dialog<const options extends dialog.Options = {}>(
          */
         session: (async () => {
           if (backend === undefined) {
-            // The dialog shows a Tempo ID session, not a `local` plugin's beside it.
+            // The dialog shows a Tempo ID session, not a `local` plugin's or a guest session beside it.
             const stored = await context.session.load()
-            return stored && !Session.local(stored) ? stored : null
+            return stored && Session.tempoId(stored) ? stored : null
           }
           const coordinator = backendOf(context, { backend })
           if (machines.signingIn(coordinator.getSnapshot()))
@@ -499,6 +503,10 @@ export function dialog<const options extends dialog.Options = {}>(
          * Signs the user in, sets the instance's session, and returns it. Call it in a click
          * handler, before any `await`, since a popup opens only within the gesture. The session
          * holds no Tempo Account, so read it with `accounts.account.get` if necessary.
+         *
+         * With `guest: true`, a request without a challenge adds `guest=offer`, so Tempo ID's page
+         * offers "Continue as guest". That choice returns `guest=1`, or posts `guest: true`, and the
+         * call sets and returns a guest session, with no request.
          *
          * With the `siwe` plugin's `auth`, and without `challenge`, the sign-in also signs the user
          * in to the app: the dialog opens, then requests the message from the app's challenge
@@ -975,7 +983,8 @@ export declare namespace dialog {
     /**
      * The session, or with `backend`, the Tempo ID session that the page reads. With a plugin's
      * challenge, such as the `siwe` plugin's `auth`, the session holds the verification's result as
-     * `auth`, which the instance does not store.
+     * `auth`, which the instance does not store. An instance with `guest` also returns a guest
+     * session, as its type of `signIn` states.
      */
     type ReturnType<options extends Options = {}> = options extends {
       backend: string | true
