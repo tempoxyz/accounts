@@ -43,7 +43,7 @@ jobs:
         run: npm install --global bun@1.4.4 # zizmor: ignore[adhoc-packages]
 
       - name: Install Uphill
-        run: cargo install --locked --git https://github.com/wevm/uphill --rev 7a2f0f10e05dfbf2744a104154cddbd10832e207 uphill # zizmor: ignore[adhoc-packages]
+        run: cargo install --locked --git https://github.com/wevm/uphill --rev ed127fcc1cf1a958051bd1603b08805f1bb990c2 uphill # zizmor: ignore[adhoc-packages]
 
       # The library metrics of the typescript pack read the build.
       - name: Build

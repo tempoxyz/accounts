@@ -2,12 +2,12 @@
 import { defineConfig } from 'vite-plus'
 import * as Transform from './test/waterfall/Transform.js'
 
-// `uphill audit` compares each vendored pack of `.agents/packs` with its pinned commit, so no fix
-// rewrites it.
+// `uphill audit` compares each vendored pack of `.agents/uphill/packs` with its pinned commit, so
+// no fix rewrites it.
 const ignorePatterns = [
   '**/dist/**',
   '**/node_modules/**',
-  '.agents/packs/**',
+  '.agents/uphill/packs/**',
   '.changeset/**',
 ]
 

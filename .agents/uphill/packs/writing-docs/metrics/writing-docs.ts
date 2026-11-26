@@ -22,7 +22,7 @@ const ignored = [
   /(^|\/)\.changeset\//,
   /(^|\/)\.github\//,
   /(^|\/)(AGENTS|CHANGELOG|CLAUDE|LICENSE)(\.md)?$/i,
-  /(^|\/)(\.agents\/packs|node_modules)\//,
+  /(^|\/)(\.agents\/uphill\/packs|node_modules)\//,
 ]
 
 /** `title` for Title Case headings, or `sentence` for sentence case. */

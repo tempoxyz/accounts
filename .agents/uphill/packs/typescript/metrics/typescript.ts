@@ -20,7 +20,7 @@ import * as Compiler from './compiler.js'
  * packs.
  */
 const ignored = [
-  /(^|\/)(\.agents\/packs|dist|build|coverage|node_modules|target)\//,
+  /(^|\/)(\.agents\/uphill\/packs|dist|build|coverage|node_modules|target)\//,
 ]
 
 /** Compiler options the conventions treat as design constraints. */
