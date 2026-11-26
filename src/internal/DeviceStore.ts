@@ -30,7 +30,9 @@ const connect = Broadcast.create()
  * accepts, and each value as ox's `Json`, which keeps a `bigint`. The store is `json` and `private`,
  * since only the app reads the secure store, so it keeps private keys as JSON. Every store that this function
  * returns shares the device's secure store, so its `lock` serializes their session refreshes, and its
- * `connect` carries a sign-out of one instance to the others at once, as `Store.memory` does.
+ * `connect` carries a sign-out of one instance to the others at once, as `Store.memory` does. It
+ * sets `local`, since only the app's process reads the secure store, so a refused refresh token
+ * signs out after one request.
  *
  * @throws {Store.InvalidValueError} From a read, for a stored value that holds no valid JSON.
  *
@@ -67,6 +69,7 @@ export function create(secureStore: create.SecureStore): Store.Store {
     // JSON. Only the app reads the device's secure store, so it keeps private keys, such as the
     // guest account's P256 private key.
     json: true,
+    local: true,
     lock,
     private: true,
     removeItem: (key) => secureStore.deleteItemAsync(encode(key)),

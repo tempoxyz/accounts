@@ -544,6 +544,7 @@ export function create(options: create.Options): create.ReturnType {
     received() {
       actor.send({ type: 'received' })
     },
+    resources: () => machines.resources(actor.getSnapshot()),
     show(value) {
       const id = crypto.randomUUID()
       actor.send({
@@ -609,6 +610,11 @@ export declare namespace create {
      * that popup then ends nothing.
      */
     received: () => void
+    /**
+     * Returns whether the frame issues tokens for a registered resource, as the loaded page reports
+     * it, or `undefined` before the page loads.
+     */
+    resources: () => boolean | undefined
     /**
      * Posts the request to the frame, shows the dialog once the page shows it, and routes the
      * user's actions to the handlers. A deferred request shows at once, and `challenge` completes
@@ -1217,7 +1223,11 @@ function parse(data: unknown): machines.sheet.Message | undefined {
   const value = data as Record<string, unknown>
   const id = typeof value.id === 'string' ? value.id : undefined
   if (value.type === 'tempo-id:embed.loaded')
-    return { trusted: value.trusted === true, type: 'embed.loaded' }
+    return {
+      resources: value.resources === true,
+      trusted: value.trusted === true,
+      type: 'embed.loaded',
+    }
   if (
     value.type === 'tempo-id:embed.resize' &&
     typeof value.height === 'number'
@@ -1400,10 +1410,10 @@ export namespace machines {
           current: { ...context.current, popupUrl: event.popupUrl },
         }
       }),
-      /** Holds the trust that the loaded page reports. */
+      /** Holds the trust and the support of resources that the loaded page reports. */
       trust: assign(({ event }) => {
         if (event.type !== 'embed.loaded') return {}
-        return { trusted: event.trusted }
+        return { resources: event.resources, trusted: event.trusted }
       }),
       /** Stops taking the page's messages. `Sheet.ts` provides it. */
       unlisten: () => {},
@@ -1455,6 +1465,7 @@ export namespace machines {
       challenge: undefined,
       current: undefined,
       request: undefined,
+      resources: undefined,
       trusted: undefined,
     },
     id: 'sheet',
@@ -1724,6 +1735,12 @@ export namespace machines {
       /** The authorization request that the page has not received yet, until the page loads. */
       request: string | undefined
       /**
+       * Whether the frame issues tokens for a registered resource, as the loaded page reports it, or
+       * `undefined` before the page loads. A Tempo ID whose frame overwrites `resource` with its
+       * own origin reports nothing, which reads as `false`.
+       */
+      resources: boolean | undefined
+      /**
        * Whether Tempo ID trusts the app not to cover the frame, as the loaded page reports it, or
        * `undefined` before the page loads.
        */
@@ -1749,6 +1766,8 @@ export namespace machines {
           type: 'embed.close'
         }
       | {
+          /** Whether the frame forwards a request's `resource`, and issues tokens for it. */
+          resources: boolean
           /** Whether Tempo ID trusts the app not to cover the frame, which skips its check of visibility. */
           trusted: boolean
           /** The page loaded, and takes a request. */
@@ -1913,6 +1932,37 @@ export namespace machines {
       /** Whether the popup runs a method, such as Buy MACH or a sign-in as another user. */
       method: boolean
     }
+  }
+
+  /**
+   * Returns whether a sign-in takes the frame, from what the loaded page reports. A request with a
+   * resource needs a frame that reports `resources`. A browser without IntersectionObserver v2
+   * needs a frame that reports that Tempo ID trusts the app.
+   */
+  export function frames(options: frames.Options) {
+    if (options.resource && options.resources !== true) return false
+    return options.visibility || options.trusted === true
+  }
+
+  export declare namespace frames {
+    type Options = {
+      /** Whether the request names a registered resource. */
+      resource: boolean
+      /** The support of resources that the loaded page reports. Absent before it loads. */
+      resources: boolean | undefined
+      /** The trust that the loaded page reports. Absent before it loads. */
+      trusted: boolean | undefined
+      /** Whether the browser reports whether anything covers the frame. */
+      visibility: boolean
+    }
+  }
+
+  /**
+   * Returns whether the frame issues tokens for a registered resource, as the loaded page reports
+   * it, or `undefined` before the page loads.
+   */
+  export function resources(snapshot: machines.sheet.Snapshot) {
+    return snapshot.context.resources
   }
 
   /**

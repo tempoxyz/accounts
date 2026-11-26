@@ -18,7 +18,7 @@ export type Store = {
    * microtask. The store holds no listener of an instance that the app dropped. An instance's
    * session posts each saved change through it where no page's `BroadcastChannel` exists, such as in
    * React Native or Node, so another instance's sign-out empties its session at once.
-   * `Store.file`, `Store.memory`, `Store.redis`, `Store.durableObject` of `accounts/cloudflare`, the store of `accounts/expo`, and the default store of a `cli:` client ID set it. Absent, an instance outside a page reads another's sign-out only from
+   * `Store.file`, `Store.memory`, `Store.postgres`, `Store.redis`, `Store.durableObject` of `accounts/cloudflare`, the store of `accounts/expo`, and the default store of a `cli:` client ID set it. Absent, an instance outside a page reads another's sign-out only from
    * the store.
    */
   connect?:
@@ -37,8 +37,9 @@ export type Store = {
    */
   json?: boolean | undefined
   /**
-   * Whether only the process that created the store holds its values, as `Store.memory` does, or
-   * only one Durable Object, as `Store.durableObject` of `accounts/cloudflare` does.
+   * Whether only the process that created the store holds its values, as `Store.memory` does, only
+   * one Durable Object, as `Store.durableObject` of `accounts/cloudflare` does, or only the app, as
+   * the store of `accounts/expo` does.
    * In a browser, a page load empties such a store, so `redirect.signIn` without `open` refuses
    * it before any request. An instance's `session.refresh` with such a store reads a refusal of its refresh token as final where a
    * lock spans the process, Web Locks or the store's `lock`, since no other process can rotate the token. Defaults to `false`.

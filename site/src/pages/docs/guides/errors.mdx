@@ -261,6 +261,8 @@ A closed dialog is no refusal. <SourceLink name="signIn" path="src/plugins/dialo
 
 If another sign-in or a sign-out completes first, it throws <SourceLink name="SupersededError" path="src/Accounts.ts">`Accounts.SupersededError`</SourceLink>. The app ignores both.
 
+In a browser without a connection, <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> opens no dialog, and throws <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> with `server_error` and status 0. The app shows its message.
+
 :::code-group
 
 ```tsx [SignIn.tsx]
