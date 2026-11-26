@@ -2057,6 +2057,12 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       if (status.status === 'signedOut' && !session.get())
         document.cookie = Hint.expire({ cookie })
     })
+    // A sign-out or a read after that expiry empties the held session, and the status stays
+    // `signedOut`, so no status change reports it.
+    session.subscribe((current) => {
+      if (!current && session.status.get().status === 'signedOut')
+        document.cookie = Hint.expire({ cookie })
+    })
   }
 
   const context: Plugin.Context = {
