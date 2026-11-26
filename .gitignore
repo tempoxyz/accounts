@@ -25,6 +25,8 @@ mise.toml
 _TODO
 .pi
 .agents/tmp
+# Uphill writes each run's reports.
+.uphill
 worker-configuration.d.ts
 _TODO
 .pnpm-store
