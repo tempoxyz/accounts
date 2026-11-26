@@ -23,7 +23,7 @@ import { backend } from '../plugins/backend.js'
 import { viem } from '../plugins/viem.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
-import { ChainError, mpp } from './index.js'
+import { ChainError, LimitError, mpp } from './index.js'
 
 describe('mpp', () => {
   test.each([
@@ -995,6 +995,26 @@ describe('mpp', () => {
           "0x20c0000000000000000000000000000000000000",
         ],
         "sends": [],
+      }
+    `)
+  })
+
+  test('holds the amount, the limit that is left, and the token of mpp.LimitError', () => {
+    const error = new LimitError({
+      amount: '0.5',
+      limit: '0.079289',
+      token: '0x20c0000000000000000000006a37DA5C996874BE',
+    })
+
+    expect({
+      amount: error.amount,
+      limit: error.limit,
+      token: error.token,
+    }).toMatchInlineSnapshot(`
+      {
+        "amount": "0.5",
+        "limit": "0.079289",
+        "token": "0x20c0000000000000000000006a37DA5C996874BE",
       }
     `)
   })
