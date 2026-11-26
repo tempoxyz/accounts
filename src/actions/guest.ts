@@ -1,0 +1,1881 @@
+/**
+ * The guest account: a root Tempo Account whose owner is a P256 key pair in the instance's store,
+ * with no Tempo ID sign-in. A guest session holds its address and public key, and the store keeps
+ * the key pair under its own entry. The key pair signs the guest session's transactions, the guest
+ * request that opens Tempo ID's payment page, and the one transaction that the page posts back.
+ * @module
+ */
+import {
+  Address,
+  Base64,
+  Bytes,
+  Hash,
+  Hex,
+  P256,
+  PublicKey,
+  WebCryptoP256,
+} from 'ox'
+import { SignatureEnvelope, TokenId, TxEnvelopeTempo } from 'ox/tempo'
+import { type Client, parseUnits, TransactionReceiptNotFoundError } from 'viem'
+import { getTransactionReceipt } from 'viem/actions'
+import { Account } from 'viem/tempo'
+import { token as TokenActions } from 'viem/tempo/actions'
+import { type Config, RequestError, SignedOutError } from '../Accounts.js'
+import * as Api from '../internal/Api.js'
+import * as DefaultStore from '../internal/DefaultStore.js'
+import * as Payment from '../internal/Payment.js'
+import * as Permissions from '../Permissions.js'
+import * as Session from '../Session.js'
+import type { Store } from '../Store.js'
+
+/**
+ * A guest payment whose outcome the call did not decide before it stopped: its transfer can still
+ * land, or Tempo ID and the chain did not confirm whether it landed. The call stops 60 seconds after
+ * the transfer's window, or at an abort or a sign-out after a send may have reached Tempo ID, which
+ * `cause` holds. `checkout` names the undecided checkout, so the app can decide it, such as from
+ * Tempo ID's status or the chain, before it pays again.
+ *
+ * The store keeps nothing of the checkout, and a later `pay` of the same payment opens a new
+ * checkout, which can pay again. If the process exits during a send, such as after a crash, the call
+ * throws nothing, and no record of its checkout and no recovery remain. The app confirms the outcome
+ * of an interrupted payment before it pays again.
+ */
+export class PendingError extends Error {
+  override readonly name = 'Actions.guest.PendingError'
+  /** The checkout ID of the undecided payment. */
+  readonly checkout: string
+
+  constructor(options: { cause?: unknown; checkout: string }) {
+    super(
+      `Pending payment: the outcome of checkout ${options.checkout} is unknown, and its transfer can still land. Confirm whether it paid before paying again, since another payment opens a new checkout.`,
+      options.cause === undefined ? undefined : { cause: options.cause },
+    )
+    this.checkout = options.checkout
+  }
+}
+
+/** The attodollars per gas of a fee that charge one base unit of a TIP-20 fee token of 6 decimals. */
+const attodollars = 1_000_000_000_000n
+
+/**
+ * The prepares of one guest payment at most. A cost above the quote, `quote_changed`, quotes again
+ * before the next prepare, and rejects after the last.
+ */
+const quoteAttempts = 3
+
+/**
+ * The funding code requests of one shortfall at most. A refusal with `upstream_unavailable`, such as
+ * a failed read of the guest account's balance, requests again after 1 second, then 2 seconds.
+ */
+const fundAttempts = 3
+
+/**
+ * The time after a transfer's validity window during which the payment still reads its checkout's
+ * status, since a transfer can land in the last block of its window, in milliseconds.
+ */
+const settleMargin = 60_000
+
+/** The time between the guest request's signature and its expiry, in seconds. */
+const lifetime = 4 * 60
+
+/** The longest window of a transaction that Tempo ID prepares, in seconds. */
+const windowLimit = 5 * 60
+
+/**
+ * The guest account's key pair, as the store keeps it: a non-extractable WebCrypto key pair in a
+ * store that keeps values as they are, such as IndexedDB, or a P256 private key in a private store
+ * of JSON, such as `Store.file`. No store of JSON holds a `CryptoKey`.
+ */
+type Key =
+  | { keyPair: WebCryptoP256.createKeyPair.ReturnType; type: 'webCrypto' }
+  | { privateKey: Hex.Hex; publicKey: PublicKey.PublicKey; type: 'p256' }
+
+/** A P256 private key, as a private store of JSON keeps it. */
+type P256Entry = { privateKey: Hex.Hex; type: 'p256' }
+
+/**
+ * Returns the Viem account of the guest session `session`, a root account whose key pair signs each
+ * transaction, message, and typed data. Each signature reads the key pair from the store, so the
+ * session holds no `CryptoKey`. A WebCrypto key pair signs a P256 envelope with `prehash`, since
+ * WebCrypto hashes the payload with SHA-256 before it signs.
+ *
+ * @throws {SignedOutError} At a signature, when the store holds another key pair or none, such as
+ *   after `guest.disconnect` in another tab.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const account = Actions.guest.account(accounts.config, { session })
+ * ```
+ */
+export function account(
+  auth: Config,
+  options: account.Options,
+): Account.RootAccount {
+  const { session } = options
+  const signer = async () => {
+    const key = await read(storeOf(auth), { key: keyOf(auth) })
+    if (
+      !key ||
+      PublicKey.toHex(publicKeyOf(key)).toLowerCase() !==
+        session.publicKey.toLowerCase()
+    )
+      throw new SignedOutError()
+    return key.type === 'webCrypto'
+      ? Account.fromWebCryptoP256(key.keyPair)
+      : Account.fromP256(key.privateKey)
+  }
+  return Account.from({
+    keyType: 'p256',
+    publicKey: PublicKey.fromHex(session.publicKey),
+    sign: async (parameters) => (await signer()).sign(parameters),
+  })
+}
+
+export declare namespace account {
+  type Options = {
+    /** The guest session. */
+    session: Pick<Session.GuestSession, 'publicKey'>
+  }
+}
+
+/**
+ * Returns whether the instance's session `current` is still the guest session `started`: the same
+ * guest account, from the same start. A sign-out, another user, or another start of the guest
+ * session, also of the same guest account, ends it, though the store keeps the key pair.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * if (!Actions.guest.active({ current: accounts.session.get(), started }))
+ *   throw new Accounts.SignedOutError()
+ * ```
+ */
+export function active(options: active.Options): boolean {
+  const { current, started } = options
+  return (
+    !!current &&
+    Session.guest(current) &&
+    Session.same(current, started) &&
+    current.revision === started.revision
+  )
+}
+
+export declare namespace active {
+  type Options = {
+    /** The instance's session now. Absent when it holds none. */
+    current: Session.Any | undefined
+    /** The guest session that started the action. */
+    started: Session.GuestSession
+  }
+}
+
+/**
+ * Returns `value`, a transaction that Tempo ID's page prepared for a guest payment, as a Tempo
+ * envelope to sign, if it makes the requested transfer and nothing else. With the sponsor's marker,
+ * Tempo ID's sponsor pays its fee. Without it, the guest account pays its fee. The sender is the
+ * account that signs it, so the check reads no sender. The check reads no network.
+ *
+ * @throws {RequestError} `invalid_request` with the field `transaction` for any other value, such
+ *   as a transaction on another chain, with another call or more calls, with an access key or an
+ *   authorization, with a signature, or with a fee payer's signature.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const envelope = Actions.guest.check(transaction, {
+ *   amount: '12.5',
+ *   chainId: 4217,
+ *   to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+ *   token: 'ousd',
+ * })
+ * ```
+ */
+export function check(
+  value: unknown,
+  options: check.Options,
+): TxEnvelopeTempo.TxEnvelopeTempo {
+  const refused = (fault: string) =>
+    new RequestError({
+      code: 'invalid_request',
+      field: 'transaction',
+      message: `Invalid prepared transaction: ${fault} The guest account signs only the requested transfer. Try again.`,
+      status: 0,
+    })
+  if (
+    typeof value !== 'string' ||
+    !Hex.validate(value) ||
+    !value.startsWith('0x76')
+  )
+    throw refused('it is no Tempo transaction.')
+  const envelope = (() => {
+    try {
+      return TxEnvelopeTempo.deserialize(value as TxEnvelopeTempo.Serialized)
+    } catch {
+      throw refused('it is no Tempo transaction.')
+    }
+  })()
+
+  // The token's symbol becomes its address on the chain, and the amount its base units. A token's
+  // address needs no listing: each TIP-20 token has 6 decimals.
+  const limit = (() => {
+    if (Address.validate(options.token, { strict: false })) {
+      try {
+        TokenId.fromAddress(options.token)
+      } catch {
+        throw refused('its token is no TIP-20 token.')
+      }
+      return {
+        limit: parseUnits(options.amount, 6),
+        token: options.token,
+      }
+    }
+    const [resolved] =
+      Permissions.resolve(
+        {
+          limits: [
+            {
+              limit: options.amount as `${number}`,
+              token: options.token as Permissions.Token,
+            },
+          ],
+        },
+        { chainId: options.chainId },
+      ).limits ?? []
+    if (!resolved) throw refused('its token is unknown.')
+    return resolved
+  })()
+  const expected = TokenActions.transfer.call({
+    amount: limit.limit,
+    ...(options.memo ? { memo: options.memo } : {}),
+    to: options.to,
+    token: limit.token,
+  })
+  const [call, ...rest] = envelope.calls ?? []
+  if (envelope.chainId !== options.chainId)
+    throw refused('it is for another chain.')
+  if (!call || rest.length > 0) throw refused('it makes more than one call.')
+  if (
+    !call.to ||
+    !Address.isEqual(call.to, expected.to) ||
+    (call.value ?? 0n) !== 0n ||
+    call.data?.toLowerCase() !== expected.data.toLowerCase()
+  )
+    throw refused('its call is not the requested transfer.')
+  if (envelope.keyAuthorization || envelope.authorizationList?.length)
+    throw refused('it changes the account.')
+  // The sponsor's marker, `null`, or none, where the guest account pays the fee. A fee payer's
+  // signature would name a fee payer that Tempo ID's page did not choose.
+  if (
+    envelope.feePayerSignature !== null &&
+    envelope.feePayerSignature !== undefined
+  )
+    throw refused('it holds a fee payer signature.')
+  if (envelope.signature) throw refused('it holds a signature.')
+  const { quote } = options
+  // A payment that Tempo ID quoted as sponsored keeps the sponsor's marker, so the guest account
+  // pays no fee that the quote did not show.
+  if (quote?.sponsored && envelope.feePayerSignature !== null)
+    throw refused('it drops the sponsor that the quote names.')
+  // Without the sponsor's marker, the guest account pays the fee, in the fee token that Tempo ID
+  // quoted, or else in a TIP-20 token.
+  if (envelope.feePayerSignature === undefined) {
+    const expected = quote ? (quote.fee?.token ?? undefined) : undefined
+    const valid = (() => {
+      if (envelope.feeToken === undefined) return expected === undefined
+      try {
+        const feeToken = TokenId.toAddress(envelope.feeToken)
+        // A token ID always names a TIP-20 address, and an address must hold the TIP-20 prefix.
+        TokenId.fromAddress(feeToken)
+        return expected === undefined || Address.isEqual(feeToken, expected)
+      } catch {
+        return false
+      }
+    })()
+    if (!valid) throw refused('its fee token is not the quoted one.')
+    // The most that the guest account pays is the gas times the fee cap per gas, in attodollars
+    // per gas, which a TIP-20 fee token of 6 decimals charges as 1e12 attodollars per base unit.
+    // The guest approved the quoted fee, which Tempo ID's prepare also bounds the fill by.
+    if (quote) {
+      if (!quote.fee)
+        throw refused('the quote names no fee for the guest account.')
+      const { gas, maxFeePerGas } = envelope
+      if (gas === undefined || maxFeePerGas === undefined)
+        throw refused('it names no gas or fee cap.')
+      const most = (gas * maxFeePerGas + attodollars - 1n) / attodollars
+      if (most > BigInt(quote.fee.amount))
+        throw refused('its fee exceeds the quoted fee.')
+    }
+  }
+  return envelope
+}
+
+export declare namespace check {
+  type Options = {
+    /** The amount of the transfer, as a decimal string in whole units, such as `12.5`. */
+    amount: string
+    /** The payment's chain. */
+    chainId: number
+    /**
+     * The quote of `GET /i/guest/pay` that the transaction fills. With it, a payment quoted as
+     * sponsored must keep the sponsor's marker, and a transaction whose fee the guest account pays
+     * must name the quoted fee token, and its gas at its fee cap costs at most the quoted fee.
+     * Absent, such a transaction names any TIP-20 fee token, at any fee, as on Tempo ID's own
+     * payment page.
+     */
+    quote?:
+      | {
+          /** The quoted fee, or `null` when Tempo ID knows none. */
+          fee: {
+            /** The fee, in base units of the fee token. */
+            amount: string
+            /** The fee token's address, or `null` when the fill names none. */
+            token?: `0x${string}` | null | undefined
+          } | null
+          /** Whether Tempo ID's sponsor pays the fee. */
+          sponsored: boolean
+        }
+      | undefined
+    /** The transfer's memo, as hex. Absent for a transfer without one. */
+    memo?: `0x${string}` | undefined
+    /** The recipient's address. */
+    to: `0x${string}`
+    /**
+     * The token: its symbol that the chain lists, such as `ousd`, or the address of any TIP-20
+     * token.
+     */
+    token: string
+  }
+}
+
+/**
+ * Returns the next step of a guest payment that waits for its funds, from its latest quote.
+ *
+ * | Step      | When                                                                                  |
+ * | --------- | ------------------------------------------------------------------------------------- |
+ * | `covered` | The quote names no shortfall.                                                         |
+ * | `fund`    | With `funded`, the shortfall names a token that no funding code named. Each token receives one code. |
+ * | `expired` | The shortfall remains at `deadline`.                                                  |
+ * | `wait`    | The shortfall remains before `deadline`.                                              |
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const step = Actions.guest.coverage({ deadline, funded: [token], now: Date.now(), quote })
+ * ```
+ */
+export function coverage(options: coverage.Options): coverage.ReturnType {
+  const { deadline, funded, now, quote } = options
+  if (!quote.shortfall) return { type: 'covered' }
+  const token = (quote.shortfall.token ?? quote.token).toLowerCase()
+  if (funded && !funded.includes(token)) return { type: 'fund' }
+  return now >= deadline ? { type: 'expired' } : { type: 'wait' }
+}
+
+export declare namespace coverage {
+  type Options = {
+    /** The end of the wait, in Unix milliseconds, such as the funding code's expiry. */
+    deadline: number
+    /**
+     * The lowercase addresses of the tokens that a funding code named. Absent, such as for the
+     * faucet, no shortfall asks for a funding code.
+     */
+    funded?: readonly string[] | undefined
+    /** The time, in Unix milliseconds. */
+    now: number
+    /** The latest quote of the payment, from `GET /i/guest/pay`. */
+    quote: Pick<Quoted, 'shortfall' | 'token'>
+  }
+
+  type ReturnType = {
+    type: 'covered' | 'expired' | 'fund' | 'wait'
+  }
+}
+
+/**
+ * Forgets the instance's guest account: removes its key pair from the store. The next guest session
+ * creates a new guest account. The funds of the forgotten guest account stay on its address, and no
+ * key signs for it again. The instance's session stays as it is, so call it after a sign-out.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * await Actions.guest.disconnect(accounts.config)
+ * ```
+ */
+export async function disconnect(auth: Config): Promise<void> {
+  const store = storeOf(auth)
+  const key = keyOf(auth)
+  // The removal waits for a creation in progress, which would otherwise save the key pair after it.
+  await exclusive(store, { key }, () => store.removeItem(key))
+}
+
+/**
+ * Returns the end of a prepared transaction's window on the local clock, in Unix milliseconds. The
+ * sends and the status reads of `Actions.guest.pay` end by it. Tempo ID's clock sets `validBefore`,
+ * and the local clock can differ, so the remaining window starts at the prepare's return.
+ *
+ * | Remaining window, in seconds                     | When                                                        |
+ * | ------------------------------------------------ | ----------------------------------------------------------- |
+ * | `validBefore` minus `now`, from 0 to `windowLimit` | The prepare names Tempo ID's time `now`.                  |
+ * | `validBefore` minus the local time at `returned` | Without `now`, when it is above 0 and at most `windowLimit`. |
+ * | `windowLimit`                                    | Without `now`, otherwise, such as for a local clock ahead of Tempo ID by more than the window. |
+ * | `lifetime`                                       | The transaction names no `validBefore`.                     |
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const end = Actions.guest.expiry({ returned: Date.now(), validBefore: envelope.validBefore })
+ * ```
+ */
+export function expiry(options: expiry.Options): number {
+  const { now, returned, validBefore } = options
+  const remaining = (() => {
+    if (validBefore === undefined) return lifetime
+    if (now !== undefined)
+      return Math.min(Math.max(validBefore - now, 0), windowLimit)
+    const local = validBefore - returned / 1_000
+    if (local > 0 && local <= windowLimit) return local
+    return windowLimit
+  })()
+  return returned + remaining * 1_000
+}
+
+export declare namespace expiry {
+  type Options = {
+    /** Tempo ID's time at the prepare, in Unix seconds. Absent when the prepare names none. */
+    now?: number | undefined
+    /** The local time when the prepare returned, in Unix milliseconds. */
+    returned: number
+    /** The end of the transaction's window on Tempo ID's clock, in Unix seconds. Absent for none. */
+    validBefore?: number | undefined
+  }
+}
+
+/**
+ * Returns the funding hint of a guest payment's funding code: the amount and the token that the
+ * guest account lacks, as `quote.shortfall` names them. Without a shortfall token, such as from an
+ * earlier Tempo ID, it returns the payment's amount and token.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const hint = Actions.guest.funding({ amount: '5', quote })
+ * ```
+ */
+export function funding(options: funding.Options): funding.ReturnType {
+  const { amount, quote } = options
+  if (quote.shortfall?.token)
+    return { amount: quote.shortfall.formatted, token: quote.shortfall.token }
+  return { amount, token: quote.token }
+}
+
+export declare namespace funding {
+  type Options = {
+    /** The payment's amount, in whole units of the payment's token. */
+    amount: string
+    /** The payment's quote, from `GET /i/guest/pay`. */
+    quote: Pick<Quoted, 'shortfall' | 'token'>
+  }
+
+  type ReturnType = {
+    /** The amount to fund, in whole units of `token`. */
+    amount: string
+    /** The token's address. */
+    token: `0x${string}`
+  }
+}
+
+/**
+ * Returns the address of the instance's guest account, or `undefined` before a guest session creates
+ * one. The read creates no guest account.
+ *
+ * @throws {Error} For a value at the guest account's entry of the store that is no key pair.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const address = await Actions.guest.get(accounts.config)
+ * ```
+ */
+export async function get(auth: Config): Promise<get.ReturnType> {
+  const key = await read(storeOf(auth), { key: keyOf(auth) })
+  return key && Address.fromPublicKey(publicKeyOf(key), { checksum: true })
+}
+
+export declare namespace get {
+  /** The guest account's address, or `undefined` without a guest account. */
+  type ReturnType = `0x${string}` | undefined
+}
+
+/** The page of a guest payment that `GET /i/guest/pay` returns, with the fields the payment reads. */
+type Quoted = {
+  /** Whether the chain's faucet drips the payment's token. */
+  faucet: boolean
+  /** The network fee, or `null` when Tempo ID knows none. */
+  fee: {
+    /** The fee, in base units of the fee token, which the prepare names as the approved fee. */
+    amount: string
+    /** The fee, in whole units of the fee token. */
+    formatted: string
+    /** The fee token's address, or `null` when the fill names none. */
+    token?: `0x${string}` | null | undefined
+  } | null
+  /** Why no transaction pays, other than a shortfall. */
+  refusal: Refusal | null
+  /** What the guest account lacks. */
+  shortfall: {
+    /** The missing amount, in base units of `token`. */
+    amount: string
+    /** The missing amount, in whole units of `token`. */
+    formatted: string
+    /** Whether the chain lists `token`. */
+    listed: boolean
+    /** The missing token's symbol. */
+    symbol: string
+    /**
+     * The missing token's address: the payment's token, or the fee token of a transfer whose fee
+     * the guest account pays. Absent from an earlier Tempo ID.
+     */
+    token?: `0x${string}` | undefined
+  } | null
+  /** Whether Tempo ID's sponsor pays the fee. */
+  sponsored: boolean
+  /** The token's address. */
+  token: `0x${string}`
+}
+
+/** A prepared transaction of a guest payment, which `POST /i/guest/pay` returns. */
+type Prepared = {
+  /** Tempo ID's time at the prepare, in Unix seconds. Absent when Tempo ID names none. */
+  now?: number | undefined
+  /** Tempo ID's tag of the transaction, which each send names. */
+  tag: string
+  /** The prepared transaction, serialized. */
+  transaction: string
+}
+
+/** A guest payment's paid checkout, which each route returns for a checkout that paid. */
+type Paid = { paid: { transaction: `0x${string}` } }
+
+/** Why Tempo ID refuses a guest payment. */
+type Refusal = { error_description: string; reason: string }
+
+/** A refusal of a guest payment, which `GET /i/guest/pay` returns in place of the page. */
+type Refused = { cancel: string; refusal: Refusal }
+
+/**
+ * Pays from the guest account outside a page, such as in a CLI, through the routes that Tempo ID's
+ * payment page calls. It reads the payment, funds a shortfall, prepares the transfer, checks that
+ * the prepared transaction makes exactly the requested transfer, signs it with the key pair, and
+ * sends it. Each request carries a fresh guest request of one checkout ID for the call, so a
+ * repeated send pays once. The guest request names the instance's `redirectUri`, or the empty
+ * string, as a device client's does.
+ *
+ * A shortfall on a chain whose faucet drips the token requests the faucet. Otherwise `fund` shows a
+ * funding code, such as the `device` plugin's `fundGuest`, and the call waits for the funds until
+ * the code expires. A funding code request that Tempo ID refuses with `upstream_unavailable`
+ * repeats after 1 second, then 2 seconds, as {@link retryFunding} decides.
+ *
+ * The prepare names the quoted cost: the sponsor, or the fee that the guest account pays. Tempo ID
+ * refuses a fill above it with `quote_changed`, and the call quotes again and prepares at the new
+ * quote, up to three prepares. The key pair signs only a fill whose fee is within the quote.
+ *
+ * The call settles its checkout before it returns, and the store keeps nothing of it. A send
+ * without an answer repeats until the prepared transaction's window ends. Then {@link settlement}
+ * decides from the checkout's status and the chain's receipt: a paid checkout, or a signed
+ * transaction whose receipt the chain holds, returns its transaction, and a checkout whose
+ * transaction can no longer land is cancelled, which fences it. Each request ends at the window's
+ * end, or 60 seconds after it for a status read or a cancellation, so a stalled response cannot
+ * hold the call. The window's end counts on the local clock from the prepare's return, as
+ * {@link expiry} returns it, so a local clock that differs from Tempo ID's ends no send early. If
+ * the outcome is still unknown then, the call rejects with `PendingError`. Once a send may have
+ * reached Tempo ID, an abort or a sign-out also rejects with `PendingError`, whose `cause` holds
+ * the abort's reason or the `SignedOutError`.
+ *
+ * Each call opens its own checkout, so a later call of the same payment neither resumes nor waits
+ * for an earlier one. The store keeps no record of a checkout, so a call that ends without an
+ * error, such as when its process exits during a send, has no recovery. The app confirms the
+ * outcome of an interrupted payment before it pays again.
+ *
+ * @throws {RequestError} With the reason of Tempo ID's refusal, such as `recipient_not_permitted`.
+ *   With `insufficient_balance` and status 0 for a shortfall without a faucet or `fund`, after the
+ *   funding code expired, or for a new quote with a shortfall. With `quote_changed` when the third
+ *   prepare's fill still costs more than its quote. With `upstream_unavailable` when Tempo ID
+ *   refuses the third funding code request of a shortfall with it, such as when it cannot read the
+ *   guest account's balance. Retry later.
+ * @throws {RequestError} With `invalid_request` at `transaction`, for a prepared transaction other
+ *   than the requested transfer, or whose fee exceeds the quoted fee, which the key pair never
+ *   signs.
+ * @throws {PendingError} When the transfer can still land, or Tempo ID and the chain do not
+ *   confirm its outcome, 60 seconds after the transaction's window. At an abort or a sign-out after
+ *   a send may have reached Tempo ID, with the abort's reason or the `SignedOutError` as `cause`.
+ *   The error names the checkout, and the store keeps nothing of it.
+ * @throws {SignedOutError} When the store holds another key pair than the session's, or once
+ *   `current` no longer holds the session, such as after a sign-out, before the first send.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const { transaction } = await Actions.guest.pay(accounts.config, {
+ *   amount: '5',
+ *   session,
+ *   to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+ *   token: 'ousd',
+ * })
+ * ```
+ */
+export async function pay(
+  auth: Config,
+  options: pay.Options,
+): Promise<pay.ReturnType> {
+  const { current, fund, reload, session, signal, token } = options
+  const amount = Payment.amount(options.amount)
+  const to = Payment.to(options.to)
+  const memo =
+    options.memo === undefined ? undefined : Payment.memo(options.memo)
+  const chainId = options.chainId ?? auth.chainId
+  // One checkout ID for the call, so each retry pays the same checkout, and Tempo ID pays it once.
+  // `Bytes.random` needs only `crypto.getRandomValues`, which React Native polyfills, and the
+  // URL-safe Base64 holds only letters, digits, `-`, and `_`.
+  const checkout = Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
+  const redirectUri = auth.redirectUri ?? ''
+  const terms = {
+    amount,
+    chain_id: chainId,
+    client_id: auth.clientId,
+    ...(memo !== undefined ? { memo } : {}),
+    redirect_uri: redirectUri,
+    to,
+    token,
+  }
+  const aborted = () =>
+    signal?.reason ??
+    Object.assign(new Error('The payment was aborted.'), {
+      name: 'AbortError',
+    })
+
+  /** Throws `SignedOutError` once the instance's session no longer holds the guest session. */
+  const held = () => {
+    if (current && !active({ current: current(), started: session }))
+      throw new SignedOutError()
+  }
+  /**
+   * Signs a fresh guest request of the checkout, which the key pair signs with no request. It names
+   * `target`, which defaults to the redirect URI of the payment's routes.
+   */
+  const guest = async (options: { redirectUri?: string } = {}) => {
+    if (signal?.aborted) throw aborted()
+    held()
+    const { address, value } = await request(auth, {
+      chainId,
+      checkout,
+      redirectUri: options.redirectUri ?? redirectUri,
+    })
+    if (!Address.isEqual(address, session.address)) throw new SignedOutError()
+    // A sign-out during the signature ends the payment too.
+    held()
+    return value
+  }
+  const unanswered = (cause: unknown) =>
+    new RequestError({
+      cause,
+      code: 'server_error',
+      message:
+        'The guest payment request received no response. Check the connection, and try again.',
+      status: 0,
+    })
+  /**
+   * Sends a request to Tempo ID, and returns its JSON. With `deadline`, in Unix milliseconds, the
+   * request aborts at it and rejects as unanswered, also when its response or body stalls.
+   */
+  const send = async <value>(
+    path: string,
+    options: RequestInit & { deadline?: number | undefined },
+  ) => {
+    const { deadline, ...init } = options
+    const controller = new AbortController()
+    const abort = () => controller.abort()
+    if (signal?.aborted) abort()
+    signal?.addEventListener('abort', abort, { once: true })
+    const response = (async () => {
+      const response = await (auth.fetch ?? fetch)(new URL(path, auth.url), {
+        ...init,
+        redirect: 'manual',
+        signal: controller.signal,
+      }).catch((error: unknown) => {
+        if (signal?.aborted) throw aborted()
+        throw unanswered(error)
+      })
+      return await Api.json<value>(response)
+    })()
+    // The timer also rejects when a `fetch` ignores the abort, so the call never waits past it.
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const expired =
+      deadline === undefined
+        ? undefined
+        : new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => {
+                abort()
+                reject(unanswered(new Error('The request timed out.')))
+              },
+              Math.max(0, deadline - Date.now()),
+            )
+          })
+    try {
+      return await (expired ? Promise.race([response, expired]) : response)
+    } catch (error) {
+      if (signal?.aborted) throw aborted()
+      throw error
+    } finally {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
+      // A response that loses the race to the deadline rejects later, with no reader.
+      response.catch(() => undefined)
+    }
+  }
+  /** Posts `options.body` to Tempo ID as JSON, as {@link send} does, and returns its JSON. */
+  const post = async <value>(
+    path: string,
+    options: { body: object; deadline?: number | undefined },
+  ) =>
+    send<value>(path, {
+      body: JSON.stringify(options.body),
+      deadline: options.deadline,
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+  const quote = async () =>
+    send<Paid | Quoted | Refused>(
+      `/i/guest/pay?${new URLSearchParams({ ...terms, chain_id: String(chainId), guest: await guest() })}`,
+      { method: 'GET' },
+    )
+  const refused = (refusal: Refusal) =>
+    new RequestError({
+      code: 'invalid_request',
+      message: refusal.error_description,
+      reason: refusal.reason as RequestError.Reason,
+      status: 0,
+    })
+  const short = (message: string) =>
+    new RequestError({
+      code: 'invalid_request',
+      message,
+      reason: 'insufficient_balance',
+      status: 0,
+    })
+
+  /** Returns the paid result. */
+  const settled = (transaction: `0x${string}`) => ({
+    address: session.address,
+    transaction,
+  })
+  /**
+   * Returns what the chain holds of the signed transaction `hash` by `deadline`, in Unix
+   * milliseconds: its receipt's status, `missing` for no receipt, `unreadable` without a hash or a
+   * client, or `unknown` after a failed read or one still open at `deadline`.
+   */
+  const landed = async (
+    hash: `0x${string}` | undefined,
+    deadline: number,
+  ): Promise<settlement.Options['receipt']> => {
+    const client = hash ? options.getClient?.({ chainId }) : undefined
+    if (!hash || !client) return 'unreadable'
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        getTransactionReceipt(client, { hash }).then(
+          (receipt) => receipt.status,
+          (error: unknown) =>
+            error instanceof TransactionReceiptNotFoundError
+              ? ('missing' as const)
+              : ('unknown' as const),
+        ),
+        new Promise<'unknown'>((resolve) => {
+          timer = setTimeout(
+            () => resolve('unknown'),
+            Math.max(0, deadline - Date.now()),
+          )
+        }),
+      ])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  /** Returns whether `error` is Tempo ID's definitive refusal: not a network, server, rate limit, or held send's. */
+  const final = (error: unknown) =>
+    error instanceof RequestError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 429 &&
+    error.reason !== 'payment_pending'
+  /**
+   * Reads the status of the call's checkout by `deadline`, in Unix milliseconds: the paid
+   * transaction and whether a send can land.
+   */
+  const status = async (
+    deadline: number,
+  ): Promise<settlement.Options['status']> => {
+    try {
+      // The route nests the paid result, as the other routes return it, beside `pending`.
+      const value = await send<{ paid: Paid | null; pending: boolean }>(
+        `/i/guest/pay/status?${new URLSearchParams({ ...terms, chain_id: String(chainId), guest: await guest() })}`,
+        { deadline, method: 'GET' },
+      )
+      return {
+        paid: value.paid?.paid.transaction ?? null,
+        pending: value.pending,
+      }
+    } catch (error) {
+      if (signal?.aborted) throw aborted()
+      if (error instanceof SignedOutError) throw error
+      return final(error) ? 'refused' : 'unknown'
+    }
+  }
+  /**
+   * Reads the outcome of the call's checkout until {@link settlement} decides it, and returns the
+   * paid transaction, or `undefined` once no transaction of it can land, after its cancellation
+   * where Tempo ID admits it. The cancellation stores a fence, so no later send pays the checkout.
+   * Each read and cancellation ends 60 seconds after the transaction's window, and an outcome that
+   * is still unknown then rejects with `PendingError`.
+   */
+  const settle = async (entry: settlement.Options['entry']) => {
+    const deadline = entry.expiry + settleMargin
+    let cancellation: settlement.Options['cancellation']
+    for (;;) {
+      const read = await status(deadline)
+      const receipt =
+        typeof read === 'object' && read.paid
+          ? ('unknown' as const)
+          : await landed(entry.hash, deadline)
+      const step = settlement({
+        cancellation,
+        entry,
+        now: Date.now(),
+        receipt,
+        status: read,
+      })
+      if (step.type === 'paid') return step.transaction
+      if (step.type === 'unpaid') return undefined
+      if (step.type === 'pending') throw new PendingError({ checkout })
+      if (step.type === 'cancel') {
+        cancellation = await post('/i/guest/pay/cancel', {
+          body: {
+            chain_id: chainId,
+            client_id: auth.clientId,
+            guest: await guest(),
+            redirect_uri: redirectUri,
+          },
+          deadline,
+        }).then(
+          () => undefined,
+          (error: unknown) => {
+            if (signal?.aborted) throw aborted()
+            if (error instanceof SignedOutError) throw error
+            // A held send, such as one that the cancellation found, reads the status again.
+            return final(error) ? ('refused' as const) : ('unknown' as const)
+          },
+        )
+        if (cancellation === undefined) return undefined
+      }
+      await wait(2_000, { aborted, signal })
+    }
+  }
+
+  /**
+   * Reads the payment until no shortfall remains, and returns it, or the paid checkout. With
+   * `funded`, it also returns a payment whose shortfall names a token that no funding code named.
+   */
+  const covered = async (options: {
+    deadline: number
+    funded?: readonly string[] | undefined
+    interval: number
+  }): Promise<Paid | Quoted> => {
+    for (;;) {
+      const next = await quote()
+      if ('paid' in next) return next
+      if (!('shortfall' in next)) throw refused(next.refusal)
+      const step = coverage({
+        deadline: options.deadline,
+        funded: options.funded,
+        now: Date.now(),
+        quote: next,
+      })
+      if (step.type === 'covered' || step.type === 'fund') return next
+      if (step.type === 'expired')
+        throw short(
+          `Insufficient balance: the guest account ${session.address} still lacks ${next.shortfall?.formatted} ${next.shortfall?.symbol}. Fund the guest account, then pay again.`,
+        )
+      await wait(options.interval, { aborted, signal })
+    }
+  }
+
+  const read = await quote()
+  if ('paid' in read) return settled(read.paid.transaction)
+  if (!('shortfall' in read)) throw refused(read.refusal)
+  if (read.refusal && !read.shortfall) throw refused(read.refusal)
+  const quoted = await (async () => {
+    if (!read.shortfall) return read
+    if (read.faucet) {
+      await post('/i/guest/fund', {
+        body: {
+          chain_id: chainId,
+          client_id: auth.clientId,
+          guest: await guest(),
+          redirect_uri: redirectUri,
+        },
+      })
+      return await covered({ deadline: Date.now() + 60_000, interval: 1_000 })
+    }
+    if (!fund)
+      throw short(
+        `Insufficient balance: the guest account ${session.address} lacks ${read.shortfall.formatted} ${read.shortfall.symbol}, and the chain has no faucet. Add the \`device\` plugin with \`onCode\`, so the payment shows a funding code, or fund the guest account.`,
+      )
+    // The funding hint names what the guest account lacks, by the exact token's address, also an
+    // unlisted one, since a deposit of another token covers nothing. The device form names no
+    // redirect URI, so its guest request names none either. A guest account that lacks a second
+    // token, such as the fee token after the payment's token arrived, receives one more funding
+    // code for it. Each token receives one code, so the funding ends.
+    const funded: string[] = []
+    let lacking = read
+    for (;;) {
+      const hint = funding({ amount, quote: lacking })
+      funded.push(hint.token.toLowerCase())
+      const code = await (async () => {
+        for (let attempt = 1; ; attempt++) {
+          try {
+            return await fund({
+              chainId,
+              funding: hint,
+              guest: await guest({ redirectUri: '' }),
+              signal,
+            })
+          } catch (error) {
+            if (signal?.aborted) throw error
+            const step = retryFunding({ attempt, error })
+            if (step.type === 'throw') throw step.error
+            await wait(step.delay, { aborted, signal })
+          }
+        }
+      })()
+      const next = await covered({
+        deadline: Date.now() + code.expiresIn * 1_000,
+        funded,
+        interval: code.interval * 1_000,
+      })
+      if ('paid' in next || !next.shortfall) return next
+      lacking = next
+    }
+  })()
+  if ('paid' in quoted) return settled(quoted.paid.transaction)
+
+  // The prepare names the quoted cost, which bounds the fill: the sponsor, or the fee that the
+  // guest pays, also `0` for a sponsored quote. A cost above it receives `quote_changed`, and the
+  // payment quotes again, so the key pair signs only a fill within a quote. A quote without a fee
+  // names none, and the check below refuses a fill whose fee the guest pays.
+  const prepare = async (quote: Quoted) =>
+    post<Paid | Prepared>('/i/guest/pay', {
+      body: {
+        ...terms,
+        ...(quote.sponsored
+          ? { fee: '0' }
+          : quote.fee
+            ? { fee: quote.fee.amount }
+            : {}),
+        guest: await guest(),
+        sponsored: quote.sponsored,
+      },
+    })
+  const { approved, prepared, returned } = await (async () => {
+    let approved = quoted
+    for (let attempt = 1; ; attempt++) {
+      const result = await prepare(approved).then(
+        (prepared) => ({ prepared, type: 'prepared' as const }),
+        (error: unknown) => ({ error, type: 'failed' as const }),
+      )
+      const step = requote({ attempt, result })
+      if (step.type === 'sign')
+        return { approved, prepared: step.prepared, returned: Date.now() }
+      if (step.type === 'throw') throw step.error
+      const next = requote({
+        attempt,
+        result: { quote: await quote(), type: 'quoted' },
+      })
+      if (next.type === 'paid')
+        return { approved, prepared: next.paid, returned: Date.now() }
+      if (next.type === 'refused') throw refused(next.refusal)
+      if (next.type === 'short')
+        throw short(
+          `Insufficient balance: the guest account ${session.address} lacks ${next.shortfall.formatted} ${next.shortfall.symbol} at the new quote. Fund the guest account, then pay again.`,
+        )
+      // A quote's step is `prepare` once no other step applies.
+      if (next.type === 'prepare') approved = next.quote
+    }
+  })()
+  if ('paid' in prepared) return settled(prepared.paid.transaction)
+  const envelope = check(prepared.transaction, {
+    amount,
+    chainId,
+    quote: approved,
+    memo,
+    to,
+    token,
+  })
+  held()
+  const transaction = await sign(envelope, {
+    account: account(auth, { session }),
+  })
+
+  const { tag } = prepared
+  // The end of the prepared transaction's window on the local clock, which Tempo ID sets at the
+  // prepare. No transfer of it lands after it. A local clock ahead of Tempo ID's ends no send early.
+  const end = expiry({
+    now: prepared.now,
+    returned,
+    validBefore: envelope.validBefore,
+  })
+  // Each send repeats the one signed transaction. Without a sponsor, its hash is the hash of the
+  // transfer that lands. A sponsor's signature gives the transfer that lands another hash, which
+  // the call does not know.
+  const hash =
+    envelope.feePayerSignature === null
+      ? undefined
+      : Hash.keccak256(transaction)
+
+  // Once a send may have reached Tempo ID, its transfer can land, so an abort or a sign-out ends
+  // the call with `PendingError`, which names the checkout.
+  let sent = false
+  try {
+    return await sending()
+  } catch (error) {
+    if (!sent || error instanceof PendingError) throw error
+    if (signal?.aborted || error instanceof SignedOutError)
+      throw new PendingError({ cause: error, checkout })
+    throw error
+  }
+
+  /** Sends the signed transfer until the checkout's outcome is final, and returns the payment. */
+  async function sending() {
+    // A send without a response, or of a held payment, sends the same transaction again, which pays
+    // the checkout once, until the transaction's window ends. Then the checkout's status decides.
+    for (;;) {
+      try {
+        // Another process on the same store, such as another CLI command, can sign out or forget
+        // the guest account, so each send reads the store's session beside the guest request,
+        // whose signature reads the key pair.
+        const [value] = await Promise.all([guest(), reload?.()])
+        // The send starts in the same task as the check, so no sign-out lands between them. A send
+        // that already left settles as Tempo ID's claim of the checkout decides.
+        held()
+        sent = true
+        const paid = await post<Paid>('/i/guest/pay/send', {
+          body: {
+            chain_id: chainId,
+            client_id: auth.clientId,
+            guest: value,
+            redirect_uri: redirectUri,
+            tag,
+            transaction,
+          },
+          // A send that stalls ends with the window, and the checkout's status decides its outcome.
+          deadline: end,
+        })
+        return settled(paid.paid.transaction)
+      } catch (error) {
+        if (signal?.aborted) throw aborted()
+        const retried =
+          error instanceof RequestError &&
+          ((error.status === 0 && error.code === 'server_error') ||
+            error.status >= 500 ||
+            error.reason === 'payment_pending')
+        if (retried && Date.now() < end) {
+          await wait(1_000, { aborted, signal })
+          continue
+        }
+        // The send's outcome is unknown, or Tempo ID refused it. The status tells a landed transfer
+        // from one that can no longer land, which the cancellation fences.
+        const transaction = await settle({ expiry: end, hash })
+        if (transaction) return settled(transaction)
+        throw error
+      }
+    }
+  }
+}
+
+export declare namespace pay {
+  type Options = {
+    /** The payment's amount, as a decimal string in whole units of the token, such as `5`. */
+    amount: string
+    /** The payment's chain. Defaults to the instance's. */
+    chainId?: number | undefined
+    /**
+     * Returns the instance's session. Once it no longer holds `session`, as {@link active} decides,
+     * the payment signs and sends nothing more, and rejects with `SignedOutError`. Absent, the
+     * payment checks only the stored key pair.
+     */
+    current?: (() => Session.Any | undefined) | undefined
+    /**
+     * Returns a client of the chain of `chainId`, which reads the receipt of a checkout's signed
+     * transaction. `Accounts.pay` passes one from the `viem` plugin's settings. Absent, only Tempo
+     * ID's status decides the checkout's outcome.
+     */
+    getClient?:
+      | ((options: { chainId: number }) => Client | undefined)
+      | undefined
+    /**
+     * Shows a funding code of the guest account for a shortfall on a chain without a faucet, such as
+     * the `device` plugin's `fundGuest`, and returns its expiry and poll interval. Absent, such a
+     * shortfall rejects with `insufficient_balance`.
+     */
+    fund?:
+      | ((options: {
+          chainId: number
+          funding: { amount: string; token: string }
+          guest: string
+          signal?: AbortSignal | undefined
+        }) => Promise<{ expiresIn: number; interval: number }>)
+      | undefined
+    /** The transfer's memo: a string, or hex of at most 32 bytes. Absent, the transfer has none. */
+    memo?: string | undefined
+    /**
+     * Reads the store's session again, and sets it as the instance's session when it is newer, such
+     * as after a sign-out in another process on the same store. Each send calls it before `current`.
+     * Absent, each send checks only the stored key pair and `current`.
+     */
+    reload?: (() => Promise<unknown>) | undefined
+    /** The guest session whose guest account pays. */
+    session: Session.GuestSession
+    /**
+     * Rejects the payment with the signal's reason, and stops its requests and waits. After a send
+     * may have reached Tempo ID, it rejects with `PendingError`, whose `cause` is the reason.
+     */
+    signal?: AbortSignal | undefined
+    /** The recipient's address. */
+    to: string
+    /** The token: its symbol that the chain lists, such as `ousd`, or the address of any TIP-20 token. */
+    token: string
+  }
+
+  type ReturnType = {
+    /** The guest account, which paid. */
+    address: `0x${string}`
+    /** The hash of the transaction that paid. */
+    transaction: `0x${string}`
+  }
+}
+
+/**
+ * Returns the guest request that opens Tempo ID's payment page for the guest account: the unpadded
+ * URL-safe Base64 of the request's JSON, with the key pair's signature over its message. The request
+ * binds the key pair to the app, the redirect URI, the chain, and the payment's checkout ID, for 4
+ * minutes. The message holds these lines, in order:
+ *
+ * ```
+ * tempo-id:guest
+ * chain_id=<chain ID>
+ * checkout=<checkout ID>
+ * client_id=<client ID>
+ * exp=<expiry, in Unix seconds>
+ * redirect_uri=<redirect URI>
+ * ```
+ * The first call
+ * creates and saves the key pair. The call reads and writes only the store, and sends no request.
+ *
+ * @throws {Error} As {@link session} throws it.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const { value } = await Actions.guest.request(accounts.config, {
+ *   chainId: 4217,
+ *   checkout: Base64.fromBytes(Bytes.random(16), { pad: false, url: true }),
+ *   redirectUri: 'https://example.com/',
+ * })
+ * ```
+ */
+export async function request(
+  auth: Config,
+  options: request.Options,
+): Promise<request.ReturnType> {
+  const { chainId, checkout, redirectUri } = options
+  // A line break in the checkout ID would add a line to the signed message.
+  if (!/^[\w-]{1,128}$/.test(checkout))
+    throw new TypeError(
+      'Invalid `checkout`: it holds a character other than a letter, a digit, `-`, or `_`, or more than 128 characters. Pass 16 random bytes as unpadded URL-safe Base64.',
+    )
+  const key = await load(auth)
+  const publicKey = publicKeyOf(key)
+
+  const expiresAt = Math.floor(Date.now() / 1000) + lifetime
+  const message = [
+    'tempo-id:guest',
+    `chain_id=${chainId}`,
+    `checkout=${checkout}`,
+    `client_id=${auth.clientId}`,
+    `exp=${expiresAt}`,
+    `redirect_uri=${redirectUri}`,
+  ].join('\n')
+  const payload = Bytes.fromString(message)
+  // Both forms sign the SHA-256 hash of the message, as WebCrypto's ECDSA does.
+  const signature =
+    key.type === 'webCrypto'
+      ? await WebCryptoP256.sign({
+          payload,
+          privateKey: key.keyPair.privateKey,
+        })
+      : P256.sign({ payload: Hash.sha256(payload), privateKey: key.privateKey })
+  const value = Base64.fromString(
+    JSON.stringify({
+      chain_id: chainId,
+      checkout,
+      client_id: auth.clientId,
+      exp: expiresAt,
+      public_key: PublicKey.toHex(publicKey),
+      redirect_uri: redirectUri,
+      signature: Hex.concat(
+        Hex.fromNumber(signature.r, { size: 32 }),
+        Hex.fromNumber(signature.s, { size: 32 }),
+      ),
+    }),
+    { pad: false, url: true },
+  )
+  return {
+    address: Address.fromPublicKey(publicKey, { checksum: true }),
+    checkout,
+    value,
+  }
+}
+
+export declare namespace request {
+  type Options = {
+    /** The payment's chain. */
+    chainId: number
+    /**
+     * The payment's checkout ID, such as 16 random bytes as unpadded URL-safe Base64: up to 128 letters, digits, `-`, or
+     * `_`. Each guest request of one payment, also a renewal, holds the same one.
+     */
+    checkout: string
+    /** The registered redirect URI that the payment page returns to. */
+    redirectUri: string
+  }
+
+  type ReturnType = {
+    /** The guest account's address. */
+    address: `0x${string}`
+    /** The checkout ID that the request signs. */
+    checkout: string
+    /** The guest request, as the page's `guest` parameter takes it. */
+    value: string
+  }
+}
+
+/**
+ * Returns the next step of `Actions.guest.pay` after a prepare of the transfer, or after the quote
+ * that follows Tempo ID's `quote_changed`. The prepare names the quoted cost, so a fill that costs
+ * more receives `quote_changed`, and the payment quotes again, up to 3 prepares.
+ *
+ * | Result     | Step                                                                                  |
+ * | ---------- | ------------------------------------------------------------------------------------- |
+ * | `prepared` | `sign`: the key pair signs the prepared transaction.                                  |
+ * | `failed`   | `quote` for `quote_changed` before the third prepare, or `throw` with the error.      |
+ * | `quoted`   | `paid` for a paid checkout, `refused`, `short` for a shortfall, or `prepare` at the new quote. |
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const step = Actions.guest.requote({ attempt: 1, result: { error, type: 'failed' } })
+ * ```
+ */
+export function requote<const prepared>(
+  options: requote.Options<prepared>,
+): requote.ReturnType<prepared> {
+  const { attempt, result } = options
+  if (result.type === 'prepared')
+    return { prepared: result.prepared, type: 'sign' }
+  if (result.type === 'failed') {
+    const changed =
+      result.error instanceof RequestError &&
+      result.error.reason === 'quote_changed'
+    if (changed && attempt < quoteAttempts) return { type: 'quote' }
+    return { error: result.error, type: 'throw' }
+  }
+  const { quote } = result
+  if ('paid' in quote) return { paid: quote, type: 'paid' }
+  if (!('shortfall' in quote))
+    return { refusal: quote.refusal, type: 'refused' }
+  if (quote.shortfall) return { shortfall: quote.shortfall, type: 'short' }
+  return { quote, type: 'prepare' }
+}
+
+export declare namespace requote {
+  type Options<prepared = unknown> = {
+    /** The number of the prepare, from 1. */
+    attempt: number
+    /** The outcome of the prepare, or of the quote after it. */
+    result:
+      | {
+          /** The prepare's error. */
+          error: unknown
+          type: 'failed'
+        }
+      | {
+          /** The prepared transaction, or the paid checkout. */
+          prepared: prepared
+          type: 'prepared'
+        }
+      | {
+          /** The new quote of `GET /i/guest/pay`. */
+          quote: Paid | Quoted | Refused
+          type: 'quoted'
+        }
+  }
+
+  type ReturnType<prepared = unknown> =
+    | {
+        /** The paid checkout of the new quote. */
+        paid: Paid
+        type: 'paid'
+      }
+    | {
+        /** The new quote, which the next prepare names. */
+        quote: Quoted
+        type: 'prepare'
+      }
+    | { type: 'quote' }
+    | {
+        /** Why Tempo ID refuses the payment at the new quote. */
+        refusal: Refusal
+        type: 'refused'
+      }
+    | {
+        /** What the guest account lacks at the new quote. */
+        shortfall: NonNullable<Quoted['shortfall']>
+        type: 'short'
+      }
+    | {
+        /** The prepared transaction, or the paid checkout, which the payment signs or returns. */
+        prepared: prepared
+        type: 'sign'
+      }
+    | {
+        /** The prepare's error, which the payment rejects with. */
+        error: unknown
+        type: 'throw'
+      }
+}
+
+/**
+ * Returns the next step of `Actions.guest.pay` after a funding code request rejects. Tempo ID
+ * refuses the request with `upstream_unavailable` when it cannot read the guest account's balance,
+ * and a later request can succeed. The request moves no funds, so a repeat is safe. The payment
+ * requests at most 3 times.
+ *
+ * | Error                                       | Step                                               |
+ * | ------------------------------------------- | -------------------------------------------------- |
+ * | `upstream_unavailable` before the third try | `retry` after 1 second, then 2 seconds.            |
+ * | `upstream_unavailable` at the third try     | `throw` with the error.                            |
+ * | Any other error                             | `throw` with the error.                            |
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const step = Actions.guest.retryFunding({ attempt: 1, error })
+ * ```
+ */
+export function retryFunding(
+  options: retryFunding.Options,
+): retryFunding.ReturnType {
+  const { attempt, error } = options
+  const unavailable =
+    error instanceof RequestError && error.reason === 'upstream_unavailable'
+  if (unavailable && attempt < fundAttempts)
+    return { delay: 1_000 * 2 ** (attempt - 1), type: 'retry' }
+  return { error, type: 'throw' }
+}
+
+export declare namespace retryFunding {
+  type Options = {
+    /** The number of the funding code request, from 1. */
+    attempt: number
+    /** The request's error. */
+    error: unknown
+  }
+
+  type ReturnType =
+    | {
+        /** The time before the next request, in milliseconds. */
+        delay: number
+        type: 'retry'
+      }
+    | {
+        /** The error that the payment rejects with. */
+        error: unknown
+        type: 'throw'
+      }
+}
+
+/**
+ * Returns a new guest session of the instance's guest account, whose key pair the first call creates
+ * and saves. The store keeps the key pair, and the session holds only its address and public key,
+ * so a save of the session as JSON holds no `CryptoKey`. The call reads and writes only the store,
+ * and sends no request.
+ *
+ * @throws {Error} Without a store, for a store that other parties read, such as `Store.postgres`,
+ *   and in a browser page for a store that keeps its values only in the page, such as
+ *   `Store.memory`, since a page load would lose the guest account and its funds. Also without Web
+ *   Locks or the store's `lock` in a page.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const session = await Actions.guest.session(accounts.config)
+ * ```
+ */
+export async function session(auth: Config): Promise<Session.GuestSession> {
+  const store = storeOf(auth)
+  persists(store)
+  const key = keyOf(auth)
+  // The key pair and the revision share one lock, so two starts never take one revision.
+  const [held, revision] = await exclusive(store, { key }, async (check) => {
+    const held = await create(store, { check, key })
+    return [held, await advance(store, { check, key })] as const
+  })
+  const publicKey = publicKeyOf(held)
+  return Session.from({
+    address: Address.fromPublicKey(publicKey, { checksum: true }),
+    kind: 'guest',
+    publicKey: PublicKey.toHex(publicKey),
+    revision,
+  })
+}
+
+/**
+ * Returns the next step of `Actions.guest.pay` for its checkout, after a send whose outcome is
+ * unknown or refused, from Tempo ID's status and the chain's receipt of its signed transaction.
+ *
+ * | Step      | When                                                                                          |
+ * | --------- | --------------------------------------------------------------------------------------------- |
+ * | `paid`    | Tempo ID's status names the paid transaction, or the chain holds a receipt of the signed one. |
+ * | `cancel`  | Tempo ID reads it unpaid with no send that can land, after the window or with a reverted receipt. |
+ * | `unpaid`  | Tempo ID refuses the checkout or its cancellation for good, and the receipt shows a revert.  |
+ * | `wait`    | The outcome is not known yet, before the window's end and `settleMargin`.                     |
+ * | `pending` | The outcome is still unknown after the window's end and `settleMargin`, also after cancellations or reads that failed. |
+ *
+ * Without Tempo ID's status, a missing receipt decides nothing, since the node that reads it can
+ * lag behind the chain. Only a reverted receipt shows that the transfer did not land.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const step = Actions.guest.settlement({
+ *   entry: { expiry: Actions.guest.expiry({ returned, validBefore }) },
+ *   now: Date.now(),
+ *   receipt: 'unknown',
+ *   status: { paid: null, pending: false },
+ * })
+ * ```
+ */
+export function settlement(options: settlement.Options): settlement.ReturnType {
+  const { cancellation, entry, now, receipt, status } = options
+  if (typeof status === 'object' && status.paid)
+    return { transaction: status.paid, type: 'paid' }
+  if (receipt === 'success' && entry.hash)
+    return { transaction: entry.hash, type: 'paid' }
+
+  const ended = now >= entry.expiry
+  const late = now >= entry.expiry + settleMargin
+  // A reverted transaction spent its nonce, so no transaction of the checkout lands.
+  const reverted = receipt === 'reverted'
+  if (typeof status === 'object' && !status.pending && (ended || reverted)) {
+    if (cancellation === undefined) return { type: 'cancel' }
+    // A cancellation that failed on the network or the server tries again until the margin.
+    if (cancellation === 'unknown')
+      return late ? { type: 'pending' } : { type: 'cancel' }
+    // Tempo ID refuses the cancellation for good, so the chain decides, as for a refused status.
+  }
+  if ((status === 'refused' || cancellation === 'refused') && reverted)
+    return { type: 'unpaid' }
+  return late ? { type: 'pending' } : { type: 'wait' }
+}
+
+export declare namespace settlement {
+  type Options = {
+    /**
+     * The outcome of the last cancellation of the checkout: `refused` for Tempo ID's definitive
+     * refusal, or `unknown` after a network or server failure. Absent before a cancellation.
+     */
+    cancellation?: 'refused' | 'unknown' | undefined
+    /** The call's checkout. */
+    entry: {
+      /**
+       * The end of its transaction's window on the local clock, in Unix milliseconds, as
+       * {@link expiry} returns it.
+       */
+      expiry: number
+      /** The hash of its signed transaction. Absent for a sponsored one, whose hash is unknown. */
+      hash?: `0x${string}` | undefined
+    }
+    /** The local time, in Unix milliseconds. */
+    now: number
+    /**
+     * The chain's receipt of the signed transaction: its status, `missing` for none, `unreadable`
+     * without a hash or a client, or `unknown` after a failed read.
+     */
+    receipt: 'missing' | 'reverted' | 'success' | 'unknown' | 'unreadable'
+    /**
+     * Tempo ID's status of the checkout: the paid transaction and whether a send can land,
+     * `refused` for a definitive refusal, or `unknown` after a failed read.
+     */
+    status:
+      | {
+          /** The hash of the transaction that paid, or `null` before a payment. */
+          paid: `0x${string}` | null
+          /** Whether a transaction of the checkout can still land. */
+          pending: boolean
+        }
+      | 'refused'
+      | 'unknown'
+  }
+
+  type ReturnType =
+    | { type: 'cancel' }
+    | {
+        /** The hash of the transaction that paid. */
+        transaction: `0x${string}`
+        type: 'paid'
+      }
+    | { type: 'pending' }
+    | { type: 'unpaid' }
+    | { type: 'wait' }
+}
+
+/**
+ * Returns `envelope` signed by `account`, the guest session's account, serialized with the sponsor's
+ * marker that it holds, if any.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const signed = await Actions.guest.sign(envelope, { account })
+ * ```
+ */
+export async function sign(
+  envelope: TxEnvelopeTempo.TxEnvelopeTempo,
+  options: sign.Options,
+): Promise<`0x${string}`> {
+  const { account } = options
+  const signature = await account.sign({
+    hash: TxEnvelopeTempo.getSignPayload(envelope),
+  })
+  return TxEnvelopeTempo.serialize(envelope, {
+    signature: SignatureEnvelope.from(signature),
+  })
+}
+
+export declare namespace sign {
+  type Options = {
+    /** The guest session's account, from {@link account}. */
+    account: Account.RootAccount
+  }
+}
+
+/**
+ * Checks the transaction that a guest payment's page posts against the payment, as {@link check}
+ * does, and returns it signed by the guest session's account, as {@link sign} does. The instance's
+ * session must hold `session`, as {@link active} decides, before the signature and after it, so a
+ * sign-out or another session during the key pair's read or the signature releases no signature.
+ *
+ * @throws {SignedOutError} When the instance's session no longer holds `session`, or the store holds
+ *   another key pair or none.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const signed = await Actions.guest.transfer(accounts.config, {
+ *   amount: '5',
+ *   chainId: 4217,
+ *   current: () => accounts.session.get(),
+ *   session,
+ *   to: '0x…',
+ *   token: 'ousd',
+ *   transaction,
+ * })
+ * ```
+ */
+export async function transfer(
+  auth: Config,
+  options: transfer.Options,
+): Promise<`0x${string}`> {
+  const { current, session, transaction, ...terms } = options
+  const held = () => {
+    if (current && !active({ current: current(), started: session }))
+      throw new SignedOutError()
+  }
+
+  held()
+  const envelope = check(transaction, terms)
+  const signed = await sign(envelope, { account: account(auth, { session }) })
+  held()
+  return signed
+}
+
+export declare namespace transfer {
+  type Options = check.Options & {
+    /** Returns the instance's session. Absent, only the stored key pair counts. */
+    current?: (() => Session.Any | undefined) | undefined
+    /** The guest session whose guest account signs. */
+    session: Session.GuestSession
+    /** The transaction that the page posts. */
+    transaction: unknown
+  }
+}
+
+/**
+ * Returns the store's entry of the guest account. A guest account belongs to one deployment and
+ * app. The JSON tuple keeps the entry unique, since an origin and a client ID can both hold a colon.
+ */
+function keyOf(auth: Config) {
+  return `tempo-id:guest:${JSON.stringify([new URL(auth.url).origin, auth.clientId])}`
+}
+
+/**
+ * Runs `fn` while it holds the guest account's lock: a Web Lock, the store's `lock`, or both for a
+ * store that other processes share. The creation and the removal of the guest account's key pair
+ * hold it, so neither undoes the other. Throws without Web Locks and without the store's `lock`.
+ */
+async function exclusive<value>(
+  store: Store,
+  options: exclusive.Options,
+  fn: (check?: () => Promise<void>) => Promise<value>,
+): Promise<value> {
+  const locks = (globalThis.navigator as { locks?: LockManager } | undefined)
+    ?.locks
+  // The lock's name is no entry of the store, so a store that locks each entry never waits for the
+  // lock that its caller holds.
+  const name = `${options.key}:exclusive`
+  // Web Locks span one browser or one Node process only, so the store's own lock, such as the lock
+  // file of `Store.file`, also serializes other processes. The Web Lock orders the process's runs.
+  if (locks && store.lock && !store.local)
+    return await locks.request(name, () => store.lock!(name, fn))
+  if (locks) return await locks.request(name, () => fn())
+  if (store.lock) return await store.lock(name, fn)
+  // Two pages or processes that create the guest account at once would each save a key pair, and
+  // the funds of the overwritten one would stay with no signer.
+  throw new Error(
+    'Invalid `store`: the runtime has no Web Locks, and the store has no `lock`, so two callers could create two guest accounts. Use a store with `lock`.',
+  )
+}
+
+declare namespace exclusive {
+  type Options = {
+    /** The store's entry of the guest account. */
+    key: string
+  }
+}
+
+/**
+ * Returns the guest account's key pair, or creates and saves one. Web Locks, or else the store's
+ * `lock`, serialize the calls, so two tabs keep one guest account. A refused read or write throws,
+ * so no new key pair replaces a stored one.
+ */
+async function load(auth: Config): Promise<Key> {
+  const store = storeOf(auth)
+  persists(store)
+  const key = keyOf(auth)
+  return await exclusive(store, { key }, (check) =>
+    create(store, { check, key }),
+  )
+}
+
+/**
+ * Returns the guest account's stored key pair, or creates and saves one. The caller holds the lock
+ * of {@link exclusive}, whose `check` throws once another process took it.
+ */
+async function create(store: Store, options: create.Options): Promise<Key> {
+  const { check, key } = options
+  const held = await read(store, { key })
+  if (held) return held
+  const value: P256Entry | WebCryptoP256.createKeyPair.ReturnType = store.json
+    ? { privateKey: P256.randomPrivateKey(), type: 'p256' }
+    : await WebCryptoP256.createKeyPair()
+  // A holder that lost the lock to another process, such as after a pause past a stale lock,
+  // writes nothing, and runs again, so it reads the other process's key pair.
+  await check?.()
+  // The first key pair lands only on an empty entry, so a key pair that another process saved,
+  // whose guest account it may have shown for funding, stays.
+  if (store.update) {
+    const stored = await store.update(key, (current) =>
+      current === undefined || current === null
+        ? { result: value as unknown, value }
+        : { result: current, value: current },
+    )
+    return decode(stored)
+  }
+  const again = await read(store, { key })
+  if (again) return again
+  await store.setItem(key, value)
+  return decode(value)
+}
+
+declare namespace create {
+  type Options = {
+    /** Throws once another process took the lock. Absent for a lock without an owner's check. */
+    check?: (() => Promise<void>) | undefined
+    /** The store's entry of the guest account. */
+    key: string
+  }
+}
+
+/**
+ * Returns the next revision of the guest session: the clock, or one more than the last revision
+ * that the store holds, whichever is greater. A clock that steps back, or two starts in one
+ * millisecond, then still give a later revision, which another context adopts. The caller holds the
+ * lock of {@link exclusive}.
+ */
+async function advance(store: Store, options: create.Options): Promise<number> {
+  const { check } = options
+  const key = `${options.key}:revision`
+  const next = (current: unknown) =>
+    Math.max(Date.now(), typeof current === 'number' ? current + 1 : 0)
+  await check?.()
+  if (store.update)
+    return await store.update(key, (current) => {
+      const value = next(current)
+      return { result: value, value }
+    })
+  const value = next(await store.getItem(key))
+  await store.setItem(key, value)
+  return value
+}
+
+/**
+ * Throws in a browser page for a store that keeps its values only in the page, such as
+ * `Store.memory`, since a page load would lose the guest account and its funds. Outside a page, such
+ * as in Node, the process holds the store for its lifetime, so the store passes.
+ */
+function persists(store: Store) {
+  if (store.local && typeof document !== 'undefined')
+    throw new Error(
+      'Invalid `store`: it keeps the guest account only in the page, which a page load loses with its funds. Use a store that persists, such as the default IndexedDB store.',
+    )
+}
+
+/** Returns the public key of `key`. */
+function publicKeyOf(key: Key) {
+  return key.type === 'webCrypto' ? key.keyPair.publicKey : key.publicKey
+}
+
+/**
+ * Returns the guest account's key pair from the store, or `undefined` without one. Throws for a
+ * value that is no key pair, which the action never replaces.
+ */
+async function read(
+  store: Store,
+  options: read.Options,
+): Promise<Key | undefined> {
+  const value = await store.getItem(options.key)
+  if (value === undefined || value === null) return undefined
+  return decode(value)
+}
+
+declare namespace read {
+  type Options = {
+    /** The store's entry of the guest account. */
+    key: string
+  }
+}
+
+/** Returns the key pair of a stored value. Throws for a value that is no key pair. */
+function decode(value: unknown): Key {
+  const stored = value as {
+    privateKey?: unknown
+    publicKey?: PublicKey.PublicKey | undefined
+    type?: unknown
+  }
+  if (
+    typeof CryptoKey !== 'undefined' &&
+    stored.privateKey instanceof CryptoKey &&
+    stored.publicKey !== undefined &&
+    PublicKey.validate(stored.publicKey)
+  )
+    return {
+      keyPair: stored as WebCryptoP256.createKeyPair.ReturnType,
+      type: 'webCrypto',
+    }
+  if (
+    stored.type === 'p256' &&
+    typeof stored.privateKey === 'string' &&
+    Hex.validate(stored.privateKey, { strict: true })
+  )
+    return {
+      privateKey: stored.privateKey,
+      publicKey: P256.getPublicKey({ privateKey: stored.privateKey }),
+      type: 'p256',
+    }
+  throw new Error(
+    'Invalid guest account: its entry of the store holds no key pair. Remove the entry with `guest.disconnect`, then start the guest session again.',
+  )
+}
+
+/**
+ * Returns the instance's store, which keeps the guest account's key pair: a store that keeps values
+ * as they are, or a private store of JSON, such as `Store.file`. Throws without one, and for a store
+ * that other parties read, such as `Store.postgres`.
+ */
+function storeOf(auth: Config): Store {
+  const store = DefaultStore.get(auth.store)
+  if (!store)
+    throw new Error(
+      'Missing `store`: a guest account needs a store that keeps its key pair, such as IndexedDB in a browser. Pass `store` to the instance.',
+    )
+  if (store.json && !store.private)
+    throw new TypeError(
+      'Invalid `store`: other parties read it, so it keeps no key pair of a guest account. Use IndexedDB in a browser, or `Store.file`.',
+    )
+  return store
+}
+
+/**
+ * Resolves after `ms` milliseconds, or rejects with `options.aborted()` once `options.signal` aborts.
+ */
+async function wait(ms: number, options: wait.Options) {
+  const { aborted, signal } = options
+  if (signal?.aborted) throw aborted()
+  await new Promise<void>((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer)
+      reject(aborted())
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', abort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', abort, { once: true })
+  })
+}
+
+declare namespace wait {
+  type Options = {
+    /** Returns the error of an aborted wait. */
+    aborted: () => unknown
+    /** Rejects the wait once it aborts. */
+    signal?: AbortSignal | undefined
+  }
+}

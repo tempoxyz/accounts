@@ -29,10 +29,12 @@
     "types": ["node"],
     "verbatimModuleSyntax": true
   },
-  // The examples, the scripts, the site, the test apps, and the bench check their own types.
+  // The examples, the scripts, the site, the test apps, and the bench check their own types. The
+  // scripts' configuration also checks Uphill's metric scripts.
   "exclude": [
     "**/dist",
     "**/node_modules",
+    ".agents",
     ".claude",
     "examples",
     "scripts",

@@ -237,6 +237,8 @@ export declare namespace url {
     resource?: string
     /** `0` for a Viem client that shows no screen for a refused transaction. */
     retry?: '0'
+    /** The scopes beyond the instance's that the tokens of the page's "Sign in" control hold. */
+    scope?: string
     /** `1` for a config of the wagmi page's connector that also holds the second node's chain. */
     second?: '1'
     /** The typed data that the page's "Sign typed data as the owner" control signs. */

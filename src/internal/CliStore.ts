@@ -44,17 +44,22 @@ export function get(clientId: string | undefined): Store | undefined {
     return loading
   }
 
-  // Each call waits for the one load, so the calls reach the file store in their order.
+  // Each call waits for the one load, so the calls reach the file store in their order. The flags
+  // and `update` are the file store's, which a guest session needs: a JSON key pair, and a
+  // compare-and-set of its first key pair and its revision.
   return {
     // The instances of the process on the file, also on `Store.file()`, hear each saved change of
     // each other, so a sign-out empties their sessions at once.
     ...(path ? { connect: FileConnection.get(path) } : {}),
     getItem: async (key) => (await load()).getItem(key),
+    json: true,
     // The CLIs of the user share the file, so their refreshes order through its lock.
     lock: async (key, fn) => (await load()).lock!(key, fn),
+    private: true,
     removeItem: async (key) => (await load()).removeItem(key),
     setItem: async (key, value, options) =>
       (await load()).setItem(key, value, options),
     takeItem: async (key) => (await load()).takeItem?.(key),
+    update: async (key, fn) => (await load()).update!(key, fn),
   }
 }
