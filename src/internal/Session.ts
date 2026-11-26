@@ -2153,13 +2153,10 @@ export function create(options: create.Options): create.ReturnType {
       const saved = ending.empty ? await settle(writes?.flush()) : undefined
       const erased = failed ?? saved
       const ended = ending.session
-      // A refresh that the sign-out overtook ended its own new session already. A later sign-in
-      // in this instance owns the Tempo ID session, so the sign-out then ends no logout. A
-      // restore reads the session that the sign-out ends, so it counts as no sign-in.
+      // A refresh that the sign-out overtook ended its own new session already.
       const skipped = ended?.refreshToken
         ? rotated.get(ended.refreshToken)
         : undefined
-      const signIns = actor ? context().signIns : 0
       // A refresh token that Tempo ID revoked already, such as at a disconnection, needs no
       // revocation. It still enters the store's revoked digests, so another context that holds it
       // sends no revocation of it, which would count as a reuse.
@@ -2201,12 +2198,17 @@ export function create(options: create.Options): create.ReturnType {
       const errors = new Map<string, unknown>()
       const signedOut = await settle(
         signOut(revoking, {
-          logout: machines.logout({
-            everywhere: options.everywhere,
-            kept: ending.kept,
-            signIns,
-            started: ownSignIns,
-          }),
+          // A later sign-in in this instance owns the Tempo ID session, so the sign-out then ends no
+          // logout. The revocations run first, and a sign-in can commit during them, so the decision
+          // reads the count of sign-ins before the logout. A restore reads the session that the
+          // sign-out ends, so it counts as no sign-in.
+          logout: () =>
+            machines.logout({
+              everywhere: options.everywhere,
+              kept: ending.kept,
+              signIns: actor ? context().signIns : 0,
+              started: ownSignIns,
+            }),
           // The machine counts the logout that succeeded, and the one of unknown outcome, which a
           // restore that the sign-out overtook reads. Only after a logout that Tempo ID refused,
           // that restore revokes its own tokens.
@@ -2355,8 +2357,11 @@ export declare namespace create {
     signOut: (
       session: Session.Any | undefined,
       options?: {
-        /** Whether the Tempo ID session ends too. Defaults to `true`. */
-        logout?: boolean | undefined
+        /**
+         * Whether the Tempo ID session ends too, or a function that returns it, which the sign-out
+         * calls after the revocations, before the logout. Defaults to `true`.
+         */
+        logout?: boolean | (() => boolean) | undefined
         /** Runs once the logout succeeds, which ended the Tempo ID session and revoked its tokens. */
         onLoggedOut?: (() => void) | undefined
         /**
