@@ -3700,20 +3700,23 @@ export namespace machines {
     const { entries, held, refreshToken, stored } = options
     // A local session holds no tokens that another context rotates.
     if (Session.local(held)) return false
-    // The save of a successor's rotation follows its receipt, so a `stored` session that this order
-    // rates newer is newer for the context that received the successor too.
     const own = refreshToken === held.refreshToken
     const entry = own
       ? undefined
       : entries.find((entry) => entry.to === refreshToken)
     const expiresAt = own ? held.expiresAt : entry?.expiresAt
     if (!stored || expiresAt === undefined) return false
-    return newer(stored, {
-      ...held,
-      expiresAt,
-      receivedAt: own ? held.receivedAt : entry?.at,
-      refreshToken,
-    })
+    const candidate = { ...held, expiresAt, refreshToken }
+    // A context of an earlier release orders by `expiresAt` alone, so it adopts `stored` only by that
+    // order. The save of a successor's rotation follows its receipt, so a `stored` session that
+    // the receipt order rates newer is newer for the context that received the successor too.
+    return (
+      newer(stored, { ...candidate, receivedAt: undefined }) &&
+      newer(stored, {
+        ...candidate,
+        receivedAt: own ? held.receivedAt : entry?.at,
+      })
+    )
   }
 
   export declare namespace adopts {

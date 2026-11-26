@@ -1492,6 +1492,66 @@ describe('machines.session', () => {
 
       expect(result).toBe(false)
     })
+
+    describe('with receipts', () => {
+      const received = {
+        expiresAt: 1_000,
+        receivedAt: 100,
+        refreshToken: 'R0',
+        user: { id: 'a' },
+      } as never
+      const rotated = [{ at: 200, expiresAt: 1_500, from: 'digest', to: 'R1' }]
+      const cases = [
+        [
+          'the held token, and a later receipt and expiry',
+          'R0',
+          2_000,
+          300,
+          true,
+        ],
+        [
+          'the held token, and a later receipt of an earlier expiry, which an earlier release keeps',
+          'R0',
+          500,
+          300,
+          false,
+        ],
+        [
+          'the held token, and an earlier receipt of a later expiry',
+          'R0',
+          2_000,
+          50,
+          false,
+        ],
+        ['a successor, and a receipt after its save', 'R1', 2_000, 300, true],
+        [
+          "a successor, and a receipt after the held token's but before the successor's save",
+          'R1',
+          2_000,
+          150,
+          false,
+        ],
+        [
+          'a successor, and a later receipt of an earlier expiry',
+          'R1',
+          1_200,
+          300,
+          false,
+        ],
+      ] as const
+
+      for (const [name, refreshToken, expiresAt, receivedAt, expected] of cases)
+        test(`returns ${expected} for ${name}`, () => {
+          const result = machines.adopts({
+            entries: rotated,
+            held: received,
+            refreshToken,
+            stored: { expiresAt, receivedAt, user: { id: 'a' } } as never,
+          })
+
+          expect(result).toBe(expected)
+        })
+    })
   })
 
   describe('lacks', () => {
