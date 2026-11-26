@@ -389,6 +389,8 @@ export declare namespace tempoId {
      *   in again. The user's denial, `access_denied` without a `reason`, throws
      *   `UserRejectedRequestError` instead.
      * @throws {ChainNotConfiguredError} With `chainId`, for a chain outside the config's `chains`.
+     * @throws {Accounts.SupersededError} When a sign-out ends the session that the sign-in set, or
+     *   overtakes the read of the Tempo Account, before `connect` returns. wagmi stays disconnected.
      * @throws {SignInIncompleteError} When the sign-in set no session: a redirect that left the
      *   page, a dismissed browser, or the email step of a passkey. After a redirect, wagmi's
      *   `reconnect` connects on the page that the browser returns to.
@@ -849,16 +851,29 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
               )
             : defaultSignIn
         if (!signIn && !fallback) throw new SignInRequiredError()
-        if (signIn)
-          await signIn(instance as tempoId.Instance<plugins>, { accessKey })
-        else
-          await (instance as unknown as Record<string, SignInFn>)[
-            fallback!
-          ]!.signIn({ accessKey })
+        // Whether the sign-in set a session. A sign-out can end it before the read below, which
+        // overtakes the sign-in, as a sign-out during the account read does.
+        let set = false
+        const unsubscribe = instance.session.subscribe((session) => {
+          if (session && session.accessToken !== current?.accessToken)
+            set = true
+        })
+        try {
+          if (signIn)
+            await signIn(instance as tempoId.Instance<plugins>, { accessKey })
+          else
+            await (instance as unknown as Record<string, SignInFn>)[
+              fallback!
+            ]!.signIn({ accessKey })
+        } finally {
+          unsubscribe()
+        }
         // A sign-in that returned without a session, such as at the email step of a passkey, leaves
         // the held session as it was, so only a new session completes it.
         const next = await instance.session.get()
-        return next === current ? undefined : next
+        if (next && next !== current) return next
+        if (set) throw new Accounts.SupersededError()
+        return undefined
       })().catch((error: unknown) => {
         // wagmi and EIP-1193 read a refused request as code 4001, which a closed dialog or popup
         // is, and so is the user's denial.
