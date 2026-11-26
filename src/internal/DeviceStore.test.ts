@@ -2,8 +2,11 @@
  * Tests of the store of the `expo` preset, on a secure store in memory.
  * @module
  */
-import { describe, expect, test } from 'vite-plus/test'
+import * as Http from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
+import { redirect } from '../plugins/redirect.js'
 import * as Session from '../Session.js'
 import * as DeviceStore from './DeviceStore.js'
 
@@ -42,6 +45,87 @@ describe('create', () => {
       .poll(() => other.session.status.get().status, { timeout: 1_000 })
       .toBe('signedOut')
     expect(await other.session.get()).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test("keeps the sign-out flag of another preset's instance that signs out while a sign-in removes its own flag", async () => {
+    // Tempo ID's token endpoint redeems each code, and its revocation answers each sign-out.
+    const server = Http.createServer((request, response) => {
+      request.resume()
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(
+        request.url === '/oauth2/token'
+          ? JSON.stringify({
+              access_token: 'access-token',
+              expires_in: 3600,
+              id_token: `e30.${Buffer.from(JSON.stringify({ email: 'user@example.com', sub: 'user_1' })).toString('base64url')}.`,
+              refresh_token: 'refresh-token',
+              token_type: 'Bearer',
+            })
+          : '{}',
+      )
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    onTestFinished(
+      () => new Promise<void>((resolve) => server.close(() => resolve())),
+    )
+    const { port } = server.address() as AddressInfo
+    const secureStore = memory()
+    const prompts: (string | null)[] = []
+    // Each instance creates its own store, as two `expo` presets of one app do.
+    const create = () =>
+      Accounts.create({
+        chain: 1337,
+        clientId: 'example-mobile',
+        plugins: [
+          redirect({
+            open(url) {
+              const { searchParams } = new URL(url)
+              prompts.push(searchParams.get('prompt'))
+              return Promise.resolve(
+                `com.example.app:/callback?code=code&state=${searchParams.get('state')}`,
+              )
+            },
+          }),
+        ],
+        redirectUri: 'com.example.app:/callback',
+        store: DeviceStore.create(secureStore),
+        url: `http://127.0.0.1:${port}`,
+      })
+    const accounts = create()
+    const other = create()
+    await accounts.redirect.signIn({ accessKey: false })
+    await accounts.signOut()
+    // After the next sign-in commits, it reads its sign-out flag to remove it. The other instance
+    // signs out while that read runs, which a device's keychain can take a while to answer.
+    const signedOut: Promise<void>[] = []
+    const getItemAsync = secureStore.getItemAsync
+    secureStore.getItemAsync = async (key) => {
+      const value = await getItemAsync(key)
+      if (
+        key.startsWith('tempo-id_003asigned-out') &&
+        accounts.session.status.get().status === 'signedIn' &&
+        signedOut.length === 0
+      ) {
+        signedOut.push(other.signOut())
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+      return value
+    }
+
+    await accounts.redirect.signIn({ accessKey: false })
+    await Promise.all(signedOut)
+    await accounts.redirect.signIn({ accessKey: false })
+
+    expect({ prompts, signedOut: signedOut.length }).toMatchInlineSnapshot(`
+      {
+        "prompts": [
+          null,
+          "login",
+          "login",
+        ],
+        "signedOut": 1,
+      }
+    `)
   })
 
   test('sets local, since only the app reads its secure store, so a refusal of a refresh token is final', () => {
