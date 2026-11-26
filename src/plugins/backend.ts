@@ -10,6 +10,7 @@ import type * as Accounts from '../Accounts.js'
 import { GuestSessionError, LocalSessionError } from '../Accounts.js'
 import * as AccessToken from '../AccessToken.js'
 import type * as AccessToken_ from '../AccessToken.js'
+import type * as AccountActions from '../actions/account.js'
 import type * as Funding from '../internal/Funding.js'
 import * as Api from '../internal/Api.js'
 import * as BackendCookie from '../internal/BackendCookie.js'
@@ -24,10 +25,11 @@ import type { Store } from '../Store.js'
 /**
  * Returns the plugin of a backend's sessions: one for each of its users, under an opaque session ID
  * that the browser holds in an `HttpOnly` cookie. It adds `backend.start`, `backend.complete`,
- * `backend.save`, `backend.get`, `backend.fetch`, and `backend.end` by session ID, the reads of a
- * request's session `session.get(request)` and `session.fetch(request, options)`, and the sign-in
- * routes of `accounts.handler`, for a redirect or the dialog: `/auth/login`, `/auth/callback`,
- * `/auth/logout`, and `/auth/session`, and the back-channel logout route
+ * `backend.save`, `backend.get`, `backend.fetch`, `backend.disconnect`, and `backend.end` by
+ * session ID, the reads of a request's session `session.get(request)` and
+ * `session.fetch(request, options)`, and the sign-in routes of `accounts.handler`, for a redirect
+ * or the dialog: `/auth/login`, `/auth/callback`, `/auth/logout`, and `/auth/session`, and the
+ * back-channel logout route
  * `/auth/backchannel-logout`. The handler serves them under `/auth` of the `handler`
  * option's `basePath`, so under `/api/auth` by default, apart from its other routes, such as
  * `/relay`. An app with routes of its own calls `backend.start`, `backend.complete`, and
@@ -159,6 +161,55 @@ export function backend(options: backend.Options) {
         ): Promise<backend.Session.TempoId> =>
           redeem({ id: parameters.id, url: parameters.url }),
         /**
+         * Ends the connection of the app and the session's user at
+         * `POST /v1/connection/disconnect`, with the session's access token, after a refresh if
+         * necessary. Tempo ID removes the user's consent and every token of the app, and revokes each
+         * live access key of the connection, as `connection.disconnect` does on a page. The call then
+         * deletes the session without a revocation, as `end` with `revoke: false` does, since Tempo ID
+         * revoked its refresh token, and reads a second revocation as reuse. The user's Tempo ID
+         * session stays. Returns the revoked access keys, and in `remaining` those that Tempo ID could
+         * not revoke. A session that a sign-in stores under `id` during the request stays, if Tempo
+         * ID issued its tokens in a later second than the tokens of the request. Returns `undefined`
+         * without a session, and for a SIWE session, and sends no request. The app deletes the
+         * session cookie itself.
+         * @throws {Accounts.RequestError} With `invalid_token` or `invalid_dpop_proof` for an access
+         *   token that Tempo ID refuses, and `rate_limited` for too many requests. The session stays.
+         *   Also when a refresh fails, as `get` describes.
+         *
+         * @example
+         * ```ts
+         * const { remaining } = await accounts.backend.disconnect({ id })
+         * ```
+         */
+        async disconnect(
+          parameters: backend.disconnect.Parameters,
+        ): Promise<backend.disconnect.ReturnType | undefined> {
+          const { id } = parameters
+          const path = '/v1/connection/disconnect'
+          // The sessions sign the request with the configuration that redeemed the tokens, such as a
+          // Durable Object's, whose DPoP key bound them.
+          const tokenHeaders = await sessions.headers({
+            id,
+            method: 'POST',
+            url: new URL(path, config.url).href,
+          })
+          if (!tokenHeaders) return undefined
+          // A session that a sign-in stores under the ID during the request holds tokens that Tempo ID
+          // issued later, so the end keeps it.
+          const issuedAt = BackendSessions.issuedAt(
+            tokenHeaders.authorization?.split(' ')[1],
+          )
+          const body = await Api.json<AccountActions.disconnect.Response>(
+            await Api.post(config, path, {
+              credentials: 'omit',
+              headers: tokenHeaders,
+              json: { client_id: config.clientId },
+            }),
+          )
+          await sessions.end({ id, issuedAt, revoke: false })
+          return { remaining: body.remaining ?? [], revoked: body.revoked }
+        },
+        /**
          * Revokes the session's refresh token at Tempo ID's `POST /oauth2/revoke`, then deletes the
          * session. A refresh or a `complete` in progress finishes first, so `end` revokes the token
          * that it stored. A SIWE session holds no refresh token, so `end` deletes it without a
@@ -180,7 +231,12 @@ export function backend(options: backend.Options) {
         /**
          * Sends a request with the session's access token, as `Actions.fetch` does, after a refresh
          * if necessary. Returns `undefined` without a session, and for a SIWE session, which holds
-         * no access token, and sends no request.
+         * no access token, and sends no request. If the response has status 401 and `WWW-Authenticate`
+         * names `invalid_token`, such as after Tempo ID ended the user's session, the call refreshes
+         * the session once. New tokens send the request again, if its body reads twice, such as a
+         * string or a `Blob`. A stream body, a refresh that fails or that Tempo ID refuses, and a
+         * second refusal of the token that such a refresh issued return the first response. A refused
+         * refresh token ends the session.
          * @throws {Accounts.RequestError} With `invalid_dpop_proof` and status 400, if another DPoP
          *   key, or no key, binds the access token. The call sends no request. Also when a refresh
          *   fails, as `get` describes.
@@ -211,6 +267,12 @@ export function backend(options: backend.Options) {
             }
           })()
           const method = (init.method ?? 'GET').toUpperCase()
+          const send = (tokenHeaders: Record<string, string>) =>
+            (config.fetch ?? globalThis.fetch)(url, {
+              ...init,
+              headers: Api.requestHeaders(init.headers, { tokenHeaders }),
+              method,
+            })
           // The sessions sign the request with the configuration that redeemed the tokens, such as a
           // Durable Object's, whose DPoP key bound them.
           const tokenHeaders = await sessions.headers({
@@ -219,12 +281,24 @@ export function backend(options: backend.Options) {
             url: url.href,
           })
           if (!tokenHeaders) return undefined
-          const headers = Api.requestHeaders(init.headers, { tokenHeaders })
-          return (config.fetch ?? globalThis.fetch)(url, {
-            ...init,
-            headers,
-            method,
-          })
+          const response = await send(tokenHeaders)
+          if (!refusesToken(response)) return response
+
+          // The API refused a token that the session still holds, so the session refreshes once. The
+          // request already reached the API, so a failed refresh returns its response. Sessions that
+          // ignore `refused` return the same token, and the call returns the first response.
+          const refused = accessTokenOf(tokenHeaders)
+          const renewed = await sessions
+            .headers({ id: parameters.id, method, refused, url: url.href })
+            .catch(() => undefined)
+          if (
+            !renewed ||
+            accessTokenOf(renewed) === refused ||
+            !resendable(init.body)
+          )
+            return response
+          await response.body?.cancel()
+          return send(renewed)
         },
         /**
          * Returns the session, after a refresh if its access token expires within 30 seconds, or
@@ -689,11 +763,9 @@ export declare namespace backend {
      * Returns the headers that send the session's access token for a request, or `undefined`
      * without a Tempo ID session.
      */
-    headers: (options: {
-      id: string
-      method: string
-      url: string
-    }) => Promise<Record<string, string> | undefined>
+    headers: (
+      options: BackendSessions.headers.Options,
+    ) => Promise<Record<string, string> | undefined>
     /** Stores a challenge of the session: its SIWE sign-in's, or an approval's. */
     issue: (options: BackendSessions.issue.Options) => Promise<void>
     /**
@@ -771,6 +843,15 @@ export declare namespace backend {
       /** The callback URL that Tempo ID redirected to. */
       url: string
     }
+  }
+
+  namespace disconnect {
+    type Parameters = {
+      /** The session ID. */
+      id: string
+    }
+
+    type ReturnType = AccountActions.disconnect.ReturnType
   }
 
   namespace end {
@@ -890,6 +971,42 @@ function local(sessions: BackendSessions.create.ReturnType): backend.Sessions {
     take: sessions.take,
     unlink: sessions.unlink,
   }
+}
+
+/**
+ * Returns the access token of the headers that send it: the credentials of `Authorization`, in any
+ * case of the header's name.
+ */
+function accessTokenOf(headers: Record<string, string>) {
+  return new Headers(headers).get('authorization')?.split(' ')[1]
+}
+
+/**
+ * Returns whether the response refuses its request's access token: status 401, with a
+ * `WWW-Authenticate` challenge that names `invalid_token` (RFC 6750 §3.1).
+ */
+function refusesToken(response: Response) {
+  if (response.status !== 401) return false
+  const challenge = response.headers.get('www-authenticate') ?? ''
+  return /\berror="?invalid_token"?/i.test(challenge)
+}
+
+/**
+ * Returns whether a request body reads the same at a second send: absent, a string, a `Blob`, an
+ * `ArrayBuffer` or a view of one, `FormData`, or `URLSearchParams`. A stream or an iterable reads
+ * once.
+ */
+function resendable(body: RequestInit['body']) {
+  return (
+    body === undefined ||
+    body === null ||
+    typeof body === 'string' ||
+    body instanceof Blob ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body) ||
+    body instanceof FormData ||
+    body instanceof URLSearchParams
+  )
 }
 
 /** Returns a new session ID: 32 random bytes in unpadded URL-safe Base64. */

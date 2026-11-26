@@ -113,9 +113,12 @@ export function durableObject(
             }),
           )
         // An object of an earlier release reads only `id` from `end`, and would revoke. It has no
-        // `discard`, so the call throws instead.
+        // `discard`, so the call throws instead. An object that has `discard` but reads no `issuedAt`
+        // ends the session of any issue.
         else if (revoke === false)
-          Rpc.unwrap(await stub(id).discard({ id, scope, tempoIdUrl }))
+          Rpc.unwrap(
+            await stub(id).discard({ id, issuedAt, scope, tempoIdUrl }),
+          )
         else Rpc.unwrap(await stub(id).end({ id, scope, tempoIdUrl }))
       },
       async get(options) {

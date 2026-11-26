@@ -579,6 +579,56 @@ test.describe('dialog', () => {
     errors.splice(0)
   })
 
+  test('rejects a sign-in of the default dialog in a browser without a connection, after a reload that restores the session', async ({
+    capture,
+    code,
+    context,
+    email,
+    errors,
+    page,
+  }) => {
+    await page.goto(Web.url({ default: '1', path: Apps.web.paths.dialog }))
+
+    await test.step('signs in, and restores the session at a reload', async () => {
+      await Playwright.start(page, { name: 'Sign in' })
+      await Playwright.signIn(await Playwright.dialog(page), { code, email })
+      expect(
+        (await Playwright.outcome(page, { name: 'Sign in' })).value,
+      ).toMatchObject({ email })
+
+      await page.reload()
+      await expect(page.locator('#status')).toHaveText('signedIn')
+      await capture('restored')
+    })
+
+    await test.step('rejects with server_error and status 0, and opens no dialog', async () => {
+      await context.setOffline(true)
+      await Playwright.start(page, { name: 'Sign in' })
+
+      expect(
+        await Playwright.outcome(page, { name: 'Sign in', timeout: 2_000 }),
+      ).toMatchObject({
+        state: 'rejected',
+        value: {
+          code: 'server_error',
+          message:
+            'The browser is offline, so the sign-in receives no response. Check the connection, then sign in again.',
+          name: 'Accounts.RequestError',
+          status: 0,
+        },
+      })
+      await expect(
+        page.locator('dialog[data-tempo-id-dialog][open]'),
+      ).toHaveCount(0)
+      await expect(page.locator('#status')).toHaveText('signedIn')
+      await capture('offline')
+    })
+
+    await context.setOffline(false)
+    // The browser logs the load of the dialog's code that failed offline.
+    errors.splice(0)
+  })
+
   test('pushes the request of a sign-in with `par`, and signs in in a popup', async ({
     capture,
     code,

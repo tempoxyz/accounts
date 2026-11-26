@@ -1561,7 +1561,9 @@ export type Accounts<
      * `POST /v1/auth/logout`, which signs the user out of every app that relies on it. Tempo ID
      * accepts that request only from an enabled first-party app's origin, or from its own. The
      * logout ends only the session whose cookie the instance's requests send, so a native app's
-     * sign-out with the `redirect` plugin and `open` leaves the system browser's session. The
+     * sign-out with the `redirect` plugin and `open` leaves the system browser's session. A
+     * sign-in of the instance that commits before the logout starts, such as during the
+     * revocation, holds the Tempo ID session, so the sign-out sends no logout. The
      * store holds a signed-out mark of the logout until its answer, so a reload of the page during
      * the logout authorizes nothing. A logout that ends the Tempo ID session then clears the mark.
      * After a reload during the logout, the mark stays until the next sign-in, since the page
@@ -2057,8 +2059,11 @@ export function create<
       ])
       // A third-party app has no CORS grant for the logout, and the Tempo ID session is the user's,
       // which such an app does not end. Its client ID shows it: an origin, a metadata document's
-      // URL, a registrar's `app_` ID, or a CLI's `cli:` name.
-      const loggedOut = logout && !ClientId.thirdParty(config.clientId)
+      // URL, a registrar's `app_` ID, or a CLI's `cli:` name. The session decides after the
+      // revocations, since a sign-in during them owns the Tempo ID session.
+      const loggedOut =
+        (typeof logout === 'function' ? logout() : logout) &&
+        !ClientId.thirdParty(config.clientId)
       if (loggedOut) {
         // A logout without a response, such as offline, throws as a revocation without one does. A
         // timer ends a stalled logout, also in its body, so the sign-out settles, and a redirect
@@ -2118,13 +2123,21 @@ export function create<
   })
 
   // A page reads the hint at startup, before the instance reads IndexedDB, which has no synchronous
-  // read. A restore without a session, such as after an expired access key, removes it.
+  // read. A restore without a session, such as after an expired access key, removes it. An access
+  // key that expires in an open page leaves its session in the instance and the store, so the hint
+  // stays for a next load that renews it, such as with `reauthorize`.
   if (hint && typeof document !== 'undefined') {
     const cookie = hint.cookie === true ? Hint.cookie : hint.cookie
     session.status.subscribe((status) => {
       if (status.status === 'signedIn')
         document.cookie = Hint.serialize({ cookie })
-      if (status.status === 'signedOut')
+      if (status.status === 'signedOut' && !session.get())
+        document.cookie = Hint.expire({ cookie })
+    })
+    // A sign-out or a read after that expiry empties the held session, and the status stays
+    // `signedOut`, so no status change reports it.
+    session.subscribe((current) => {
+      if (!current && session.status.get().status === 'signedOut')
         document.cookie = Hint.expire({ cookie })
     })
   }
@@ -3143,8 +3156,10 @@ export declare namespace create {
        * instance only for a returning visitor. `Hint.has` of `accounts/hint` reads it. A session in
        * IndexedDB has no synchronous read. In a browser, the instance sets the cookie for 30 days at
        * each sign-in or restore, and removes it at each sign-out, and when it reads no saved session.
-       * The cookie holds only `1`, on the path `/`, and no token. `cookie: true` names it
-       * `tempo_session`. Defaults to no hint.
+       * An access key that expires in an open page keeps it, since the store keeps the session for a
+       * next load that renews it, such as `session.get` with `reauthorize` or `useSession`. A next
+       * load without a renewal empties the session and removes the cookie. The cookie holds only `1`, on the path `/`, and no token.
+       * `cookie: true` names it `tempo_session`. Defaults to no hint.
        */
       hint?:
         | {
