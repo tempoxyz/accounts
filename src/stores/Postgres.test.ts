@@ -172,6 +172,39 @@ describe('Store.postgres', () => {
     )
   })
 
+  test('behavior: a first query that finds no table runs again once another replica created the table before the read', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const other = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+    // The first query of the store finds no table. The other replica then creates it, before the
+    // store reads whether the table exists.
+    let refused = false
+    const store = Postgres.create({
+      async query(text, values) {
+        try {
+          return await database.query(text, [...values])
+        } catch (error) {
+          if (refused) throw error
+          refused = true
+          await other.setItem('other', 'kept')
+          throw error
+        }
+      },
+    })
+
+    await store.setItem('session', 'kept')
+
+    expect({ refused, value: await store.getItem('session') })
+      .toMatchInlineSnapshot(`
+        {
+          "refused": true,
+          "value": "kept",
+        }
+      `)
+  })
+
   test('behavior: takeItem returns a value to one of concurrent calls, deletes it, and returns no expired value', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())

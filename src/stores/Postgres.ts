@@ -96,26 +96,36 @@ export function create(
     return created
   }
 
+  // Whether a query of the store succeeded, so the table exists. A later refusal then has another
+  // cause, and the store reads no table.
+  let used = false
+
   /**
-   * Runs the query. If it rejects, the store reads whether the table exists, since clients put the
-   * SQLSTATE of a refusal in different fields. If the table is absent, it creates the table and runs
-   * the query again. A store on a table that exists thus sends no query before its first operation,
-   * such as the store that a Worker creates for each request. If the read fails, such as in a
-   * transaction that the refusal aborted, the query's own refusal rejects.
+   * Runs the query. If the first queries of the store reject, the store reads whether the table
+   * exists, since clients put the SQLSTATE of a refusal in different fields. It creates an absent
+   * table, and runs the query once more, also if another replica created the table since the
+   * refusal. A store on a table that exists thus sends no query before its first operation, such as
+   * the store that a Worker creates for each request. If the read fails, such as in a transaction
+   * that the refusal aborted, the query's own refusal rejects.
    */
   async function query(text: string, values: readonly unknown[]) {
     try {
-      return await client.query(text, values)
+      const result = await client.query(text, values)
+      used = true
+      return result
     } catch (error) {
+      if (used) throw error
       const absent = await client
         .query('select to_regclass($1) is null as absent', [table])
         .then(
           ({ rows }) => (rows as readonly { absent: boolean }[])[0]?.absent,
-          () => false,
+          () => undefined,
         )
-      if (!absent) throw error
-      await createTable()
-      return client.query(text, values)
+      if (absent === undefined) throw error
+      if (absent) await createTable()
+      const result = await client.query(text, values)
+      used = true
+      return result
     }
   }
 
