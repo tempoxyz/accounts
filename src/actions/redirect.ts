@@ -157,6 +157,7 @@ export function complete(
       'error',
       'error_description',
       'error_uri',
+      'guest',
       'iss',
       'state',
     ]

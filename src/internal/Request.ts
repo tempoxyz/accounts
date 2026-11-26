@@ -96,6 +96,9 @@ export async function authorizeUrl(
         }),
     ...(options.display ? { display: options.display } : {}),
     ...fundingParameters(options.funding),
+    ...(options.guest === false
+      ? {}
+      : guestParameters(auth, { challenge: options.challenge })),
     ...(authorization
       ? {
           key_authorization: Base64.fromString(
@@ -156,6 +159,12 @@ export declare namespace authorizeUrl {
      * holds less opens Tempo ID's funding page before the callback. Absent, no funding page opens.
      */
     funding?: Funding.Funding | undefined
+    /**
+     * Whether the request offers "Continue as guest", as {@link guestParameters} decides. `false`
+     * for a request whose challenge arrives later, and for a backend sign-in, which starts no guest
+     * session. Defaults to `true`.
+     */
+    guest?: boolean | undefined
     /** The address that the sign-in page's email field holds, as OpenID Connect's `login_hint`. */
     loginHint?: string | undefined
     /** Whether the request goes to `/oauth2/par` first. Defaults to {@link pushes}. */
@@ -522,6 +531,26 @@ export declare namespace keyAuthorization {
     accessKey: AccessKey | Permissions.WithAddress
     /** The Tempo Account the access key acts for, in place of the one `accessKey.account` names. */
     account?: `0x${string}` | undefined
+  }
+}
+
+/**
+ * Returns `guest=offer` for a sign-in request of an instance with `guest: true`, so Tempo ID's
+ * sign-in page offers "Continue as guest". A request with a challenge offers none, since a guest
+ * session signs no challenge. Returns none otherwise.
+ */
+export function guestParameters(
+  auth: Pick<Config, 'guest'>,
+  options: guestParameters.Options,
+): Record<string, string> {
+  if (auth.guest !== true || options.challenge !== undefined) return {}
+  return { guest: 'offer' }
+}
+
+export declare namespace guestParameters {
+  type Options = {
+    /** The request's challenge. Absent, the request names none. */
+    challenge: unknown
   }
 }
 

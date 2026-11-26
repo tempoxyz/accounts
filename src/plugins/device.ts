@@ -188,6 +188,41 @@ export function device(options: device.Options = {}) {
           }
         },
         /**
+         * Starts the funding code of the guest account that `guest` proves, and passes the code to
+         * `onCode`, as `Actions.device.fund` describes. A guest payment outside a page, such as a
+         * CLI's `pay`, calls it for a guest account that holds less than the payment on a chain
+         * without a faucet, then waits for the funds. An aborted call shows no code.
+         *
+         * @throws {Accounts.RequestError} As `Actions.device.fund` throws it, such as with
+         *   `upstream_unavailable` and status 503 when Tempo ID cannot read the guest account's
+         *   balance. Retry later.
+         * @throws {Plugins.device.OnCodeRequiredError} Without the plugin's `onCode`, before any
+         *   request.
+         *
+         * @example
+         * ```ts
+         * const code = await accounts.device.fundGuest({
+         *   funding: { amount: '5', token: 'ousd' },
+         *   guest,
+         * })
+         * ```
+         */
+        async fundGuest(
+          parameters: device.fundGuest.Parameters,
+        ): Promise<device.fundGuest.ReturnType> {
+          if (!onCode) throw new OnCodeRequiredError()
+          const { signal } = parameters
+          const code = await DeviceActions.fund(context.config, parameters)
+          if (signal?.aborted) throw signal.reason
+          await onCode({
+            expiresIn: code.expiresIn,
+            userCode: code.userCode,
+            verificationUri: code.verificationUri,
+            verificationUriComplete: code.verificationUriComplete,
+          })
+          return code
+        },
+        /**
          * Sends one poll of a device code that `authorize` started, as `Actions.device.poll` does.
          * Returns `pending` until the user decides, with `slowDown` when the poll came before the
          * interval, and `approved` with the authorization once. Sets no session.
@@ -201,7 +236,9 @@ export function device(options: device.Options = {}) {
          *   `code` values:
          *   - `access_denied`: The user denied the code.
          *   - `expired_token`: The code expired.
-         *   - `invalid_grant`: The code was already collected, or is unknown.
+         *   - `invalid_grant`: The code was already collected, is unknown, or belongs to another
+         *     client ID. A poll whose approval received no response collected it, and its tokens
+         *     stay live until they expire. Request a new code.
          * @throws {Accounts.RequestError} For a poll without a decision, after which the code stays
          *   valid. A poll without a response, such as offline, has `server_error` and status 0, and
          *   `cause` holds the platform's error. Poll again.
@@ -265,6 +302,10 @@ export function device(options: device.Options = {}) {
          * further poll, changes no session, and rejects with the signal's reason. A poll in flight
          * finishes, and an approval that it carries signs in.
          *
+         * With `guest: true`, a request without a challenge adds `guest=offer`, so Tempo ID's
+         * device page offers "Continue as guest". The poll then refuses the code with
+         * `guest_selected`, and the call sets and returns a guest session in place of the refusal.
+         *
          * @throws {Accounts.RequestError} When Tempo ID refuses the code request, with one of these
          *   `reason` values, which [Errors](https://github.com/tempoxyz/id/blob/main/docs/errors.md)
          *   describes:
@@ -323,12 +364,12 @@ export function device(options: device.Options = {}) {
          *
          * @example
          * ```ts
-         * const { user } = await accounts.device.signIn()
+         * const session = await accounts.device.signIn()
          * ```
          */
         async signIn(
           parameters: device.signIn.Parameters = {},
-        ): Promise<Session.Session> {
+        ): Promise<Session.GuestSession | Session.Session> {
           if (!onCode) throw new OnCodeRequiredError()
           // The request names the instance's chain, so the stored selection loads first. The store
           // also holds the session, so after a failed read its save fails too, and the sign-in
@@ -424,8 +465,11 @@ export function device(options: device.Options = {}) {
               // An aborted sign-in received no tokens, and the sign-out that aborted it ended the
               // session already, so it fails without the cleanup of an overtaken change.
               if (controller.signal.aborted) throw new SupersededError()
+              // The user selected "Continue as guest", which issues no tokens.
+              if (SignIn.guestSelected(context, error)) return undefined
               return fail(error)
             })
+            if (!result) return await SignIn.guest(context, { change, signal })
             const session = SignIn.toSession(result)
             await change.commit(session)
             return session
@@ -488,6 +532,12 @@ export declare namespace device {
     }
 
     type ReturnType = Omit<DeviceActions.authorize.ReturnType, 'wait'>
+  }
+
+  namespace fundGuest {
+    type Parameters = DeviceActions.fund.Options
+
+    type ReturnType = DeviceActions.fund.ReturnType
   }
 
   namespace poll {

@@ -214,7 +214,8 @@ export declare namespace react {
      * grant, leaves the status `signedOut`. After a failure without an answer from
      * Tempo ID, a server error, or a rate limit, a component that mounts 30 seconds later
      * authorizes again. After any other refusal, such as `webauthn_required` for a passkey prompt
-     * that the user dismissed, or `redirect_refused` for a `url` that redirects, it authorizes
+     * that the user dismissed, `redirect_refused` for a `url` that redirects, or
+     * `interaction_required` for an instance with `resource`, it authorizes
      * nothing until the status changes. A failure of an authorization that the app sets throws to
      * the error boundary.
      */
@@ -478,8 +479,9 @@ export namespace machines {
   /**
    * Returns whether a failure of the default authorization is transient, so the next mount retries:
    * an error without Tempo ID's answer, a server error, a status of 429, or a refusal for load. Any
-   * other refusal, such as `webauthn_required` after a passkey prompt that the user dismissed, or a
-   * refused redirect, repeats at every attempt, so it is a decline. The entry loads no error class, so the
+   * other refusal, such as `webauthn_required` after a passkey prompt that the user dismissed, a
+   * refused redirect, or `interaction_required` for an instance with `resource`, repeats at every
+   * attempt, so it is a decline. The entry loads no error class, so the
    * error's name and fields identify a `RequestError`.
    */
   export function transient(error: unknown) {
@@ -495,6 +497,9 @@ export namespace machines {
     if (status !== undefined && (status === 429 || status >= 500)) return true
     // Only a refused redirect has status 0 with this code. A retry meets the same redirect.
     if (code === 'redirect_refused' && status === 0) return false
+    // An instance with `resource` refuses the authorization before any request, and again at every
+    // attempt, since only a sign-in on a page names the resource.
+    if (code === 'interaction_required' && status === 0) return false
     // A passkey ceremony that failed on the page refuses with status 0 and `webauthn_required`, and
     // its prompt shows again at every attempt, so the reason decides before the missing answer.
     if (reason !== undefined)

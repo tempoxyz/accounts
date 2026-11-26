@@ -18,7 +18,7 @@ export type Store = {
    * microtask. The store holds no listener of an instance that the app dropped. An instance's
    * session posts each saved change through it where no page's `BroadcastChannel` exists, such as in
    * React Native or Node, so another instance's sign-out empties its session at once.
-   * `Store.file`, `Store.memory`, `Store.redis`, `Store.durableObject` of `accounts/cloudflare`, the store of `accounts/expo`, and the default store of a `cli:` client ID set it. Absent, an instance outside a page reads another's sign-out only from
+   * `Store.file`, `Store.memory`, `Store.postgres`, `Store.redis`, `Store.durableObject` of `accounts/cloudflare`, the store of `accounts/expo`, and the default store of a `cli:` client ID set it. Absent, an instance outside a page reads another's sign-out only from
    * the store.
    */
   connect?:
@@ -37,8 +37,9 @@ export type Store = {
    */
   json?: boolean | undefined
   /**
-   * Whether only the process that created the store holds its values, as `Store.memory` does, or
-   * only one Durable Object, as `Store.durableObject` of `accounts/cloudflare` does.
+   * Whether only the process that created the store holds its values, as `Store.memory` does, only
+   * one Durable Object, as `Store.durableObject` of `accounts/cloudflare` does, or only the app, as
+   * the store of `accounts/expo` does.
    * In a browser, a page load empties such a store, so `redirect.signIn` without `open` refuses
    * it before any request. An instance's `session.refresh` with such a store reads a refusal of its refresh token as final where a
    * lock spans the process, Web Locks or the store's `lock`, since no other process can rotate the token. Defaults to `false`.
@@ -51,10 +52,15 @@ export type Store = {
    * its session through it, so two instances send one refresh: without Web Locks, such as in React
    * Native, and for a store that is not `local`, such as `Store.redis` that processes share, whose
    * Web Locks span one process only. `Store.file`, `Store.memory`, `Store.postgres`, `Store.redis`, `Store.durableObject` of `accounts/cloudflare`, and the store of `accounts/expo` set it. Absent, each instance
-   * orders only its own writes and refreshes.
+   * orders only its own writes and refreshes. A lock that a stale holder can lose, such as the lock
+   * file of `Store.file`, passes `fn` a `check`, which throws once another process took the lock
+   * over, so the holder writes nothing after it.
    */
   lock?:
-    | (<result>(key: string, fn: () => Promise<result>) => Promise<result>)
+    | (<result>(
+        key: string,
+        fn: (check?: () => Promise<void>) => Promise<result>,
+      ) => Promise<result>)
     | undefined
   /**
    * Whether only the user who runs the program reads the store, as with the `0600` file of
@@ -91,7 +97,7 @@ export type Store = {
    * deletes the entry. The `backend` plugin writes the logout index of each `sid` with it, so
    * concurrent sign-ins of one `sid` on different processes keep each session, in the round trips
    * of a read and a write. The `redirect` plugin removes its sign-out flag with it, so where `update`
-   * is one conditional write, a newer flag of another instance stays. `Store.postgres` and `Store.redis` set it.
+   * is one conditional write, a newer flag of another instance stays. The guest account's first key pair lands with it, so a stale holder of the lock never replaces a saved one, as does each guest session's revision, so each start ranks later. `Store.file`, `Store.postgres`, and `Store.redis` set it.
    */
   update?:
     | (<result>(

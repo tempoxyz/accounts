@@ -853,6 +853,8 @@ export function create(
         accessKey: options.accessKey,
         display: options.display,
         funding: options.funding,
+        // No backend sign-in starts a guest session, so none offers one.
+        guest: false,
         loginHint: options.loginHint,
         par: options.par,
         prompt: options.prompt,

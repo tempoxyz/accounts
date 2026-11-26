@@ -624,6 +624,62 @@ test.describe('custom', () => {
         await capture('sent')
       })
     })
+    test('throws SupersededError with no creation prompt and no verify request when a sign-out completes during the options request of a passkey registration', async ({
+      capture,
+      code,
+      email,
+      page,
+    }) => {
+      const authenticator = await Playwright.authenticator(page)
+      await Web.enter(page, {
+        capture,
+        clientId: Apps.web.clientIdSign,
+        code,
+        email,
+      })
+      const requests: string[] = []
+      page.on('request', (request) => {
+        const { origin, pathname } = new URL(request.url())
+        if (
+          origin === TempoId.url &&
+          pathname.startsWith('/v1/account/passkey')
+        )
+          requests.push(`${request.method()} ${pathname}`)
+      })
+      // Holds the options response until the sign-out completes.
+      const held = Promise.withResolvers<void>()
+      await page.route(
+        (url) =>
+          url.origin === TempoId.url &&
+          url.pathname === '/v1/account/passkey/options',
+        async (route) => {
+          const response = await route.fetch()
+          await held.promise
+          await route.fulfill({ response })
+        },
+      )
+
+      await test.step('rejects the registration that the sign-out overtook, before the creation', async () => {
+        await Playwright.start(page, {
+          name: 'Register a passkey with an access key',
+        })
+        await expect.poll(() => requests.length).toBe(1)
+        await Playwright.run(page, { name: 'Sign out' })
+        held.resolve()
+        const result = await Playwright.outcome(page, {
+          name: 'Register a passkey with an access key',
+        })
+
+        expect(result).toMatchObject({
+          state: 'rejected',
+          value: { name: 'Accounts.SupersededError' },
+        })
+        expect(requests).toEqual(['POST /v1/account/passkey/options'])
+        expect(await authenticator.credentials()).toHaveLength(0)
+        await expect(page.locator('#status')).toHaveText('signedOut')
+        await capture('rejected with no prompt')
+      })
+    })
   })
 
   test.describe('app whose first account is a passkey', () => {

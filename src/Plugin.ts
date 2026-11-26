@@ -313,7 +313,7 @@ export type Context = {
  *     extend: (instance) => ({ clientIdOf: () => instance.config.clientId }),
  *     hooks: {
  *       afterSignIn: (context, session) => {
- *         if (!Session.local(session)) analytics.identify(session.user.id)
+ *         if (Session.tempoId(session)) analytics.identify(session.user.id)
  *       },
  *     },
  *     id: 'profile',
