@@ -990,7 +990,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       // A renewal that ends without a session ends the session that the subscriber kept: an
       // authorization that finds no Tempo ID session, or a sign-out during the renewal, which moves
       // the status to `pending` until the authorization returns.
-      instance.session.status.subscribe((status, previous) => {
+      context!.session.status.subscribe((status, previous) => {
         // At its access keys' expiry, the instance keeps the session until a read empties it, and
         // the status signs out at once, so wagmi's connection ends with the status. An
         // authorization in progress keeps wagmi connected until it returns.

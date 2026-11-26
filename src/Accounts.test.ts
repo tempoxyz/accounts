@@ -3459,6 +3459,50 @@ describe('session.status', () => {
       }
     `)
   })
+  test("shows no `signedOut` before a restore hook sets the session, such as a redirect's callback, and runs the hook once beside the page's read", async () => {
+    const session = Session.from({
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 3_600_000,
+      user: { email: 'user@example.com', id: 'user_1' },
+    })
+    // The hook completes a callback, as the `redirect` plugin's does.
+    const hooks: string[] = []
+    const callback = Accounts.create({
+      chain: 1337,
+      clientId: 'client_1',
+      plugins: [
+        Plugin.from({
+          hooks: {
+            async restore(context) {
+              hooks.push('restore')
+              await context.session.change().commit(session)
+            },
+          },
+          id: 'test',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const statuses: string[] = []
+    callback.session.status.subscribe((status, previous) =>
+      statuses.push(`${previous.status} > ${status.status}`),
+    )
+
+    // The page reads the session in the code that subscribes its guard.
+    await callback.session.get()
+
+    expect({ hooks, statuses }).toMatchInlineSnapshot(`
+      {
+        "hooks": [
+          "restore",
+        ],
+        "statuses": [
+          "pending > signedIn",
+        ],
+      }
+    `)
+  })
   test("follows another instance's sign-in on the same store, such as another tab's, as it follows that instance's sign-out", async () => {
     const store = Store.memory()
     const create = () =>
