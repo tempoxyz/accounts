@@ -4,7 +4,8 @@
 # summary. On a pull request, the comment job runs none of the code, and alone may write the pull
 # request's comment. On main, the measure job keeps the run as Git notes, and the notes job, which
 # runs none of the code, alone pushes them, so `report.html` and `uphill log` draw trends. A pull
-# request compares with its base branch on the same runner, so the comment shows both scores.
+# request's comment reads the base branch's scores from the report that the newest noted commit of
+# the base branch keeps, so the job measures only the pull request.
 name: Uphill
 on:
   pull_request:
@@ -25,14 +26,16 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    runs-on: ubuntu-latest
+    # Uphill runs its scripts one after another, and the bundler, tsc, and vitest in them use every
+    # CPU.
+    runs-on: depot-ubuntu-latest-16
     timeout-minutes: 45
 
     steps:
       - name: Secure runner
         uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
 
-      # The git pack reads the last 50 commits, and `--compare` checks out the base branch.
+      # The git pack reads the last 50 commits, and the comment reads the base branch's notes.
       - name: Clone repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,24 +76,58 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
       # A missed target is a step to climb, not a failure, so only a script that cannot measure
-      # fails the job. On a pull request, `--compare` runs each script of the base branch once more.
+      # fails the job.
       - name: Run Uphill
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then uphill --note; else uphill; fi
+          cat .uphill/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # The table of `.uphill/comment.md`, with a column of the base branch's scores. `--compare`
+      # would run each script of the base branch once more, and each timed script 16 times, so the
+      # column reads the report that the newest noted commit of the base branch keeps instead.
+      - name: Write comment
+        if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            uphill --compare "origin/$BASE_REF"
-          elif [ "$GITHUB_EVENT_NAME" = push ]; then
-            uphill --note
-          else
-            uphill
-          fi
+          base="$RUNNER_TEMP/base.json"
+          header=''
+          : > "$base"
+          for commit in $(git rev-list --max-count=50 "origin/$BASE_REF"); do
+            if git notes --ref uphill-report show "$commit" > "$base" 2> /dev/null; then
+              header="$BASE_REF<br><sub>${commit:0:7}</sub>"
+              break
+            fi
+            : > "$base"
+          done
           mkdir -p "$RUNNER_TEMP/uphill"
           {
             echo '<!-- accounts-uphill -->'
-            cat .uphill/comment.md
+            jq -r --arg header "$header" --slurpfile base "$base" '
+              def gauge($label):
+                (if .score != null then .score elif .error != null then "failed" else null end) as $file
+                | if $file == null then "–"
+                  else "<img src=\"https://raw.githubusercontent.com/wevm/uphill/main/assets/gauges/\($file).svg\" width=\"48\" height=\"48\" alt=\"\($label | @html): \($file)\">"
+                  end;
+              ($base[0].categories // []) as $before
+              | "## Uphill\n\n<table><tr><th align=\"left\">Category</th>"
+                + (if $header == "" then "" else "<th>\($header)</th>" end)
+                + "<th>This run</th></tr>"
+                + ([.categories[]
+                    | . as $category
+                    | ((if .subject then "\(.subject) · " else "" end) + .title) as $label
+                    | "<tr><td><b>\($label | @html)</b></td>"
+                      + (if $header == "" then ""
+                         else "<td align=\"center\">"
+                           + ([$before[] | select(.name == $category.name and .subject == $category.subject)][0]
+                              | if . == null then "–" else gauge($label) end)
+                           + "</td>"
+                         end)
+                      + "<td align=\"center\">\(gauge($label))</td></tr>"
+                  ] | join(""))
+                + "</table>"
+            ' .uphill/report.json
           } > "$RUNNER_TEMP/uphill/comment.md"
-          cat .uphill/report.md >> "$GITHUB_STEP_SUMMARY"
 
       # An artifact without an archive opens in the browser.
       - name: Upload report
@@ -104,11 +141,13 @@ jobs:
 
       # The report's URL exists only after its upload.
       - name: Link report
+        if: github.event_name == 'pull_request'
         env:
           REPORT_URL: ${{ steps.report.outputs.artifact-url }}
         run: printf '\n[Full report](%s)\n' "$REPORT_URL" >> "$RUNNER_TEMP/uphill/comment.md"
 
       - name: Upload comment
+        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error
