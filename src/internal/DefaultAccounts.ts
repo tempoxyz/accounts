@@ -19,7 +19,8 @@ export * from '../Accounts.js'
  */
 export type Accounts<
   plugins extends readonly Plugin.Plugin[] = readonly Plugin.Plugin[],
-> = Accounts_core.Accounts<WithMpp<WithFunding<WithSignIn<plugins>>>>
+  guest extends Accounts_core.Config['guest'] = undefined,
+> = Accounts_core.Accounts<WithMpp<WithFunding<WithSignIn<plugins>>>, guest>
 
 /**
  * Creates an instance: its configuration, the session of its user, and one namespace for each
@@ -82,9 +83,12 @@ export type Accounts<
  * const session = await accounts.session.get()
  * ```
  */
-export function create<const plugins extends readonly Plugin.Option[] = []>(
-  options: Accounts_core.create.Options<plugins> = {},
-): Accounts<Plugin.Flatten<plugins>> {
+export function create<
+  const plugins extends readonly Plugin.Option[] = [],
+  const guest extends Accounts_core.Config['guest'] = undefined,
+>(
+  options: Accounts_core.create.Options<plugins> & { guest?: guest } = {},
+): Accounts<Plugin.Flatten<plugins>, guest> {
   const named = Plugin.flatten(options.plugins ?? [])
   const ids = new Set(named.map((plugin) => plugin.id))
   const signIn = [...ids].some((id) => DefaultDialog.signInIds.has(id))
@@ -99,7 +103,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       ...(signIn ? [] : [DefaultDialog.plugin()]),
       ...(ids.has('mpp') ? [] : [DefaultMpp.plugin()]),
     ],
-  }) as Accounts<Plugin.Flatten<plugins>>
+  }) as Accounts<Plugin.Flatten<plugins>, guest>
 }
 
 /**

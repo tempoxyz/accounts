@@ -1,7 +1,8 @@
 {
-  // Node runs each script as it is, so a script imports a module by its `.ts` file.
+  // Node runs each script as it is, so a script imports a module by its `.ts` file. Uphill's metric
+  // scripts in `.agents/metrics` run the same way.
   "extends": "../tsconfig.json",
   "compilerOptions": { "allowImportingTsExtensions": true },
   "exclude": [],
-  "include": ["."]
+  "include": [".", "../.agents/metrics"]
 }
