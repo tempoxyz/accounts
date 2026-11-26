@@ -2713,20 +2713,19 @@ function order(session: Session.Any) {
 }
 
 /**
- * Returns whether `session` holds later tokens than `other`. Where both hold `receivedAt`, the later
- * receipt decides, since another context's sign-in can send its request before a refresh here and
- * receive its tokens after it. That sign-in's access token then expires sooner. Otherwise
- * {@link order} decides.
+ * Returns whether `session` holds later tokens than `other` by {@link order}, or by `receivedAt`
+ * where both hold it. Another context's sign-in can send its request before a refresh here and
+ * receive its tokens after it, so its access token expires sooner. A context of an earlier release
+ * orders by {@link order} alone, and can revoke a token by that order, so that order still counts.
  */
 function later(session: Session.Any, other: Session.Any) {
+  if (order(session) > order(other)) return true
   const { receivedAt } = session
-  if (
+  return (
     receivedAt !== undefined &&
     other.receivedAt !== undefined &&
-    receivedAt !== other.receivedAt
+    receivedAt > other.receivedAt
   )
-    return receivedAt > other.receivedAt
-  return order(session) > order(other)
 }
 
 /**
@@ -3705,23 +3704,19 @@ export namespace machines {
     const { entries, held, refreshToken, stored } = options
     // A local session holds no tokens that another context rotates.
     if (Session.local(held)) return false
-    const own = refreshToken === held.refreshToken
-    const entry = own
-      ? undefined
-      : entries.find((entry) => entry.to === refreshToken)
-    const expiresAt = own ? held.expiresAt : entry?.expiresAt
+    const expiresAt =
+      refreshToken === held.refreshToken
+        ? held.expiresAt
+        : entries.find((entry) => entry.to === refreshToken)?.expiresAt
     if (!stored || expiresAt === undefined) return false
-    const candidate = { ...held, expiresAt, refreshToken }
-    // A context of an earlier release orders by `expiresAt` alone, so it adopts `stored` only by that
-    // order. The save of a successor's rotation follows its receipt, so a `stored` session that
-    // the receipt order rates newer is newer for the context that received the successor too.
-    return (
-      newer(stored, { ...candidate, receivedAt: undefined }) &&
-      newer(stored, {
-        ...candidate,
-        receivedAt: own ? held.receivedAt : entry?.at,
-      })
-    )
+    // A context of an earlier release adopts `stored` only by the `expiresAt` order, so a
+    // revocation follows that order alone. Every context adopts a session that it rates later.
+    return newer(stored, {
+      ...held,
+      expiresAt,
+      receivedAt: undefined,
+      refreshToken,
+    })
   }
 
   export declare namespace adopts {
@@ -4140,8 +4135,8 @@ export namespace machines {
   /**
    * Returns whether a sign-in of `kept` yields to `overwritten`, the session of another context's
    * sign-in that its save replaced in the store. That context adopts `kept` only as `newer` decides,
-   * so only a session of the same user whose tokens the other context received later takes the place
-   * of `kept`. A session whose access token another DPoP key binds
+   * so only a session of the same user whose tokens expire later, or that the other context received
+   * later, takes the place of `kept`. A session whose access token another DPoP key binds
    * never takes the place of `kept`.
    */
   export function yields(
