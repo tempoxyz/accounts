@@ -74,11 +74,13 @@ export function plugin(): Dialog {
         revokeAccessKey: async (
           parameters?: dialog.revokeAccessKey.Parameters,
         ) => (await get()).revokeAccessKey(parameters),
-        // Without `backend`, the session is the stored one, so the read loads no dialog code.
-        // An instance with the `dialog` plugin signs in with Tempo ID, so its session has tokens.
-        session: async () =>
-          ((await context.session.load()) as Session.Session | undefined) ??
-          null,
+        // Without `backend`, the session is the stored one, so the read loads no dialog code. The
+        // dialog shows a Tempo ID session, not a `local` plugin's or a guest session beside it, as
+        // the loaded plugin does.
+        session: async () => {
+          const stored = await context.session.load()
+          return stored && Session.tempoId(stored) ? stored : null
+        },
         signIn: (async (parameters?: dialog.signIn.Parameters) =>
           (await get()).signIn(parameters)) as dialog.signIn.Fn,
         signMessage: async (parameters: dialog.signMessage.Parameters) =>
