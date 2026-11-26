@@ -28,6 +28,7 @@
  * | `reauthorize=0`    | `useSession` authorizes no Tempo ID session of the browser at a mount           |
  * | `resource`         | The registered resource that the tokens of the "Sign in" control are for        |
  * | `retry=0`          | The Viem client shows no screen for a refused transaction, and rejects the call |
+ * | `scope`            | The scopes beyond the instance's that the tokens of "Sign in" hold              |
  * | `second=1`         | On `/wagmi/`, the connector's config also holds the second node's chain         |
  * | `store=memory`     | The instance keeps its session in `Store.memory`, which only its page holds     |
  * | `typedData`        | The typed data that "Sign typed data as the owner" signs, as `Json` writes it   |
@@ -290,17 +291,19 @@ export function plugins() {
 
 /**
  * Returns the request items of a sign-in that the page's query sets: the challenge, `false` in
- * place of the access key, and the resource that the tokens are for.
+ * place of the access key, and the resource and the scopes that the tokens are for.
  */
 export function request() {
   const challenge = query.get('challenge')
   const resource = query.get('resource')
+  const scope = query.get('scope')
   return {
     ...(query.get('accessKey') === 'false'
       ? { accessKey: false as const }
       : {}),
     ...(challenge ? { challenge } : {}),
     ...(resource ? { resource } : {}),
+    ...(scope ? { scope } : {}),
   }
 }
 
