@@ -1404,6 +1404,31 @@ describe('machines.session', () => {
       })
   })
 
+  describe('revokesKept', () => {
+    const cases = [
+      [
+        'a later receipt and a later expiry',
+        Session.from({ ...expired, receivedAt: 1 }),
+        Session.from({ ...renewed, receivedAt: 2 }),
+        true,
+      ],
+      [
+        'a later receipt of an earlier expiry, which an earlier release rejects',
+        Session.from({ ...renewed, receivedAt: 1 }),
+        Session.from({ ...expired, receivedAt: 2 }),
+        false,
+      ],
+      ['a later expiry without receipts', expired, renewed, true],
+    ] as const
+
+    for (const [name, kept, overwritten, expected] of cases)
+      test(`returns ${expected} for ${name}`, () => {
+        const result = machines.revokesKept({ kept, overwritten })
+
+        expect(result).toBe(expected)
+      })
+  })
+
   describe('clears', () => {
     const running = (runs: number) => ({ everywhere: false, pending: 0, runs })
     const cases = [

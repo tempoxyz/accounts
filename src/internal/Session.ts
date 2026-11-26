@@ -1187,6 +1187,10 @@ export function create(options: create.Options): create.ReturnType {
         if (context().session === next) set(kept)
         return 'kept' as const
       }
+      // A context of an earlier release that holds `kept` can reject `overwritten`, so `kept`
+      // stays live, as `machines.revokesKept` decides.
+      if (!machines.revokesKept({ kept, overwritten }))
+        return 'yielded' as const
       // The list marks the token before its revocation, so a context that still holds it never
       // revokes it again, also if the revoked digests fail. A failed write leaves the token live.
       const marked = await rotations
@@ -4211,6 +4215,30 @@ export namespace machines {
     }
 
     type ReturnType = 'declined' | 'kept' | 'rotated' | 'yield'
+  }
+
+  /**
+   * Returns whether a sign-in that yielded to `overwritten` revokes the refresh token of `kept`. A
+   * context of an earlier release orders by `expiresAt` alone, so it adopts `overwritten` only by
+   * that order. Otherwise `kept` stays live, since such a context can still hold it, and a
+   * revocation of it counts as a reuse at its next refresh.
+   */
+  export function revokesKept(
+    options: machines.revokesKept.Options,
+  ): machines.revokesKept.ReturnType {
+    const { kept, overwritten } = options
+    return newer(overwritten, { ...kept, receivedAt: undefined })
+  }
+
+  export declare namespace revokesKept {
+    type Options = {
+      /** The session that the sign-in saved, and then replaced with `overwritten`. */
+      kept: Session.Any
+      /** The session of another context that the sign-in yielded to. */
+      overwritten: Session.Any
+    }
+
+    type ReturnType = boolean
   }
 
   export declare namespace yields {
