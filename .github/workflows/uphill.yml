@@ -72,9 +72,8 @@ jobs:
       - name: Run Uphill
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          NOTE: ${{ github.event_name == 'push' && '--note' || '' }}
         run: |
-          uphill $NOTE
+          if [ "$GITHUB_EVENT_NAME" = push ]; then uphill --note; else uphill; fi
           mkdir -p "$RUNNER_TEMP/uphill"
           {
             echo '<!-- accounts-uphill -->'
