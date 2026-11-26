@@ -30,7 +30,7 @@
     "verbatimModuleSyntax": true
   },
   // The examples, the scripts, the site, the test apps, and the bench check their own types. The
-  // scripts' configuration also checks Uphill's metric scripts, and Uphill's packs are vendored.
+  // scripts' configuration also checks Uphill's metric scripts.
   "exclude": [
     "**/dist",
     "**/node_modules",

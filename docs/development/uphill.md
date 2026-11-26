@@ -25,11 +25,10 @@ uphill                      # every category, with .uphill/report.html
 uphill waterfall            # one category
 uphill --compare main       # timings against main in interleaved pairs, on this machine
 uphill --update             # accept this run's values as the baselines
-uphill audit                # check each vendored pack against its pinned commit
 pnpm exec zile dev          # link dist to src again
 ```
 
-Uphill runs the packs' scripts on Bun. The setup needs Uphill 0.0.7 or later: `curl -fsSL https://raw.githubusercontent.com/wevm/uphill/main/install.sh | UPHILL_VERSION=0.0.7 sh`.
+Uphill runs the packs' scripts on Bun. The setup needs Uphill 0.0.8 or later: `curl -fsSL https://raw.githubusercontent.com/wevm/uphill/main/install.sh | UPHILL_VERSION=0.0.8 sh`. A run fetches each pinned pack into `~/.cache/uphill/packs/`. `.agents/uphill/typescript/config.ts` holds the typescript pack's inputs.
 
 The `Uphill` workflow runs `uphill` on each pull request, and keeps one comment with `report.md`. Its artifact holds `report.html`.
 

@@ -51,8 +51,8 @@ jobs:
       # The digest is the release's entry in its sha256sums.txt.
       - name: Install Uphill
         env:
-          SHA256: 5457ec9728f3a0e94e557c335cc941fd6ffdb533392d2573c2fec35c9ed6cd51
-          VERSION: 0.0.7
+          SHA256: c281a2522d58f70157cfc82ed0a8990251d24a8e18294fe5eba54af7267137db
+          VERSION: 0.0.8
         run: |
           asset=uphill-x86_64-unknown-linux-gnu.tar.gz
           mkdir -p "$RUNNER_TEMP/uphill-bin"
@@ -64,9 +64,6 @@ jobs:
       # The library metrics of the typescript pack read the build.
       - name: Build
         run: pnpm build
-
-      - name: Check packs
-        run: uphill audit
 
       # The notes of earlier runs on main give the report its trends. A repository without notes
       # has none to fetch. `--note` writes its notes with this identity.

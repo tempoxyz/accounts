@@ -1,10 +1,10 @@
 /**
  * Inputs of the typescript pack's library metrics: the entries to leave out, and the members that
- * apps call most.
+ * apps call most. The default export has the type `Config` of the pack's `metrics/library.ts`.
  * @module
  */
-import type { Config } from '../metrics/library.ts'
 
+/** The entries that the library metrics leave out, and the hot items that score on their own. */
 export default {
   // `./cloudflare` imports `cloudflare:workers`, which only a Worker resolves. `./expo` and the
   // React Native entries import `react-native-get-random-values`, which only Metro loads. The test
@@ -29,4 +29,4 @@ export default {
     'accounts/react:react',
     'accounts/wagmi:tempoId',
   ],
-} satisfies Config
+}

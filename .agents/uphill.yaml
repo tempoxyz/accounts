@@ -114,11 +114,11 @@ waterfall:
   calls: {}
 
 # The packs' categories run after these, and merge with the categories of the same name. The
-# typescript pack reads its project inputs from .agents/uphill/packs/typescript/local/config.ts. Its
+# typescript pack reads its project inputs from .agents/uphill/typescript/config.ts. Its
 # `coverage` and `fuzz` categories read the calls of the replay above, so they stay out.
 packs:
   - {
-      pack: wevm/uphill/packs/typescript@ed127fcc1cf1a958051bd1603b08805f1bb990c2,
+      pack: wevm/uphill/packs/typescript@19cdac7a0f0f500d227f2bbf74b684af17478fd3,
       categories:
         [
           architecture,
@@ -136,10 +136,10 @@ packs:
       install: true,
     } # main
   - {
-      pack: wevm/uphill/packs/writing-docs@ed127fcc1cf1a958051bd1603b08805f1bb990c2,
+      pack: wevm/uphill/packs/writing-docs@19cdac7a0f0f500d227f2bbf74b684af17478fd3,
       install: true,
     } # main
   - {
-      pack: wevm/uphill/packs/git@ed127fcc1cf1a958051bd1603b08805f1bb990c2,
+      pack: wevm/uphill/packs/git@19cdac7a0f0f500d227f2bbf74b684af17478fd3,
       install: true,
     } # main
