@@ -1,16 +1,20 @@
-# Scores each pull request with Uphill against the targets of `.agents/uphill.baseline.yaml`, and
-# compares its sizes, counts, and checks with the committed baselines. The measure job runs the pull
-# request's code without write access. The comment job runs none of it, and alone may write the pull
+# Scores each pull request and each push to main with Uphill against the targets of
+# `.agents/uphill.baseline.yaml`, and compares its sizes, counts, and checks with the committed
+# baselines. The measure job runs the code without write access, and writes the report to the job
+# summary. On a pull request, the comment job runs none of the code, and alone may write the pull
 # request's comment. Timings differ between machines, so the job compares no revisions. Run
 # `uphill --compare main` on one machine for that.
 name: Uphill
 on:
   pull_request:
     types: [opened, ready_for_review, reopened, synchronize]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   cancel-in-progress: true
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
 jobs:
   measure:
@@ -56,7 +60,7 @@ jobs:
       # fails the job.
       - name: Run Uphill
         env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           uphill
           mkdir -p "$RUNNER_TEMP/uphill"
@@ -80,7 +84,7 @@ jobs:
   # A pull request from a fork receives a read-only token, so its report stays in the job summary.
   comment:
     name: Comment
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     needs: measure
     permissions:
       id-token: write
