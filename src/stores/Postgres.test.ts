@@ -135,6 +135,43 @@ describe('Store.postgres', () => {
     `)
   })
 
+  test('behavior: creates a missing table for a client whose refusals name no SQLSTATE in `code`', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    // A client such as Prisma's raw queries or Bun's `SQL` keeps the SQLSTATE in another field.
+    const store = Postgres.create({
+      async query(text, values) {
+        try {
+          return await database.query(text, [...values])
+        } catch {
+          throw new Error('Refused query.')
+        }
+      },
+    })
+
+    await store.setItem('session', 'kept')
+
+    expect(await store.getItem('session')).toMatchInlineSnapshot(`"kept"`)
+  })
+
+  test('error: a client in a transaction whose first query finds no table rejects with the refusal of that query', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+
+    const error = await database
+      .transaction((transaction) =>
+        Postgres.create({
+          query: (text, values) => transaction.query(text, [...values]),
+        }).getItem('session'),
+      )
+      .catch((error: { code?: string; message: string }) => error)
+
+    expect(error).toMatchObject({ code: '42P01' })
+    expect((error as Error).message).toMatchInlineSnapshot(
+      `"relation "tempo_id_store" does not exist"`,
+    )
+  })
+
   test('behavior: takeItem returns a value to one of concurrent calls, deletes it, and returns no expired value', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())

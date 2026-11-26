@@ -9,13 +9,13 @@ import type * as Store from '../Store.js'
 import * as Redis from './Redis.js'
 
 /**
- * Returns a store in a Postgres table. If a query finds no table, the store creates the table and
- * an index on `expires_at`, and runs the query again, so a store on a table that exists sends no
- * other query. The table holds `key text primary key`,
+ * Returns a store in a Postgres table. If a query rejects and the table does not exist, the store
+ * creates the table and an index on `expires_at`, and runs the query again, so a store on a table
+ * that exists sends no other query. The table holds `key text primary key`,
  * `value text not null`, and `expires_at bigint`, in whole milliseconds, so a fraction of `expiresAt`
  * rounds up. Replicas that first use a new table at the same time all succeed, though only one of
- * them creates it. A client in a transaction whose first query finds no table rejects, since
- * Postgres aborts the transaction at the refusal. Create the table before such a client uses it.
+ * them creates it. A client in a transaction whose first query finds no table rejects with that
+ * refusal, since Postgres aborts the transaction at it. Create the table before such a client uses it.
  * Each value is stored as ox's `Json`, so a `bigint` survives. A write with an expiry deletes the
  * expired rows in a query beside it, and a read skips them. `takeItem` reads and deletes in one
  * `delete … returning`, so replicas that share the table take each value once. `update` writes only
@@ -29,8 +29,7 @@ import * as Redis from './Redis.js'
  * session of every instance in the process at once. An instance in another process reads the
  * sign-out from the table at its next refresh.
  *
- * `client` is any client with `query(text, values)`, such as a `pg` pool, whose refusals hold
- * the SQLSTATE in `code`.
+ * `client` is any client with `query(text, values)`, such as a `pg` pool.
  *
  * Do not expose the table to other roles. Each row holds a refresh token, and an access key's
  * private key.
@@ -98,15 +97,23 @@ export function create(
   }
 
   /**
-   * Runs the query. If it finds no table, it creates the table and runs the query again. A store on
-   * a table that exists thus sends no query before its first operation, such as the store that a
-   * Worker creates for each request.
+   * Runs the query. If it rejects, the store reads whether the table exists, since clients put the
+   * SQLSTATE of a refusal in different fields. If the table is absent, it creates the table and runs
+   * the query again. A store on a table that exists thus sends no query before its first operation,
+   * such as the store that a Worker creates for each request. If the read fails, such as in a
+   * transaction that the refusal aborted, the query's own refusal rejects.
    */
   async function query(text: string, values: readonly unknown[]) {
     try {
       return await client.query(text, values)
     } catch (error) {
-      if (!undefinedTable(error)) throw error
+      const absent = await client
+        .query('select to_regclass($1) is null as absent', [table])
+        .then(
+          ({ rows }) => (rows as readonly { absent: boolean }[])[0]?.absent,
+          () => false,
+        )
+      if (!absent) throw error
       await createTable()
       return client.query(text, values)
     }
@@ -313,25 +320,13 @@ const lease = 30_000
  */
 const holdLimit = 120_000
 
-/** Returns whether `error` is Postgres's refusal of a query that names no table (`42P01`). */
-function undefinedTable(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: unknown }).code === '42P01'
-  )
-}
-
 export declare namespace create {
   /**
    * A Postgres client with positional parameters, such as a `pg` pool or client. For `postgres`,
    * pass `{ query: async (text, values) => ({ rows: await sql.unsafe(text, values) }) }`.
    */
   type Client = {
-    /**
-     * Runs `text` with the positional `values`, and resolves with the rows. Rejects with an error
-     * whose `code` holds the SQLSTATE, such as `42P01` for a table that does not exist.
-     */
+    /** Runs `text` with the positional `values`, and resolves with the rows. */
     query: (
       text: string,
       values: readonly unknown[],
