@@ -46,20 +46,18 @@ describe('create', () => {
 
   test("writes no other preset's write between the read and the write of update", async () => {
     const name = 'tempo-id:signed-out:["http://127.0.0.1:9","example-mobile"]'
-    const secureStore = memory()
+    // The other preset writes its flag while the read of `update` runs, as a sign-out of another
+    // instance does while a sign-in removes the flag that it read.
+    const writes: Promise<void>[] = []
+    const secureStore = memory({
+      onRead() {
+        if (writes.length === 0) writes.push(other.setItem(name, 'flag-2'))
+      },
+    })
     // Each instance creates its own store, as two `expo` presets of one app do.
     const store = DeviceStore.create(secureStore)
     const other = DeviceStore.create(secureStore)
     await store.setItem(name, 'flag-1')
-    // The other preset writes its flag while the read of `update` runs, as a sign-out of another
-    // instance does while a sign-in removes the flag that it read.
-    const writes: Promise<void>[] = []
-    const getItemAsync = secureStore.getItemAsync
-    secureStore.getItemAsync = async (key) => {
-      const value = await getItemAsync(key)
-      if (writes.length === 0) writes.push(other.setItem(name, 'flag-2'))
-      return value
-    }
 
     const removed = await store.update!(name, (value) => ({
       result: value,
@@ -74,6 +72,22 @@ describe('create', () => {
         "stored": "flag-2",
       }
     `)
+  })
+
+  test('writes nothing in update for a value that the key already holds', async () => {
+    const name = 'tempo-id:signed-out:["http://127.0.0.1:9","example-mobile"]'
+    const secureStore = memory()
+    const store = DeviceStore.create(secureStore)
+    await store.setItem(name, 'flag-1')
+    secureStore.writes.length = 0
+
+    await store.update!(name, (value) => ({ result: undefined, value }))
+    await store.update!('absent', () => ({
+      result: undefined,
+      value: undefined,
+    }))
+
+    expect(secureStore.writes).toMatchInlineSnapshot(`[]`)
   })
 
   test('sets local, since only the app reads its secure store, so a refusal of a refresh token is final', () => {
@@ -93,19 +107,29 @@ describe('create', () => {
 
 /**
  * Returns the platform capability that `expo-secure-store` provides on a device: strings at keys, in
- * memory.
+ * memory. `writes` records each write and deletion. `options.onRead` runs at each read, after the
+ * value is read, such as for a write of another preset while the read runs.
  */
-function memory() {
+function memory(options: { onRead?: (() => void) | undefined } = {}) {
+  const { onRead } = options
   const values = new Map<string, string>()
+  const writes: string[] = []
   return {
     deleteItemAsync(key: string) {
+      writes.push(`delete ${key}`)
       values.delete(key)
       return Promise.resolve()
     },
-    getItemAsync: (key: string) => Promise.resolve(values.get(key) ?? null),
+    getItemAsync(key: string) {
+      const value = values.get(key) ?? null
+      onRead?.()
+      return Promise.resolve(value)
+    },
     setItemAsync(key: string, value: string) {
+      writes.push(`set ${key}`)
       values.set(key, value)
       return Promise.resolve()
     },
-  } satisfies DeviceStore.create.SecureStore
+    writes,
+  } satisfies DeviceStore.create.SecureStore & { writes: string[] }
 }

@@ -82,12 +82,11 @@ export function create(secureStore: create.SecureStore): Store.Store {
         const { result, value } = fn(
           text === null ? undefined : StoreValue.parse(text),
         )
-        if (value === undefined) await secureStore.deleteItemAsync(encode(key))
-        else
-          await secureStore.setItemAsync(
-            encode(key),
-            StoreValue.stringify(value),
-          )
+        const next = value === undefined ? null : StoreValue.stringify(value)
+        // A value that the key already holds, or an absent key that stays absent, needs no write.
+        if (next === text) return result
+        if (next === null) await secureStore.deleteItemAsync(encode(key))
+        else await secureStore.setItemAsync(encode(key), next)
         return result
       }),
   })
