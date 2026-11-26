@@ -2966,8 +2966,8 @@ export declare namespace create {
        * IndexedDB has no synchronous read. In a browser, the instance sets the cookie for 30 days at
        * each sign-in or restore, and removes it at each sign-out, and when it reads no saved session.
        * An access key that expires in an open page keeps it, since the store keeps the session, which
-       * the next load renews. The cookie holds only `1`, on the path `/`, and no token. `cookie: true` names it
-       * `tempo_session`. Defaults to no hint.
+       * the next load renews. The cookie holds only `1`, on the path `/`, and no token.
+       * `cookie: true` names it `tempo_session`. Defaults to no hint.
        */
       hint?:
         | {
