@@ -553,7 +553,9 @@ export const accounts = Accounts.create({
 
 ### Send above the limit or the balance
 
-With the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, a transfer above the limit of the access key, or above the balance, starts a new device grant. <SourceLink name="onCode" path="src/plugins/device.ts">`onCode`</SourceLink> shows its code. After the approval, the transfer sends again. A payment of <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> above the limit retries in the same way. A payment above the balance rejects with the node's error.
+With the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, a transfer above the limit of the access key, or above the balance, starts a new device grant. <SourceLink name="onCode" path="src/plugins/device.ts">`onCode`</SourceLink> shows its code. After the approval, the transfer sends again.
+
+A payment of <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> above the limit retries in the same way. A payment above the balance rejects with the node's error.
 
 | Refusal     | The grant requests                                                                         |
 | ----------- | ------------------------------------------------------------------------------------------ |
