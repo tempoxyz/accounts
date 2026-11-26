@@ -34,7 +34,8 @@ describe('machines.read', () => {
     `)
   })
 
-  test('keeps no failure of a read that a read of the page overlapped, since that read received it', async () => {
+  test('keeps no failure that a read of the page beside it rejected with, since that read joined its hooks', async () => {
+    const refusal = new Error('Refused.')
     const settle = Promise.withResolvers<unknown>()
     const actor = createActor(
       SessionRead.machines.read.provide({
@@ -46,21 +47,57 @@ describe('machines.read', () => {
 
     actor.send({ loaded: false, type: 'follow.start' })
     actor.send({ type: 'page.start' })
-    settle.reject(new Error('Refused.'))
+    actor.send({ failure: { error: refusal }, type: 'page.end' })
+    settle.reject(refusal)
     await expect.poll(() => actor.getSnapshot().value).toBe('idle')
 
-    expect({
-      context: actor.getSnapshot().context,
-      failure: SessionRead.machines.failure(actor.getSnapshot()),
-    }).toMatchInlineSnapshot(`
+    expect(actor.getSnapshot().context).toMatchInlineSnapshot(`
       {
-        "context": {
-          "failure": undefined,
-          "pages": 1,
-        },
+        "delivered": [],
         "failure": undefined,
+        "pages": 0,
       }
     `)
+  })
+
+  test('keeps the failure beside a read of the page that resolved, since that read ran the hooks again', async () => {
+    const settle = Promise.withResolvers<unknown>()
+    const actor = createActor(
+      SessionRead.machines.read.provide({
+        actors: {
+          read: fromPromise(() => settle.promise),
+        },
+      }),
+    ).start()
+
+    actor.send({ loaded: false, type: 'follow.start' })
+    actor.send({ type: 'page.start' })
+    actor.send({ type: 'page.end' })
+    settle.reject(new Error('Refused.'))
+    await expect.poll(() => actor.getSnapshot().value).toBe('unreported')
+
+    const failure = SessionRead.machines.failure(actor.getSnapshot())
+    expect(failure && (failure.error as Error).message).toMatchInlineSnapshot(
+      `"Refused."`,
+    )
+  })
+
+  test('drops the kept failure once a read of the page that ran beside the read rejects with it', async () => {
+    const refusal = new Error('Refused.')
+    const actor = createActor(
+      SessionRead.machines.read.provide({
+        actors: {
+          read: fromPromise(() => Promise.reject(refusal)),
+        },
+      }),
+    ).start()
+
+    actor.send({ loaded: false, type: 'follow.start' })
+    actor.send({ type: 'page.start' })
+    await expect.poll(() => actor.getSnapshot().value).toBe('unreported')
+    actor.send({ failure: { error: refusal }, type: 'page.end' })
+
+    expect(actor.getSnapshot().value).toMatchInlineSnapshot(`"idle"`)
   })
 
   test('starts no read for a loaded session, or beside a read of the page', () => {
@@ -109,9 +146,8 @@ describe('machines.read', () => {
     expect([...reached].sort()).toMatchInlineSnapshot(`
       [
         ""idle"",
+        ""reading"",
         ""unreported"",
-        "{"reading":"alone"}",
-        "{"reading":"shared"}",
       ]
     `)
     expect([...handled].sort()).toEqual(Object.keys(events).sort())
@@ -149,7 +185,12 @@ describe('machines.read', () => {
     ],
     // The runner ends only a read that started, and starts none while a failure waits.
     'page.end': (snapshot) =>
-      snapshot.context.pages > 0 ? [{ type: 'page.end' }] : [],
+      snapshot.context.pages > 0
+        ? [
+            { type: 'page.end' },
+            { failure: { error: failed.error }, type: 'page.end' },
+          ]
+        : [],
     'page.start': (snapshot) =>
       snapshot.matches('unreported') || snapshot.context.pages > 0
         ? []
@@ -161,7 +202,7 @@ describe('machines.read', () => {
       snapshot.matches('reading') ? [failed] : [],
   }
 
-  /** The traversal of the machine's graph, keyed by the state and whether a read of the page runs. */
+  /** The traversal of the machine's graph, keyed by the state, whether a read of the page runs, and whether one delivered a failure. */
   const traversal = {
     // The traversal's type names only `Event`, though the machine handles every `Step`.
     events: (snapshot: SessionRead.machines.read.Snapshot) =>
@@ -169,7 +210,11 @@ describe('machines.read', () => {
         fn(snapshot),
       ) as readonly SessionRead.machines.read.Event[],
     serializeState: (snapshot: SessionRead.machines.read.Snapshot) =>
-      JSON.stringify([snapshot.value, snapshot.context.pages > 0]),
+      JSON.stringify([
+        snapshot.value,
+        snapshot.context.pages > 0,
+        snapshot.context.delivered.length > 0,
+      ]),
   }
 })
 

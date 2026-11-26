@@ -12,7 +12,6 @@ import {
   fromPromise,
   type SnapshotFrom,
   setup,
-  stateIn,
 } from 'xstate'
 
 /**
@@ -54,7 +53,16 @@ export function create(options: create.Options): create.ReturnType {
         return Promise.reject(failure.error)
       }
       actor.send({ type: 'page.start' })
-      return fn().finally(() => actor.send({ type: 'page.end' }))
+      return fn().then(
+        (value) => {
+          actor.send({ type: 'page.end' })
+          return value
+        },
+        (error: unknown) => {
+          actor.send({ failure: { error }, type: 'page.end' })
+          throw error
+        },
+      )
     },
   }
 }
@@ -84,24 +92,35 @@ export declare namespace create {
 
 export namespace machines {
   /**
-   * The machine of a status subscription's read beside the reads of the page.
+   * The machine of a status subscription's read beside the reads of the page. A read of the page
+   * that joins the subscription's restore hooks rejects with the same error, which then reached a
+   * caller. A read of the page that ran the hooks again, after the subscription's run of them ended,
+   * delivers nothing, so the failure stays.
    *
-   * | State               | Meaning                                                                 |
-   * | ------------------- | ----------------------------------------------------------------------- |
-   * | `idle`              | No subscription's read runs, and no failure waits.                      |
-   * | `reading.alone`     | The subscription's read runs, and no read of the page started beside it. |
-   * | `reading.shared`    | The subscription's read runs, and a read of the page started beside it. |
-   * | `unreported`        | A restore hook failed in the subscription's read alone, and the next read of the page throws it, unless the session changes first. |
+   * | State        | Meaning                                                                                          |
+   * | ------------ | ------------------------------------------------------------------------------------------------ |
+   * | `idle`       | No subscription's read runs, and no failure waits.                                               |
+   * | `reading`    | The subscription's read runs. `delivered` holds the failures of the reads of the page beside it. |
+   * | `unreported` | A restore hook failed in the subscription's read, no caller received the failure, and the next read of the page throws it, unless the session changes first. |
    */
   export const read = setup({
     actions: {
       /** Counts a read of the page that starts. */
       count: assign((args) => ({ pages: args.context.pages + 1 })),
-      /** Forgets the failure that a read of the page took. */
-      forget: assign({ failure: undefined }),
+      /** Records the failure of a read of the page beside the subscription's read. */
+      deliver: assign((args) => {
+        assertEvent(args.event, 'page.end')
+        return {
+          delivered: args.event.failure
+            ? [...args.context.delivered, args.event.failure.error]
+            : args.context.delivered,
+        }
+      }),
+      /** Forgets the kept failure, and the failures that reads of the page received. */
+      forget: assign({ delivered: [], failure: undefined }),
       /** Keeps the failure of the subscription's read. */
-      keep: assign((args, params: { error: unknown }) => ({
-        ...args.context,
+      keep: assign((_, params: { error: unknown }) => ({
+        delivered: [],
         failure: { error: params.error },
       })),
       /** Counts a read of the page that ends. */
@@ -112,8 +131,17 @@ export namespace machines {
       read: fromPromise<unknown>(() => Promise.resolve(undefined)),
     },
     guards: {
-      /** Whether no read of the page started beside the subscription's read. */
-      alone: stateIn({ reading: 'alone' }),
+      /** Whether a read of the page rejected with the error itself, so a caller received it. */
+      delivered: (args, params: { error: unknown }) =>
+        args.context.delivered.includes(params.error),
+      /** Whether a read of the page that ends rejected with the kept failure. */
+      received: (args) => {
+        assertEvent(args.event, 'page.end')
+        return (
+          args.event.failure !== undefined &&
+          args.event.failure.error === args.context.failure?.error
+        )
+      },
       /** Whether the session is unread, and no read of the page runs. */
       startable: (args) => {
         assertEvent(args.event, 'follow.start')
@@ -125,7 +153,7 @@ export namespace machines {
       events: {} as read.Event,
     },
   }).createMachine({
-    context: { failure: undefined, pages: 0 },
+    context: { delivered: [], failure: undefined, pages: 0 },
     id: 'read',
     initial: 'idle',
     on: {
@@ -139,34 +167,43 @@ export namespace machines {
         },
       },
       reading: {
-        initial: 'alone',
         invoke: {
-          onDone: { target: 'idle' },
-          // A read of the page beside it received the failure itself.
+          id: 'read',
+          onDone: { actions: 'forget', target: 'idle' },
           onError: [
+            {
+              actions: 'forget',
+              guard: {
+                params: (args) => ({ error: args.event.error }),
+                type: 'delivered',
+              },
+              target: 'idle',
+            },
             {
               actions: {
                 params: (args) => ({ error: args.event.error }),
                 type: 'keep',
               },
-              guard: 'alone',
               target: 'unreported',
             },
-            { target: 'idle' },
           ],
-          id: 'read',
           src: 'read',
         },
-        states: {
-          alone: {
-            on: { 'page.start': { actions: 'count', target: 'shared' } },
-          },
-          shared: {},
-        },
+        on: { 'page.end': { actions: ['uncount', 'deliver'] } },
       },
       unreported: {
         on: {
           'failure.take': { actions: 'forget', target: 'idle' },
+          // A read of the page that was running when the read failed joined its hooks, and rejected
+          // with the failure.
+          'page.end': [
+            {
+              actions: ['uncount', 'forget'],
+              guard: 'received',
+              target: 'idle',
+            },
+            { actions: 'uncount' },
+          ],
           // A sign-in or a sign-out since the failure makes it stale.
           'session.change': { actions: 'forget', target: 'idle' },
         },
@@ -177,6 +214,8 @@ export namespace machines {
   export declare namespace read {
     /** The machine's context. */
     type Context = {
+      /** In `reading`, the errors of the reads of the page beside the subscription's read. */
+      delivered: readonly unknown[]
       /** The failure of the subscription's read in `unreported`, or `undefined`. */
       failure: { error: unknown } | undefined
       /** The count of the reads of the page that run. */
@@ -196,6 +235,8 @@ export namespace machines {
           type: 'failure.take'
         }
       | {
+          /** The read's failure, or `undefined` for a read that resolved. */
+          failure?: { error: unknown } | undefined
           /** A read of the page ended. */
           type: 'page.end'
         }
