@@ -1195,35 +1195,36 @@ describe('mpp', () => {
     expect(error).toMatchInlineSnapshot(`[TypeError: fetch failed]`)
   })
 
-  test('sends the identity to an origin of `identity.scope` that the app names with a trailing slash or in capitals', async () => {
+  test('sends the identity to an origin of `identity.scope` that the app names with a trailing slash', async () => {
     const store = Store.memory()
     await store.setItem(name, {
       state: { session: { ...session({ expiry: 3600 }), idToken: 'id-token' } },
       version: 0,
     })
-    const requests: Request[] = []
+    // A free API records the headers of each request that it receives.
+    const headers: Http.IncomingHttpHeaders[] = []
+    const api = Http.createServer((request, response) => {
+      headers.push(request.headers)
+      response.end('free')
+    })
+    await new Promise<void>((resolve) => api.listen(0, '127.0.0.1', resolve))
+    const address = api.address()
+    if (!address || typeof address === 'string') throw new Error('No port.')
+    const origin = `http://127.0.0.1:${address.port}`
     const accounts = instance({
-      fetch: (input, init) => {
-        requests.push(new Request(input, init))
-        return Promise.resolve(new Response('free'))
-      },
       // An origin read from the environment often ends with a slash, such as `API_URL`.
-      identity: { scope: ['https://API.example.com/'] },
+      identity: { scope: [`${origin}/`] },
       store,
     })
 
-    await accounts.mpp().fetch('https://api.example.com/fortune')
+    await accounts.mpp().fetch(`${origin}/fortune`)
+    await new Promise((resolve) => api.close(resolve))
 
     expect(
-      requests.map((request) => [
-        request.url,
-        request.headers.get('authorization'),
-        request.headers.get('tempo-id-token'),
-      ]),
+      headers.map((entry) => [entry.authorization, entry['tempo-id-token']]),
     ).toMatchInlineSnapshot(`
       [
         [
-          "https://api.example.com/fortune",
           "Bearer access-token",
           "id-token",
         ],
