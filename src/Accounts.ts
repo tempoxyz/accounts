@@ -1442,7 +1442,10 @@ export type Accounts<
        * status and the one before it, and returns the function that unsubscribes. `signedOut` for
        * an instance without a session, such as a backend's, which never calls the listener. `get`
        * returns the same object while the status is unchanged, so the pair fits
-       * `useSyncExternalStore` as it is. `accounts.useSession()` reads it in React.
+       * `useSyncExternalStore` as it is. `accounts.useSession()` reads it in React. The first
+       * `subscribe` before any read loads the saved session, as `session.get` does without its
+       * restore hooks, so the status leaves `pending` with no other call. If the store rejects the
+       * read, the status stays `pending`.
        *
        * @example
        * ```ts
@@ -2662,7 +2665,21 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
         }))
       },
       refresh,
-      status: session.status,
+      status: {
+        get: session.status.get,
+        subscribe(listener: Parameters<typeof session.status.subscribe>[0]) {
+          const unsubscribe = session.status.subscribe(listener)
+          // A subscriber that reads no session, such as a router guard, still sees the status leave
+          // `pending`, since the first subscription loads the saved session. A failed read keeps
+          // `pending`, as `session.get` does.
+          if (
+            session.actor &&
+            !InternalSession.machines.loaded(session.actor.getSnapshot())
+          )
+            void session.load().catch(() => undefined)
+          return unsubscribe
+        },
+      },
       subscribe: session.subscribe,
     },
     signOut: (parameters?: NonNullable<Parameters<Accounts['signOut']>[0]>) =>

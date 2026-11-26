@@ -669,8 +669,9 @@ export function dialog<const options extends dialog.Options = {}>(
           }),
       }
     },
-    // The plugin adds no member. It reads the instance's status, which only `extend` receives.
-    extend(instance: Accounts.Accounts, context: Plugin.Context) {
+    // The plugin adds no member. It follows the status of the context's session, whose subscriptions
+    // load no session, so the page's own read decides the first status.
+    extend(_instance: Accounts.Accounts, context: Plugin.Context) {
       // The instance can be created outside a browser, such as on a server that renders the page.
       if (!preloads()) return {}
       const load = () => {
@@ -683,7 +684,7 @@ export function dialog<const options extends dialog.Options = {}>(
       // authorization. A renewal, at `reauthorizing`, is a request of the page, so it loads no
       // frame. A held frame stays, so a repeated status loads nothing.
       const follow = () => {
-        instance.session.status.subscribe((status) => {
+        context.session.status.subscribe((status) => {
           if (status.status === 'signedOut') load()
         })
       }
@@ -726,7 +727,7 @@ export function dialog<const options extends dialog.Options = {}>(
       else {
         // The first load's `signedOut` ends no session: the page's authorization at mount can still
         // restore one, so the read below decides. Only the ends after the first load load the frame.
-        const loading = instance.session.status.subscribe((status) => {
+        const loading = context.session.status.subscribe((status) => {
           if (status.status === 'pending') return
           loading()
           follow()

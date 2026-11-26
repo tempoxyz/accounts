@@ -152,7 +152,7 @@ export function plugin(): Dialog {
       // The loaded plugin subscribes after the status changes, and a subscription never receives the
       // current status, so `signedOut` reads no store. A renewal, at `reauthorizing`, is a request
       // of the page, so it loads no code of the dialog.
-      instance.session.status.subscribe((status) => {
+      context.session.status.subscribe((status) => {
         if (status.status === 'signedOut') extend({ session: status.session })
       })
       return {}

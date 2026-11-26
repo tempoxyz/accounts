@@ -3393,7 +3393,73 @@ describe('session.status', () => {
       state: { session: { accessToken: 'access-token' } },
     })
   })
-  test("follows another instance's sign-in on the same store before a read of its own, such as another tab's, as it follows that instance's sign-out", async () => {
+  test('reads the saved session at the first subscription, so a router guard that calls no `session.get` leaves `pending`', async () => {
+    const saved = Store.memory()
+    await saved.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",1337]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 3_600_000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const requests: string[] = []
+    const guard = (store: Store.Store) => {
+      const accounts = Accounts.create({
+        chain: 1337,
+        clientId: 'client_1',
+        fetch: (input, init) => {
+          requests.push(`${init?.method ?? 'GET'} ${String(input)}`)
+          return globalThis.fetch(input, init)
+        },
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+      const statuses: string[] = []
+      accounts.session.status.subscribe((status, previous) =>
+        statuses.push(
+          `${previous.status} > ${status.status} ${status.session?.user.email}`,
+        ),
+      )
+      return { accounts, statuses }
+    }
+    // A returning visitor's page, and a new visitor's.
+    const returning = guard(saved)
+    const visitor = guard(Store.memory())
+
+    await expect
+      .poll(() => returning.accounts.session.status.get().status, {
+        timeout: 2_000,
+      })
+      .toBe('signedIn')
+    await expect
+      .poll(() => visitor.accounts.session.status.get().status, {
+        timeout: 2_000,
+      })
+      .toBe('signedOut')
+
+    expect({
+      requests,
+      returning: returning.statuses,
+      visitor: visitor.statuses,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [],
+        "returning": [
+          "pending > signedIn user@example.com",
+        ],
+        "visitor": [
+          "pending > signedOut undefined",
+        ],
+      }
+    `)
+  })
+  test("follows another instance's sign-in on the same store, such as another tab's, as it follows that instance's sign-out", async () => {
     const store = Store.memory()
     const create = () =>
       Accounts.create({
@@ -3438,7 +3504,8 @@ describe('session.status', () => {
 
     expect(statuses).toMatchInlineSnapshot(`
       [
-        "pending > signedIn user@example.com",
+        "pending > signedOut undefined",
+        "signedOut > signedIn user@example.com",
         "signedIn > signedOut undefined",
       ]
     `)

@@ -254,7 +254,7 @@ export const accounts = Accounts.create({ chain: 'testnet' })
 
 ### Follow the status
 
-<SourceLink name="session.status" path="src/Accounts.ts">`session.status`</SourceLink> returns the status of the table above, and calls a listener at each change. It suits code outside a component, such as a router guard.
+<SourceLink name="session.status" path="src/Accounts.ts">`session.status`</SourceLink> returns the status of the table above, and calls a listener at each change. It suits code outside a component, such as a router guard. The first subscription loads the saved session, so the status leaves `pending` without a call of `session.get`.
 
 :::code-group
 

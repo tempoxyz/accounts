@@ -131,7 +131,7 @@ export function react(options: react.Options = {}) {
         }),
       ).start()
       // A sign-in or a sign-out after a decline lets the next mount authorize again.
-      instance.session.status.subscribe(() =>
+      context.session.status.subscribe(() =>
         actor.send({ type: 'session.status' }),
       )
 
@@ -174,7 +174,7 @@ export function react(options: react.Options = {}) {
         // The instance types it by its session, which `Accounts.Members` names.
         useSession(): useSession.ReturnType<Session.Any> {
           const status = React.useSyncExternalStore(
-            instance.session.status.subscribe,
+            context.session.status.subscribe,
             instance.session.status.get,
             () => pending,
           )
