@@ -28,7 +28,7 @@ jobs:
       id-token: write
     # Uphill runs its scripts one after another, and the bundler, tsc, and vitest in them use every
     # CPU.
-    runs-on: depot-ubuntu-latest-16
+    runs-on: depot-ubuntu-latest-8
     timeout-minutes: 45
 
     steps:

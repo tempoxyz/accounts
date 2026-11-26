@@ -9,4 +9,4 @@ paths:
 self-hosted-runner:
   labels:
     - depot-ubuntu-latest-4
-    - depot-ubuntu-latest-16
+    - depot-ubuntu-latest-8
