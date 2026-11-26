@@ -317,6 +317,23 @@ export const accounts = Accounts.create({
 })
 ```
 
+### Pay as a guest
+
+With a guest session, <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> opens the payment page for the guest account, and the key pair in the instance's store signs the transfer in one click. An instance starts guest sessions only with <SourceLink name="Config.guest" path="src/Accounts.ts">`guest`</SourceLink>. [Guest checkout](/docs/guides/guest-checkout) covers the flow, its funds, and its fees.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  // Without a session, the payment page offers Continue as guest.
+  guest: true, // [!code hl]
+  plugins: [react(), viem()],
+})
+```
+
 ### Open a popup
 
 <SourceLink name="pay.mode" path="src/actions/account.ts">`mode: 'popup'`</SourceLink> opens the payment page in a popup window. A frame without a Tempo ID session signs the user in on its own page, as <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> does, and creates a new user's passkey account there.

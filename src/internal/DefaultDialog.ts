@@ -3,6 +3,7 @@
  * chunk, so an app that names its sign-in plugins bundles none of the dialog's code.
  * @module
  */
+import { RequestError } from '../Accounts.js'
 import * as Plugin from '../Plugin.js'
 import type { dialog } from '../plugins/dialog.js'
 import * as Session from '../Session.js'
@@ -36,7 +37,8 @@ export type Dialog = ReturnType<typeof dialog<{}>>
  * module loads as the instance is created without a saved session or with an expired one, and once
  * the session ends. It then preloads the dialog's frame as `dialog()` does. A page that restores a
  * live session, or renews an expired one through an authorization in progress, loads no code of
- * the dialog before the session ends or an action runs.
+ * the dialog before the session ends or an action runs. A sign-in whose load of the module fails in
+ * a browser without a connection throws as the loaded sign-in does offline.
  */
 export function plugin(): Dialog {
   let loading: Promise<Dialog> | undefined
@@ -74,15 +76,17 @@ export function plugin(): Dialog {
         revokeAccessKey: async (
           parameters?: dialog.revokeAccessKey.Parameters,
         ) => (await get()).revokeAccessKey(parameters),
-        // Without `backend`, the session is the stored one, so the read loads no dialog code.
-        // An instance with the `dialog` plugin signs in with Tempo ID, so its session has tokens.
-        session: async () =>
-          ((await context.session.load()) as Session.Session | undefined) ??
-          null,
+        // Without `backend`, the session is the stored one, so the read loads no dialog code. The
+        // dialog shows a Tempo ID session, not a `local` plugin's or a guest session beside it, as
+        // the loaded plugin does.
+        session: async () => {
+          const stored = await context.session.load()
+          return stored && Session.tempoId(stored) ? stored : null
+        },
         signIn: (async (parameters?: dialog.signIn.Parameters) =>
-          (await get()).signIn(parameters)) as dialog.signIn.Fn,
+          (await get().catch(unloaded)).signIn(parameters)) as dialog.signIn.Fn,
         signMessage: async (parameters: dialog.signMessage.Parameters) =>
-          (await get()).signMessage(parameters),
+          (await get().catch(unloaded)).signMessage(parameters),
         updateAccessKey: async (
           parameters: dialog.updateAccessKey.Parameters,
         ) => (await get()).updateAccessKey(parameters),
@@ -177,6 +181,22 @@ export function plugin(): Dialog {
 
 /** The actions of the dialog plugin. */
 type Actions = ReturnType<NonNullable<Dialog['actions']>>
+
+/**
+ * Throws `Accounts.RequestError` with `server_error` and status 0 for a load of the dialog's module
+ * that fails in a browser without a connection, as the loaded sign-in throws offline, with the
+ * failure as its `cause`. Rethrows any other failure.
+ */
+function unloaded(error: unknown): never {
+  if (globalThis.navigator?.onLine !== false) throw error
+  throw new RequestError({
+    cause: error,
+    code: 'server_error',
+    message:
+      'The browser is offline, so the sign-in receives no response. Check the connection, then sign in again.',
+    status: 0,
+  })
+}
 
 /**
  * Returns whether the browser reports whether anything covers an element, with IntersectionObserver

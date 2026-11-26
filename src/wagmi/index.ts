@@ -743,8 +743,12 @@ function settle<value>(fn: () => value): Promise<value> {
   return new Promise((resolve) => resolve(fn()))
 }
 
-/** Returns the address of `session`'s account, or `undefined` without an access key and an account. */
+/**
+ * Returns the address of `session`'s account, or `undefined` without an access key and an account.
+ * A guest session's account is its own address.
+ */
 function addressOf(session: Session.Any | undefined) {
+  if (session && Session.guest(session)) return session.address
   return (
     session?.accessKey?.account ??
     session?.account?.address ??
@@ -1364,7 +1368,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
      */
     function foreign(session: Session.Any) {
       return (
-        !Session.local(session) &&
+        Session.tempoId(session) &&
         Api.page() === undefined &&
         Api.unbound(getInstance().config, session)
       )
@@ -1458,7 +1462,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       // Tempo ID returns the Tempo Account only for a first-party app's access token, and the page of
       // a third-party app has no CORS grant for the read, so the read sends no request.
       if (ClientId.thirdParty(getInstance().config.clientId)) return held
-      if (Session.local(held)) return held
+      if (!Session.tempoId(held)) return held
       // The session's access token authenticates the read, so it returns the account of the
       // session's user, also on a page of another site, which sends no Tempo ID cookie. A token
       // that another DPoP key binds throws without a request, as every other request with the
@@ -1502,7 +1506,8 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
         // those, never to this instance's earlier copy.
         const latest = await context!.session.reload()
         if (!latest) throw new Accounts.SupersededError()
-        if (addressOf(latest)) return { session: latest }
+        if (addressOf(latest) || !Session.tempoId(latest))
+          return { session: latest }
         // A switch during the read reads the account on its own chain.
         if (getInstance().chain.get() !== chainId) return { session: latest }
         if (

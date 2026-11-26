@@ -7,6 +7,7 @@ import { KeyAuthorization } from 'ox/tempo'
 import { RequestError } from '../Accounts.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
+import type * as InternalSession from './Session.js'
 import * as Session from '../Session.js'
 import * as AccessKey from './AccessKey.js'
 import type * as TempoAccount from './TempoAccount.js'
@@ -146,6 +147,66 @@ export type AccountOption<accessKey> =
        */
       account: false
     }
+
+/**
+ * Commits a new guest session of the instance with `options.change`, and returns it. The guest
+ * account's key pair loads from the store, or the call creates and saves one. The call sends no
+ * request. A failure, or an abort of `options.signal` before the commit, rejects through the change.
+ */
+export async function guest(
+  context: Pick<Plugin.Context, 'config'>,
+  options: guest.Options,
+): Promise<Session.GuestSession> {
+  const { change } = options
+  try {
+    // The guest module loads at the first guest session, so an instance without one bundles none of
+    // its signing.
+    const Guest = await import('../actions/guest.js')
+    const session = await Guest.session(context.config)
+    throwIfAborted(options.signal)
+    await change.commit(session)
+    return session
+  } catch (error) {
+    return await change.fail(error)
+  }
+}
+
+export declare namespace guest {
+  type Options = {
+    /** The sign-in's change, which the guest session commits. */
+    change: Pick<InternalSession.Change, 'commit' | 'fail'>
+    /** The sign-in's signal, whose abort before the commit rejects with its reason. */
+    signal?: AbortSignal | undefined
+  }
+}
+
+/**
+ * Returns whether `error` is the refusal of a sign-in whose user selected "Continue as guest", the
+ * reason `guest_selected`, on an instance with `guest`. The sign-in then starts the guest session.
+ */
+export function guestSelected(
+  context: Pick<Plugin.Context, 'config'>,
+  error: unknown,
+): boolean {
+  return (
+    context.config.guest === true &&
+    error instanceof RequestError &&
+    error.reason === 'guest_selected'
+  )
+}
+
+/**
+ * Throws the reason of `signal` once it aborted. React Native's `AbortSignal` has no reason, so an
+ * abort without one throws an `AbortError`.
+ */
+function throwIfAborted(signal: AbortSignal | undefined) {
+  if (!signal?.aborted) return
+  throw signal.reason !== undefined
+    ? signal.reason
+    : Object.assign(new Error('The sign-in was aborted.'), {
+        name: 'AbortError',
+      })
+}
 
 /** Returns the session of a sign-in's result: its tokens, its user, its access key, and its account. */
 export function toSession(
