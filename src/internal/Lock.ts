@@ -24,7 +24,7 @@ export function create(): NonNullable<Store.Store['lock']> {
   return (name, fn) => {
     const run = (runs.get(name) ?? Promise.resolve())
       .catch(() => undefined)
-      .then(fn)
+      .then(() => fn())
     runs.set(name, run)
     const release = () => {
       if (runs.get(name) === run) runs.delete(name)

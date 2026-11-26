@@ -53,8 +53,8 @@ jobs:
       # The digest is the release's entry in its sha256sums.txt.
       - name: Install Uphill
         env:
-          SHA256: 061066d68ed30c8e30c402228e3923b266ba3cfb6fb536af43e0d838096212f7
-          VERSION: 0.0.9
+          SHA256: 40a3af250b4861e62cf62e5e14d29e4f20d01e62de32b947f8a784cde0d9449d
+          VERSION: 0.0.11
         run: |
           asset=uphill-x86_64-unknown-linux-gnu.tar.gz
           mkdir -p "$RUNNER_TEMP/uphill-bin"

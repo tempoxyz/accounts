@@ -144,7 +144,7 @@ test.describe('popup', () => {
       Web.url({ path: Apps.web.paths.dialog, resource: Apps.mcp.resource }),
     )
 
-    await test.step('opens a popup, since the frame issues tokens for Tempo ID alone', async () => {
+    await test.step('opens a popup, since the frame reports no support of resources', async () => {
       const window = await Playwright.popup(page, {
         open: () => Playwright.start(page, { name: 'Sign in' }),
       })

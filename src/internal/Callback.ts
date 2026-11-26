@@ -15,12 +15,19 @@ const opaqueSet = /[^ -~]/gu
 
 /**
  * What Tempo ID's page in the frame or the popup posts at the end of a sign-in: the callback URL,
- * or, for a request in the web message mode, the token response of the code that Tempo ID redeemed.
+ * or, for a request in the web message mode, the token response of the code that Tempo ID redeemed,
+ * or the user's choice to continue as a guest.
  */
 export type Received =
   | {
-      /** The redirect URI with `code` and `state`, or with `error`. */
+      /** The redirect URI with `code` and `state`, with `error`, or with `guest=1`. */
       url: string
+    }
+  | {
+      /** Marks the choice of "Continue as guest" on a request in the web message mode. */
+      guest: true
+      /** The request's `state`. */
+      state?: string | undefined
     }
   | {
       /**
@@ -34,8 +41,9 @@ export type Received =
 
 /**
  * Returns what a message of Tempo ID's page posts at the end of a sign-in: its `url` for a
- * `callback` type, its `authorization` and `state` for a `result` type, or `undefined` for any
- * other message. `prefix` names the page, such as `tempo-id:popup`.
+ * `callback` type, its `authorization` and `state` for a `result` type, `guest` and `state` for a
+ * `result` type of a guest, or `undefined` for any other message. `prefix` names the page, such as
+ * `tempo-id:popup`.
  */
 export function received(
   value: unknown,
@@ -48,6 +56,11 @@ export function received(
     typeof data.url === 'string'
   )
     return { url: data.url }
+  if (data.type === `${options.prefix}.result` && data.guest === true)
+    return {
+      guest: true,
+      ...(typeof data.state === 'string' ? { state: data.state } : {}),
+    }
   if (
     data.type !== `${options.prefix}.result` ||
     typeof data.authorization !== 'object' ||
@@ -253,10 +266,17 @@ export declare namespace checkState {
 /**
  * Returns the callback's denial, such as `error=access_denied`, as a `RequestError` with that
  * `code` and status 0. Its message is the `error_description`, or without one, a message that states
- * the fault and the fix. Returns `undefined` for a callback without an `error`.
+ * the fault and the fix. A callback with `guest=1` and no `code` returns {@link guestSelected}.
+ * Returns `undefined` for a callback without an `error`.
  */
 export function error(url: URL, options: error.Options) {
   const code = parameter(url, { ...options, name: 'error' })
+  if (
+    !code &&
+    parameter(url, { ...options, name: 'guest' }) === '1' &&
+    parameter(url, { ...options, name: 'code' }) === undefined
+  )
+    return guestSelected()
   if (!code) return undefined
   return new RequestError({
     code,
@@ -288,6 +308,21 @@ export function denied(error: unknown) {
     error.code === 'access_denied' &&
     error.reason === undefined
   )
+}
+
+/**
+ * Returns the refusal of a sign-in whose user selected "Continue as guest": `access_denied` with the
+ * reason `guest_selected` and status 0, as a device grant's poll returns it. A sign-in plugin of an
+ * instance with `guest` starts the guest session in its place.
+ */
+export function guestSelected() {
+  return new RequestError({
+    code: 'access_denied',
+    message:
+      'The user continued as a guest. Start the guest session with `guest`, or sign in again.',
+    reason: 'guest_selected',
+    status: 0,
+  })
 }
 
 /**
