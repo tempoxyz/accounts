@@ -135,25 +135,6 @@ describe('Store.postgres', () => {
     `)
   })
 
-  test('behavior: creates a missing table for a client whose refusals name no SQLSTATE in `code`', async () => {
-    const database = new PGlite()
-    onTestFinished(() => database.close())
-    // A client such as Prisma's raw queries or Bun's `SQL` keeps the SQLSTATE in another field.
-    const store = Postgres.create({
-      async query(text, values) {
-        try {
-          return await database.query(text, [...values])
-        } catch {
-          throw new Error('Refused query.')
-        }
-      },
-    })
-
-    await store.setItem('session', 'kept')
-
-    expect(await store.getItem('session')).toMatchInlineSnapshot(`"kept"`)
-  })
-
   test('error: a client in a transaction whose first query finds no table rejects with the refusal of that query', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())
@@ -203,6 +184,38 @@ describe('Store.postgres', () => {
           "value": "kept",
         }
       `)
+  })
+
+  test('error: a first query that the database refuses for another cause rejects, and runs once', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    await Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    }).setItem('session', 'kept')
+    await database.exec(`
+      create function refuse() returns trigger language plpgsql as $$ begin raise exception 'refused'; end $$;
+      create trigger refuse before delete on tempo_id_store for each row execute function refuse();
+    `)
+    const queries: string[] = []
+    const store = Postgres.create({
+      query(text, values) {
+        queries.push(text.split(' ')[0]!)
+        return database.query(text, [...values])
+      },
+    })
+
+    const error = await store.takeItem!('session').catch(
+      (error: Error) => error.message,
+    )
+
+    expect({ error, queries }).toMatchInlineSnapshot(`
+      {
+        "error": "refused",
+        "queries": [
+          "delete",
+        ],
+      }
+    `)
   })
 
   test('behavior: takeItem returns a value to one of concurrent calls, deletes it, and returns no expired value', async () => {

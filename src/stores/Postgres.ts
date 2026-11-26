@@ -9,9 +9,9 @@ import type * as Store from '../Store.js'
 import * as Redis from './Redis.js'
 
 /**
- * Returns a store in a Postgres table. If a query rejects and the table does not exist, the store
- * creates the table and an index on `expires_at`, and runs the query again, so a store on a table
- * that exists sends no other query. The table holds `key text primary key`,
+ * Returns a store in a Postgres table. If a query finds no table (`42P01`), the store creates the
+ * table and an index on `expires_at`, and runs the query again, so a store on a table that exists
+ * sends no other query. The table holds `key text primary key`,
  * `value text not null`, and `expires_at bigint`, in whole milliseconds, so a fraction of `expiresAt`
  * rounds up. Replicas that first use a new table at the same time all succeed, though only one of
  * them creates it. A client in a transaction whose first query finds no table rejects with that
@@ -29,7 +29,8 @@ import * as Redis from './Redis.js'
  * session of every instance in the process at once. An instance in another process reads the
  * sign-out from the table at its next refresh.
  *
- * `client` is any client with `query(text, values)`, such as a `pg` pool.
+ * `client` is any client with `query(text, values)`, such as a `pg` pool. Its refusals hold the
+ * SQLSTATE in `code`, `errno`, or `meta.code`.
  *
  * Do not expose the table to other roles. Each row holds a refresh token, and an access key's
  * private key.
@@ -96,25 +97,19 @@ export function create(
     return created
   }
 
-  // Whether a query of the store succeeded, so the table exists. A later refusal then has another
-  // cause, and the store reads no table.
-  let used = false
-
   /**
-   * Runs the query. If the first queries of the store reject, the store reads whether the table
-   * exists, since clients put the SQLSTATE of a refusal in different fields. It creates an absent
-   * table, and runs the query once more, also if another replica created the table since the
-   * refusal. A store on a table that exists thus sends no query before its first operation, such as
-   * the store that a Worker creates for each request. If the read fails, such as in a transaction
-   * that the refusal aborted, the query's own refusal rejects.
+   * Runs the query. If it finds no table (`42P01`), which Postgres refuses before the query runs, the
+   * store creates an absent table and runs the query once more, also if another replica created the
+   * table since the refusal. A store on a table that exists thus sends no query before its first
+   * operation, such as the store that a Worker creates for each request. Any other refusal rejects
+   * without a second run, since the query may have run. If the read of the table fails, such as in a
+   * transaction that the refusal aborted, the query's own refusal rejects.
    */
   async function query(text: string, values: readonly unknown[]) {
     try {
-      const result = await client.query(text, values)
-      used = true
-      return result
+      return await client.query(text, values)
     } catch (error) {
-      if (used) throw error
+      if (!undefinedTable(error)) throw error
       const absent = await client
         .query('select to_regclass($1) is null as absent', [table])
         .then(
@@ -123,9 +118,7 @@ export function create(
         )
       if (absent === undefined) throw error
       if (absent) await createTable()
-      const result = await client.query(text, values)
-      used = true
-      return result
+      return client.query(text, values)
     }
   }
 
@@ -329,6 +322,21 @@ const lease = 30_000
  * `fn` never settles frees the lock for other replicas.
  */
 const holdLimit = 120_000
+
+/**
+ * Returns whether `error` is Postgres's refusal of a query that names no table (`42P01`). Clients
+ * hold the SQLSTATE in `code`, as `pg` and `postgres` do, in `errno`, as Bun's `SQL` does, or in
+ * `meta.code`, as Prisma does.
+ */
+function undefinedTable(error: unknown) {
+  if (typeof error !== 'object' || error === null) return false
+  const { code, errno, meta } = error as {
+    code?: unknown
+    errno?: unknown
+    meta?: { code?: unknown } | undefined
+  }
+  return code === '42P01' || errno === '42P01' || meta?.code === '42P01'
+}
 
 export declare namespace create {
   /**
