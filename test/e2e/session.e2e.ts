@@ -306,7 +306,8 @@ test.describe('session', () => {
       tab.goto(`${Apps.web.url}/restore/?restore=0`),
     ])
     await expect(page.locator('#status')).toHaveText('signedOut')
-    await expect(tab.locator('#status')).toHaveText('pending')
+    // The tab's subscription loads the saved session, so the status leaves `pending` with no read.
+    await expect(tab.locator('#status')).toHaveText('signedOut')
 
     await test.step('signs the second tab in at the first tab’s sign-in', async () => {
       await enter(page, { code, email })
