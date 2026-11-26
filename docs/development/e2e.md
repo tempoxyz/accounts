@@ -297,7 +297,7 @@ The page's query sets the options that a spec varies. Tempo ID matches a redirec
 | `dpop=1`           | A DPoP key binds the tokens. The page keeps the key in IndexedDB                |
 | `expiry`           | The expiry of each access key, such as `15s`. Defaults to `1d`                  |
 | `funding`          | The amount that a sign-in needs in the Tempo Account, as JSON                   |
-| `instanceResource` | The registered resource of the instance, so a sign-in opens a popup             |
+| `instanceResource` | The registered resource that the instance names for each request                |
 | `message`          | The message that each "Sign a message" control signs                            |
 | `par=1`            | On `/`, the plugin pushes each request, so the sign-in opens a popup            |
 | `plugin=1`         | On `/wagmi/`, the config is `accounts.wagmi` of the page's own instance         |

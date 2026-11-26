@@ -806,9 +806,9 @@ export declare namespace dialog {
      * signs in through the backend's `GET /auth/login` redirect instead.
      *
      * The backend's instance names the request's `resource`, after the dialog chooses the frame or
-     * the popup. Tempo ID's frame issues tokens for its own origin alone. So if the backend's
-     * instance names a `resource`, the page's instance names the same `resource`, and the sign-in
-     * runs in a popup.
+     * the popup. The dialog takes the frame for a resource only if the frame reports that it
+     * issues tokens for one. So if the backend's instance names a `resource`, the page's instance
+     * names the same `resource`.
      */
     backend?: string | true | undefined
     /**
@@ -1052,8 +1052,9 @@ export declare namespace dialog {
       /**
        * Whether the sign-in shows in a frame or in a popup window. Defaults to the plugin's `mode`.
        * A popup opens only within a click. Outside a secure context, on a page on `http:` such as
-       * `http://localhost`, for a pushed request, for a request with a `resource`, and with `funding`
-       * for a hint of `MACH` on Tempo mainnet on iOS or iPadOS, `iframe` runs as `popup`. A page on
+       * `http://localhost`, for a pushed request, for a request with a `resource` that the preloaded
+       * frame does not take, and with `funding` for a hint of `MACH` on Tempo mainnet on iOS or
+       * iPadOS, `iframe` runs as `popup`. A page on
        * `http:` keeps the frame only for a Tempo ID on `http:`, such as a local one.
        */
       mode?: 'iframe' | 'popup' | undefined
@@ -1063,8 +1064,11 @@ export declare namespace dialog {
        * names them as `aud`, and each refresh keeps them. A pushed request, with `par`, names at
        * most one. An unknown or disabled resource fails with
        * [`invalid_target`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_target).
-       * Tempo ID's frame issues tokens for its own origin alone, so a sign-in with a resource runs
-       * in a popup. Defaults to the instance's `resource`, or else Tempo ID's origin.
+       * The sign-in runs in the frame if the preloaded frame reports that it issues tokens for a
+       * resource, and in a popup otherwise. A frame that cannot serve the request, such as for an
+       * app that no resource's scopes link, offers the popup. After the sign-in,
+       * `accounts.session.accessToken()` returns the resource's access token. Defaults to the
+       * instance's `resource`, or else Tempo ID's origin.
        */
       resource?: Accounts.Config['resource']
       /**

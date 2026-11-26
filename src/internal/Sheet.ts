@@ -547,6 +547,7 @@ export function create(options: create.Options): create.ReturnType {
       })
       return id
     },
+    resources: () => machines.resources(actor.getSnapshot()),
     trusted: () => machines.trusted(actor.getSnapshot()),
     usable: () =>
       dialog.isConnected &&
@@ -604,6 +605,11 @@ export declare namespace create {
      * it later. Returns the request's ID.
      */
     show: (options: show.Options) => string
+    /**
+     * Returns whether the frame issues tokens for a registered resource, as the loaded page reports
+     * it, or `undefined` before the page loads.
+     */
+    resources: () => boolean | undefined
     /**
      * Returns whether Tempo ID trusts the app not to cover the frame, as the loaded page reports it,
      * or `undefined` before the page loads.
@@ -1172,7 +1178,11 @@ function parse(data: unknown): machines.sheet.Message | undefined {
   const value = data as Record<string, unknown>
   const id = typeof value.id === 'string' ? value.id : undefined
   if (value.type === 'tempo-id:embed.loaded')
-    return { trusted: value.trusted === true, type: 'embed.loaded' }
+    return {
+      resources: value.resources === true,
+      trusted: value.trusted === true,
+      type: 'embed.loaded',
+    }
   if (
     value.type === 'tempo-id:embed.resize' &&
     typeof value.height === 'number'
@@ -1355,10 +1365,10 @@ export namespace machines {
           current: { ...context.current, popupUrl: event.popupUrl },
         }
       }),
-      /** Holds the trust that the loaded page reports. */
+      /** Holds the trust and the support of resources that the loaded page reports. */
       trust: assign(({ event }) => {
         if (event.type !== 'embed.loaded') return {}
-        return { trusted: event.trusted }
+        return { resources: event.resources, trusted: event.trusted }
       }),
       /** Stops taking the page's messages. `Sheet.ts` provides it. */
       unlisten: () => {},
@@ -1410,6 +1420,7 @@ export namespace machines {
       challenge: undefined,
       current: undefined,
       request: undefined,
+      resources: undefined,
       trusted: undefined,
     },
     id: 'sheet',
@@ -1679,6 +1690,12 @@ export namespace machines {
       /** The authorization request that the page has not received yet, until the page loads. */
       request: string | undefined
       /**
+       * Whether the frame issues tokens for a registered resource, as the loaded page reports it, or
+       * `undefined` before the page loads. A Tempo ID whose frame overwrites `resource` with its
+       * own origin reports nothing, which reads as `false`.
+       */
+      resources: boolean | undefined
+      /**
        * Whether Tempo ID trusts the app not to cover the frame, as the loaded page reports it, or
        * `undefined` before the page loads.
        */
@@ -1704,6 +1721,8 @@ export namespace machines {
           type: 'embed.close'
         }
       | {
+          /** Whether the frame forwards a request's `resource`, and issues tokens for it. */
+          resources: boolean
           /** Whether Tempo ID trusts the app not to cover the frame, which skips its check of visibility. */
           trusted: boolean
           /** The page loaded, and takes a request. */
@@ -1868,6 +1887,14 @@ export namespace machines {
       /** Whether the popup runs a method, such as Buy MACH or a sign-in as another user. */
       method: boolean
     }
+  }
+
+  /**
+   * Returns whether the frame issues tokens for a registered resource, as the loaded page reports
+   * it, or `undefined` before the page loads.
+   */
+  export function resources(snapshot: machines.sheet.Snapshot) {
+    return snapshot.context.resources
   }
 
   /**

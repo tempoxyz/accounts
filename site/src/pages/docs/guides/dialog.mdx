@@ -366,7 +366,7 @@ export const accounts = Accounts.create({
 
 ### Sign in for an API
 
-<SourceLink name="signIn.resource" path="src/plugins/dialog.ts">`resource`</SourceLink> names a [registered resource](https://github.com/tempoxyz/id/blob/main/docs/resources.md), such as an MCP server. Each access token then names it as its audience, so only that API accepts the token. A sign-in with a resource runs in a popup.
+<SourceLink name="signIn.resource" path="src/plugins/dialog.ts">`resource`</SourceLink> names a [registered resource](https://github.com/tempoxyz/id/blob/main/docs/resources.md), such as an MCP server. Each access token then names it as its audience, so only that API accepts the token. The sign-in runs in the dialog's frame if the preloaded frame reports that it issues tokens for a resource, and in a popup otherwise. After the sign-in, <SourceLink name="session.accessToken" path="src/Accounts.ts">`accounts.session.accessToken`</SourceLink> returns the resource's access token.
 
 :::code-group
 

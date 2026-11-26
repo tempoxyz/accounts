@@ -65,7 +65,7 @@ describe('machines.sheet', () => {
   test('posts a deferred request to a loaded frame at once, reveals it once the page shows it, and posts its challenge once it arrives', () => {
     const { actor, effects } = start()
 
-    actor.send({ trusted: true, type: 'embed.loaded' })
+    actor.send({ resources: false, trusted: true, type: 'embed.loaded' })
     actor.send(show('a'))
     const pending = actor.getSnapshot().value
     actor.send({ id: 'a', type: 'embed.ready' })
@@ -90,13 +90,24 @@ describe('machines.sheet', () => {
     actor.send(show('a'))
     actor.send(challenge('a'))
     const held = actor.getSnapshot().context
-    actor.send({ trusted: false, type: 'embed.loaded' })
+    actor.send({ resources: false, trusted: false, type: 'embed.loaded' })
 
     expect([held.request, held.challenge]).toEqual(['q-a', 'q-a&challenge=m'])
     expect(actor.getSnapshot().value).toEqual({
       open: { dialog: 'pending', frame: 'loaded' },
     })
     expect(effects).toEqual(['arm', ['post', 'q-a', 'q-a&challenge=m']])
+  })
+
+  test('holds the support of resources that the loaded page reports, and none before it loads', () => {
+    const { actor } = start()
+
+    const before = machines.resources(actor.getSnapshot())
+    actor.send({ resources: true, trusted: false, type: 'embed.loaded' })
+
+    expect(before).toBeUndefined()
+    expect(machines.resources(actor.getSnapshot())).toBe(true)
+    expect(machines.trusted(actor.getSnapshot())).toBe(false)
   })
 
   test('offers the popup at a fallback before the challenge, and opens it only once the challenge supplies its URL', () => {
@@ -156,7 +167,7 @@ describe('machines.sheet', () => {
     const { actor, effects } = start()
     const popupUrl = 'https://id.example/oauth2/authorize?client_id=a'
 
-    actor.send({ trusted: true, type: 'embed.loaded' })
+    actor.send({ resources: false, trusted: true, type: 'embed.loaded' })
     actor.send(
       row.deferred ? show('a') : { ...show('a'), deferred: false, popupUrl },
     )
@@ -182,7 +193,7 @@ describe('machines.sheet', () => {
   test("opens a method's offered popup with the method at Continue", () => {
     const { actor, effects } = start()
 
-    actor.send({ trusted: true, type: 'embed.loaded' })
+    actor.send({ resources: false, trusted: true, type: 'embed.loaded' })
     actor.send({
       ...show('a'),
       deferred: false,
@@ -205,7 +216,7 @@ describe('machines.sheet', () => {
   test('takes no challenge of a show that a later show replaced', () => {
     const { actor, effects } = start()
 
-    actor.send({ trusted: true, type: 'embed.loaded' })
+    actor.send({ resources: false, trusted: true, type: 'embed.loaded' })
     actor.send(show('a'))
     actor.send(show('b'))
     actor.send(challenge('a'))
