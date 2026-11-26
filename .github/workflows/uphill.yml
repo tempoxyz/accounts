@@ -2,8 +2,10 @@
 # `.agents/uphill.baseline.yaml`, and compares its sizes, counts, and checks with the committed
 # baselines. The measure job runs the code without write access, and writes the report to the job
 # summary. On a pull request, the comment job runs none of the code, and alone may write the pull
-# request's comment. Timings differ between machines, so the job compares no revisions. Run
-# `uphill --compare main` on one machine for that.
+# request's comment. On main, the measure job keeps the run as Git notes, and the notes job, which
+# runs none of the code, alone pushes them, so `report.html` and `uphill log` draw trends. Timings
+# differ between machines, so the job compares no revisions. Run `uphill --compare main` on one
+# machine for that.
 name: Uphill
 on:
   pull_request:
@@ -12,8 +14,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A run on main waits for the previous one, so each run's notes start from the notes it pushed.
 concurrency:
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
 jobs:
@@ -56,13 +59,22 @@ jobs:
       - name: Check packs
         run: uphill audit
 
+      # The notes of earlier runs on main give the report its trends. A repository without notes
+      # has none to fetch. `--note` writes its notes with this identity.
+      - name: Fetch notes
+        run: |
+          git fetch origin 'refs/notes/uphill*:refs/notes/uphill*' || true
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
       # A missed target is a step to climb, not a failure, so only a script that cannot measure
       # fails the job.
       - name: Run Uphill
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          NOTE: ${{ github.event_name == 'push' && '--note' || '' }}
         run: |
-          uphill
+          uphill $NOTE
           mkdir -p "$RUNNER_TEMP/uphill"
           {
             echo '<!-- accounts-uphill -->'
@@ -80,6 +92,52 @@ jobs:
           name: uphill
           path: ${{ runner.temp }}/uphill
           retention-days: 14
+
+      # A bundle carries the notes to the notes job, which alone may push.
+      - name: Bundle notes
+        if: github.event_name == 'push'
+        run: git bundle create "$RUNNER_TEMP/notes.bundle" refs/notes/uphill refs/notes/uphill-report
+
+      - name: Upload notes
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          name: uphill-notes
+          path: ${{ runner.temp }}/notes.bundle
+          retention-days: 1
+
+  # Pushes the notes of a run on main. It runs none of the code, and alone may write the repository.
+  notes:
+    name: Notes
+    if: github.event_name == 'push'
+    needs: measure
+    permissions:
+      contents: write
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      - name: Download notes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: uphill-notes
+          path: ${{ runner.temp }}/notes
+
+      # The bundle holds the notes that the measure job fetched, and one note more for this commit,
+      # so the push fast-forwards each notes ref.
+      - name: Push notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init -q notes && cd notes
+          git fetch -q "$RUNNER_TEMP/notes/notes.bundle" 'refs/notes/uphill*:refs/notes/uphill*'
+          git -c "http.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            push "https://github.com/$GITHUB_REPOSITORY.git" 'refs/notes/uphill*:refs/notes/uphill*'
 
   # A pull request from a fork receives a read-only token, so its report stays in the job summary.
   comment:
