@@ -59,8 +59,11 @@ speed:
   hot-import-time: { poor: 800ms }
   hot-import-memory: { poor: 30MB }
   # The pack replays calls that its recorder takes from a `vitest` install. This repository runs
-  # Vitest through Vite+, so the replay finds no calls, and `call-time`, `call-memory`, and their hot
-  # copies skip with a note.
+  # Vitest through Vite+, so the replay finds no calls, and these metrics leave the category.
+  call-time: false
+  call-memory: false
+  hot-call-time: false
+  hot-call-memory: false
 
 # The typescript pack's type-checking cost of each export. Most exports of a typical library cost
 # under 200 instantiations and check in 1 ms, so the targets are 300 instantiations, 2 ms, and 1 MB.
@@ -79,20 +82,18 @@ types:
 call-types:
   hot-instantiations: { poor: 120000, score: max }
 
-# The writing-docs pack's prose checks. A weight of 0 shows a check, and leaves it out of the
-# score: `uphill --update` reads this file without the packs, so it refuses `false`. The site and
-# the docs use sentence-case headings, as AGENTS.md requires, and the pack checks Title Case.
-# AGENTS.md limits only a guide's label to three words, and a section heading is a noun phrase of
-# any length.
+# The writing-docs pack's prose checks. The site and the docs use sentence-case headings, as
+# AGENTS.md requires, and the pack checks Title Case. AGENTS.md limits only a guide's label to three
+# words, and a section heading is a noun phrase of any length.
 documentation:
-  heading-case: { weight: 0 }
-  heading-words: { weight: 0 }
+  heading-case: false
+  heading-words: false
 
 # The git pack's repository checks. `.changeset/` keeps the notes written for 1.0.0, which no
 # workflow reads, and the examples track their `.env.example` files on purpose.
 commits:
-  changeset-sentences: { weight: 0 }
-  tracked-output: { weight: 0 }
+  changeset-sentences: false
+  tracked-output: false
 
 # The async calls of each public action, recorded by the waterfall of this repository's own tests
 # (`pnpm waterfall --local src`). AGENTS.md: "Never add a round trip to a flow." Tempo ID's

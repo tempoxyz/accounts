@@ -43,14 +43,23 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository]
 
-      # The packs' scripts run on Bun. The organization allows only GitHub-owned actions, so Bun and
-      # Uphill come from their registries at pinned versions. Uphill's `packs` key is newer than its
-      # latest release, so Cargo builds the commit that pins the packs.
+      # The packs' scripts run on Bun. The organization allows only GitHub-owned actions, so Bun comes
+      # from npm, and Uphill from its GitHub release, each at a pinned version.
       - name: Install Bun
         run: npm install --global bun@1.4.4 # zizmor: ignore[adhoc-packages]
 
+      # The digest is the release's entry in its sha256sums.txt.
       - name: Install Uphill
-        run: cargo install --locked --git https://github.com/wevm/uphill --rev ed127fcc1cf1a958051bd1603b08805f1bb990c2 uphill # zizmor: ignore[adhoc-packages]
+        env:
+          SHA256: 5457ec9728f3a0e94e557c335cc941fd6ffdb533392d2573c2fec35c9ed6cd51
+          VERSION: 0.0.7
+        run: |
+          asset=uphill-x86_64-unknown-linux-gnu.tar.gz
+          mkdir -p "$RUNNER_TEMP/uphill-bin"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$asset" "https://github.com/wevm/uphill/releases/download/v$VERSION/$asset"
+          echo "$SHA256  $RUNNER_TEMP/$asset" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/uphill-bin" uphill
+          echo "$RUNNER_TEMP/uphill-bin" >> "$GITHUB_PATH"
 
       # The library metrics of the typescript pack read the build.
       - name: Build

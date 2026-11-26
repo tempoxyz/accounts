@@ -29,15 +29,14 @@ uphill audit                # check each vendored pack against its pinned commit
 pnpm exec zile dev          # link dist to src again
 ```
 
-Uphill runs the packs' scripts on Bun. The `packs` key needs Uphill 0.0.5 or later. Until its release, build it with `cargo install --locked --git https://github.com/wevm/uphill uphill`.
+Uphill runs the packs' scripts on Bun. The setup needs Uphill 0.0.7 or later: `curl -fsSL https://raw.githubusercontent.com/wevm/uphill/main/install.sh | UPHILL_VERSION=0.0.7 sh`.
 
 The `Uphill` workflow runs `uphill` on each pull request, and keeps one comment with `report.md`. Its artifact holds `report.html`.
 
 ## Limitations
 
-- The typescript pack records calls through a `vitest` install, and the tests run on Vite+. The pack's `call-time` and `call-memory` skip, and its `coverage` and `fuzz` categories stay out.
+- The typescript pack records calls through a `vitest` install, and the tests run on Vite+. The pack's `call-time` and `call-memory` metrics and its `coverage` and `fuzz` categories stay out.
 - `./cloudflare`, `./expo`, and the React Native entries load only in their runtimes, so the pack's library metrics leave them out.
 - The waterfall drives the actions through this repository's own tests. Tempo ID's integration suite drives more flows.
 - The redis tests need Docker. Without it, their actions record no traces.
-- `uphill --update` parses `.agents/uphill.yaml` without the packs, so it refuses the overrides of the `types`, `call-types`, `documentation`, and `commits` categories. Remove those four categories, run `uphill --update`, and restore them. The friction log holds the entry.
 - `uphill --update` writes `.agents/uphill.baseline.yaml` without comments, so `.agents/uphill.yaml` holds the source of each target.
