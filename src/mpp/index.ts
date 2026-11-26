@@ -1753,7 +1753,8 @@ export declare namespace mpp {
  * string, so an entry in another form matches no request.
  *
  * @throws {TypeError} For an entry with a path, a query, or a fragment, since every path of its
- * origin receives the tokens.
+ * origin receives the tokens. The message names only the origin, since the query or the user
+ * information of an entry can hold a secret.
  */
 function origins(scope: mpp.Identity['scope']) {
   if (scope === '*') return scope
@@ -1761,7 +1762,7 @@ function origins(scope: mpp.Identity['scope']) {
     const url = new URL(entry)
     if (url.pathname !== '/' || url.search || url.hash)
       throw new TypeError(
-        `Invalid identity scope: \`${entry}\` is no origin. Name its origin, such as \`${url.origin}\`.`,
+        `Invalid identity scope: an entry of \`${url.origin}\` names a path, a query, or a fragment. Name the origin alone.`,
       )
     return url.origin
   })

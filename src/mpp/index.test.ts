@@ -1232,11 +1232,15 @@ describe('mpp', () => {
     `)
   })
 
-  test('refuses an entry of `identity.scope` with a path, before any request', () => {
+  test('refuses an entry of `identity.scope` with a path, without its secrets in the error, before any request', () => {
     expect(() =>
-      mpp({ identity: { scope: ['https://api.example.com/v1'] } }),
+      mpp({
+        identity: {
+          scope: ['https://user:secret@api.example.com/v1?key=secret'],
+        },
+      }),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[TypeError: Invalid identity scope: \`https://api.example.com/v1\` is no origin. Name its origin, such as \`https://api.example.com\`.]`,
+      `[TypeError: Invalid identity scope: an entry of \`https://api.example.com\` names a path, a query, or a fragment. Name the origin alone.]`,
     )
   })
 
