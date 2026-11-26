@@ -163,7 +163,7 @@ export const accounts = Accounts.create({
 
 ### Disconnect the app
 
-<SourceLink name="backend.disconnect" path="src/plugins/backend.ts">`backend.disconnect`</SourceLink> ends the connection of the app and the session's user at Tempo ID, with the session's access token. Tempo ID removes the user's consent and every token of the app, and revokes the connection's access keys. The call then deletes the session without a revocation. The user's Tempo ID session stays.
+<SourceLink name="backend.disconnect" path="src/plugins/backend.ts">`backend.disconnect`</SourceLink> ends the connection of the app and the session's user at Tempo ID. It then deletes the session without a revocation.
 
 :::code-group
 
