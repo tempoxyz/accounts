@@ -490,7 +490,7 @@ export const accounts = Accounts.create({
 
 ### Sign in from a page
 
-A page signs in for the resource with <SourceLink name="signIn.resource" path="src/plugins/dialog.ts">`resource`</SourceLink> on <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink>. Tempo ID's frame issues tokens for its own origin alone, so a sign-in with a resource opens a popup. Call it in a click handler.
+A page signs in for the resource with <SourceLink name="signIn.resource" path="src/plugins/dialog.ts">`resource`</SourceLink> on <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink>. The sign-in runs in the dialog's frame if the preloaded frame reports that it issues tokens for a resource, and in a popup otherwise. Call it in a click handler.
 
 :::code-group
 

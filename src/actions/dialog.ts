@@ -151,8 +151,8 @@ export async function callback(auth: Config): Promise<boolean> {
  * frame, which starts the sign-in again. A call while the page holds a frame of the same redirect
  * URI that has not failed loads nothing. Outside a secure context, on a page on `http:` for a Tempo
  * ID on `https:`, and for an instance that pushes its requests with `par`, it loads nothing, since
- * `signIn` then opens a popup. An instance with a `resource` loads the frame, since
- * `signMessage` signs in it. On a page that is not on the redirect URI's origin it loads nothing
+ * `signIn` then opens a popup. An instance with a `resource` loads the frame, since the frame
+ * reports whether its sign-in takes the resource, and `signMessage` signs in it. On a page that is not on the redirect URI's origin it loads nothing
  * either, since `signIn` then throws.
  *
  * @example
@@ -219,8 +219,9 @@ export declare namespace preload {
  * `http://localhost`, signs in with `popup` too, unless Tempo ID is on `http:` itself, such as a
  * local one. An instance that pushes its requests with `par` signs in with `popup` as well, since the
  * frame takes the request's own parameters, and Tempo ID reads a pushed request only from its push.
- * A request with a `resource`, its own or the instance's, signs in with `popup` too, since the frame's
- * tokens are for Tempo ID's origin alone.
+ * A request with a `resource`, its own or the instance's, signs in in the frame only if the preloaded
+ * frame reported that it issues tokens for a resource. Otherwise it signs in with `popup`. A frame
+ * that cannot serve the request, such as for an app that no resource's scopes link, offers a popup.
  * A request with `funding` signs in in the
  * frame. If the account holds less than the hint, the call redeems the code, then opens the deposit
  * page as `Actions.funding.open` does in `frame` mode, and resolves once that page returns or closes.
@@ -525,11 +526,15 @@ async function authorize<
       })
     ) &&
     !pushed &&
-    // Tempo ID's frame sets the request's resource to its own origin, so only a popup issues tokens
-    // for a registered resource.
-    resources(auth, rest).length === 0 &&
     framed(auth, { redirectUri }) &&
-    (visibility() || entry?.sheet.trusted() === true)
+    // A frame issues tokens for a registered resource only if its loaded page reports it. An older
+    // Tempo ID's frame sets the request's resource to its own origin, so a popup issues them there.
+    Sheet.machines.frames({
+      resource: resources(auth, rest).length > 0,
+      resources: entry?.sheet.resources(),
+      trusted: entry?.sheet.trusted(),
+      visibility: visibility(),
+    })
       ? 'iframe'
       : 'popup'
 
@@ -704,6 +709,9 @@ async function authorize<
                 return rest.challenge
               })(),
               display: 'popup',
+              // A guest session signs no challenge, so a request whose challenge arrives later
+              // offers no guest.
+              ...(deferred ? { guest: false } : {}),
               redirectUri,
               ...(responseMode ? { responseMode } : {}),
             }))().then((value) => ({ ...value, state: value.pending.state })),
@@ -826,6 +834,19 @@ async function authorize<
     // redeems.
     unblock?.()
 
+    // The user selected "Continue as guest" on a request in the web message mode, which issues no
+    // tokens. A sign-in plugin starts the guest session.
+    if ('guest' in callback) {
+      if (callback.state !== state)
+        throw new RequestError({
+          code: 'invalid_request',
+          field: 'state',
+          message:
+            'Invalid `state` in the posted result. Start sign-in again from this app.',
+          status: 400,
+        })
+      throw Callback.guestSelected()
+    }
     // Tempo ID redeemed the code of a request in the web message mode, and posted its authorization.
     if ('authorization' in callback) {
       const authorization = await (async () => {
