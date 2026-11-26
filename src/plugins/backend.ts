@@ -168,8 +168,10 @@ export function backend(options: backend.Options) {
          * deletes the session without a revocation, as `end` with `revoke: false` does, since Tempo ID
          * revoked its refresh token, and reads a second revocation as reuse. The user's Tempo ID
          * session stays. Returns the revoked access keys, and in `remaining` those that Tempo ID could
-         * not revoke. Returns `undefined` without a session, and for a SIWE session, and sends no
-         * request. The app deletes the session cookie itself.
+         * not revoke. A session that a sign-in stores under `id` during the request stays, if Tempo
+         * ID issued its tokens in a later second than the tokens of the request. Returns `undefined`
+         * without a session, and for a SIWE session, and sends no request. The app deletes the
+         * session cookie itself.
          * @throws {Accounts.RequestError} With `invalid_token` or `invalid_dpop_proof` for an access
          *   token that Tempo ID refuses, and `rate_limited` for too many requests. The session stays.
          *   Also when a refresh fails, as `get` describes.
@@ -192,6 +194,11 @@ export function backend(options: backend.Options) {
             url: new URL(path, config.url).href,
           })
           if (!tokenHeaders) return undefined
+          // A session that a sign-in stores under the ID during the request holds tokens that Tempo ID
+          // issued later, so the end keeps it.
+          const issuedAt = BackendSessions.issuedAt(
+            tokenHeaders.authorization?.split(' ')[1],
+          )
           const body = await Api.json<AccountActions.disconnect.Response>(
             await Api.post(config, path, {
               credentials: 'omit',
@@ -199,7 +206,7 @@ export function backend(options: backend.Options) {
               json: { client_id: config.clientId },
             }),
           )
-          await sessions.end({ id, revoke: false })
+          await sessions.end({ id, issuedAt, revoke: false })
           return { remaining: body.remaining ?? [], revoked: body.revoked }
         },
         /**

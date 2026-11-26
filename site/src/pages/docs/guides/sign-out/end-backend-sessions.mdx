@@ -170,10 +170,13 @@ export const accounts = Accounts.create({
 ```ts [server.ts]
 import { Hono } from 'hono'
 import { deleteCookie, getCookie } from 'hono/cookie'
+import { csrf } from 'hono/csrf'
 import { accounts } from './tempo.config.js'
 
 const app = new Hono()
 
+// The browser sends the cookie with a form post of another site, so the route checks the origin.
+app.use(csrf())
 app.post('/auth/disconnect', async (c) => {
   const id = getCookie(c, 'session')
   if (id) await accounts.backend.disconnect({ id }) // [!code hl]
