@@ -425,7 +425,7 @@ export const accounts = Accounts.create({
 
 ### Call an API for the user
 
-<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch(request, options)`</SourceLink> sends a request with the [access token](/docs/guides/api-authentication/authenticate-requests) of the request's session, after a refresh if necessary. It returns `undefined` without a Tempo ID session, and sends nothing.
+<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch(request, options)`</SourceLink> sends a request with the [access token](/docs/guides/api-authentication/authenticate-requests) of the request's session, after a refresh if necessary. It returns `undefined` without a Tempo ID session, and sends nothing. If the API refuses the access token with `invalid_token`, the call refreshes the session once and sends the request again.
 
 :::code-group
 

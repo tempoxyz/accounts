@@ -97,7 +97,7 @@ export type Store = {
    * deletes the entry. The `backend` plugin writes the logout index of each `sid` with it, so
    * concurrent sign-ins of one `sid` on different processes keep each session, in the round trips
    * of a read and a write. The `redirect` plugin removes its sign-out flag with it, so where `update`
-   * is one conditional write, a newer flag of another instance stays. The guest account's first key pair lands with it, so a stale holder of the lock never replaces a saved one, as does each guest session's revision, so each start ranks later. `Store.file`, `Store.postgres`, and `Store.redis` set it.
+   * is one conditional write, a newer flag of another instance stays. The guest account's first key pair lands with it, so a stale holder of the lock never replaces a saved one, as does each guest session's revision, so each start ranks later. `Store.file`, `Store.postgres`, `Store.redis`, and the store of `accounts/expo` set it.
    */
   update?:
     | (<result>(
