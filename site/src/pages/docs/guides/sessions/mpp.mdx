@@ -497,7 +497,9 @@ export declare namespace TopUp {
 
 ### Cap every session
 
-The plugin's <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> is the default of every payment session of the instance.
+The plugin's <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink> is the default of every payment session of the instance. A session manager's own `maxDeposit` replaces it, and an absent one keeps it.
+
+A [guest session](/docs/guides/guest-checkout) holds no access key, so only `maxDeposit` caps its deposit. Its session manager without one throws <SourceLink name="MaxDepositRequiredError" path="src/mpp/index.ts">`mpp.MaxDepositRequiredError`</SourceLink>, and a value that is no decimal amount above 0, such as `''`, throws <SourceLink name="MaxDepositInvalidError" path="src/mpp/index.ts">`mpp.MaxDepositInvalidError`</SourceLink>, before any request.
 
 ```ts [tempo.config.ts]
 import { Accounts } from 'accounts'

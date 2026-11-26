@@ -4,7 +4,9 @@ paths:
     ignore:
       - 'unexpected key "queue" for "concurrency" section'
 
-# The shards of the end-to-end suite run on a Depot runner, whose label actionlint does not know.
+# The shards of the end-to-end suite and the Uphill job run on Depot runners, whose labels actionlint
+# does not know.
 self-hosted-runner:
   labels:
     - depot-ubuntu-latest-4
+    - depot-ubuntu-latest-8

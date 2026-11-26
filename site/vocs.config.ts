@@ -96,6 +96,11 @@ export default defineConfig({
           text: 'Sign-In With Ethereum',
         }),
         item({ icon: 'key', link: '/docs/guides/local', text: 'Local' }),
+        item({
+          icon: 'user',
+          link: '/docs/guides/guest-checkout',
+          text: 'Guest checkout',
+        }),
         item({ icon: 'flask', link: '/docs/guides/testing', text: 'Test' }),
       ],
       text: 'Sign-in flows',

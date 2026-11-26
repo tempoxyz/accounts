@@ -36,6 +36,7 @@ import { getTransactionReceipt } from 'viem/actions'
 import { tempoModerato } from 'viem/chains'
 import { type Account, Actions, ExecutionError } from 'viem/tempo'
 import * as AccountActions from '../actions/account.js'
+import * as Guest from '../actions/guest.js'
 import * as AccessKey from '../internal/AccessKey.js'
 import * as Api from '../internal/Api.js'
 import * as FeeAllowance from '../internal/FeeAllowance.js'
@@ -135,10 +136,18 @@ export class ConfigurableAccountError extends Error {
  * `fees`, pays only network fees, so its token counts as one that the limits do not name. Only such
  * a charge reads the chain's limits, since `updateLimit` can raise them.
  * In a browser, Tempo ID's payment page pays such a charge of the instance's session, so only a
- * charge that the page does not pay throws it.
+ * charge that the page does not pay throws it. Its `amount` and `token` name the charge that a new
+ * access key pays, such as for a sign-in with `permissions`. If the token also pays network fees,
+ * the new limit covers `amount` and the fees. `limit` describes only the current access key.
  */
 export class LimitError extends Error {
   override readonly name = 'mpp.LimitError'
+  /** The charge's amount, in the units of its token. */
+  readonly amount: string
+  /** The access key's limit of the token that is left, in its units. Absent for a token that the limits do not name. */
+  readonly limit: string | undefined
+  /** The charge's token. */
+  readonly token: Address.Address
 
   constructor(options: LimitError.Options) {
     super(
@@ -147,6 +156,9 @@ export class LimitError extends Error {
         : `The charge of ${options.amount} exceeds the access key's limit of ${options.limit} left for token ${options.token}. Sign in with an access key whose limit covers the charge.`,
       options.cause === undefined ? undefined : { cause: options.cause },
     )
+    this.amount = options.amount
+    this.limit = options.limit
+    this.token = options.token
   }
 }
 
@@ -159,7 +171,7 @@ export declare namespace LimitError {
     /** The access key's limit of the token that is left, in its units. Absent for a token that the limits do not name. */
     limit?: string | undefined
     /** The charge's token. */
-    token: string
+    token: Address.Address
   }
 }
 
@@ -216,6 +228,54 @@ export declare namespace MaxAmountPrecisionError {
   type Options = {
     /** The most that a charge may cost, as the payer received it. */
     maxAmount: string
+  }
+}
+
+/**
+ * A charge of a guest session has no `maxAmount`, so the payer signs nothing. The guest account's key
+ * pair signs as the root account, with no access key limits, so only `maxAmount` bounds a charge. A
+ * proof spends nothing, and needs none.
+ */
+export class MaxAmountRequiredError extends Error {
+  override readonly name = 'mpp.MaxAmountRequiredError'
+
+  constructor() {
+    super(
+      "Missing `maxAmount`: a guest account has no access key limits, so a charge needs a bound. Pass `maxAmount` to the payer, such as `accounts.mpp({ maxAmount: '1' })`.",
+    )
+  }
+}
+
+/** `maxDeposit` is not a decimal amount above 0, such as `''` or `'0'`, so the manager opens no channel. */
+export class MaxDepositInvalidError extends Error {
+  override readonly name = 'mpp.MaxDepositInvalidError'
+
+  constructor(options: MaxDepositInvalidError.Options) {
+    super(
+      `Invalid \`maxDeposit\`: "${String(options.maxDeposit)}" is not a decimal amount above 0 with at most 6 decimals. Pass a decimal string, such as \`'1'\`.`,
+    )
+  }
+}
+
+export declare namespace MaxDepositInvalidError {
+  type Options = {
+    /** The most that a channel holds, as the payer received it. */
+    maxDeposit: string
+  }
+}
+
+/**
+ * A session manager of a guest session has no `maxDeposit`, so it opens no channel. The guest
+ * account's key pair signs as the root account, with no access key limits, so only `maxDeposit`
+ * bounds the deposit that a channel holds.
+ */
+export class MaxDepositRequiredError extends Error {
+  override readonly name = 'mpp.MaxDepositRequiredError'
+
+  constructor() {
+    super(
+      "Missing `maxDeposit`: a guest account has no access key limits, so a channel needs a bound. Pass `maxDeposit` to the payer, such as `accounts.mpp({ maxDeposit: '1' })`.",
+    )
   }
 }
 
@@ -390,11 +450,19 @@ export function mpp(options: mpp.Options = {}) {
       const clients = new Map<number, Client<Transport, Chain>>()
       // The payers of each access key, one for each setting of the charges.
       const payers = new WeakMap<AccessKey.AccessKey, Map<string, mpp.Payer>>()
-      // The changes that ended the instance's session, or replaced it with one of another user or
-      // Tempo Account. One subscription per instance holds it, so a discarded manager holds none.
+      // The changes that ended the instance's session, or replaced it with one of another user,
+      // Tempo Account, or start of a guest session. One subscription per instance holds it, so a
+      // discarded manager holds none.
       let ends = 0
       instance.session.subscribe((next, before) => {
         if (!before || !Session.same(next, before)) ends++
+        // A sign-out keeps the guest key pair, so another start of the guest session holds the same
+        // guest account, with a later revision.
+        else if (
+          Session.guest(before) &&
+          !Guest.active({ current: next, started: before })
+        )
+          ends++
       })
 
       /** Returns the client of the chain of `chainId`, which the viem plugin resolves. */
@@ -717,9 +785,10 @@ export function mpp(options: mpp.Options = {}) {
               Credential.extractPaymentScheme(authorization) !== null
             )
               return request
-            // A local session holds no Tempo ID tokens, so its requests go out without an identity.
+            // A local or guest session holds no Tempo ID tokens, so its requests go out without an
+            // identity.
             const held = context.session.get()
-            if (held && Session.local(held) && !ended()) return request
+            if (held && !Session.tempoId(held) && !ended()) return request
             const accessToken = await read().catch((error: unknown) => {
               // A request with a credential, such as the paid retry of a pushed transfer or a
               // session manager's close, still goes out, without the tokens it can no longer read.
@@ -780,6 +849,55 @@ export function mpp(options: mpp.Options = {}) {
 
         const current = overrides.session ?? context.session.get()
         if (!current) throw new Accounts.SignedOutError()
+        // A guest session's key pair signs each charge as the root account, with no access key and
+        // no identity, since Tempo ID issued it no tokens.
+        const guest = overrides.session ? undefined : context.session.get()
+        if (guest && Session.guest(guest)) {
+          // A sign-out keeps the key pair, so the payer stops once the session ends, holds another
+          // account, or starts again, in this tab or another process, as the access key's payer below
+          // does.
+          const started = ends
+          const reads = !messaged()
+          const ended = () =>
+            ends !== started ||
+            !Guest.active({ current: context.session.get(), started: guest })
+          // A session manager supplies its own check, which lets `close` sign the final voucher of
+          // an open channel after the session ends.
+          const account = checked(
+            Guest.account(instance.config, { session: guest }),
+            {
+              check:
+                signing.check ??
+                (() => {
+                  if (ended()) throw new Accounts.SignedOutError()
+                }),
+            },
+          )
+          return create({
+            ...settings,
+            account,
+            address: account.address,
+            chainId: instance.config.chainId,
+            fees: [],
+            fetch,
+            getClient,
+            identity: undefined,
+            landed: registrations.landed,
+            limits: undefined,
+            marks: false,
+            pay: undefined,
+            subscribe: undefined,
+            turn: registrations.turn,
+            verify: async (options) => {
+              if (reads)
+                await Retry.abortable(
+                  context.session.reload().catch(() => undefined),
+                  { signal: options.signal },
+                )
+              if (ended()) throw new Accounts.SignedOutError()
+            },
+          })
+        }
         // Only a page shows the payment page, and only for the instance's own session.
         const paged =
           signing.page === true &&
@@ -1072,7 +1190,9 @@ export function mpp(options: mpp.Options = {}) {
           session(parameters) {
             if (overrides.session) return expiring({ overrides, parameters })
             if (overrides.account) throw new SubscriptionOnlyError()
-            if (context.session.get()) return guarded({ overrides, parameters })
+            const maxDeposit = overrides.maxDeposit ?? options.maxDeposit
+            if (context.session.get())
+              return guarded({ maxDeposit, overrides, parameters })
             // The instance reads its stored session only at `load`, such as after a restart, so the
             // manager loads it at its first request, as `fetch` does.
             return SessionManager.deferred(async () => {
@@ -1080,7 +1200,7 @@ export function mpp(options: mpp.Options = {}) {
               // manager's creation, returns without a store read, so the first request reads it.
               const loaded = !context.session.get()
               await context.session.load()
-              return guarded({ loaded, overrides, parameters })
+              return guarded({ loaded, maxDeposit, overrides, parameters })
             })
           },
         }
@@ -1162,6 +1282,8 @@ export function mpp(options: mpp.Options = {}) {
       function guarded(options: {
         /** The caller read the store just before, so the first request reads it no more. */
         loaded?: boolean | undefined
+        // The payer's `maxDeposit`, of its overrides or the plugin. Absent without one.
+        maxDeposit: string | undefined
         overrides: mpp.Overrides
         parameters: Parameters<mpp.Payer['session']>[0]
       }) {
@@ -1171,10 +1293,27 @@ export function mpp(options: mpp.Options = {}) {
         let fresh = options.loaded === true
         const held = context.session.get()
         const accessKey = held?.accessKey
+        // A guest account has no access key limits, so only `maxDeposit` bounds the deposit of its
+        // channel.
+        const maxDeposit = maxDepositOf(parameters, {
+          fallback: options.maxDeposit,
+        })
+        if (held && Session.guest(held) && maxDeposit === undefined)
+          throw new MaxDepositRequiredError()
         // A sign-out ends the manager for good, so a later sign-in of the same user does not resume
         // its access key.
         const started = ends
         const check = () => {
+          // A guest session's key pair signs as the root account, with no access key, until the
+          // session ends, holds another account, or starts again with the same key pair.
+          if (held && Session.guest(held)) {
+            if (
+              ends !== started ||
+              !Guest.active({ current: context.session.get(), started: held })
+            )
+              throw new Accounts.SignedOutError()
+            return
+          }
           if (
             !held ||
             !accessKey ||
@@ -1385,8 +1524,9 @@ export declare namespace mpp {
     /**
      * The most that a session's channel holds, in the units of its token, such as `'0.05'`. It
      * caps the deposit that an endpoint suggests and each automatic top-up. A manager's own
-     * `topUp(amount)` adds `amount` as given, so the app bounds it. Defaults to the deposit that
-     * the endpoint suggests, within the access key's token limits.
+     * `topUp(amount)` adds `amount` as given, so the app bounds it. A decimal amount above 0, which
+     * a manager of a guest session needs. Defaults to the deposit that the endpoint suggests,
+     * within the access key's token limits.
      */
     maxDeposit?: string | undefined
     /**
@@ -1569,6 +1709,7 @@ export declare namespace mpp {
      * @throws {MaxAmountError} For a charge that costs more than `maxAmount`.
      * @throws {MaxAmountInvalidError} For a `maxAmount` that is no decimal amount of 0 or more.
      * @throws {MaxAmountPrecisionError} For a `maxAmount` of more than 6 decimals.
+     * @throws {MaxAmountRequiredError} For a charge of a guest session without `maxAmount`.
      * @throws {BalanceError} For a subscription whose first period the Tempo Account cannot pay,
      *   when the request cannot send again after the deposit page.
      * @throws {ChainError} For a subscription challenge on another chain than the payer's, before
@@ -1613,6 +1754,7 @@ export declare namespace mpp {
      * @throws {MaxAmountError} For a charge that costs more than `maxAmount`.
      * @throws {MaxAmountInvalidError} For a `maxAmount` that is no decimal amount of 0 or more.
      * @throws {MaxAmountPrecisionError} For a `maxAmount` of more than 6 decimals.
+     * @throws {MaxAmountRequiredError} For a charge of a guest session without `maxAmount`.
      * @throws {SubscriptionOnlyError} For a payer of a named `account`.
      *
      * @example
@@ -1658,6 +1800,10 @@ export declare namespace mpp {
      * manager throws `Accounts.SignedOutError` before any request, and the access key signs
      * nothing. `close()` still settles the channel, at the amount that the access key signed for.
      *
+     * A manager of a guest session signs with the guest account's key pair, and needs `maxDeposit`,
+     * since no access key limits bound its deposit. After a sign-out, its `close()` still signs the
+     * final voucher of an open channel.
+     *
      * The manager pays only on the payer's chain. `allowedChainIds` may narrow that policy;
      * it must include the payer's chain. HTTP and SSE select a matching-chain offer. A session
      * offer without a chain uses the payer chain. `close()` preserves dependency errors, including
@@ -1666,6 +1812,8 @@ export declare namespace mpp {
      * @throws {ChainError} For a session challenge on another chain than the payer's, except during `close()`.
      * @throws {RangeError} If `allowedChainIds` excludes the payer's chain.
      * @throws {TypeError} If every session offer names a malformed chain ID.
+     * @throws {MaxDepositInvalidError} For a `maxDeposit` that is no decimal amount above 0, before any request.
+     * @throws {MaxDepositRequiredError} For a guest session without `maxDeposit`, before any request.
      * @throws {SubscriptionOnlyError} For a payer of a named `account`, before any request.
      * @throws {Error} For a retry of the manager's `topUp(amount)`, when a request of the manager
      *   selected another channel while the deposit page showed. The manager tops up no channel. A
@@ -1777,15 +1925,16 @@ function messaged() {
 }
 
 /**
- * Returns `account`, which runs `options.check` before each signature, so a check that throws keeps
- * the access key from signing.
+ * Returns `account`, which runs `options.check` before each signature and after it, so a check that
+ * throws keeps the access key, or a guest session's key pair, from signing, and a sign-out during an
+ * async signature, such as a guest key pair's read or a WebCrypto signature, releases no signature.
  */
-function checked(
-  account: Account.AccessKeyAccount,
-  options: { check: () => void },
-): Account.AccessKeyAccount {
+function checked<
+  account extends Account.AccessKeyAccount | Account.RootAccount,
+>(account: account, options: { check: () => void }): account {
   const { check } = options
-  const { sign } = account
+  // A root account signs a hash as an access key account does.
+  const { sign } = account as Account.AccessKeyAccount
   return {
     ...account,
     // Viem reads `sign` to choose how an account signs a hash, so it stays absent without one.
@@ -1793,7 +1942,9 @@ function checked(
       ? {
           async sign(...args: Parameters<typeof sign>) {
             check()
-            return sign(...args)
+            const signature = await sign(...args)
+            check()
+            return signature
           },
         }
       : {}),
@@ -1801,21 +1952,27 @@ function checked(
       ...args: Parameters<Account.AccessKeyAccount['signMessage']>
     ) {
       check()
-      return account.signMessage(...args)
+      const signature = await account.signMessage(...args)
+      check()
+      return signature
     },
     async signTransaction(
       ...args: Parameters<Account.AccessKeyAccount['signTransaction']>
     ) {
       check()
-      return account.signTransaction(...args)
+      const signed = await account.signTransaction(...args)
+      check()
+      return signed
     },
     async signTypedData(
       ...args: Parameters<Account.AccessKeyAccount['signTypedData']>
     ) {
       check()
-      return account.signTypedData(...args)
+      const signature = await account.signTypedData(...args)
+      check()
+      return signature
     },
-  } as Account.AccessKeyAccount
+  } as account
 }
 
 /**
@@ -1831,6 +1988,39 @@ function assertMaxAmount(maxAmount: string) {
   // The fraction holds only digits, so a nonzero digit after the sixth decimal is a finer one.
   if (/[1-9]/.test(fraction.slice(6)))
     throw new MaxAmountPrecisionError({ maxAmount })
+}
+
+/**
+ * Returns the `maxDeposit` of a session manager: the one of `parameters`, else `options.fallback`,
+ * the payer's own. Returns `undefined` without either.
+ *
+ * @throws {MaxDepositInvalidError} For a value that is no decimal amount above 0 with at most 6
+ * decimals, such as `''`.
+ */
+function maxDepositOf(
+  parameters: { maxDeposit?: string | undefined } | undefined,
+  options: maxDepositOf.Options,
+) {
+  const value =
+    parameters?.maxDeposit !== undefined
+      ? parameters.maxDeposit
+      : options.fallback
+  if (value === undefined) return undefined
+  if (
+    typeof value !== 'string' ||
+    !/^(\d+(\.\d*)?|\.\d+)$/.test(value) ||
+    /[1-9]/.test(value.split('.')[1]?.slice(6) ?? '') ||
+    parseUnits(value, 6) === 0n
+  )
+    throw new MaxDepositInvalidError({ maxDeposit: value })
+  return value
+}
+
+declare namespace maxDepositOf {
+  type Options = {
+    /** The payer's `maxDeposit`, of its overrides or the plugin. */
+    fallback: string | undefined
+  }
 }
 
 /**
@@ -1885,8 +2075,11 @@ async function assertLimit(options: {
 
 /** Creates the payer of `account`, or of `address` alone, which pays only subscriptions. */
 function create(options: {
-  /** The access key that signs each charge and voucher. Absent, the payer pays only subscriptions. */
-  account: Account.AccessKeyAccount | undefined
+  /**
+   * The access key that signs each charge and voucher, or a guest session's root account. Absent,
+   * the payer pays only subscriptions.
+   */
+  account: Account.AccessKeyAccount | Account.RootAccount | undefined
   /** The Tempo Account that pays. Absent, the payer pays no subscription. */
   address: Address.Address | undefined
   autoSwap: mpp.AutoSwap | undefined
@@ -1968,6 +2161,9 @@ function create(options: {
     turn,
     verify,
   } = options
+  // The access key of `account`, whose registration and limits the chain holds. A guest session's
+  // root account holds none.
+  const keyed = account?.source === 'accessKey' ? account : undefined
   // A payer of the payment page alone holds no access key. `check` pays each of its charges or
   // refuses it, so the method signs nothing.
   const charge =
@@ -1993,6 +2189,13 @@ function create(options: {
     challenge: Challenge.Challenge,
     options: { signal?: AbortSignal | undefined } = {},
   ): Promise<string | undefined> {
+    // Only a guest session's account signs as the root account, with no limits but `maxAmount`.
+    if (
+      maxAmount === undefined &&
+      account?.source === 'root' &&
+      BigInt(String(challenge.request.amount ?? 0)) > 0n
+    )
+      throw new MaxAmountRequiredError()
     if (maxAmount !== undefined) {
       const amount = BigInt(String(challenge.request.amount ?? 0))
       if (amount > parseUnits(maxAmount, 6))
@@ -2052,7 +2255,7 @@ function create(options: {
       return await remote()
     }
     if (
-      account &&
+      keyed &&
       limits &&
       token &&
       challenge.intent === 'charge' &&
@@ -2066,7 +2269,7 @@ function create(options: {
       if (!entry || amount > BigInt(entry.limit))
         try {
           await assertLimit({
-            account,
+            account: keyed,
             amount,
             client: getClient({ chainId }),
             fee: fee ? BigInt(fee.limit) : undefined,
@@ -2179,7 +2382,7 @@ function create(options: {
       signals.set(payload.challenge.id, signal)
       ;(call.challenges ??= []).push(payload.challenge.id)
     }
-    if (!account || !call) return undefined
+    if (!keyed || !call) return undefined
     const { intent, request } = payload.challenge
     if (intent !== 'charge' || BigInt(String(request.amount ?? 0)) === 0n)
       return undefined
@@ -2187,12 +2390,12 @@ function create(options: {
     if (call.end) return undefined
     call.end = await turn(
       {
-        accessKey: account.accessKeyAddress,
-        address: account.address,
+        accessKey: keyed.accessKeyAddress,
+        address: keyed.address,
         chainId,
       },
       {
-        keyAuthorizationManager: account.keyAuthorizationManager,
+        keyAuthorizationManager: keyed.keyAuthorizationManager,
         signal: signalOf(payload.input, payload.init),
       },
     )
@@ -2248,16 +2451,16 @@ function create(options: {
       type: string
     }>(serialized)
     if (
-      !account ||
+      !keyed ||
       credential.payload.type !== 'transaction' ||
       !credential.payload.signature
     )
       return
-    const { accessKeyAddress } = account
+    const { accessKeyAddress } = keyed
     landed(credential.payload.signature, async () => {
       const metadata = await Actions.accessKey.getMetadata(
         getClient({ chainId }),
-        { accessKey: accessKeyAddress, account: account.address },
+        { accessKey: accessKeyAddress, account: keyed.address },
       )
       return (
         !metadata.isRevoked &&
@@ -2296,16 +2499,16 @@ function create(options: {
    * charge attaches no key authorization. Returns `false` after a failed read.
    */
   async function superseded(serialized: string, receipt: Inclusion) {
-    if (!account) return false
+    if (!keyed) return false
     const signed = transaction(serialized)
     if (!signed?.keyAuthorization) return false
 
     const client = getClient({ chainId })
-    const { accessKeyAddress } = account
+    const { accessKeyAddress } = keyed
     const registered = await Actions.accessKey
       .getMetadata(client, {
         accessKey: accessKeyAddress,
-        account: account.address,
+        account: keyed.address,
       })
       .then(
         (metadata) =>
@@ -2339,15 +2542,15 @@ function create(options: {
     charge: { amount: bigint; token: Address.Address } | undefined,
   ) {
     // Without signed limits, the access key spends any amount, so a revert is not of a limit.
-    if (!account || !charge || !limits) return undefined
+    if (!keyed || !charge || !limits) return undefined
     if (receipt.settled && !failed(receipt.settled)) return undefined
     const client = getClient({ chainId })
     const [settled, read] = await Promise.all([
       receipt.read(),
       Actions.accessKey
         .getRemainingLimit(client, {
-          accessKey: account.accessKeyAddress,
-          account: account.address,
+          accessKey: keyed.accessKeyAddress,
+          account: keyed.address,
           token: charge.token,
         })
         .catch(() => undefined),
@@ -2431,7 +2634,7 @@ function create(options: {
     },
   ) {
     const { charge } = options
-    if (!account || !charge || !(error instanceof Error)) return undefined
+    if (!keyed || !charge || !(error instanceof Error)) return undefined
     if (ExecutionError.from(error).errorName !== 'SpendingLimitExceeded')
       return undefined
     // A refusal of the fee payment, or of a spend in another token, is not the charge's.
@@ -2441,8 +2644,8 @@ function create(options: {
 
     const client = getClient({ chainId })
     const parameters = {
-      accessKey: account.accessKeyAddress,
-      account: account.address,
+      accessKey: keyed.accessKeyAddress,
+      account: keyed.address,
     }
     const [metadata, read] = await Promise.all([
       options.mark
@@ -2470,11 +2673,11 @@ function create(options: {
     if (
       signed &&
       metadata &&
-      Address.isEqual(metadata.address, account.accessKeyAddress) &&
+      Address.isEqual(metadata.address, keyed.accessKeyAddress) &&
       read.remaining < BigInt(signed.limit)
     )
       Object.defineProperty(limited, limitSpent, {
-        value: account.accessKeyAddress,
+        value: keyed.accessKeyAddress,
       })
     return limited
   }
@@ -2596,6 +2799,7 @@ function create(options: {
         throw new RangeError(
           `The session excludes payer chain ${chainId}. Include chain ${chainId} in allowedChainIds.`,
         )
+      const deposit = maxDepositOf(parameters, { fallback: maxDeposit })
       const order: NonNullable<
         Mppx.create.Config<
           readonly [ReturnType<typeof tempo.session>]
@@ -2662,8 +2866,10 @@ function create(options: {
         ...(autoSwap !== undefined ? { autoSwap } : {}),
         // The manager inherits the identity provers of the payer's mppx fetch.
         ...(identity ? { fetch: mppx.fetch } : fetch ? { fetch } : {}),
-        ...(maxDeposit ? { maxDeposit } : {}),
         ...parameters,
+        // An absent `maxDeposit` of the call keeps the payer's, so the manager holds the value
+        // that a guest session's check read.
+        ...(deposit !== undefined ? { maxDeposit: deposit } : {}),
         account,
         allowedChainIds: [chainId],
         getClient,
