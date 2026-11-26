@@ -42,6 +42,7 @@ import * as Plugin from './Plugin.js'
 import type { backend } from './plugins/backend.js'
 import type * as React from './react/index.js'
 import * as Session from './Session.js'
+import * as SessionRead from './internal/SessionRead.js'
 import type { Store } from './Store.js'
 import type * as TempoAccount from './internal/TempoAccount.js'
 
@@ -2130,29 +2131,66 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   // The restore hooks in progress, which every overlapping read awaits, such as the read of a status
   // subscription beside the page's own, so a redirect's callback completes once.
   let hooks: Promise<void> | undefined
-  // The failure of a status subscription's read, such as a refused redirect callback, which no caller
-  // awaits, so the next `session.get` throws it once. A read that overlapped it threw it already.
-  let unreported: { error: unknown } | undefined
-  // The count of `session.get` calls, which tells whether a page's read overlapped the subscription's,
-  // and of those in progress.
-  let reads = 0
-  let reading = 0
-  /**
-   * Runs `fn`, a read of `session.get`. A page's read first throws the failure of a status
-   * subscription's read that no caller received.
-   */
-  function tracked<value>(fn: () => Promise<value>): Promise<value> {
-    if (unreported) {
-      const { error } = unreported
-      unreported = undefined
-      return Promise.reject(error)
-    }
-    reads++
-    reading++
-    return fn().finally(() => {
-      reading--
-    })
+  /** Reads the session for `session.get`, as a read of the page or of a status subscription. */
+  function readSession(parameters: Core.getSession.Parameters) {
+    const read = (reauthorize: Core.getSession.Parameters['reauthorize']) =>
+      Core.getSession(context, {
+        ...parameters,
+        declined: () =>
+          session.actor !== undefined &&
+          InternalSession.machines.declined(session.actor.getSnapshot()),
+        delegate: session.delegate,
+        reauthorize,
+        renew: accessKey_option === undefined && merged.account !== false,
+        restore() {
+          // A restore, such as a redirect's callback, completes on the selected chain, so the
+          // stored selection loads first. A failed read runs no hook, so a later read restores.
+          // The stored session reads beside it, so a restore waits for one round trip of the
+          // store. A hook's change keeps its session over the read's.
+          hooks ??= (async () => {
+            const [loaded] = await Promise.all([
+              chain.load().then(
+                () => true,
+                () => false,
+              ),
+              session.preload(),
+            ])
+            if (!loaded) return
+            for (const plugin of plugins) await plugin.hooks?.restore?.(context)
+          })().finally(() => {
+            hooks = undefined
+          })
+          return hooks
+        },
+        signedOut: session.signedOut,
+      })
+    // Only calls with `reauthorize: true` share, since another call's own parameters or
+    // function decide its authorization. An instance without a session, such as a backend's,
+    // serves many users, so each of its calls authorizes on its own.
+    if (parameters.reauthorize !== true || !session.actor)
+      return read(parameters.reauthorize)
+    // A sign-in or a sign-out can complete while the shared call runs, so its result can be
+    // stale. A joining call then reads the current session, without a second authorization.
+    if (restoring)
+      return restoring.then(
+        () => read(undefined),
+        (error: unknown) => {
+          if (error instanceof SupersededError) return read(undefined)
+          throw error
+        },
+      )
+    return (restoring = read(true).finally(() => {
+      restoring = undefined
+    }))
   }
+  // The reads of the session, so a status subscription reads it once beside no read of the page.
+  const sessionRead = SessionRead.create({
+    loaded: () =>
+      session.actor === undefined ||
+      InternalSession.machines.loaded(session.actor.getSnapshot()),
+    read: () => readSession({}),
+  })
+
   /**
    * Returns the access token that authenticates a read of the user's own data, such as
    * `account.get`, in place of the session cookie. Tempo ID's own pages send its session cookie, with
@@ -2645,60 +2683,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
                 ] as { token?: boolean } | undefined
               )?.token === true,
           })
-        return tracked(() => {
-          const read = (
-            reauthorize: Core.getSession.Parameters['reauthorize'],
-          ) =>
-            Core.getSession(context, {
-              ...parameters,
-              declined: () =>
-                session.actor !== undefined &&
-                InternalSession.machines.declined(session.actor.getSnapshot()),
-              delegate: session.delegate,
-              reauthorize,
-              renew: accessKey_option === undefined && merged.account !== false,
-              restore() {
-                // A restore, such as a redirect's callback, completes on the selected chain, so the
-                // stored selection loads first. A failed read runs no hook, so a later read restores.
-                // The stored session reads beside it, so a restore waits for one round trip of the
-                // store. A hook's change keeps its session over the read's.
-                hooks ??= (async () => {
-                  const [loaded] = await Promise.all([
-                    chain.load().then(
-                      () => true,
-                      () => false,
-                    ),
-                    session.preload(),
-                  ])
-                  if (!loaded) return
-                  for (const plugin of plugins)
-                    await plugin.hooks?.restore?.(context)
-                })().finally(() => {
-                  hooks = undefined
-                })
-                return hooks
-              },
-              signedOut: session.signedOut,
-            })
-          // Only calls with `reauthorize: true` share, since another call's own parameters or
-          // function decide its authorization. An instance without a session, such as a backend's,
-          // serves many users, so each of its calls authorizes on its own.
-          if (parameters.reauthorize !== true || !session.actor)
-            return read(parameters.reauthorize)
-          // A sign-in or a sign-out can complete while the shared call runs, so its result can be
-          // stale. A joining call then reads the current session, without a second authorization.
-          if (restoring)
-            return restoring.then(
-              () => read(undefined),
-              (error: unknown) => {
-                if (error instanceof SupersededError) return read(undefined)
-                throw error
-              },
-            )
-          return (restoring = read(true).finally(() => {
-            restoring = undefined
-          }))
-        })
+        return sessionRead.run(() => readSession(parameters))
       },
       refresh,
       status: {
@@ -2710,21 +2695,7 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
           // restore hooks. The read starts after the code that subscribes, so a page's own read in
           // that code, such as with `reauthorize`, holds the status first, and the hooks run once.
           // A failure, such as a refused redirect callback, stays for the page's next read.
-          queueMicrotask(() => {
-            // A page's read in progress settles the status, and receives its own failure.
-            if (
-              !session.actor ||
-              reading > 0 ||
-              InternalSession.machines.loaded(session.actor.getSnapshot())
-            )
-              return
-            const started = reads
-            void (instance.session as { get: () => Promise<unknown> })
-              .get()
-              .catch((error: unknown) => {
-                if (reads === started + 1) unreported = { error }
-              })
-          })
+          sessionRead.follow()
           return unsubscribe
         },
       },
