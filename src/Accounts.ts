@@ -2131,6 +2131,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
   // The restore hooks in progress, which every overlapping read awaits, such as the read of a status
   // subscription beside the page's own, so a redirect's callback completes once.
   let hooks: Promise<void> | undefined
+  // The failures of the restore hooks, so a status subscription's read keeps a refused callback and
+  // drops a failed read of the store.
+  const refusals = new WeakSet<object>()
   /** Reads the session for `session.get`, as a read of the page or of a status subscription. */
   function readSession(parameters: Core.getSession.Parameters) {
     const read = (reauthorize: Core.getSession.Parameters['reauthorize']) =>
@@ -2157,9 +2160,15 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
             ])
             if (!loaded) return
             for (const plugin of plugins) await plugin.hooks?.restore?.(context)
-          })().finally(() => {
-            hooks = undefined
-          })
+          })()
+            .catch((error: unknown) => {
+              if (typeof error === 'object' && error !== null)
+                refusals.add(error)
+              throw error
+            })
+            .finally(() => {
+              hooks = undefined
+            })
           return hooks
         },
         signedOut: session.signedOut,
@@ -2189,6 +2198,8 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
       session.actor === undefined ||
       InternalSession.machines.loaded(session.actor.getSnapshot()),
     read: () => readSession({}),
+    refused: (error) =>
+      typeof error === 'object' && error !== null && refusals.has(error),
   })
   session.subscribe(() => sessionRead.change())
 
@@ -2917,6 +2928,9 @@ export function create<const plugins extends readonly Plugin.Option[] = []>(
     // call ends no session.
     if (options.everywhere && ClientId.thirdParty(config.clientId))
       throw new EverywhereNotAllowedError()
+    // A sign-out of a session that is already empty changes no session, so it drops a kept failure
+    // of a status subscription's read itself.
+    sessionRead.change()
     // The hooks start before the session's sign-out, which starts at once, so a sign-in that starts
     // after this call meets both. The sign-out's own rejection wins over a hook's.
     const before = (async () => {

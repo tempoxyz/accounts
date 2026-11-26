@@ -20,15 +20,15 @@ import {
  * in that code settles the status first.
  */
 export function create(options: create.Options): create.ReturnType {
-  const { loaded, read } = options
+  const { loaded, read, refused } = options
   const actor = createActor(
     machines.read.provide({
       actors: {
         // A failed read of the store leaves the session unread, so the page's next read reads it
-        // again, and the machine keeps nothing. A restore hook's failure leaves the session loaded.
+        // again, and the machine keeps nothing. Only a restore hook's failure stays.
         read: fromPromise(() =>
           read().catch((error: unknown) => {
-            if (!loaded()) return undefined
+            if (!refused(error)) return undefined
             throw error
           }),
         ),
@@ -73,6 +73,8 @@ export declare namespace create {
     loaded: () => boolean
     /** Reads the session as `session.get` does, with the restore hooks. */
     read: () => Promise<unknown>
+    /** Returns whether `error` is a restore hook's failure, such as a refused callback. */
+    refused: (error: unknown) => boolean
   }
 
   type ReturnType = {

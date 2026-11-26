@@ -3575,6 +3575,35 @@ describe('session.status', () => {
       }
     `)
   })
+  test("drops a restore hook's failure from the subscription's read at a sign-out of an empty session", async () => {
+    let refused = false
+    const accounts = Accounts.create({
+      chain: 1337,
+      clientId: 'client_1',
+      plugins: [
+        Plugin.from({
+          hooks: {
+            restore() {
+              if (refused) return Promise.resolve()
+              refused = true
+              return Promise.reject(new Error('Refused callback.'))
+            },
+          },
+          id: 'test',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    accounts.session.status.subscribe(() => {})
+    await expect
+      .poll(() => accounts.session.status.get().status, { timeout: 2_000 })
+      .toBe('signedOut')
+
+    await accounts.signOut()
+
+    expect(await accounts.session.get()).toMatchInlineSnapshot(`undefined`)
+  })
   test("follows another instance's sign-in on the same store, such as another tab's, as it follows that instance's sign-out", async () => {
     const store = Store.memory()
     const create = () =>

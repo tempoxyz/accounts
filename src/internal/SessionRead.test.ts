@@ -221,17 +221,17 @@ describe('machines.read', () => {
 describe('create', () => {
   /** Returns reads whose subscription's read fails, as `refusal` describes, once. */
   function refusing(refusal: 'hook' | 'store') {
-    let loaded = false
     let refused = false
+    const failure = new Error('Refused.')
     const reads = SessionRead.create({
-      loaded: () => loaded,
+      // The session stays unread, also for a hook's failure beside a failed read of the store.
+      loaded: () => false,
       read: () => {
         if (refused) return Promise.resolve()
         refused = true
-        // A restore hook fails after the store read, which loads the session.
-        if (refusal === 'hook') loaded = true
-        return Promise.reject(new Error('Refused.'))
+        return Promise.reject(failure)
       },
+      refused: (error) => refusal === 'hook' && error === failure,
     })
     return reads
   }
