@@ -1728,8 +1728,12 @@ async function create(store: Store, options: create.Options): Promise<Key> {
     )
     return decode(stored)
   }
-  const again = await read(store, { key })
-  if (again) return again
+  // Only this process reads a `local` store, such as the `expo` preset's, and the lock spans the
+  // process, so no other caller saved a key pair since the read.
+  if (!store.local) {
+    const again = await read(store, { key })
+    if (again) return again
+  }
   await store.setItem(key, value)
   return decode(value)
 }

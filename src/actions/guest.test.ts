@@ -425,6 +425,39 @@ describe('Actions.guest.session on each store preset', () => {
     expect(() => StoreValue.stringify(keyPair)).toThrow()
   })
 
+  test("reads the guest account's entry once as the first guest session creates it on the `expo` preset's store", async () => {
+    // Each call reaches the device's secure store, a call of the native bridge in React Native.
+    const calls: string[] = []
+    const values = new Map<string, string>()
+    const store = DeviceStore.create({
+      deleteItemAsync(key) {
+        calls.push(`delete ${key}`)
+        values.delete(key)
+        return Promise.resolve()
+      },
+      getItemAsync(key) {
+        calls.push(`get ${key}`)
+        return Promise.resolve(values.get(key) ?? null)
+      },
+      setItemAsync(key, value) {
+        calls.push(`set ${key}`)
+        values.set(key, value)
+        return Promise.resolve()
+      },
+    })
+
+    await Guest.session(config(store))
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        "get tempo-id_003aguest_003a_005b_0022http_003a_002f_002f127.0.0.1_003a9_0022_002c_0022cli_003aguest-example_0022_005d",
+        "set tempo-id_003aguest_003a_005b_0022http_003a_002f_002f127.0.0.1_003a9_0022_002c_0022cli_003aguest-example_0022_005d",
+        "get tempo-id_003aguest_003a_005b_0022http_003a_002f_002f127.0.0.1_003a9_0022_002c_0022cli_003aguest-example_0022_005d_003arevision",
+        "set tempo-id_003aguest_003a_005b_0022http_003a_002f_002f127.0.0.1_003a9_0022_002c_0022cli_003aguest-example_0022_005d_003arevision",
+      ]
+    `)
+  })
+
   test('refuses a shared store of JSON, such as `Store.postgres`, before any query', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())
