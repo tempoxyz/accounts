@@ -1,4 +1,5 @@
 import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
 import { PageCard } from '../../../components/PageCard.tsx'
 import { SourceLink } from '../../../components/SourceLink.tsx'
 
@@ -10,9 +11,9 @@ A guest session signs a visitor in with no Tempo ID user. The instance keeps a P
 
 Tempo ID issues a guest session no tokens and no [access key](/docs/guides/access-keys). The key pair signs each payment and transaction of the visitor in the app. [Guest sessions](https://github.com/tempoxyz/id/blob/main/docs/guest-checkout.md) describes the side of Tempo ID.
 
-:::warning
-The key pair alone owns the guest account. A party that reads the store, or runs a script in the page of the app, signs for the guest account. The key pair signs with no limits, so the app sends only the transactions that the visitor requests.
-:::
+The demo signs a visitor in as a guest, and pays 1 OUSD from the guest account. A new guest account holds no funds, so Deposit on the payment page offers the testnet faucet.
+
+<Demo name="GuestCheckout" title="Pay as a guest" />
 
 ## Walkthrough
 
@@ -171,7 +172,7 @@ A new guest account holds no funds. If it holds less than the payment, Deposit o
 | Buy MACH              | Not offered, since its cards and receipts need a user  |
 | Swap from the balance | Not offered, since the key pair signs only the payment |
 
-Done returns to the same checkout, and Pay enables once the funds arrive. On a test chain whose faucet drips the token, Add funds and pay requests the faucet first.
+Done returns to the same checkout, and Pay enables once the funds arrive. On a test chain, the deposit pages also offer the faucet of the token.
 
 ::::
 
