@@ -28,9 +28,9 @@ uphill --update             # accept this run's values as the baselines
 pnpm exec zile dev          # link dist to src again
 ```
 
-Uphill runs the packs' scripts on Bun. The setup needs Uphill 0.0.8 or later: `curl -fsSL https://raw.githubusercontent.com/wevm/uphill/main/install.sh | UPHILL_VERSION=0.0.8 sh`. A run fetches each pinned pack into `~/.cache/uphill/packs/`. `.agents/uphill/typescript/config.ts` holds the typescript pack's inputs.
+Uphill runs the packs' scripts on Bun. The setup needs Uphill 0.0.9 or later: `curl -fsSL https://raw.githubusercontent.com/wevm/uphill/main/install.sh | UPHILL_VERSION=0.0.9 sh`. A run fetches each pinned pack into `~/.cache/uphill/packs/`. `.agents/uphill/typescript/config.ts` holds the typescript pack's inputs.
 
-The `Uphill` workflow runs `uphill` on each pull request, and keeps one comment with `report.md`. Its artifact holds `report.html`.
+The `Uphill` workflow runs `uphill --compare` against the base branch on each pull request, and keeps one comment with each category's score on both revisions and a link to `report.html`. The job summary holds `report.md`. On main, `uphill --note` keeps each run as Git notes for trends.
 
 ## Limitations
 

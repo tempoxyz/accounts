@@ -3,9 +3,8 @@
 # baselines. The measure job runs the code without write access, and writes the report to the job
 # summary. On a pull request, the comment job runs none of the code, and alone may write the pull
 # request's comment. On main, the measure job keeps the run as Git notes, and the notes job, which
-# runs none of the code, alone pushes them, so `report.html` and `uphill log` draw trends. Timings
-# differ between machines, so the job compares no revisions. Run `uphill --compare main` on one
-# machine for that.
+# runs none of the code, alone pushes them, so `report.html` and `uphill log` draw trends. A pull
+# request compares with its base branch on the same runner, so the comment shows both scores.
 name: Uphill
 on:
   pull_request:
@@ -33,7 +32,7 @@ jobs:
       - name: Secure runner
         uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
 
-      # The git pack reads the last 50 commits.
+      # The git pack reads the last 50 commits, and `--compare` checks out the base branch.
       - name: Clone repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,8 +50,8 @@ jobs:
       # The digest is the release's entry in its sha256sums.txt.
       - name: Install Uphill
         env:
-          SHA256: c281a2522d58f70157cfc82ed0a8990251d24a8e18294fe5eba54af7267137db
-          VERSION: 0.0.8
+          SHA256: 061066d68ed30c8e30c402228e3923b266ba3cfb6fb536af43e0d838096212f7
+          VERSION: 0.0.9
         run: |
           asset=uphill-x86_64-unknown-linux-gnu.tar.gz
           mkdir -p "$RUNNER_TEMP/uphill-bin"
@@ -74,29 +73,48 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
       # A missed target is a step to climb, not a failure, so only a script that cannot measure
-      # fails the job.
+      # fails the job. On a pull request, `--compare` runs each script of the base branch once more.
       - name: Run Uphill
         env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = push ]; then uphill --note; else uphill; fi
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            uphill --compare "origin/$BASE_REF"
+          elif [ "$GITHUB_EVENT_NAME" = push ]; then
+            uphill --note
+          else
+            uphill
+          fi
           mkdir -p "$RUNNER_TEMP/uphill"
           {
             echo '<!-- accounts-uphill -->'
-            echo "## Uphill at \`${HEAD_SHA:0:7}\`"
-            echo
-            cat .uphill/report.md
+            cat .uphill/comment.md
           } > "$RUNNER_TEMP/uphill/comment.md"
-          cat "$RUNNER_TEMP/uphill/comment.md" >> "$GITHUB_STEP_SUMMARY"
-          cp .uphill/report.html "$RUNNER_TEMP/uphill/report.html"
+          cat .uphill/report.md >> "$GITHUB_STEP_SUMMARY"
 
+      # An artifact without an archive opens in the browser.
       - name: Upload report
+        id: report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          archive: false
+          if-no-files-found: error
+          path: .uphill/report.html
+          retention-days: 14
+
+      # The report's URL exists only after its upload.
+      - name: Link report
+        env:
+          REPORT_URL: ${{ steps.report.outputs.artifact-url }}
+        run: printf '\n[Full report](%s)\n' "$REPORT_URL" >> "$RUNNER_TEMP/uphill/comment.md"
+
+      - name: Upload comment
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error
-          name: uphill
-          path: ${{ runner.temp }}/uphill
-          retention-days: 14
+          name: uphill-comment
+          path: ${{ runner.temp }}/uphill/comment.md
+          retention-days: 1
 
       # A bundle carries the notes to the notes job, which alone may push.
       - name: Bundle notes
@@ -159,10 +177,10 @@ jobs:
       - name: Secure runner
         uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
 
-      - name: Download report
+      - name: Download comment
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: uphill
+          name: uphill-comment
           path: ${{ runner.temp }}/uphill
 
       # One comment per pull request, which each run updates.
