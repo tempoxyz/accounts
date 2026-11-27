@@ -2029,7 +2029,10 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         }
         // A renewal is an authorization of the browser's Tempo ID session, so the status shows
         // `reauthorizing` with the expired session until the commit, as a renewal at a mount does.
-        if (renewal) return await context.session.authorize(renew)
+        // It waits for no other tab's authorization, so its request starts at once, and a canceled
+        // retry ends at once. Its change already yields to a change that overtakes it.
+        if (renewal)
+          return await context.session.authorize(renew, { lock: false })
         return await renew()
       }
 
