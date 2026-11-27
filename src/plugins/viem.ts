@@ -1613,6 +1613,24 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       }
 
       /**
+       * Returns the fee allowance that a deposit of `token` holds besides a call, in base units:
+       * {@link Retry.fees} if `options.feeToken` is `token`, or without `options.feeToken`, if
+       * `token` pays network fees, else `0n`. A failed read returns `0n`.
+       */
+      async function fee(
+        token: `0x${string}`,
+        options: { chainId: number; feeToken: unknown; transport: Transport },
+      ) {
+        const { chainId, feeToken, transport } = options
+        if (typeof feeToken === 'string' && Address.validate(feeToken))
+          return Address.isEqual(feeToken, token) ? Retry.fees : 0n
+        const paying = await pays(token, { chainId, transport }).catch(
+          () => false,
+        )
+        return paying ? Retry.fees : 0n
+      }
+
+      /**
        * Returns whether the chain of `options.chainId` holds `accessKey` with part of a limit spent,
        * read through `options.transport` in one round. A chain that does not hold the access key yet
        * holds no spending. Without a spent limit, the transaction needs more than a whole limit.
@@ -1667,6 +1685,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         failure: Retry.Failure,
         options: {
           address: `0x${string}`
+          /** The fee that a deposit holds besides the amount that the failure names, in base units. */
+          allowance: Promise<bigint>
           chainId: number
           error: unknown
           /** The amount that the new access key's limit of its token adds to the old limit. */
@@ -1678,12 +1698,23 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           signal: AbortSignal | undefined
         },
       ) {
-        const { address, chainId, error, needs, raise, screen, signal } =
-          options
+        const {
+          address,
+          allowance,
+          chainId,
+          error,
+          needs,
+          raise,
+          screen,
+          signal,
+        } = options
         // The screens load from chunks of their own, so a bundle of the client holds them only once
         // a transaction fails.
         if (failure.kind === 'balance' && page) {
-          const Funding = await import('../actions/funding.js')
+          const [Funding, allowed] = await Promise.all([
+            import('../actions/funding.js'),
+            allowance.catch(() => 0n),
+          ])
           const result = await Funding.open(config, {
             address,
             chainId,
@@ -1691,7 +1722,13 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             signal,
             ...(failure.amount === undefined
               ? {}
-              : { amount: failure.amount, token: failure.token }),
+              : {
+                  amount: formatUnits(
+                    parseUnits(failure.amount, 6) + allowed,
+                    6,
+                  ),
+                  token: failure.token,
+                }),
           })
           if (result?.status !== 'received')
             throw new RetryClosedError({ cause: error, kind: failure.kind })
@@ -2283,18 +2320,35 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         // against the balance within the transaction, which earlier calls of a batch spend, and a
         // send between the refusal and the read changes the balance. The read runs beside the
         // screen, so it adds no round trip to a deposit page.
+        // The fee that the deposit holds besides the balance that the node names, which names the
+        // call alone. The fee token pays the fee: the call's `feeToken` or the client's, else the
+        // token of the refusal if it is a `USD` stablecoin. The relay's fee payer pays no fee from
+        // the account. The read runs beside the balance read and the screen's chunk.
+        const allowance =
+          failure.kind === 'balance' && failure.token && !options.relayed
+            ? fee(failure.token, {
+                chainId,
+                feeToken:
+                  (parameters as { feeToken?: unknown } | undefined)
+                    ?.feeToken ?? resolve(chainId).feeToken,
+                transport: options.transport,
+              })
+            : Promise.resolve(0n)
         const needs =
           failure.kind === 'balance' &&
           failure.amount !== undefined &&
           failure.token
-            ? read(failure.token).then((balance) => {
-                const total = balance + parseUnits(failure.amount!, 6)
-                const required =
-                  failure.required === undefined
-                    ? 0n
-                    : parseUnits(failure.required, 6)
-                return total > required ? total : required
-              })
+            ? Promise.all([read(failure.token), allowance]).then(
+                ([balance, allowed]) => {
+                  const total =
+                    balance + parseUnits(failure.amount!, 6) + allowed
+                  const required =
+                    failure.required === undefined
+                      ? 0n
+                      : parseUnits(failure.required, 6) + allowed
+                  return total > required ? total : required
+                },
+              )
             : undefined
         needs?.catch(() => undefined)
         // A new access key resolves a spent limit and a missing access key at once, and a second
@@ -2318,6 +2372,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                   show: fromPromise((args) =>
                     fix(failure, {
                       address,
+                      allowance,
                       chainId,
                       error,
                       needs,
