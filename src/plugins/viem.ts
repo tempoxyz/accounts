@@ -1325,8 +1325,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
 
       /**
        * Returns the user's passkey that approves a coordinated transaction of a configurable account
-       * on `chainId`: the passkey owner of the session's Tempo Account, or with several, the one that
-       * the account's configuration names. The configuration is the account's, else the stored
+       * on `chainId`: the passkey owner of the session's Tempo Account that the account's
+       * configuration names. The configuration is the account's, else the stored
        * operation's of `hash`, else the chain's. The session's account serves when it belongs to the
        * chain, else a read of Tempo ID returns it.
        *
@@ -1359,9 +1359,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           return read?.owners ?? []
         })()
         if (owners.length === 0) throw new OwnerRequiredError()
-        // One passkey needs no read of the configuration, since the relay refuses a non-owner.
-        if (owners.length === 1) return owners[0]!
 
+        // Even one passkey reads the configuration, so a non-owner throws before any ceremony.
         const configuration = await (async () => {
           if (account?.config) return account.config
           if (hash) {
@@ -1388,8 +1387,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
 
       /**
        * Returns whether a transaction of the instance's session coordinates owner approvals without
-       * an owner, so the user's passkey approves: an approval by `hash` of the session's account or a
-       * configurable account, or a transaction of a configurable account that holds no local owner.
+       * an owner, so the user's passkey approves: an approval by `hash` alone, or a transaction or an
+       * approval of a configurable account that holds no local owner.
        */
       function coordinated(parameters: Coordinated) {
         const { account, hash, owner } = parameters
@@ -1398,7 +1397,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           !!account &&
           typeof account === 'object' &&
           account.source === 'configurable'
-        if (hash) return account === undefined || configurable
+        if (hash && account === undefined) return true
+        // A configurable account with a local owner approves as Viem does, by `hash` or not.
         return (
           configurable &&
           (account as Account.ConfigurableAccount).owners.length === 0
@@ -2558,8 +2558,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                  * approves a coordinated transaction of a configurable account (TIP-1107) that
                  * names no `owner`: an approval by `hash` alone, or a transaction of an account
                  * that holds no local owner, such as `Account.fromConfig(address)`. The passkey
-                 * owner of the session's Tempo Account signs, or the one that the account's
-                 * configuration names. Coordination needs the plugin's `relay`. Every other call
+                 * owner of the session's Tempo Account that the account's configuration names
+                 * signs. Coordination needs the plugin's `relay`. Every other call
                  * is Viem's own, unchanged.
                  *
                  * @throws {OwnerRequiredError} When no passkey of the user owns the account.
