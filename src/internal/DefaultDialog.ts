@@ -37,9 +37,9 @@ export type Dialog = ReturnType<typeof dialog<{}>>
  * module loads as the instance is created without a saved session or with an expired one, and once
  * the session ends. It then preloads the dialog's frame as `dialog()` does. A page that restores a
  * live session, or renews an expired one through an authorization in progress, loads no code of
- * the dialog before the session ends or an action runs. A sign-in, or a revocation or a change of an
- * access key, whose load of the module fails in a browser without a connection throws as the loaded
- * action does offline.
+ * the dialog before the session ends or an action runs. A sign-in whose load of the module fails in
+ * a browser without a connection throws as the loaded sign-in does offline. A revocation or a change
+ * of an access key throws the same way.
  */
 export function plugin(): Dialog {
   let loading: Promise<Dialog> | undefined
@@ -78,7 +78,9 @@ export function plugin(): Dialog {
           parameters?: dialog.revokeAccessKey.Parameters,
         ) =>
           (
-            await get().catch((error: unknown) => unloaded(error, 'revocation'))
+            await get().catch((error: unknown) =>
+              unloaded(error, { noun: 'revocation' }),
+            )
           ).revokeAccessKey(parameters),
         // Without `backend`, the session is the stored one, so the read loads no dialog code. The
         // dialog shows a Tempo ID session, not a `local` plugin's or a guest session beside it, as
@@ -95,7 +97,9 @@ export function plugin(): Dialog {
           parameters: dialog.updateAccessKey.Parameters,
         ) =>
           (
-            await get().catch((error: unknown) => unloaded(error, 'change'))
+            await get().catch((error: unknown) =>
+              unloaded(error, { noun: 'change' }),
+            )
           ).updateAccessKey(parameters),
       } satisfies Actions
     },
@@ -192,10 +196,10 @@ type Actions = ReturnType<NonNullable<Dialog['actions']>>
 /**
  * Throws `Accounts.RequestError` with `server_error` and status 0 for a load of the dialog's module
  * that fails in a browser without a connection, as the loaded action throws offline, with the
- * failure as its `cause`. `noun` names the approval of an access key action, and is absent for a
- * sign-in. Rethrows any other failure.
+ * failure as its `cause`. Rethrows any other failure.
  */
-function unloaded(error: unknown, noun?: string): never {
+function unloaded(error: unknown, options: unloaded.Options = {}): never {
+  const { noun } = options
   if (globalThis.navigator?.onLine !== false) throw error
   throw new RequestError({
     cause: error,
@@ -206,6 +210,13 @@ function unloaded(error: unknown, noun?: string): never {
         : `The browser is offline, so the ${noun} receives no response. Check the connection, then try again.`,
     status: 0,
   })
+}
+
+declare namespace unloaded {
+  type Options = {
+    /** The approval of an access key action, such as `revocation`. Absent for a sign-in. */
+    noun?: string | undefined
+  }
 }
 
 /**
