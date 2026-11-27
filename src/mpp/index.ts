@@ -454,9 +454,13 @@ export function mpp(options: mpp.Options = {}) {
       const clients = new Map<number, Client<Transport, Chain>>()
       // The payers of each access key, one for each setting of the charges.
       const payers = new WeakMap<AccessKey.AccessKey, Map<string, mpp.Payer>>()
-      // The node's refusal of a charge of each access key that the chain holds revoked, by the
-      // access key's Tempo Account, ID, and chain. A revoked access key never registers again.
-      const revocations = new Map<string, Error>()
+      // The node's refusal of a charge of each access key that the chain holds revoked, with the
+      // access key, by its Tempo Account, ID, and chain. A revoked access key never registers
+      // again. An expired access key refuses each charge before the read, so its entry goes.
+      const revocations = new Map<
+        string,
+        { accessKey: AccessKey.AccessKey; error: Error }
+      >()
       // The changes that ended the instance's session, or replaced it with one of another user,
       // Tempo Account, or start of a guest session. One subscription per instance holds it, so a
       // discarded manager holds none.
@@ -1005,7 +1009,9 @@ export function mpp(options: mpp.Options = {}) {
               ? false
               : retries(overrides, Number(accessKey.chainId))
             if (enabled === false || enabled.accessKey === false)
-              throw new Accounts.AccessKeyRequiredError({ cause: revocation })
+              throw new Accounts.AccessKeyRequiredError({
+                cause: revocation.error,
+              })
           }
           if (reads)
             await Retry.abortable(
@@ -1159,8 +1165,14 @@ export function mpp(options: mpp.Options = {}) {
         accessKey: AccessKey.AccessKey,
       ): mpp.Payer {
         const record = (error: unknown): never => {
-          if (retry.errorName(error) === 'KeyAlreadyRevoked')
-            revocations.set(revocationName(accessKey), error as Error)
+          if (retry.errorName(error) === 'KeyAlreadyRevoked') {
+            for (const [name, entry] of revocations)
+              if (AccessKey.expired(entry.accessKey)) revocations.delete(name)
+            revocations.set(revocationName(accessKey), {
+              accessKey,
+              error: error as Error,
+            })
+          }
           throw error
         }
         return {
