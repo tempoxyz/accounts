@@ -1247,25 +1247,25 @@ export function mpp(options: mpp.Options = {}) {
           fetch: {
             value: async (...args: Parameters<mpp.SessionManager['fetch']>) => {
               check()
-              return manager.fetch(...args)
+              return manager.fetch(...args).catch(rethrow)
             },
           },
           sse: {
             value: async (...args: Parameters<mpp.SessionManager['sse']>) => {
               check()
-              return manager.sse(...args)
+              return manager.sse(...args).catch(rethrow)
             },
           },
           topUp: {
             value: async (...args: Parameters<mpp.SessionManager['topUp']>) => {
               check()
-              return manager.topUp(...args)
+              return manager.topUp(...args).catch(rethrow)
             },
           },
           ws: {
             value: async (...args: Parameters<mpp.SessionManager['ws']>) => {
               check()
-              return manager.ws(...args)
+              return manager.ws(...args).catch(rethrow)
             },
           },
         }) as mpp.SessionManager
@@ -1396,7 +1396,7 @@ export function mpp(options: mpp.Options = {}) {
                   replayable: () => resendable(...args),
                   signal: signalOf(...args),
                 },
-              ),
+              ).catch(rethrow),
           },
           sse: {
             value: (...args: Parameters<mpp.SessionManager['sse']>) =>
@@ -1409,7 +1409,7 @@ export function mpp(options: mpp.Options = {}) {
                   replayable: () => resendable(...args),
                   signal: signalOf(...args),
                 },
-              ),
+              ).catch(rethrow),
           },
           topUp: {
             value: (...args: Parameters<mpp.SessionManager['topUp']>) => {
@@ -1423,7 +1423,7 @@ export function mpp(options: mpp.Options = {}) {
                     "Invalid top-up: the session's channel changed while the top-up waited. Call `topUp` again, which tops up the current channel.",
                   )
                 return manager.topUp(...args)
-              })
+              }).catch(rethrow)
             },
           },
           ws: {
@@ -1434,7 +1434,7 @@ export function mpp(options: mpp.Options = {}) {
                   return manager.ws(...args)
                 },
                 { signal: args[1]?.signal },
-              ),
+              ).catch(rethrow),
           },
         }) as mpp.SessionManager
       }
@@ -1814,6 +1814,9 @@ export declare namespace mpp {
      * offer without a chain uses the payer chain. `close()` preserves dependency errors, including
      * a plain `Error` for a replacement challenge on another chain.
      *
+     * @throws {Accounts.AccessKeyRequiredError} For a request, stream, or top-up that the chain
+     *   refuses, since it holds the access key revoked, with the chain's refusal as `cause`, as
+     *   for `fetch`.
      * @throws {ChainError} For a session challenge on another chain than the payer's, except during `close()`.
      * @throws {RangeError} If `allowedChainIds` excludes the payer's chain.
      * @throws {TypeError} If every session offer names a malformed chain ID.
@@ -3045,6 +3048,14 @@ function revoked(error: unknown) {
   if (!(error instanceof Error)) return error
   if (ExecutionError.from(error).errorName !== 'KeyAlreadyRevoked') return error
   return new Accounts.AccessKeyRequiredError({ cause: error })
+}
+
+/**
+ * Throws the error that {@link revoked} returns for `error`, for the `catch` of a session manager's
+ * request, stream, and top-up, so they reject as `fetch` does.
+ */
+function rethrow(error: unknown): never {
+  throw revoked(error)
 }
 
 /**
