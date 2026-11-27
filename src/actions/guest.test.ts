@@ -425,6 +425,38 @@ describe('Actions.guest.session on each store preset', () => {
     expect(() => StoreValue.stringify(keyPair)).toThrow()
   })
 
+  test("reads the guest account's entry once as the first guest session creates it on a `local` store, such as `Store.memory`", async () => {
+    // The store records each call, and delegates it to `Store.memory`, whose `local` and `lock` it keeps.
+    const calls: string[] = []
+    const memory = Store.memory()
+    const store = Store.from({
+      ...memory,
+      async getItem(key) {
+        calls.push(`get ${key}`)
+        return await memory.getItem(key)
+      },
+      async removeItem(key) {
+        calls.push(`remove ${key}`)
+        await memory.removeItem(key)
+      },
+      async setItem(key, value, options) {
+        calls.push(`set ${key}`)
+        await memory.setItem(key, value, options)
+      },
+    })
+
+    await Guest.session(config(store))
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        "get tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]",
+        "set tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]",
+        "get tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]:revision",
+        "set tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]:revision",
+      ]
+    `)
+  })
+
   test('refuses a shared store of JSON, such as `Store.postgres`, before any query', async () => {
     const database = new PGlite()
     onTestFinished(() => database.close())
