@@ -454,6 +454,9 @@ export function mpp(options: mpp.Options = {}) {
       const clients = new Map<number, Client<Transport, Chain>>()
       // The payers of each access key, one for each setting of the charges.
       const payers = new WeakMap<AccessKey.AccessKey, Map<string, mpp.Payer>>()
+      // The node's refusal of a charge of each access key that the chain holds revoked, by the
+      // access key's Tempo Account, ID, and chain. A revoked access key never registers again.
+      const revocations = new Map<string, Error>()
       // The changes that ended the instance's session, or replaced it with one of another user,
       // Tempo Account, or start of a guest session. One subscription per instance holds it, so a
       // discarded manager holds none.
@@ -949,6 +952,16 @@ export function mpp(options: mpp.Options = {}) {
           throw new Accounts.SignedOutError()
         const { clientId, maxAmount, maxDeposit, mode } = settings
         const accessKey = AccessKey.from(current.accessKey)
+        // Once the node refused a charge of the access key as revoked, a later charge sends no
+        // request, unless a retry signs in for a new access key, such as on a page.
+        const revocation = revocations.get(revocationName(accessKey))
+        if (revocation) {
+          const enabled = overrides.session
+            ? false
+            : retries(overrides, Number(accessKey.chainId))
+          if (enabled === false || enabled.accessKey === false)
+            throw new Accounts.AccessKeyRequiredError({ cause: revocation })
+        }
         // The store read of the access key's registration runs beside the request, and the access
         // key's fill waits for it. A connection lists every access key that the API holds in
         // `accessKeys`, so only the mark of its `accessKey` is read.
@@ -1060,23 +1073,26 @@ export function mpp(options: mpp.Options = {}) {
           (paged && signing.signal) ||
           (maxAmount !== undefined && typeof maxAmount !== 'string')
         )
-          return create({
-            ...settings,
-            account,
-            address: account.address,
-            chainId,
-            fees,
-            fetch,
-            getClient,
-            identity,
-            landed: registrations.landed,
-            limits,
-            marks,
-            pay: remote,
-            subscribe: subscriber,
-            turn: registrations.turn,
-            verify,
-          })
+          return recording(
+            create({
+              ...settings,
+              account,
+              address: account.address,
+              chainId,
+              fees,
+              fetch,
+              getClient,
+              identity,
+              landed: registrations.landed,
+              limits,
+              marks,
+              pay: remote,
+              subscribe: subscriber,
+              turn: registrations.turn,
+              verify,
+            }),
+            accessKey,
+          )
         let byAccessKey = payers.get(current.accessKey)
         if (!byAccessKey)
           payers.set(current.accessKey, (byAccessKey = new Map()))
@@ -1098,25 +1114,65 @@ export function mpp(options: mpp.Options = {}) {
         const existing = byAccessKey.get(name)
         if (existing) return existing
 
-        const created = create({
-          ...settings,
-          account,
-          address: account.address,
-          chainId,
-          fees,
-          fetch,
-          getClient,
-          identity,
-          landed: registrations.landed,
-          limits,
-          marks,
-          pay: remote,
-          subscribe: subscriber,
-          turn: registrations.turn,
-          verify,
-        })
+        const created = recording(
+          create({
+            ...settings,
+            account,
+            address: account.address,
+            chainId,
+            fees,
+            fetch,
+            getClient,
+            identity,
+            landed: registrations.landed,
+            limits,
+            marks,
+            pay: remote,
+            subscribe: subscriber,
+            turn: registrations.turn,
+            verify,
+          }),
+          accessKey,
+        )
         byAccessKey.set(name, created)
         return created
+      }
+
+      /** Returns the name of `accessKey` in `revocations`. */
+      function revocationName(accessKey: AccessKey.AccessKey) {
+        return [
+          accessKey.account,
+          accessKey.keyAuthorization.keyId,
+          Number(accessKey.chainId),
+        ]
+          .join(':')
+          .toLowerCase()
+      }
+
+      /**
+       * Returns `payer`, which records the node's refusal of a charge of `accessKey` as revoked.
+       * Only a refusal that the transport marks counts, so no endpoint's response records one.
+       */
+      function recording(
+        payer: mpp.Payer,
+        accessKey: AccessKey.AccessKey,
+      ): mpp.Payer {
+        const record = (error: unknown): never => {
+          if (retry.errorName(error) === 'KeyAlreadyRevoked')
+            revocations.set(revocationName(accessKey), error as Error)
+          throw error
+        }
+        return {
+          ...payer,
+          fetch: (input, init) => payer.fetch(input, init).catch(record),
+          mcp: (client) => {
+            const inner = payer.mcp(client)
+            return {
+              callTool: (params, resultSchema, options) =>
+                inner.callTool(params, resultSchema, options).catch(record),
+            }
+          },
+        }
       }
 
       /** Returns the payer that resolves its access key at each call, as `payer` does. */
@@ -1695,7 +1751,8 @@ export declare namespace mpp {
      *   accounts.
      * @throws {Accounts.AccessKeyRequiredError} For a session without an access key. For a charge
      *   that the chain refuses, since it holds the access key revoked, with the chain's refusal as
-     *   `cause`, after a retry of the `accessKey` kind, if one runs. In a browser,
+     *   `cause`, after a retry of the `accessKey` kind, if one runs. If no such retry runs, a later
+     *   charge of the same access key throws it before any request. In a browser,
      *   Tempo ID's payment page pays a charge of such an instance's session, if one transfer in
      *   `push` mode pays the charge. The error is then thrown only once a challenge needs an access
      *   key.
