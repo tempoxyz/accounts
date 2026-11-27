@@ -184,6 +184,19 @@ describe('machines.session', () => {
       expect(seen).toEqual([true, false, false, false])
     })
 
+    test("marks the session that another context saved as adopted, until the instance's own change", () => {
+      const actor = createActor(machines.session).start()
+      const seen: boolean[] = []
+
+      seen.push(machines.adopted(actor.getSnapshot()))
+      actor.send({ session: renewed, signIn: false, type: 'adopt' })
+      seen.push(machines.adopted(actor.getSnapshot()))
+      actor.send({ session: other, signIn: true, type: 'set' })
+      seen.push(machines.adopted(actor.getSnapshot()))
+
+      expect(seen).toEqual([false, true, false])
+    })
+
     test("moves the kept expired session's access keys to the chain that a switch selects", () => {
       const actor = createActor(machines.session).start()
       const accessKey = { account: '0x1', chainId: 4217 } as never

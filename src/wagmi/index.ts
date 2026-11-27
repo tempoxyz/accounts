@@ -174,6 +174,10 @@ export class StoreRequiredError extends Error {
  * that the chain does not hold retries through wagmi's actions too. The `retry` option of the
  * `viem` plugin describes the retry.
  *
+ * A session that another tab or instance saves connects wagmi at the next `connect` or
+ * `reconnect`, since wagmi's storage holds the connection of the tab that wrote it last. A session
+ * of the same account that replaces an expired connection connects at once.
+ *
  * `disconnect` signs the user out with `accounts.signOut`. A sign-out through the instance itself
  * disconnects wagmi too. If the sign-out rejects, such as for a revocation with status 0, 429, or
  * 5xx, the session still ends, and the provider emits `disconnect`. wagmi stays connected, so its
@@ -724,6 +728,15 @@ const defaultSignInIds = new Set(['device', 'dialog', 'passkey', 'redirect'])
 /** The members of every connector's instance, whatever its plugins. */
 type Base = Accounts.Accounts<readonly [ReturnType<typeof viem>]>
 
+/** The options of the connector's `connectIfChosen`. */
+type ChosenOptions = {
+  /**
+   * Whether an expiry ended wagmi's connection of this connector before the session, so the
+   * connector held the current connection. Defaults to `false`.
+   */
+  resumes?: boolean | undefined
+}
+
 /** The options of the connector's `saved`. */
 type SavedOptions = {
   /**
@@ -1003,7 +1016,8 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           if (session) emitNamed()
           return
         }
-        if (next) onAccountsChanged([next])
+        // After an expiry ended wagmi's connection here, the account's next session connects.
+        if (next) onAccountsChanged([next], { resumes: ended })
         else onDisconnect()
       })
       // A renewal that ends without a session ends the session that the subscriber kept: an
@@ -1327,9 +1341,13 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
     /**
      * Emits the change of the session's accounts to wagmi and to the providers' listeners. wagmi
      * reads `change` only for a connection of this connector, and `connect` without one, so a
-     * sign-in through the instance itself connects wagmi too.
+     * sign-in through the instance itself connects wagmi too. `options.resumes` connects a session
+     * that another context saved after an expiry ended wagmi's connection here.
      */
-    function onAccountsChanged(accounts: readonly string[]) {
+    function onAccountsChanged(
+      accounts: readonly string[],
+      options: ChosenOptions = {},
+    ) {
       if (accounts.length === 0) return onDisconnect()
       const addresses = accounts.map((account) => Address.checksum(account))
       config.emitter.emit('change', { accounts: addresses })
@@ -1338,14 +1356,31 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       // wagmi's `connect` makes this connector the current one, so it follows only when no other
       // connector holds the current connection, never over another wallet. A failed read of
       // wagmi's storage counts as none, so the promise needs no other handler.
-      void connectIfChosen(addresses)
+      void connectIfChosen(addresses, options)
     }
 
-    /** Emits wagmi's `connect` unless another connector holds wagmi's current connection. */
-    async function connectIfChosen(addresses: readonly Address.Address[]) {
+    /**
+     * Emits wagmi's `connect` unless another connector holds wagmi's current connection. A session
+     * that another context saved connects only with `options.resumes`.
+     */
+    async function connectIfChosen(
+      addresses: readonly Address.Address[],
+      options: ChosenOptions = {},
+    ) {
       // Without storage, the connector cannot read wagmi's current connection, so it connects
       // nothing, never over another wallet. `connect` and `reconnect` connect it.
       if (!config.storage) return
+      // wagmi's storage holds the state of the context that wrote it last, such as another tab of
+      // the page, so for a session that another context saved, it does not name this context's
+      // current connection. `connect` and `reconnect` connect such a session. After an expiry ended
+      // wagmi's connection here, this connector held the current connection, so it connects again.
+      const { actor } = getInstance().session
+      if (
+        !options.resumes &&
+        actor &&
+        InternalSession.machines.adopted(actor.getSnapshot())
+      )
+        return
       // wagmi persists its state, whose `current` names the connection that its actions use.
       const store = await (async () =>
         (await config.storage?.getItem('store')) as

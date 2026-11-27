@@ -6,10 +6,12 @@
 import {
   connect,
   createConfig,
+  createStorage,
   getChainId,
   getConnection,
   getWalletClient,
   http,
+  mock,
   reconnect,
   sendCalls,
   signMessage,
@@ -940,6 +942,86 @@ describe('tempoId', () => {
       }
     `)
     await expect.poll(() => signIns).toEqual(['user_1'])
+  })
+
+  test("keeps another wallet's connection when another tab's sign-in saves a session to the shared store", async () => {
+    const key =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]'
+    const store = Store.memory()
+    // The page's `localStorage`, which wagmi's storage in each tab of the origin reads and writes.
+    const local = new Map<string, string>()
+    const create = () =>
+      createConfig({
+        chains: [tempo],
+        connectors: [
+          tempoId({
+            clientId: 'https://app.example.com',
+            fetch: (() =>
+              Promise.resolve(
+                Response.json({
+                  access_token: 'access-token-2',
+                  expires_in: 3600,
+                  refresh_token: 'refresh-token-2',
+                  token_type: 'Bearer',
+                }),
+              )) as typeof globalThis.fetch,
+            store,
+            url: 'http://127.0.0.1:9',
+          }),
+          mock({ accounts: ['0x00000000000000000000000000000000000000aa'] }),
+        ],
+        storage: createStorage({
+          storage: {
+            getItem: (name) => local.get(name) ?? null,
+            removeItem: (name) => void local.delete(name),
+            setItem: (name, value) => void local.set(name, value),
+          },
+        }),
+        transports: {
+          [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }),
+        },
+      })
+    const tab = create()
+    const other = create()
+    await Promise.all([reconnect(tab), reconnect(other)])
+    // The other tab connects another wallet.
+    await connect(other, { connector: other.connectors[1]! })
+    const provider = await other.connectors[0]!.getProvider()
+    const changes: unknown[] = []
+    provider.on('accountsChanged', (accounts) => changes.push(accounts))
+
+    // The first tab connects Tempo ID, so wagmi's storage names its connection. Its refresh posts
+    // the session to the other tab's instance.
+    await store.setItem(key, {
+      state: {
+        session: Session.from({
+          accessKey: createAccessKey({
+            chainId: tempo.id,
+            owner: Secp256k1.randomPrivateKey(),
+          }),
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await reconnect(tab)
+    await (await tab.connectors[0]!.getInstance()).session.refresh()
+    await expect.poll(() => changes.length).toBe(1)
+    // The connector reads wagmi's storage once before it connects.
+    await other.storage!.getItem('store')
+
+    expect({
+      other: getConnection(other).connector?.id,
+      tab: getConnection(tab).connector?.id,
+    }).toMatchInlineSnapshot(`
+      {
+        "other": "mock",
+        "tab": "tempoId",
+      }
+    `)
   })
 
   test("disconnects at `reconnect` once another process's sign-out empties the shared `Store.file`", async () => {
