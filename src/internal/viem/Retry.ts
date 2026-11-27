@@ -26,11 +26,14 @@ export type Failure =
   | {
       /** The balance of a token is below the transaction's need. */
       kind: 'balance'
-      /** The amount that the account lacks, as a decimal string. Absent when the error names none. */
+      /**
+       * The amount that the account lacks, with {@link fees}, as a decimal string. Absent when the
+       * error names none.
+       */
       amount?: string | undefined
       /**
-       * The balance that the transaction needs, as a decimal string. Absent when the error names
-       * only the amount that the account lacks, or none.
+       * The balance that the transaction needs, with {@link fees}, as a decimal string. Absent when
+       * the error names only the amount that the account lacks, or none.
        */
       required?: string | undefined
       /** The token's address. Absent when the error names none, such as for the fee token. */
@@ -151,10 +154,12 @@ export function create(): create.ReturnType {
     const [available, required, token] = args ?? []
     if (typeof available !== 'bigint' || typeof required !== 'bigint')
       return { kind }
+    // The node names the balance of the call alone. A transfer of a USD token pays its fee in that
+    // token, so a deposit of the call's balance alone leaves no fee, and the retry reverts.
     return {
-      amount: formatUnits(required - available, 6),
+      amount: formatUnits(required + fees - available, 6),
       kind,
-      required: formatUnits(required, 6),
+      required: formatUnits(required + fees, 6),
       token: token as `0x${string}`,
     }
   }

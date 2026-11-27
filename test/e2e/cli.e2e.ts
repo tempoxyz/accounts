@@ -814,7 +814,7 @@ test.describe('cli', () => {
         const funding = await Playwright.funding(page)
 
         await expect(funding.hint).toContainText(
-          `${Apps.cli.name} (unverified app) recommends you have at least $1 in OUSD in your wallet. Your balance is $0.`,
+          `${Apps.cli.name} (unverified app) recommends you have at least $1.10 in OUSD in your wallet. Your balance is $0.`,
         )
         await capture('deposit page')
 

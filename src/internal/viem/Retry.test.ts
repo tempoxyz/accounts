@@ -4,8 +4,8 @@
  * kind of failure.
  * @module
  */
-import { custom, http, type Transport } from 'viem'
-import { Actions } from 'viem/tempo'
+import { custom, encodeErrorResult, http, type Transport } from 'viem'
+import { Abis, Actions } from 'viem/tempo'
 import { describe, expect, test } from 'vite-plus/test'
 import { AccessKeyRequiredError } from '../../Accounts.js'
 import { AccessKeyExpiredError } from '../../plugins/viem.js'
@@ -187,6 +187,42 @@ describe('create', () => {
     ).toMatchInlineSnapshot(`
       {
         "kind": "accessKey",
+      }
+    `)
+  })
+
+  test('names a deposit of the balance that a refused transfer lacks plus the fees, which the transfer pays besides it', async () => {
+    const retry = Retry.create()
+    const transport = retry.transport(
+      // An RPC that refuses each fill with the node's revert of a balance below the transfer.
+      custom(
+        {
+          request() {
+            throw {
+              code: 3,
+              data: encodeErrorResult({
+                abi: Abis.tip20,
+                args: [0n, 1_000_000n, pathUsd],
+                errorName: 'InsufficientBalance',
+              }),
+              message: 'execution reverted',
+            }
+          },
+        },
+        { retryCount: 0 },
+      ),
+    )
+
+    const error = await transport({})
+      .request({ method: 'eth_fillTransaction', params: [{}] })
+      .catch((error: unknown) => error)
+
+    expect(retry.classify(error)).toMatchInlineSnapshot(`
+      {
+        "amount": "1.1",
+        "kind": "balance",
+        "required": "1.1",
+        "token": "0x20C0000000000000000000000000000000000000",
       }
     `)
   })

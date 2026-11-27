@@ -513,6 +513,8 @@ test.describe('access keys', () => {
       await test.step('rejects the transfer once the user closes the deposit page', async () => {
         await Playwright.submit(page, { amount: '1', to: recipient })
         const deposit = await Playwright.deposit(await Playwright.dialog(page))
+        // The transfer pays its fee in OUSD too, so the hint holds the fee allowance.
+        await expect(deposit.hint).toContainText('at least $1.10')
         await capture('deposit page')
         await deposit.close.click()
 
