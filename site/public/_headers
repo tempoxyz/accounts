@@ -1,11 +1,6 @@
-# The canonical URL of each page names the production origin. Search engines index no other
-# deployment: the Worker's workers.dev URL, and the preview URL of each version.
-https://:version.:subdomain.workers.dev/*
-  X-Robots-Tag: noindex
-
-# Browsers reach the production origin only over HTTPS. The tempo.xyz zone sets no HSTS, so this rule
+# Browsers reach the production origin only over HTTPS. The tempo.com zone sets no HSTS, so this rule
 # sets it for two years, without subdomains.
-https://accounts.tempo.xyz/*
+https://accounts.tempo.com/*
   Strict-Transport-Security: max-age=63072000
 
 # The Cloudflare Deploy Broker uploads a file whose extension its builder does not map with no media

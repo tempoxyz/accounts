@@ -21,8 +21,11 @@
     { "binding": "STORE", "id": "45b778b6db1d468a8d8b342a838fcd39" }
   ],
   "main": "./src/server/Worker.ts",
-  "preview_urls": true,
-  "routes": [{ "custom_domain": true, "pattern": "accounts.tempo.xyz" }],
+  "preview_urls": false,
+  "routes": [
+    { "custom_domain": true, "pattern": "accounts.tempo.com" },
+    { "custom_domain": true, "pattern": "accounts.tempo.xyz" }
+  ],
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
-  "workers_dev": true
+  "workers_dev": false
 }
