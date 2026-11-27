@@ -1002,6 +1002,31 @@ describe('tempoId', () => {
     )
   })
 
+  test('keeps a wallet that the tab connected after its Tempo ID connection ended, at the next sign-in of the instance', async () => {
+    const config = tabs()()
+    await reconnect(config)
+    await connect(config, { connector: config.connectors[0]!, signIn } as never)
+    const instance = (await config.connectors[0]!.getInstance()) as unknown as {
+      dialog: { signIn: () => Promise<unknown> }
+      signOut: () => Promise<void>
+    }
+    const changes: unknown[] = []
+    ;(await config.connectors[0]!.getProvider()).on(
+      'accountsChanged',
+      (accounts) => changes.push(accounts),
+    )
+
+    // The session ends outside `disconnect`, and the tab connects the other wallet.
+    await instance.signOut()
+    await connect(config, { connector: config.connectors[1]! })
+    await instance.dialog.signIn()
+    await expect.poll(() => changes.length).toBe(1)
+    // The connector reads wagmi's storage once before it connects.
+    await config.storage!.getItem('store')
+
+    expect(getConnection(config).connector?.id).toMatchInlineSnapshot(`"mock"`)
+  })
+
   test("disconnects at `reconnect` once another process's sign-out empties the shared `Store.file`", async () => {
     const key =
       'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]'

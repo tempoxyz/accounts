@@ -177,8 +177,8 @@ export class StoreRequiredError extends Error {
  * A session that another tab or instance saves connects wagmi at the next `connect` or
  * `reconnect`, since wagmi's storage holds the connection of the tab that wrote it last. If the
  * session's end or an expiry ended the connector's connection in this tab, the next session connects
- * at once, also over a wallet that the tab connected after the end, since the connector reads no
- * other connector's connection.
+ * at once, unless wagmi's storage names another wallet. Another tab's later write of that storage can
+ * name this connector over a wallet that this tab connected after the end.
  *
  * `disconnect` signs the user out with `accounts.signOut`. A sign-out through the instance itself
  * disconnects wagmi too. If the sign-out rejects, such as for a revocation with status 0, 429, or
@@ -1378,7 +1378,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       // wagmi's storage holds the state of the context that wrote it last, such as another tab of
       // the page, so for a session that another context saved, it does not name this context's
       // current connection. `connect` and `reconnect` connect such a session. A connection of this
-      // connector that the session's end ended here held the current connection, so it resumes.
+      // connector that the session's end ended here resumes with it.
       const { actor } = getInstance().session
       if (
         !options.resumes &&
@@ -1387,18 +1387,18 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       )
         return
       // wagmi persists its state, whose `current` names the connection that its actions use.
-      const store = options.resumes
-        ? undefined
-        : await (async () =>
-            (await config.storage?.getItem('store')) as
-              | {
-                  state?: {
-                    connections?: Map<string, { connector?: { id?: string } }>
-                    current?: string | null
-                  }
-                }
-              | null
-              | undefined)().catch(() => undefined)
+      // A resumed connection still yields to a wallet that wagmi's storage names, such as one that
+      // the tab connected after the end.
+      const store = await (async () =>
+        (await config.storage?.getItem('store')) as
+          | {
+              state?: {
+                connections?: Map<string, { connector?: { id?: string } }>
+                current?: string | null
+              }
+            }
+          | null
+          | undefined)().catch(() => undefined)
       const current = store?.state?.current
       const holder = current
         ? store?.state?.connections?.get?.(current)?.connector?.id
