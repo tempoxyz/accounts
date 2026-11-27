@@ -175,8 +175,10 @@ export class StoreRequiredError extends Error {
  * `viem` plugin describes the retry.
  *
  * A session that another tab or instance saves connects wagmi at the next `connect` or
- * `reconnect`, since wagmi's storage holds the connection of the tab that wrote it last. A session
- * of the same account that replaces an expired connection connects at once.
+ * `reconnect`, since wagmi's storage holds the connection of the tab that wrote it last. If the
+ * session's end or an expiry ended the connector's connection in this tab, the next session connects
+ * at once, also over a wallet that the tab connected after the end, since the connector reads no
+ * other connector's connection.
  *
  * `disconnect` signs the user out with `accounts.signOut`. A sign-out through the instance itself
  * disconnects wagmi too. If the sign-out rejects, such as for a revocation with status 0, 429, or
@@ -915,7 +917,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
     function afterSignOut() {
       if (!machines.held(disconnects.getSnapshot()) || context?.session.get())
         return
-      disconnects.send({ type: 'session.change' })
+      disconnects.send({ addressed: false, type: 'session.change' })
       endConnection()
     }
 
@@ -999,8 +1001,12 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
         if (!session && machines.signingOut(snapshot)) return onSignOut()
         // wagmi can hold the account of a session that `disconnect` ended, which a new session replaces.
         const stale = machines.stale(snapshot)
-        if (session) disconnects.send({ type: 'session.change' })
         const next = addressOf(session)
+        if (session)
+          disconnects.send({
+            addressed: next !== undefined,
+            type: 'session.change',
+          })
         if (session && !next) {
           // A session without an access key or an account, such as a dialog's sign-in without an
           // access key, has no address until its account is read. The account's commit notifies
@@ -1929,6 +1935,14 @@ export namespace machines {
       start: assign((args) => ({ runs: args.context.runs + 1 })),
     },
     guards: {
+      /**
+       * Whether the new session has an address. A session without one, such as a dialog's sign-in
+       * without an access key, keeps the ended connection until the commit of its account read.
+       */
+      addressed: (args) => {
+        assertEvent(args.event, 'session.change')
+        return args.event.addressed
+      },
       /** Whether the sign-out that settles is the last one in progress. */
       last: (args) => args.context.runs === 1,
     },
@@ -1952,7 +1966,7 @@ export namespace machines {
         entry: 'end',
         on: {
           'connection.start': { target: 'connected' },
-          'session.change': { target: 'idle' },
+          'session.change': { guard: 'addressed', target: 'idle' },
           'session.clear': { target: 'lapsed' },
           'signOut.start': { actions: 'start', target: 'signingOut' },
         },
@@ -1975,7 +1989,7 @@ export namespace machines {
       lapsed: {
         on: {
           'connection.start': { target: 'connected' },
-          'session.change': { target: 'idle' },
+          'session.change': { guard: 'addressed', target: 'idle' },
           'signOut.start': { actions: 'start', target: 'signingOut' },
         },
         tags: ['resumable'],
@@ -2011,6 +2025,8 @@ export namespace machines {
           type: 'connection.start'
         }
       | {
+          /** Whether the new session has an address. `false` without a session. */
+          addressed: boolean
           /**
            * The instance's session changed to a new session, a sign-out of the instance completed,
            * or a read emptied the expired session.

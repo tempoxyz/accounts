@@ -1821,7 +1821,7 @@ describe('machines.disconnect', () => {
       { type: 'signOut.start' },
       { type: 'signOut.fail' },
     )
-    const changed = step(failed, { type: 'session.change' })
+    const changed = step(failed, { addressed: true, type: 'session.change' })
     const retried = step(
       failed,
       { type: 'signOut.start' },
@@ -1848,7 +1848,7 @@ describe('machines.disconnect', () => {
     actor.send({ type: 'session.expire' })
     actor.send({ type: 'session.expire' })
     const expired = actor.getSnapshot()
-    actor.send({ type: 'session.change' })
+    actor.send({ addressed: true, type: 'session.change' })
     const changed = actor.getSnapshot()
     actor.send({ type: 'session.expire' })
 
@@ -1870,7 +1870,7 @@ describe('machines.disconnect', () => {
     const connected = step(initial, { type: 'connection.start' })
     const expired = step(connected, { type: 'session.expire' })
     const lapsed = step(expired, { type: 'session.clear' })
-    const changed = step(lapsed, { type: 'session.change' })
+    const changed = step(lapsed, { addressed: true, type: 'session.change' })
 
     expect(lapsed.value).toMatchInlineSnapshot(`"lapsed"`)
     expect([connected, expired, lapsed, changed].map(machines.resumes))
@@ -1903,23 +1903,31 @@ describe('machines.disconnect', () => {
       { type: 'signOut.start' },
       { type: 'signOut.finish' },
     )
+    // A session without an address, such as a dialog's sign-in without an access key, keeps it
+    // until the commit of its account read.
+    const unread = step(ended, { addressed: false, type: 'session.change' })
 
-    expect([ended, unconnected, disconnected].map((snapshot) => snapshot.value))
-      .toMatchInlineSnapshot(`
+    expect(
+      [ended, unconnected, disconnected, unread].map(
+        (snapshot) => snapshot.value,
+      ),
+    ).toMatchInlineSnapshot(`
       [
         "lapsed",
         "idle",
         "idle",
+        "lapsed",
       ]
     `)
-    expect([ended, unconnected, disconnected].map(machines.resumes))
+    expect([ended, unconnected, disconnected, unread].map(machines.resumes))
       .toMatchInlineSnapshot(`
-      [
-        true,
-        false,
-        false,
-      ]
-    `)
+        [
+          true,
+          false,
+          false,
+          true,
+        ]
+      `)
   })
 
   test('reaches every state along its shortest paths, handles every event type, and counts sign-outs only while it signs out', () => {
@@ -1977,7 +1985,10 @@ describe('machines.disconnect', () => {
     ) => readonly machines.disconnect.Event[]
   } = {
     'connection.start': () => [{ type: 'connection.start' }],
-    'session.change': () => [{ type: 'session.change' }],
+    'session.change': () => [
+      { addressed: false, type: 'session.change' },
+      { addressed: true, type: 'session.change' },
+    ],
     'session.clear': (snapshot) =>
       machines.expired(snapshot) ? [{ type: 'session.clear' }] : [],
     'session.end': () => [{ type: 'session.end' }],
