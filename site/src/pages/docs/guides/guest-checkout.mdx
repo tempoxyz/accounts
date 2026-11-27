@@ -258,6 +258,47 @@ export const accounts = Accounts.create({
 })
 ```
 
+### Sign a guest in to the app
+
+With the <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe`</SourceLink> plugin on the page, <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> offers Continue as guest too. After that selection, the guest key pair signs the plugin's message, and the call posts the signature to the verify route before it sets the guest session.
+
+The call returns the verify route's JSON object as `auth`, as for a Tempo ID sign-in. The guest account is a root Tempo Account, so the route verifies its P256 signature as the account's own. [Sign in with the plugin on the page](/docs/guides/siwe#sign-in-with-the-plugin-on-the-page) describes the routes.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={async () => {
+        // A guest or a Tempo ID user, signed in to the app's routes either way.
+        const { auth } = await accounts.dialog.signIn()
+        console.log(auth)
+      }}
+      type="button"
+    >
+      Sign in
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { siwe, viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  guest: true,
+  plugins: [react(), siwe({ auth: '/api/auth' }), viem()], // [!code hl]
+})
+```
+
+:::
+
 ### Pay from a CLI
 
 Outside a page, <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> pays from the guest account through the routes of Tempo ID, with no page. <SourceLink name="pay" path="src/actions/guest.ts">`Actions.guest.pay`</SourceLink> describes each request and check.
@@ -451,7 +492,8 @@ export const accounts = Accounts.create({
 
 - A guest pays only in the token of the payment. A payment that needs a swap shows a shortfall.
 - The deposit pages offer a guest no Buy MACH and no swap. The EVM bridge pays only an OUSD payment on Tempo mainnet.
-- A guest session holds no access key and signs no challenge. It takes no `accessKey`, `challenge`, or `siwe` sign-in, and pays no MPP subscription.
+- A guest session holds no access key. It takes no `accessKey` or `challenge` sign-in, and pays no MPP subscription.
+- The guest key pair signs the `siwe` plugin's message only in `dialog.signIn`. A payment with the plugin and without a session offers no guest.
 - A sign-in through the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin never offers a guest.
 - A guest account has no passkey and no Tempo ID user. No sign-in turns it into a configurable account.
 - Outside a page, a short guest account on a chain without a faucet needs the `device` plugin's `onCode` to show its funding code.
