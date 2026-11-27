@@ -4,7 +4,8 @@
  * own app, a public one, requests each signature. The backend holds the session. A second instance
  * names the backend's routes with the `siwe` plugin's `auth`, so its dialog shows at the click, and
  * the page requests the message while the frame loads, for a sign-in and for a payment. It offers
- * a guest, whose key pair signs the message of a sign-in.
+ * a guest, whose key pair signs the message of a sign-in. A third instance offers a guest without
+ * the plugin, and signs nothing.
  * @module
  */
 import { Accounts } from 'accounts'
@@ -24,6 +25,13 @@ export function start() {
     clientId: import.meta.env.VITE_CLIENT_ID_PAGE,
     guest: true,
     plugins: [dialog(), siwe({ auth: '/api/auth/siwe' })],
+  })
+  // A guest offer without a plugin's challenge.
+  const plain = Accounts.create({
+    ...App.options,
+    clientId: import.meta.env.VITE_CLIENT_ID_PAGE,
+    guest: true,
+    plugins: [dialog()],
   })
 
   App.mount({
@@ -48,6 +56,11 @@ export function start() {
           token: 'ousd',
         }),
       Session: () => App.call('/api/auth/session'),
+      // Only the kind and the address show, since a guest session holds no tokens.
+      'Sign in as a guest without the plugin': async () => {
+        const session = await plain.dialog.signIn()
+        return { address: session.address ?? null, kind: session.kind ?? null }
+      },
       'Sign in': () => accounts.dialog.signIn({ method: 'siwe' }),
       'Sign in in a popup': () =>
         accounts.dialog.signIn({ method: 'siwe', mode: 'popup' }),

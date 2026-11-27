@@ -113,6 +113,12 @@ export type Plugin<
  */
 export type Challenge = {
   /**
+   * Whether the guest key pair may sign the message, so a sign-in of an instance with `guest`
+   * offers "Continue as guest" beside it. The guest account is a root Tempo Account, and `settle`
+   * receives its P256 signature envelope. Defaults to `false`: the sign-in offers no guest.
+   */
+  guest?: boolean | undefined
+  /**
    * Returns the message that the account signs on the chain of `chainId`, such as from the app's
    * challenge route. It runs after the dialog or the popup opens, and again for a sign-in that
    * retries outside the gesture. Its signal aborts once the call ends.

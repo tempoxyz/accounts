@@ -254,6 +254,8 @@ function page(options: siwe.PageOptions) {
         // the signed one.
         let issued: { id?: string; message: string } | undefined
         return {
+          // `complete` verifies the guest account's P256 signature as the account's own.
+          guest: true,
           async message(options) {
             const body = await post(fetchFn, {
               body: { chainId: options.chainId },

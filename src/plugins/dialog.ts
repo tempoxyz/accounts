@@ -302,9 +302,9 @@ export function dialog<const options extends dialog.Options = {}>(
             // The plugin's challenge comes from the app's server, so the dialog shows at the click.
             deferred: source !== undefined,
             funding: page.funding,
-            // The guest key pair signs a plugin's challenge, so an instance with `guest` offers a
-            // guest with it too.
-            guest: source !== undefined,
+            // The guest key pair signs a plugin's challenge that accepts it, so an instance with
+            // `guest` offers a guest with it too. Otherwise, the request decides the offer itself.
+            ...(source?.guest ? { guest: true } : {}),
             loginHint: page.loginHint,
             mode: page.mode ?? (popup ? 'popup' : 'iframe'),
             resource: page.resource,
@@ -339,15 +339,19 @@ export function dialog<const options extends dialog.Options = {}>(
             return await SignIn.guest(context, {
               // The end of the sign-in aborts a request of the message that is still pending, so
               // a guest that the page selected before the message arrived requests it again.
-              challenge: source && {
-                message: async () =>
-                  message ??
-                  (await source.message({
-                    chainId: context.config.chainId,
-                    signal: page.signal ?? new AbortController().signal,
-                  })),
-                settle: (signed) => source.settle(signed),
-              },
+              // Tempo ID's frame holds the choice until the message arrives, and a popup opens
+              // with it.
+              challenge: source?.guest
+                ? {
+                    message: async () =>
+                      message ??
+                      (await source.message({
+                        chainId: context.config.chainId,
+                        signal: page.signal ?? new AbortController().signal,
+                      })),
+                    settle: (signed) => source.settle(signed),
+                  }
+                : undefined,
               change,
               signal: page.signal,
             })
@@ -524,8 +528,8 @@ export function dialog<const options extends dialog.Options = {}>(
          * With `guest: true`, a request without `challenge` adds `guest=offer`, so Tempo ID's page
          * offers "Continue as guest". That choice returns `guest=1`, or posts `guest: true`, and the
          * call sets and returns a guest session. Without a plugin's challenge, it sends no request.
-         * With the `siwe` plugin's `auth`, the guest key pair signs the plugin's message as the guest
-         * account. The call posts the signature to the verify route before it sets the guest
+         * With the `siwe` plugin's `auth`, or another plugin's challenge with `guest: true`, the
+         * guest key pair signs the plugin's message as the guest account. The call posts the signature to the verify route before it sets the guest
          * session, and returns the route's result as `auth`, as for a Tempo ID sign-in.
          *
          * With the `siwe` plugin's `auth`, and without `challenge`, the sign-in also signs the user

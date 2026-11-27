@@ -584,6 +584,42 @@ test.describe('siwe', () => {
       })
     })
 
+    test('offers Continue as guest without the plugin too, and posts no challenge or signature', async ({
+      capture,
+      page,
+    }) => {
+      await page.goto(url)
+      const requests: string[] = []
+      page.on('request', (request) => {
+        if ([authUrl, challengeUrl].includes(request.url()))
+          requests.push(request.url())
+      })
+
+      await test.step('offers Continue as guest on the sign-in of a request without a challenge', async () => {
+        await Playwright.start(page, {
+          name: 'Sign in as a guest without the plugin',
+        })
+        await expect(Playwright.prompt(page)).toBeVisible()
+        const dialog = await Playwright.dialog(page)
+        await capture('sign-in with Continue as guest')
+        await Playwright.guest(dialog)
+      })
+
+      await test.step('returns the guest session of the guest account, with no request', async () => {
+        const signedIn = await Playwright.outcome(page, {
+          name: 'Sign in as a guest without the plugin',
+        })
+        const guest = await Playwright.run(page, { name: 'Guest account' })
+
+        expect(signedIn).toEqual({
+          state: 'fulfilled',
+          value: { address: guest.value, kind: 'guest' },
+        })
+        expect(requests).toEqual([])
+        await capture('signed in as a guest')
+      })
+    })
+
     test('shows the payment page while the challenge loads, rejects a payment whose challenge route fails, closes the dialog, and sends nothing', async ({
       capture,
       errors,
