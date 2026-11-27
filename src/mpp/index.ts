@@ -1000,9 +1000,18 @@ export function mpp(options: mpp.Options = {}) {
           signal?: AbortSignal | undefined
         }) => {
           if (AccessKey.expired(accessKey)) throw new Accounts.SignedOutError()
+          if (reads)
+            await Retry.abortable(
+              context.session.reload().catch(() => undefined),
+              { signal: options.signal },
+            )
+          if (ended()) throw new Accounts.SignedOutError()
+          // The access key can also expire while the store read runs, such as a store's timeout.
+          if (AccessKey.expired(accessKey)) throw new Accounts.SignedOutError()
           // Once the node refused a charge of the access key as revoked, a later challenge that only
           // the access key pays signs nothing and reads no chain. A payment page, a subscription's
-          // dialog, or a retry that signs in for a new access key still pays it.
+          // dialog, or a retry that signs in for a new access key still pays it. The check runs
+          // after the store read, so the instance adopts a new access key that another process saved.
           const revocation = revocations.get(revocationName(accessKey))
           if (revocation && !remote && !subscriber) {
             const enabled = overrides.session
@@ -1013,14 +1022,6 @@ export function mpp(options: mpp.Options = {}) {
                 cause: revocation.error,
               })
           }
-          if (reads)
-            await Retry.abortable(
-              context.session.reload().catch(() => undefined),
-              { signal: options.signal },
-            )
-          if (ended()) throw new Accounts.SignedOutError()
-          // The access key can also expire while the store read runs, such as a store's timeout.
-          if (AccessKey.expired(accessKey)) throw new Accounts.SignedOutError()
         }
         // Only a page shows the dialog where the user approves a subscription, and only for the
         // instance's own session. The tab may sign out or switch accounts before the challenge
