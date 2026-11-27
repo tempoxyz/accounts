@@ -444,7 +444,8 @@ export declare namespace get {
  * 32 bytes, before any page opens, for a `challenge`
  * that is no Sign-In with Ethereum message for the redirect URI's origin and the payment's chain
  * without resources, and for a return without a transaction hash, an account, or the challenge's
- * signature. `access_denied` when the user rejects the payment.
+ * signature. `access_denied` when the user rejects the payment. `server_error` with status 0 in a
+ * browser without a connection, before any page opens.
  * @throws {PageRequiredError} Outside a browser page, for a payment that the session's access key
  * does not send, such as one above its limits or after its expiry, also when the node refuses it,
  * with the refusal as its `cause`. Its message names that fix: a sign-in for an access key that
@@ -666,7 +667,8 @@ export declare namespace pay {
  * a failed start of the guest session or a guest transfer that never landed.
  *
  * @throws {RequestError} As {@link pay} throws it for `amount`, `memo`, and `to`, before any page
- *   opens, and `access_denied` when the user rejects the payment.
+ *   opens, `access_denied` when the user rejects the payment, and `server_error` with status 0 in a
+ *   browser without a connection, before any page opens.
  * @throws {PageRequiredError} Outside a browser page.
  * @throws {SupersededError} For a guest offer, when a sign-out since the call started supersedes the
  *   guest session that Continue as guest starts. The page closes.
@@ -864,6 +866,8 @@ export declare namespace pay_guest {
  *     seconds.
  *   - `upstream_unavailable`: The chain or the cloud wallet's provider failed. Retry later.
  *   - `unexpected`: An unexpected failure. Retry the request.
+ * @throws {Accounts.RequestError} With `server_error` and status 0, with `mode: 'iframe'` or
+ *   `mode: 'popup'` in a browser without a connection, before any page opens.
  *
  * @example
  * ```ts
@@ -1356,6 +1360,8 @@ export declare namespace signTypedData {
  *     seconds.
  *   - `upstream_unavailable`: The chain or the cloud wallet's provider failed. Retry later.
  *   - `unexpected`: An unexpected failure. Retry the request.
+ * @throws {Accounts.RequestError} With `server_error` and status 0, with `mode: 'iframe'` or
+ *   `mode: 'popup'` in a browser without a connection, before any page opens.
  *
  * @example
  * ```ts
@@ -1610,6 +1616,14 @@ async function approve<held = never>(
   // Tempo ID posts the return only to the redirect URI's origin.
   if (new URL(redirectUri).origin !== window.location.origin)
     throw new OriginError({ origin: window.location.origin, redirectUri })
+  // Without a connection, the frame and the popup load no page of Tempo ID, so the dialog would
+  // offer a popup at its timeout that fails too. The call fails as a request without a response.
+  if (navigator.onLine === false)
+    throw new RequestError({
+      code: 'server_error',
+      message: `The browser is offline, so the ${options.noun} receives no response. Check the connection, then try again.`,
+      status: 0,
+    })
 
   const origin = new URL(auth.url).origin
   /** Returns the message of `error` that the page shows. */
@@ -2073,7 +2087,10 @@ declare namespace approve {
     label: string
     /** Where the page opens: a frame in a dialog, or a popup window. */
     mode: revokeAccessKey.Dialog
-    /** What the page approves, as the error of a close names it, such as `change`. */
+    /**
+     * What the page approves, as the errors of a close and of an offline call name it, such as
+     * `change`.
+     */
     noun: string
     /** The approval page's path, such as `/access-keys/update`. */
     path: '/access-keys/revoke' | '/access-keys/update' | '/pay'
