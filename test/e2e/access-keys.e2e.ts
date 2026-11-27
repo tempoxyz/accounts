@@ -1135,6 +1135,50 @@ test.describe('access keys', () => {
       })
     })
 
+    test('shows reauthorizing while a transfer after the expiry renews the access key with no screen', async ({
+      capture,
+      code,
+      email,
+      page,
+    }) => {
+      const recipient = privateKeyToAddress(generatePrivateKey())
+      const key = await Web.enter(page, {
+        accessKey: { ...five, expiry: '15s' },
+        capture,
+        code,
+        email,
+      })
+
+      await test.step('shows signedOut at the expiry of the access key', async () => {
+        const first = await Playwright.send(page, {
+          amount: '1',
+          to: recipient,
+        })
+        expect(first.state).toBe('fulfilled')
+        await expired(key)
+
+        await expect(page.locator('#history')).toHaveText(
+          'pending signedOut signedIn signedOut',
+        )
+        await capture('expired')
+      })
+
+      await test.step('shows reauthorizing during the renewal of the transfer, then signedIn', async () => {
+        const transfer = await Playwright.send(page, {
+          amount: '1',
+          to: recipient,
+        })
+
+        expect(transfer.state).toBe('fulfilled')
+        await expect(page.locator('#history')).toHaveText(
+          'pending signedOut signedIn signedOut reauthorizing signedIn',
+        )
+        const session = await Playwright.run(page, { name: 'Session' })
+        expect(session.value.key.id).not.toBe(key.id)
+        await capture('renewed')
+      })
+    })
+
     test('renews the access key with no screen for a transaction after the expiry whose fields are all given, and the node receives no send of the expired access key', async ({
       capture,
       code,

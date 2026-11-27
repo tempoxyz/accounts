@@ -243,7 +243,8 @@ export declare namespace RetryClosedError {
  * On a page, a transaction of the session's access key that the node refuses for a low balance, a
  * spent limit, or an access key that the chain does not hold shows Tempo ID's screen that fixes it,
  * then sends again, unless `retry` turns it off. An expired access key first renews through the
- * browser's Tempo ID session, with no screen. With that retry, the node receives no transaction of
+ * browser's Tempo ID session, with no screen, while the session's status is `reauthorizing`. With
+ * that retry, the node receives no transaction of
  * an expired access key that this app holds. Outside a page, a transaction of an access key that
  * this app holds on the client's chain, and that expired, rejects before the node receives it, with
  * `Accounts.SignedOutError`, or `Accounts.AccessKeyRequiredError` while an access key on another
@@ -1812,217 +1813,224 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           grant.resource === undefined
             ? context.session.change({ restore: true })
             : undefined
-        const request = renewal
-          ? Actions_accounts.authorize(config, {
-              accessKey,
-              account: onChain?.account,
-              // The session's user most likely still holds the browser's Tempo ID session, so the
-              // renewal sends the authorization alone.
-              check: false,
-              // The renewed account's passkey signs through the instance's ceremony, as a restore's does.
-              getFn: config.getFn,
-            }).catch(() => undefined)
-          : undefined
-        /**
-         * Ends a renewal that the retry does not keep. After a change that overtook it, the renewal's own
-         * change ends it, as a restore's does: a sign-out revokes its refresh token, and a logout
-         * that Tempo ID did not refuse, which can have revoked it already, sends no revocation, since
-         * one would count as a reuse. After a newer sign-in, that change ends nothing, so the retry
-         * revokes the token itself.
-         */
-        const end = async (result: NonNullable<Awaited<typeof request>>) => {
-          const session = SignIn.toSession(result)
-          if (renewal?.overtaken()) {
-            await renewal.commit(session).catch(() => undefined)
-            if (!context.session.get()) return
-          }
-          context.session.discard(session)
-        }
-        // A canceled retry stops waiting for the renewal, so it frees the chain's fix at once, and a
-        // later transaction starts its own. The renewal that arrives after it ends.
-        const renewed = await Retry.abortable(Promise.resolve(request), {
-          signal,
-        }).catch((reason: unknown) => {
-          void request?.then((result) => (result ? end(result) : undefined))
-          throw reason
-        })
-        // A sign-out that runs as the renewal arrives would end the session after its commit, whose new
-        // change clears the signed-out mark. The decision waits for it, so the renewal yields to it.
-        if (renewal) await context.session.ended()
-        // Only the expired access key's user and account keep the renewal, so any other renewal ends.
-        const headless =
-          renewed?.accessKey &&
-          renewed.user.id === Session.subject(before) &&
-          onChain &&
-          Address.isEqual(renewed.accessKey.account, onChain.account)
-            ? renewed
-            : undefined
-        // Another retry's commit on another chain leaves this chain's access key, so only a change that
-        // replaced it, such as a sign-in or a sign-out, supersedes the renewal.
-        const current = accessKeyOn(context.session.get(), { chainId })
-        const { action, revoke } = Retry.renewal({
-          aborted: signal?.aborted ?? false,
-          issued: renewed?.refreshToken !== undefined,
-          kept: headless !== undefined,
-          overtaken: renewal?.overtaken() ?? false,
-          replaced:
-            !current ||
-            !onChain ||
-            !Address.isEqual(
-              current.keyAuthorization.keyId,
-              onChain.keyAuthorization.keyId,
-            ),
-        })
-        // The revocation runs beside the fallback or the rejection, which read nothing from it, so the
-        // sign-in waits for no round trip. One without an answer is sent again at the next sign-out.
-        if (revoke && renewed)
-          context.session.discard(SignIn.toSession(renewed))
-        if (action === 'abort') throw signal?.reason
-        if (action === 'supersede') {
-          if (renewed) await end(renewed)
-          else await renewal?.check().catch(() => undefined)
-          throw new SupersededError()
-        }
-        // The commit follows with no wait, so no change overtakes it, and it replaces the expired
-        // session as a sign-in does, which revokes its refresh token.
-        const change = context.session.change()
-        const result =
-          (action === 'commit' ? headless : undefined) ??
-          (await (async () => {
-            // Only an instance with the `device` plugin retries outside a page, and its `onCode`
-            // shows the code.
-            if (!page) {
-              const authorization = await deviceRequests.get(config)!({
-                // The new tokens keep the API audiences and the API scopes of the replaced session's
-                // tokens.
-                ...grant,
+        /** Renews the access key, or signs in on Tempo ID's page, and commits the new session. */
+        const renew = async () => {
+          const request = renewal
+            ? Actions_accounts.authorize(config, {
                 accessKey,
-                funding: funding && {
-                  amount: formatUnits(funding.amount, 6),
-                  token: funding.token,
-                },
+                account: onChain?.account,
+                // The session's user most likely still holds the browser's Tempo ID session, so the
+                // renewal sends the authorization alone.
+                check: false,
+                // The renewed account's passkey signs through the instance's ceremony, as a restore's does.
+                getFn: config.getFn,
+              }).catch(() => undefined)
+            : undefined
+          /**
+           * Ends a renewal that the retry does not keep. After a change that overtook it, the renewal's own
+           * change ends it, as a restore's does: a sign-out revokes its refresh token, and a logout
+           * that Tempo ID did not refuse, which can have revoked it already, sends no revocation, since
+           * one would count as a reuse. After a newer sign-in, that change ends nothing, so the retry
+           * revokes the token itself.
+           */
+          const end = async (result: NonNullable<Awaited<typeof request>>) => {
+            const session = SignIn.toSession(result)
+            if (renewal?.overtaken()) {
+              await renewal.commit(session).catch(() => undefined)
+              if (!context.session.get()) return
+            }
+            context.session.discard(session)
+          }
+          // A canceled retry stops waiting for the renewal, so it frees the chain's fix at once, and a
+          // later transaction starts its own. The renewal that arrives after it ends.
+          const renewed = await Retry.abortable(Promise.resolve(request), {
+            signal,
+          }).catch((reason: unknown) => {
+            void request?.then((result) => (result ? end(result) : undefined))
+            throw reason
+          })
+          // A sign-out that runs as the renewal arrives would end the session after its commit, whose new
+          // change clears the signed-out mark. The decision waits for it, so the renewal yields to it.
+          if (renewal) await context.session.ended()
+          // Only the expired access key's user and account keep the renewal, so any other renewal ends.
+          const headless =
+            renewed?.accessKey &&
+            renewed.user.id === Session.subject(before) &&
+            onChain &&
+            Address.isEqual(renewed.accessKey.account, onChain.account)
+              ? renewed
+              : undefined
+          // Another retry's commit on another chain leaves this chain's access key, so only a change that
+          // replaced it, such as a sign-in or a sign-out, supersedes the renewal.
+          const current = accessKeyOn(context.session.get(), { chainId })
+          const { action, revoke } = Retry.renewal({
+            aborted: signal?.aborted ?? false,
+            issued: renewed?.refreshToken !== undefined,
+            kept: headless !== undefined,
+            overtaken: renewal?.overtaken() ?? false,
+            replaced:
+              !current ||
+              !onChain ||
+              !Address.isEqual(
+                current.keyAuthorization.keyId,
+                onChain.keyAuthorization.keyId,
+              ),
+          })
+          // The revocation runs beside the fallback or the rejection, which read nothing from it, so the
+          // sign-in waits for no round trip. One without an answer is sent again at the next sign-out.
+          if (revoke && renewed)
+            context.session.discard(SignIn.toSession(renewed))
+          if (action === 'abort') throw signal?.reason
+          if (action === 'supersede') {
+            if (renewed) await end(renewed)
+            else await renewal?.check().catch(() => undefined)
+            throw new SupersededError()
+          }
+          // The commit follows with no wait, so no change overtakes it, and it replaces the expired
+          // session as a sign-in does, which revokes its refresh token.
+          const change = context.session.change()
+          const result =
+            (action === 'commit' ? headless : undefined) ??
+            (await (async () => {
+              // Only an instance with the `device` plugin retries outside a page, and its `onCode`
+              // shows the code.
+              if (!page) {
+                const authorization = await deviceRequests.get(config)!({
+                  // The new tokens keep the API audiences and the API scopes of the replaced session's
+                  // tokens.
+                  ...grant,
+                  accessKey,
+                  funding: funding && {
+                    amount: formatUnits(funding.amount, 6),
+                    token: funding.token,
+                  },
+                  signal,
+                }).catch((reason: unknown) => {
+                  // Only the user's denial closes the retry. A refusal of Tempo ID with a `reason`
+                  // keeps its error.
+                  if (
+                    reason instanceof RequestError &&
+                    reason.code === 'access_denied' &&
+                    reason.reason === undefined
+                  )
+                    return change.fail(
+                      new RetryClosedError({
+                        cause: error,
+                        denied: true,
+                        kind: failure.kind,
+                      }),
+                    )
+                  // A plugin without `onCode` cannot show the code, so the transaction rejects as it
+                  // would without a retry.
+                  if (
+                    reason instanceof Error &&
+                    reason.name === 'Plugins.device.OnCodeRequiredError'
+                  )
+                    return change.fail(error)
+                  return change.fail(reason)
+                })
+                // The wait lets a poll in flight finish after every call left the retry. Its approval
+                // then ends, and the session keeps its access key.
+                if (signal?.aborted) {
+                  context.session.discard(SignIn.toSession(authorization))
+                  return change.fail(Retry.aborted(signal))
+                }
+                return authorization
+              }
+              const Dialog = await import('../actions/dialog.js')
+              return await Dialog.signIn(config, {
+                accessKey,
+                mode: 'iframe',
+                ...(grant.resource ? { resource: grant.resource } : {}),
+                // The dialog's `scope` replaces the instance's, so it names both, as the device grant
+                // adds the instance's.
+                ...(grant.scope
+                  ? {
+                      scope: [
+                        ...new Set([
+                          ...config.scope.split(' '),
+                          ...grant.scope.split(' '),
+                        ]),
+                      ].join(' '),
+                    }
+                  : {}),
                 signal,
               }).catch((reason: unknown) => {
-                // Only the user's denial closes the retry. A refusal of Tempo ID with a `reason`
-                // keeps its error.
                 if (
-                  reason instanceof RequestError &&
-                  reason.code === 'access_denied' &&
-                  reason.reason === undefined
+                  !signal?.aborted &&
+                  reason instanceof DOMException &&
+                  reason.name === 'AbortError'
                 )
                   return change.fail(
                     new RetryClosedError({
                       cause: error,
-                      denied: true,
                       kind: failure.kind,
                     }),
                   )
-                // A plugin without `onCode` cannot show the code, so the transaction rejects as it
-                // would without a retry.
-                if (
-                  reason instanceof Error &&
-                  reason.name === 'Plugins.device.OnCodeRequiredError'
-                )
-                  return change.fail(error)
                 return change.fail(reason)
               })
-              // The wait lets a poll in flight finish after every call left the retry. Its approval
-              // then ends, and the session keeps its access key.
-              if (signal?.aborted) {
-                context.session.discard(SignIn.toSession(authorization))
-                return change.fail(Retry.aborted(signal))
-              }
-              return authorization
-            }
-            const Dialog = await import('../actions/dialog.js')
-            return await Dialog.signIn(config, {
-              accessKey,
-              mode: 'iframe',
-              ...(grant.resource ? { resource: grant.resource } : {}),
-              // The dialog's `scope` replaces the instance's, so it names both, as the device grant
-              // adds the instance's.
-              ...(grant.scope
-                ? {
-                    scope: [
-                      ...new Set([
-                        ...config.scope.split(' '),
-                        ...grant.scope.split(' '),
-                      ]),
-                    ].join(' '),
-                  }
-                : {}),
-              signal,
-            }).catch((reason: unknown) => {
-              if (
-                !signal?.aborted &&
-                reason instanceof DOMException &&
-                reason.name === 'AbortError'
-              )
-                return change.fail(
-                  new RetryClosedError({
-                    cause: error,
-                    kind: failure.kind,
-                  }),
-                )
-              return change.fail(reason)
-            })
-          })())
-        const session = SignIn.toSession(result)
-        if (
-          Session.subject(session) !== Session.subject(before) ||
-          !session.accessKey ||
-          (expected && !Address.isEqual(session.accessKey.account, expected))
-        ) {
-          // The instance keeps no session of the sign-in, so its refresh token ends.
-          context.session.discard(session)
-          return change.fail(
-            new RetryAccountError({ cause: error, kind: failure.kind }),
+            })())
+          const session = SignIn.toSession(result)
+          if (
+            Session.subject(session) !== Session.subject(before) ||
+            !session.accessKey ||
+            (expected && !Address.isEqual(session.accessKey.account, expected))
+          ) {
+            // The instance keeps no session of the sign-in, so its refresh token ends.
+            context.session.discard(session)
+            return change.fail(
+              new RetryAccountError({ cause: error, kind: failure.kind }),
+            )
+          }
+          // A new access key that Tempo ID granted in full keeps the old one's lifetime, which a later
+          // renewal requests. The time left until its expiry is shorter by the sign-in's latency, which
+          // repeated retries would add up.
+          const granted = KeyAuthorization.fromRpc(
+            session.accessKey.keyAuthorization,
+          )
+          // The user's access keys on other chains stay, since this sign-in only adds an access key
+          // on this chain. A switch during the sign-in leaves the session on another chain, so the
+          // commit moves the new access key to `accessKeys`. They come from the latest session of the
+          // same user, so a retry on another chain that committed during this one stays.
+          const latest = context.session.get()
+          const held = Session.same(latest, before) ? latest : before
+          const others = [held.accessKey, ...(held.accessKeys ?? [])].filter(
+            (entry): entry is NonNullable<typeof entry> =>
+              !!entry && Number(entry.chainId) !== chainId,
+          )
+          const next =
+            kept !== undefined && granted.expiry && granted.expiry >= kept
+              ? {
+                  ...session,
+                  accessKey: {
+                    ...session.accessKey,
+                    lifetime: previous.lifetime,
+                  },
+                }
+              : session
+          // The session follows the instance's chain, so an access key on another chain, such as a
+          // named chain's client, or after a switch during the sign-in, waits in `accessKeys`.
+          const moved = InternalSession.toChain(
+            others.length ? { ...next, accessKeys: others } : next,
+            { chainId: context.chain.get() },
+          )
+          // An access key on another chain than the instance's leaves the account that the instance
+          // read on its own chain in place.
+          await change.commit(
+            moved.accessKey ||
+              moved === next ||
+              Session.guest(moved) ||
+              !Session.same(latest, moved) ||
+              !latest.account ||
+              latest.accessKey
+              ? moved
+              : { ...moved, account: latest.account },
           )
         }
-        // A new access key that Tempo ID granted in full keeps the old one's lifetime, which a later
-        // renewal requests. The time left until its expiry is shorter by the sign-in's latency, which
-        // repeated retries would add up.
-        const granted = KeyAuthorization.fromRpc(
-          session.accessKey.keyAuthorization,
-        )
-        // The user's access keys on other chains stay, since this sign-in only adds an access key
-        // on this chain. A switch during the sign-in leaves the session on another chain, so the
-        // commit moves the new access key to `accessKeys`. They come from the latest session of the
-        // same user, so a retry on another chain that committed during this one stays.
-        const latest = context.session.get()
-        const held = Session.same(latest, before) ? latest : before
-        const others = [held.accessKey, ...(held.accessKeys ?? [])].filter(
-          (entry): entry is NonNullable<typeof entry> =>
-            !!entry && Number(entry.chainId) !== chainId,
-        )
-        const next =
-          kept !== undefined && granted.expiry && granted.expiry >= kept
-            ? {
-                ...session,
-                accessKey: {
-                  ...session.accessKey,
-                  lifetime: previous.lifetime,
-                },
-              }
-            : session
-        // The session follows the instance's chain, so an access key on another chain, such as a
-        // named chain's client, or after a switch during the sign-in, waits in `accessKeys`.
-        const moved = InternalSession.toChain(
-          others.length ? { ...next, accessKeys: others } : next,
-          { chainId: context.chain.get() },
-        )
-        // An access key on another chain than the instance's leaves the account that the instance
-        // read on its own chain in place.
-        await change.commit(
-          moved.accessKey ||
-            moved === next ||
-            Session.guest(moved) ||
-            !Session.same(latest, moved) ||
-            !latest.account ||
-            latest.accessKey
-            ? moved
-            : { ...moved, account: latest.account },
-        )
+        // A renewal is an authorization of the browser's Tempo ID session, so the status shows
+        // `reauthorizing` with the expired session until the commit, as a renewal at a mount does.
+        if (renewal) return await context.session.authorize(renew)
+        return await renew()
       }
 
       /**
