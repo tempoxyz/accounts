@@ -1613,17 +1613,36 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       }
 
       /**
+       * Returns the address of the token that pays the fees of a client on the chain of `chainId`:
+       * `value`, such as the client's own `feeToken`, else the options', else the chain's.
+       * Returns `undefined` without one, or for a value that names no token.
+       */
+      function feeTokenOf(chainId: number, value?: unknown) {
+        const chain = chainOf(chainId)
+        const token =
+          value ??
+          resolve(chainId).feeToken ??
+          (chain && 'feeToken' in chain ? chain.feeToken : undefined)
+        if (typeof token === 'bigint') return TokenId.toAddress(token)
+        if (typeof token === 'string' && Address.validate(token)) return token
+        return undefined
+      }
+
+      /**
        * Returns the fee allowance that a deposit of `token` holds besides a call, in base units:
        * {@link Retry.fees} if `options.feeToken` is `token`, or without `options.feeToken`, if
        * `token` pays network fees, else `0n`. A failed read returns `0n`.
        */
       async function fee(
         token: `0x${string}`,
-        options: { chainId: number; feeToken: unknown; transport: Transport },
+        options: {
+          chainId: number
+          feeToken: `0x${string}` | undefined
+          transport: Transport
+        },
       ) {
         const { chainId, feeToken, transport } = options
-        if (typeof feeToken === 'string' && Address.validate(feeToken))
-          return Address.isEqual(feeToken, token) ? Retry.fees : 0n
+        if (feeToken) return Address.isEqual(feeToken, token) ? Retry.fees : 0n
         const paying = await pays(token, { chainId, transport }).catch(
           () => false,
         )
@@ -2156,6 +2175,13 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           chainId: number
           /** The error of the failure, which a rejection throws or names as its cause. */
           error: unknown
+          /** The fee token of the client that sent the call, such as its own `feeToken`. */
+          feeToken?: unknown
+          /**
+           * Whether the failure's `amount` holds the fee already, such as a shortfall that a shared
+           * deposit left. Defaults to `false`.
+           */
+          inclusive?: boolean | undefined
           /** The call's first argument, such as a transfer's `amount` and `token`. Absent for a payment. */
           parameters: unknown
           /**
@@ -2323,14 +2349,20 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         // The fee that the deposit holds besides the balance that the node names, which names the
         // call alone. The fee token pays the fee: the call's `feeToken` or the client's, else the
         // token of the refusal if it is a `USD` stablecoin. The relay's fee payer pays no fee from
-        // the account. The read runs beside the balance read and the screen's chunk.
+        // the account. A shortfall that a shared deposit left holds the fee already. The read runs
+        // beside the balance read and the screen's chunk.
         const allowance =
-          failure.kind === 'balance' && failure.token && !options.relayed
+          failure.kind === 'balance' &&
+          failure.token &&
+          !options.relayed &&
+          !options.inclusive
             ? fee(failure.token, {
                 chainId,
-                feeToken:
+                feeToken: feeTokenOf(
+                  chainId,
                   (parameters as { feeToken?: unknown } | undefined)
-                    ?.feeToken ?? resolve(chainId).feeToken,
+                    ?.feeToken ?? options.feeToken,
+                ),
                 transport: options.transport,
               })
             : Promise.resolve(0n)
@@ -2455,7 +2487,11 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         // payer's named `account`, stays.
         return await fix_joined(
           { ...failure, amount: formatUnits(lacking, 6) },
-          { ...options, state: page ? options.state : same() },
+          {
+            ...options,
+            inclusive: true,
+            state: page ? options.state : same(),
+          },
         )
       }
 
@@ -2805,6 +2841,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
               address: extended.account.address,
               chainId,
               error,
+              feeToken: clientOptions.feeToken,
               parameters,
               // A client's own `transport` sends past the relay route.
               relayed: !transport && !!routing(chainId).relay,
@@ -2940,16 +2977,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       // The check is synchronous, so a payment that no access key sends opens the payment page
       // within the gesture.
       senders.set(config, (payment) => {
-        // The options' fee token, else the chain's, as the client that sends the payment takes it.
-        const chain = chainOf(payment.chainId)
-        const feeToken = (() => {
-          const value =
-            resolve(payment.chainId).feeToken ??
-            (chain && 'feeToken' in chain ? chain.feeToken : undefined)
-          if (typeof value === 'bigint') return TokenId.toAddress(value)
-          if (typeof value === 'string' && Address.validate(value)) return value
-          return undefined
-        })()
+        const feeToken = feeTokenOf(payment.chainId)
         // Outside a page, a client whose retry takes a spent limit, as with the `device` plugin,
         // raises the limit for an amount above it. A fixed session never retries.
         const retries = page
@@ -2967,7 +2995,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             relayed: !page || !!routing(payment.chainId).relay,
           },
         )
-        if (!transfer || !chain) return undefined
+        if (!transfer || !chainOf(payment.chainId)) return undefined
         return send(payment, transfer)
       })
 
