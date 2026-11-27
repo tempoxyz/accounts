@@ -192,4 +192,33 @@ describe('authorize', () => {
       ]
     `)
   })
+
+  test('sends no chain_id without an access key on an instance with account: false, which reads no Tempo Account', async () => {
+    const bodies: unknown[] = []
+    const fetch: typeof globalThis.fetch = (input, init) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return globalThis.fetch(input, init)
+    }
+    // Nothing listens at the URL, so the authorization rejects with `server_error` after its body
+    // is recorded.
+    const auth = Accounts.from({
+      account: false,
+      clientId: 'client_test',
+      fetch,
+      redirectUri: 'https://app.example.com/callback',
+      url: 'http://127.0.0.1:9',
+    })
+
+    await Actions.authorize(auth, { check: false }).catch(() => undefined)
+
+    expect(bodies).toMatchInlineSnapshot(`
+      [
+        {
+          "client_id": "client_test",
+          "redirect_uri": "https://app.example.com/callback",
+          "scope": "openid email offline_access",
+        },
+      ]
+    `)
+  })
 })

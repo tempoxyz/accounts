@@ -114,8 +114,9 @@ export async function authorize<
         account: options.account,
         challenge: options.challenge,
       }),
-      // Without an access key, the chain names where the response lists the user's accounts.
-      ...(resolved ? {} : { chain_id: auth.chainId }),
+      // Without an access key, the chain names where the response lists the user's accounts. An
+      // instance with `account: false` reads none, so the request asks for none.
+      ...(resolved || auth.account === false ? {} : { chain_id: auth.chainId }),
     },
     passkey: options.passkey ?? false,
   })
@@ -227,7 +228,8 @@ export declare namespace authorize {
         : Authorization<chainId>) & {
         /**
          * The user's Tempo Account that the authorization acts for, as Tempo ID lists it on the
-         * access key's chain, else on the instance's chain. Absent where Tempo ID lists no accounts.
+         * access key's chain, else on the instance's chain. Absent where Tempo ID lists no accounts,
+         * and without an access key on an instance with `account: false`, which reads none.
          * Without an access key, `undefined` for a user whom Tempo ID lists with no account.
          */
         account?: TempoAccount.TempoAccount | undefined
