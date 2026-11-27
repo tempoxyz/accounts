@@ -63,7 +63,7 @@ catalog:
   testcontainers: 12.2.1
   tsx: 4.23.15
   typescript: 7.0.2
-  viem: 2.58.6
+  viem: 2.58.8
   # Vite+ plugins and `vp dev` need Vite+'s core in place of Vite, as Void's Vite+ template sets.
   vite: npm:@voidzero-dev/vite-plus-core@1.3.0
   vite-plus: 1.6.0
@@ -90,10 +90,10 @@ minimumReleaseAgeExclude:
   - mppx@0.19.0
   # ox 0.14.67 splits the WebAuthn data of a signature envelope in linear time (wevm/ox#677).
   - ox@0.14.67
-  # Viem 2.58.6 parses a SIWE message in linear time, and rejects a line break in its statement
-  # (wevm/viem#5609). It resolves ox 0.14.67, so its Tempo `verifyHash` parses a WebAuthn envelope
-  # in linear time and refuses one above 2048 bytes.
-  - viem@2.58.6
+  # Viem 2.58.8 approves a stored configurable account operation by its hash alone, with the owner as
+  # `account` (wevm/viem#5675). It keeps 2.58.6's linear-time SIWE parse (wevm/viem#5609) and its
+  # ox 0.14.67 WebAuthn envelope parse.
+  - viem@2.58.8
 
 overrides:
   # The examples name published ranges, so a copy installs as it is. In the workspace, each resolves to the
