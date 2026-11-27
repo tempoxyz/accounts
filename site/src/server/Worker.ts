@@ -39,20 +39,14 @@ const routes: Record<string, Route> = {
   [Subscriptions.path]: Subscriptions.fetch,
 }
 
-/** The site's production host, which Vercel names in `x-forwarded-host` when it proxies to workers.dev. */
-const host = 'accounts.tempo.xyz'
-
 export default {
   fetch(request) {
+    // Each route derives the client ID and redirect URI from `request.url`, which names the page's
+    // origin, since the site's custom domain reaches the Worker directly.
     const url = new URL(request.url)
     const route = routes[url.pathname.split('/', 3).join('/')]
     if (!route) return Response.json({ error: 'not_found' }, { status: 404 })
 
-    // Each route derives the client ID and redirect URI from `request.url`, so a proxied request
-    // names the page's origin, not the Worker's workers.dev host. Only the production origin is
-    // accepted, so a header names no other app.
-    if (request.headers.get('x-forwarded-host') !== host) return route(request)
-    const proxied = new URL(`${url.pathname}${url.search}`, `https://${host}`)
-    return route(new Request(proxied, request))
+    return route(request)
   },
 } satisfies ExportedHandler
