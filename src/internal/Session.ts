@@ -3105,7 +3105,9 @@ export namespace machines {
         assertEvent(args.event, 'set')
         const { context, event } = args
         return {
-          adopted: false,
+          // A change of the adopted session, such as its refresh or its account read, keeps the mark.
+          // A sign-in or a sign-out of the instance itself clears it.
+          adopted: !!event.session && !event.signIn && context.adopted,
           loaded: true,
           // A new session replaces the expired one that an authorization renews. Without one, the
           // next authorization renews it, also after `load` emptied it outside an authorization.
@@ -3309,8 +3311,9 @@ export namespace machines {
     export type Context = {
       /**
        * Whether the last change of the session came from another context, such as another tab's
-       * sign-in, which the instance adopted without a write. `false` after a change of the instance
-       * itself, and at the start.
+       * sign-in, which the instance adopted without a write. A later change of that session, such as
+       * its refresh, keeps it. `false` after a sign-in or a sign-out of the instance itself, and at
+       * the start.
        */
       adopted: boolean
       /** The number of authorizations in progress, which hold the status at `pending` or `reauthorizing`. */

@@ -946,33 +946,7 @@ describe('tempoId', () => {
   })
 
   test("keeps another wallet's connection when another tab's sign-in saves a session to the shared store", async () => {
-    const store = Store.memory()
-    // The page's `localStorage`, which wagmi's storage in each tab of the origin reads and writes.
-    const local = new Map<string, string>()
-    const create = () =>
-      createConfig({
-        chains: [tempo],
-        connectors: [
-          tempoId({
-            clientId: 'https://app.example.com',
-            plugins: [Test.dialog()],
-            store,
-            url: 'http://127.0.0.1:9',
-          }),
-          // wagmi's own connector of a wallet outside the browser, since `injected` needs a window.
-          mock({ accounts: ['0x00000000000000000000000000000000000000aa'] }),
-        ],
-        storage: createStorage({
-          storage: {
-            getItem: (name) => local.get(name) ?? null,
-            removeItem: (name) => void local.delete(name),
-            setItem: (name, value) => void local.set(name, value),
-          },
-        }),
-        transports: {
-          [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }),
-        },
-      })
+    const create = tabs()
     const tab = create()
     const other = create()
     await Promise.all([reconnect(tab), reconnect(other)])
@@ -986,11 +960,7 @@ describe('tempoId', () => {
 
     // The first tab connects with a sign-in, so wagmi's storage names its connection. The sign-in
     // saves the session that the other tab's instance receives.
-    await connect(tab, {
-      connector: tab.connectors[0]!,
-      signIn: (instance: { dialog: { signIn: () => Promise<unknown> } }) =>
-        instance.dialog.signIn(),
-    } as never)
+    await connect(tab, { connector: tab.connectors[0]!, signIn } as never)
     await expect.poll(() => changes.length).toBe(1)
     // The connector reads wagmi's storage once before it connects.
     await other.storage!.getItem('store')
@@ -1004,6 +974,32 @@ describe('tempoId', () => {
         "tab": "tempoId",
       }
     `)
+  })
+
+  test("connects a tab whose Tempo ID connection another tab's sign-out ended again at that tab's next sign-in", async () => {
+    const create = tabs()
+    const tab = create()
+    const other = create()
+    await Promise.all([reconnect(tab), reconnect(other)])
+    // The other tab connects Tempo ID with a sign-in of its own.
+    await connect(other, { connector: other.connectors[0]!, signIn } as never)
+    const instance = (await tab.connectors[0]!.getInstance()) as unknown as {
+      dialog: { signIn: () => Promise<unknown> }
+      signOut: () => Promise<void>
+    }
+
+    // The first tab signs out, and signs in again.
+    await expect
+      .poll(async () => (await tab.connectors[0]!.getAccounts()).length)
+      .toBe(1)
+    await instance.signOut()
+    await expect.poll(() => getConnection(other).status).toBe('disconnected')
+    await instance.dialog.signIn()
+
+    await expect.poll(() => getConnection(other).status).toBe('connected')
+    expect(getConnection(other).connector?.id).toMatchInlineSnapshot(
+      `"tempoId"`,
+    )
   })
 
   test("disconnects at `reconnect` once another process's sign-out empties the shared `Store.file`", async () => {
@@ -1848,12 +1844,13 @@ describe('machines.disconnect', () => {
       }),
     ).start()
 
-    actor.send({ connected: true, type: 'session.expire' })
-    actor.send({ connected: true, type: 'session.expire' })
+    actor.send({ type: 'connection.start' })
+    actor.send({ type: 'session.expire' })
+    actor.send({ type: 'session.expire' })
     const expired = actor.getSnapshot()
     actor.send({ type: 'session.change' })
     const changed = actor.getSnapshot()
-    actor.send({ connected: false, type: 'session.expire' })
+    actor.send({ type: 'session.expire' })
 
     expect(expired.value).toMatchInlineSnapshot(`"expired"`)
     expect(machines.expired(expired)).toMatchInlineSnapshot(`true`)
@@ -1870,19 +1867,59 @@ describe('machines.disconnect', () => {
   test('resumes the connection that an expiry ended, also after a read empties the expired session, until a change of the session', () => {
     const [initial] = initialTransition(machines.disconnect)
 
-    const expired = step(initial, { connected: true, type: 'session.expire' })
+    const connected = step(initial, { type: 'connection.start' })
+    const expired = step(connected, { type: 'session.expire' })
     const lapsed = step(expired, { type: 'session.clear' })
     const changed = step(lapsed, { type: 'session.change' })
 
     expect(lapsed.value).toMatchInlineSnapshot(`"lapsed"`)
-    expect([expired, lapsed, changed].map(machines.resumes))
+    expect([connected, expired, lapsed, changed].map(machines.resumes))
       .toMatchInlineSnapshot(`
-        [
-          true,
-          true,
-          false,
-        ]
-      `)
+      [
+        false,
+        true,
+        true,
+        false,
+      ]
+    `)
+  })
+
+  test('resumes a connection that the end of the session outside `disconnect` ended, and no session that wagmi never connected here', () => {
+    const [initial] = initialTransition(machines.disconnect)
+
+    const ended = step(
+      initial,
+      { type: 'connection.start' },
+      { type: 'session.end' },
+    )
+    const unconnected = step(
+      initial,
+      { type: 'session.end' },
+      { type: 'session.expire' },
+    )
+    const disconnected = step(
+      initial,
+      { type: 'connection.start' },
+      { type: 'signOut.start' },
+      { type: 'signOut.finish' },
+    )
+
+    expect([ended, unconnected, disconnected].map((snapshot) => snapshot.value))
+      .toMatchInlineSnapshot(`
+      [
+        "lapsed",
+        "idle",
+        "idle",
+      ]
+    `)
+    expect([ended, unconnected, disconnected].map(machines.resumes))
+      .toMatchInlineSnapshot(`
+      [
+        true,
+        false,
+        false,
+      ]
+    `)
   })
 
   test('reaches every state along its shortest paths, handles every event type, and counts sign-outs only while it signs out', () => {
@@ -1902,6 +1939,7 @@ describe('machines.disconnect', () => {
 
     expect([...reached].sort()).toMatchInlineSnapshot(`
       [
+        "connected",
         "expired",
         "held",
         "idle",
@@ -1938,13 +1976,12 @@ describe('machines.disconnect', () => {
       snapshot: machines.disconnect.Snapshot,
     ) => readonly machines.disconnect.Event[]
   } = {
+    'connection.start': () => [{ type: 'connection.start' }],
     'session.change': () => [{ type: 'session.change' }],
     'session.clear': (snapshot) =>
       machines.expired(snapshot) ? [{ type: 'session.clear' }] : [],
-    'session.expire': () => [
-      { connected: false, type: 'session.expire' },
-      { connected: true, type: 'session.expire' },
-    ],
+    'session.end': () => [{ type: 'session.end' }],
+    'session.expire': () => [{ type: 'session.expire' }],
     'signOut.fail': (snapshot) =>
       snapshot.context.runs > 0 ? [{ type: 'signOut.fail' }] : [],
     'signOut.finish': (snapshot) =>
@@ -1956,8 +1993,10 @@ describe('machines.disconnect', () => {
   /** The traversal of the machine's graph, keyed by the state. */
   const traversal = {
     events: (snapshot: machines.disconnect.Snapshot) => [
+      ...events['connection.start'](snapshot),
       ...events['session.change'](snapshot),
       ...events['session.clear'](snapshot),
+      ...events['session.end'](snapshot),
       ...events['session.expire'](snapshot),
       ...events['signOut.fail'](snapshot),
       ...events['signOut.finish'](snapshot),
@@ -1967,6 +2006,43 @@ describe('machines.disconnect', () => {
       JSON.stringify(snapshot.value),
   }
 })
+
+/**
+ * Returns a function that creates the wagmi config of one tab of a page. Each config holds the
+ * `tempoId` connector, which signs in through `accounts/test` with no request, and wagmi's
+ * `mock` connector as another wallet, since `injected` needs a window. The configs share one
+ * `Store.memory()` and one wagmi storage, as the tabs of a page share IndexedDB and `localStorage`.
+ */
+function tabs() {
+  const store = Store.memory()
+  const local = new Map<string, string>()
+  return () =>
+    createConfig({
+      chains: [tempo],
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          plugins: [Test.dialog()],
+          store,
+          url: 'http://127.0.0.1:9',
+        }),
+        mock({ accounts: ['0x00000000000000000000000000000000000000aa'] }),
+      ],
+      storage: createStorage({
+        storage: {
+          getItem: (name) => local.get(name) ?? null,
+          removeItem: (name) => void local.delete(name),
+          setItem: (name, value) => void local.set(name, value),
+        },
+      }),
+      transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
+    })
+}
+
+/** Signs in through the `dialog` of `accounts/test`, as the `signIn` of `connect`. */
+function signIn(instance: { dialog: { signIn: () => Promise<unknown> } }) {
+  return instance.dialog.signIn()
+}
 
 /**
  * Returns a store that holds a session of `user_1` with an access key on Tempo mainnet, and
