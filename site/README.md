@@ -27,11 +27,11 @@ Through a proxy that names another host, the dev server responds with an error. 
 
 `.github/workflows/site.yml` deploys the Worker `accounts-site` to the production Cloudflare account. No job holds a long-lived Cloudflare token.
 
-| Event           | Deployment                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------ |
-| Push to `main`  | The Worker, at its workers.dev URL, which `accounts.tempo.xyz` proxies, through the broker |
-| Pull request    | A build of the site and a bundle of the Worker, which deploy nothing                       |
-| Manual dispatch | The Worker, from `main` only, as a push deploys it                                         |
+| Event           | Deployment                                                                |
+| --------------- | ------------------------------------------------------------------------- |
+| Push to `main`  | The Worker, at its custom domain `accounts.tempo.xyz`, through the broker |
+| Pull request    | A build of the site and a bundle of the Worker, which deploy nothing      |
+| Manual dispatch | The Worker, from `main` only, as a push deploys it                        |
 
 A push to `main` deploys through the [Cloudflare Deploy Broker](https://github.com/tempoxyz/cloudflare-deploy-broker), so no job of the push holds a Cloudflare token. The `attest` job runs the broker's trusted build workflow, which runs `pnpm build`, bundles the Worker, and attests the Worker, `wrangler.json`, and the files of `dist/public`. The `deploy` job sends them to the broker as the deployment `accounts-site`. The broker uploads and promotes the version, checks Cloudflare's readback, and keeps the Worker's secrets. The job then requests `accounts.tempo.xyz`.
 
@@ -45,7 +45,11 @@ Only `main` deploys the Worker. No command deploys it from a checkout.
 
 `DURABLE_STORE` binds the `DurableStore` Durable Object of `src/server/Store.ts`, one object for each key, for the values that a demo takes once, such as a challenge. Workers KV has no atomic read and delete. `exports` of `wrangler.json` declares the class with SQLite storage, since the broker refuses `migrations`.
 
-Until `wrangler.json` names a route, Vercel serves `accounts.tempo.xyz`. `vercel.json` builds only `proxy.txt`, since Vercel refuses an empty output, and proxies each other path to the Worker's workers.dev URL. Its `X-Robots-Tag` header replaces the `noindex` that `public/_headers` sets for workers.dev. The Worker reads a request with `x-forwarded-host: accounts.tempo.xyz` as one to that origin, so the demos' client ID is the page's.
+`routes` of `wrangler.json` names `accounts.tempo.xyz` as the custom domain of the Worker. The broker verifies the domain on each deploy. It attaches the domain only to a hostname that holds no other DNS record. `public/_headers` sets `Strict-Transport-Security` on the domain, since the `tempo.xyz` zone sets none.
+
+Vercel's project `accounts-site` proxies each path to the workers.dev URL, for clients that still resolve the hostname to Vercel. `vercel.json` builds only `proxy.txt`, since Vercel refuses an empty output. Its `X-Robots-Tag` header replaces the `noindex` that `public/_headers` sets for workers.dev.
+
+Without `vercel.json`, the Git integration of the project builds the site on Vercel, so the file stays while the project exists. The Worker reads a request with `x-forwarded-host: accounts.tempo.xyz` as one to that origin, so the demos' client ID is the page's.
 
 `renderStrategy: 'full-static'` in `vocs.config.ts` writes each page as a file. A static build has no server for the redirects of `vocs.config.ts`, from `/docs` and the former path of "Getting started" to `/`, so `public/_redirects` repeats them for Cloudflare. It also serves the Markdown of a page at the page's path with `.md`.
 
