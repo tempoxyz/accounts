@@ -952,16 +952,6 @@ export function mpp(options: mpp.Options = {}) {
           throw new Accounts.SignedOutError()
         const { clientId, maxAmount, maxDeposit, mode } = settings
         const accessKey = AccessKey.from(current.accessKey)
-        // Once the node refused a charge of the access key as revoked, a later charge sends no
-        // request, unless a retry signs in for a new access key, such as on a page.
-        const revocation = revocations.get(revocationName(accessKey))
-        if (revocation) {
-          const enabled = overrides.session
-            ? false
-            : retries(overrides, Number(accessKey.chainId))
-          if (enabled === false || enabled.accessKey === false)
-            throw new Accounts.AccessKeyRequiredError({ cause: revocation })
-        }
         // The store read of the access key's registration runs beside the request, and the access
         // key's fill waits for it. A connection lists every access key that the API holds in
         // `accessKeys`, so only the mark of its `accessKey` is read.
@@ -1006,6 +996,17 @@ export function mpp(options: mpp.Options = {}) {
           signal?: AbortSignal | undefined
         }) => {
           if (AccessKey.expired(accessKey)) throw new Accounts.SignedOutError()
+          // Once the node refused a charge of the access key as revoked, a later challenge that only
+          // the access key pays signs nothing and reads no chain. A payment page, a subscription's
+          // dialog, or a retry that signs in for a new access key still pays it.
+          const revocation = revocations.get(revocationName(accessKey))
+          if (revocation && !remote && !subscriber) {
+            const enabled = overrides.session
+              ? false
+              : retries(overrides, Number(accessKey.chainId))
+            if (enabled === false || enabled.accessKey === false)
+              throw new Accounts.AccessKeyRequiredError({ cause: revocation })
+          }
           if (reads)
             await Retry.abortable(
               context.session.reload().catch(() => undefined),
@@ -1751,8 +1752,9 @@ export declare namespace mpp {
      *   accounts.
      * @throws {Accounts.AccessKeyRequiredError} For a session without an access key. For a charge
      *   that the chain refuses, since it holds the access key revoked, with the chain's refusal as
-     *   `cause`, after a retry of the `accessKey` kind, if one runs. If no such retry runs, a later
-     *   charge of the same access key throws it before any request. In a browser,
+     *   `cause`, after a retry of the `accessKey` kind, if one runs. If no such retry, payment page,
+     *   or dialog pays it, a later charge of the same access key throws it at its challenge, before
+     *   the access key signs or any read of the chain. In a browser,
      *   Tempo ID's payment page pays a charge of such an instance's session, if one transfer in
      *   `push` mode pays the charge. The error is then thrown only once a challenge needs an access
      *   key.
