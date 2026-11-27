@@ -269,8 +269,14 @@ export async function signIn<
       // The registration received the generated access key by its account alone, so the access key
       // takes back its material, which the session stores to sign.
       accessKey: { ...authorization.accessKey, ...prepared.accessKey.material },
-      account: undefined,
-      accounts: [],
+      // The registration's response lists the new passkey's account, unless the sign-in reads no
+      // account, or Tempo ID left the list out.
+      ...((options.account ?? auth.account) === false
+        ? { account: undefined, accounts: [] }
+        : {
+            account: registered.account,
+            accounts: registered.accounts ?? [],
+          }),
       ...(registered.challengeError
         ? { challengeError: registered.challengeError }
         : {}),

@@ -329,7 +329,11 @@ export function passkey(options: passkey.Options = {}) {
             accessKey,
             ...ceremonies,
           }).catch(change.fail)
-          const session = SignIn.toSession(result.authorization)
+          // The registration's response lists the new passkey's account, so the session holds it.
+          const session = SignIn.toSession({
+            ...result.authorization,
+            ...(result.account ? { account: result.account } : {}),
+          })
           await change.commit(session)
           // The registration and its access key stand, so the session holds them, and the call
           // reports the challenge's failure on its own.

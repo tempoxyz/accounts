@@ -429,6 +429,7 @@ export async function register<
         address: `0x${string}`
         authorization?: Api.Headless | undefined
         id: string
+        tempo?: readonly Api.TempoAccountResponse[] | undefined
       }>(response)
     } catch (error) {
       // Tempo ID marks a failure after the store, such as `config_conflict` from the owner change, so
@@ -490,8 +491,26 @@ export async function register<
             userId: authorization.user.id,
           },
         )
+  // The response lists the user's accounts, the new passkey's first, so the page reads none. A Tempo
+  // ID that predates the list leaves it out. An account that the client cannot rebuild stays out.
+  const listed = (() => {
+    const read = (registered.tempo ?? []).map((entry) => {
+      try {
+        return Api.tempoAccount(entry, { getFn })
+      } catch {
+        return undefined
+      }
+    })
+    const [first] = read
+    if (!first) return {}
+    return {
+      account: first,
+      accounts: read.filter((entry) => entry !== undefined),
+    }
+  })()
   return {
     ...result,
+    ...listed,
     authorization: {
       ...authorization,
       ...('challengeError' in challenged ? {} : challenged),
@@ -659,6 +678,16 @@ export declare namespace register {
     id: string
   } & (hasAccessKey extends true
     ? {
+        /**
+         * The new passkey's Tempo Account, as `Actions.account.get` returns it. Absent where Tempo
+         * ID left the accounts out. Then read it with `Actions.account.get`.
+         */
+        account?: TempoAccount | undefined
+        /**
+         * Every Tempo Account of the user in the app's realms: `account` first. Absent where
+         * `account` is absent.
+         */
+        accounts?: readonly TempoAccount[] | undefined
         /**
          * The authorization of `accessKey`, whose access key acts for the new passkey's account, and
          * whether that account can upgrade.
