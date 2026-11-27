@@ -3,7 +3,8 @@
  * Account signs in the dialog, and that the backend's `siwe` plugin issues and verifies. The page's
  * own app, a public one, requests each signature. The backend holds the session. A second instance
  * names the backend's routes with the `siwe` plugin's `auth`, so its dialog shows at the click, and
- * the page requests the message while the frame loads, for a sign-in and for a payment.
+ * the page requests the message while the frame loads, for a sign-in and for a payment. It offers
+ * a guest, whose key pair signs the message of a sign-in.
  * @module
  */
 import { Accounts } from 'accounts'
@@ -21,6 +22,7 @@ export function start() {
   const plugin = Accounts.create({
     ...App.options,
     clientId: import.meta.env.VITE_CLIENT_ID_PAGE,
+    guest: true,
     plugins: [dialog(), siwe({ auth: '/api/auth/siwe' })],
   })
 
@@ -34,6 +36,8 @@ export function start() {
         })
         return App.post('/app/approval/approve', signed)
       },
+      // The address of the plugin's guest account, or `null` before a guest session.
+      'Guest account': async () => (await plugin.guest.get()) ?? null,
       Me: () => App.call('/app/me'),
       // A payment without `account` signs the user in to the backend beside it.
       'Pay with the plugin': () =>

@@ -152,20 +152,37 @@ export type AccountOption<accessKey> =
  * Commits a new guest session of the instance with `options.change`, and returns it. The guest
  * account's key pair loads from the store, or the call creates and saves one. The call sends no
  * request. A failure, or an abort of `options.signal` before the commit, rejects through the change.
+ *
+ * With `options.challenge`, a plugin's challenge, the guest key pair signs its message as the guest
+ * account, as `signMessage` does. The call then settles the signature before the commit, and
+ * returns the result as `auth`. A refused verification commits no session.
  */
 export async function guest(
   context: Pick<Plugin.Context, 'config'>,
   options: guest.Options,
-): Promise<Session.GuestSession> {
-  const { change } = options
+): Promise<guest.ReturnType> {
+  const { challenge, change } = options
   try {
     // The guest module loads at the first guest session, so an instance without one bundles none of
     // its signing.
     const Guest = await import('../actions/guest.js')
     const session = await Guest.session(context.config)
+    const auth = challenge
+      ? await (async () => {
+          const message = await challenge.message()
+          const signature = await Guest.account(context.config, {
+            session,
+          }).signMessage({ message })
+          return await challenge.settle({
+            address: session.address,
+            message,
+            signature,
+          })
+        })()
+      : undefined
     throwIfAborted(options.signal)
     await change.commit(session)
-    return session
+    return auth ? { ...session, auth } : session
   } catch (error) {
     return await change.fail(error)
   }
@@ -173,10 +190,28 @@ export async function guest(
 
 export declare namespace guest {
   type Options = {
+    /**
+     * A plugin's challenge, such as the `siwe` plugin's, which the guest key pair signs. Its
+     * `message` returns the message to sign. Absent, the guest signs nothing.
+     */
+    challenge?:
+      | {
+          /** Returns the message to sign, such as one that the sign-in received already. */
+          message: () => Promise<string>
+          /** Verifies the signature, as the plugin's `settle` does. */
+          settle: Plugin.Challenge['settle']
+        }
+      | undefined
     /** The sign-in's change, which the guest session commits. */
     change: Pick<InternalSession.Change, 'commit' | 'fail'>
     /** The sign-in's signal, whose abort before the commit rejects with its reason. */
     signal?: AbortSignal | undefined
+  }
+
+  /** The guest session, with the verification's result as `auth` for a challenge. */
+  type ReturnType = Session.GuestSession & {
+    /** The verify route's JSON object, such as `{ token }`. Absent without a challenge. */
+    auth?: Plugin.Challenge.Result | undefined
   }
 }
 

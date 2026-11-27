@@ -1,8 +1,9 @@
 /**
  * Tests the SIWE page of the backend test app: a sign-in with a message that the backend's `siwe`
  * plugin issues, that the Tempo Account signs in the dialog, and that the backend verifies. Also
- * tests the signed messages that the backend refuses, and an approval of a change that the session's
- * account signs. The node verifies each signature too.
+ * tests the signed messages that the backend refuses, an approval of a change that the session's
+ * account signs, and a guest whose key pair signs the `siwe` plugin's message. The node verifies
+ * each signature too.
  * @module
  */
 import type { Page, Request } from '@playwright/test'
@@ -538,6 +539,48 @@ test.describe('siwe', () => {
           },
         })
         await capture('signed in')
+      })
+    })
+
+    test('signs a guest in: Continue as guest signs the message with the guest key pair, and posts the signature to the verify route', async ({
+      capture,
+      page,
+    }) => {
+      await page.goto(url)
+      const verified = posted(page, { url: authUrl })
+
+      await test.step('offers Continue as guest beside the sign-in of the plugin’s challenge', async () => {
+        await Playwright.start(page, { name: 'Sign in with the plugin' })
+        await expect(Playwright.prompt(page)).toBeVisible()
+        const dialog = await Playwright.dialog(page)
+        await capture('sign-in with Continue as guest')
+        await Playwright.guest(dialog)
+      })
+
+      await test.step('returns the verify route’s session of the guest account, whose P256 key signed the message', async () => {
+        const signedIn = await Playwright.outcome(page, {
+          name: 'Sign in with the plugin',
+        })
+        const { address, message, signature } = signed(await verified)
+        const guest = await Playwright.run(page, { name: 'Guest account' })
+
+        expect(signedIn).toEqual({
+          state: 'fulfilled',
+          value: { auth: { session: { account: address, method: 'siwe' } } },
+        })
+        expect(guest).toEqual({ state: 'fulfilled', value: address })
+        expect(message).toContain(statement)
+        expect(
+          await Verify.message({ address: address!, message, signature }),
+        ).toBe(true)
+        expect(await Playwright.run(page, { name: 'Session' })).toEqual({
+          state: 'fulfilled',
+          value: {
+            body: { session: { account: address, method: 'siwe' } },
+            status: 200,
+          },
+        })
+        await capture('signed in as a guest')
       })
     })
 
