@@ -11,6 +11,7 @@ import * as Actions from './Actions.js'
 import { RequestError, SupersededError } from '../Accounts.js'
 import * as AccessKey from './AccessKey.js'
 import * as Api from './Api.js'
+import * as Callback from './Callback.js'
 import * as ClientId from './ClientId.js'
 import * as Permissions from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
@@ -663,7 +664,7 @@ export async function getSession(
       if (
         Api.page() === undefined &&
         (context.config.redirectUri === undefined ||
-          new URL(context.config.redirectUri).origin === 'null')
+          Callback.native(context.config.redirectUri))
       )
         return undefined
       const authorized = await run(context, {
