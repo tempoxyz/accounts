@@ -16,6 +16,7 @@ import {
   parseUnits,
   type Transport,
 } from 'viem'
+import { getTransaction } from 'viem/actions'
 import {
   type Account,
   Actions,
@@ -83,6 +84,22 @@ export class AccessKeyExpiredError extends Error {
   constructor() {
     super(
       'The access key expired, so the transaction did not send. Sign in again for a new access key, then send it again.',
+    )
+  }
+}
+
+/**
+ * No passkey of the user owns the configurable account of a coordinated transaction, so the
+ * transaction did not send. A call that names no `owner`, such as an approval by `hash` alone,
+ * throws it when the user's Tempo Account holds no passkey owner, or none that the configuration
+ * names. Match it by `name`.
+ */
+export class OwnerRequiredError extends Error {
+  override readonly name = 'Plugins.viem.OwnerRequiredError'
+
+  constructor() {
+    super(
+      "No passkey of the user owns the account. Pass the owner that approves the transaction as `owner`, or sign in as one of the account's owners.",
     )
   }
 }
@@ -1308,6 +1325,88 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       }
 
       /**
+       * Returns the user's passkey that approves a coordinated transaction of a configurable account
+       * on `chainId`: the passkey owner of the session's Tempo Account that the account's
+       * configuration names. The configuration is the account's, else the stored
+       * operation's of `hash`, else the chain's. The session's account serves when it belongs to the
+       * chain, else a read of Tempo ID returns it.
+       *
+       * @throws {OwnerRequiredError} When no passkey of the user owns the account.
+       */
+      async function owner(
+        client: Client,
+        options: {
+          account: Account.ConfigurableAccount | undefined
+          chainId: number
+          hash: `0x${string}` | undefined
+        },
+      ) {
+        const { account, chainId, hash } = options
+        const session = context.session.get()
+        if (!session) throw new SignedOutError()
+        const owners = await (async () => {
+          // The session's account belongs to the chain of its access key, or without one to the
+          // instance's chain, as for the owner's signatures.
+          const held = session.accessKey
+            ? Number(session.accessKey.chainId) === chainId
+            : chainId === config.chainId
+          if (held && session.account) return session.account.owners
+          const token = await accessToken(session)
+          const read = await AccountActions.get(config, {
+            ...(token ? { accessToken: token } : {}),
+            chain: chainId,
+            getFn: config.getFn,
+          })
+          return read?.owners ?? []
+        })()
+        if (owners.length === 0) throw new OwnerRequiredError()
+
+        // Even one passkey reads the configuration, so a non-owner throws before any ceremony.
+        const configuration = await (async () => {
+          if (account?.config) return account.config
+          if (hash) {
+            // A pending operation reads as a transaction that holds it, on a Tempo chain.
+            const transaction = (await getTransaction(client, { hash })) as {
+              operation?: { config: Account.ConfigurableAccount['config'] }
+            }
+            return transaction.operation?.config
+          }
+          if (account)
+            return await Actions.accounts.getConfig(client, {
+              address: account.address,
+            })
+          return undefined
+        })()
+        const found = owners.find((entry) =>
+          configuration?.owners.some((item) =>
+            Address.isEqual(item.owner, entry.address),
+          ),
+        )
+        if (!found) throw new OwnerRequiredError()
+        return found
+      }
+
+      /**
+       * Returns whether a transaction of the instance's session coordinates owner approvals without
+       * an owner, so the user's passkey approves: an approval by `hash` alone, or a transaction or an
+       * approval of a configurable account that holds no local owner.
+       */
+      function coordinated(parameters: Coordinated) {
+        const { account, hash, owner } = parameters
+        if (owner) return false
+        const configurable =
+          !!account &&
+          typeof account === 'object' &&
+          account.source === 'configurable'
+        if (hash && account === undefined) return true
+        // A configurable account with a local owner approves as Viem does, by `hash` or not.
+        return (
+          configurable &&
+          (account as Account.ConfigurableAccount).owners.length === 0
+        )
+      }
+
+      /**
        * Returns the access token of the instance's session for `accessKey` when the session holds
        * it, on any chain, since Tempo ID revokes an app's own access key with that token for any app.
        * Returns `undefined` for another access key, or without a session.
@@ -2432,7 +2531,74 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         const remote = (parameters: Token.transfer.Parameters) =>
           !parameters.account &&
           Token.ownerSends(context.session.get(), { chainId })
+        /**
+         * Returns `parameters` with the user's passkey as the approving owner. The stored operation
+         * names its account, so an approval by `hash` alone signs with the passkey as `account`.
+         */
+        const approve = async (parameters: Coordinated) => {
+          const { account, hash } = parameters
+          const signer = await owner(client, {
+            account:
+              account && typeof account === 'object'
+                ? (account as Account.ConfigurableAccount)
+                : undefined,
+            chainId,
+            hash,
+          })
+          return account === undefined
+            ? { ...parameters, account: signer }
+            : { ...parameters, owner: signer }
+        }
         const extended = client.extend((client) => ({
+          // A fixed session signs on a backend, where no passkey of the user signs.
+          ...(session
+            ? {}
+            : {
+                /**
+                 * Viem's `sendTransaction` and `sendTransactionSync`, where the user's passkey
+                 * approves a coordinated transaction of a configurable account (TIP-1107) that
+                 * names no `owner`: an approval by `hash` alone, or a transaction of an account
+                 * that holds no local owner, such as `Account.fromConfig(address)`. The passkey
+                 * owner of the session's Tempo Account that the account's configuration names
+                 * signs. Coordination needs the plugin's `relay`. Every other call
+                 * is Viem's own, unchanged.
+                 *
+                 * @throws {OwnerRequiredError} When no passkey of the user owns the account.
+                 *
+                 * @example
+                 * ```ts
+                 * import { Account } from 'viem/tempo'
+                 * import { accounts } from './tempo.config'
+                 *
+                 * const account = Account.fromConfig(multisig)
+                 * const pending = await accounts.viem.sendTransactionSync({ account, calls })
+                 * await accounts.viem.sendTransactionSync({ hash: pending.transactionHash })
+                 * ```
+                 */
+                sendTransaction: ((parameters: Coordinated) =>
+                  coordinated(parameters)
+                    ? approve(parameters).then((approval) =>
+                        client.sendTransaction(approval as never),
+                      )
+                    : client.sendTransaction(
+                        parameters as never,
+                      )) as typeof client.sendTransaction,
+                /**
+                 * Viem's `sendTransactionSync`, where the user's passkey approves a coordinated
+                 * transaction of a configurable account that names no `owner`, as
+                 * `sendTransaction` does. The receipt's status is `pending` until the owners reach the threshold.
+                 *
+                 * @throws {OwnerRequiredError} When no passkey of the user owns the account.
+                 */
+                sendTransactionSync: ((parameters: Coordinated) =>
+                  coordinated(parameters)
+                    ? approve(parameters).then((approval) =>
+                        client.sendTransactionSync(approval as never),
+                      )
+                    : client.sendTransactionSync(
+                        parameters as never,
+                      )) as typeof client.sendTransactionSync,
+              }),
           ...(page && !session
             ? {
                 token: {
@@ -3747,6 +3913,21 @@ declare namespace lapsed {
     /** The chain of the client that signs. */
     chainId: number
   }
+}
+
+/** The fields of a transaction's parameters that decide who approves it as an owner. */
+type Coordinated = {
+  /** The sender, or absent for the client's account. */
+  account?:
+    | Account.Account
+    | Account.ConfigurableAccount
+    | `0x${string}`
+    | null
+    | undefined
+  /** The hash of a stored operation that the transaction approves. */
+  hash?: `0x${string}` | undefined
+  /** The owner that approves, which the call names itself. */
+  owner?: unknown
 }
 
 /** The members of a client that are its settings, not its actions, which the instance leaves out. */
