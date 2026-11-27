@@ -685,8 +685,9 @@ export declare namespace backend {
      * without the cookie. The instance calls it as `session.get(request)`, beside the form without
      * a request.
      * @throws {Accounts.RequestError} When a refresh of the cookie's session fails with a 4xx
-     *   status other than `invalid_grant`, which keeps the session. With status 0, when the key set
-     *   of the access token's verifier cannot be fetched.
+     *   status other than `invalid_grant`, or with `redirect_refused` and status 0 for a refused
+     *   redirect. Both keep the session. With status 0, when the key set of the access token's
+     *   verifier cannot be fetched.
      *
      * @example
      * ```ts
