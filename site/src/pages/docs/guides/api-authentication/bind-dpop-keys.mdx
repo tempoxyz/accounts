@@ -137,7 +137,16 @@ export default {
   async fetch(request: Request) {
     const token = await accounts.tokens.verifyAccessToken(request)
     if (!token)
-      return Response.json({ error: 'invalid_token' }, { status: 401 })
+      return Response.json(
+        { error: 'invalid_token' },
+        {
+          headers: {
+            'access-control-expose-headers': 'WWW-Authenticate',
+            'www-authenticate': 'Bearer error="invalid_token"',
+          },
+          status: 401,
+        },
+      )
 
     // [!code hl:start]
     if (token.proof) {
