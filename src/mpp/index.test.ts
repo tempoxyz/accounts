@@ -4,9 +4,11 @@
  * @module
  */
 import { PGlite } from '@electric-sql/pglite'
+import Esbuild from 'esbuild'
 import { Challenge } from 'mppx'
 import { Mppx, Store as MppxStore, tempo } from 'mppx/server'
 import { Methods } from 'mppx/tempo'
+import * as ChildProcess from 'node:child_process'
 import * as Fs from 'node:fs/promises'
 import * as Http from 'node:http'
 import * as Os from 'node:os'
@@ -16,14 +18,16 @@ import { KeyAuthorization, TempoAddress } from 'ox/tempo'
 import { createClient, http, type Transport } from 'viem'
 import { describe, expect, onTestFinished, test, vi } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
+import * as Guest from '../actions/guest.js'
 import * as AccessKey from '../internal/AccessKey.js'
+import * as DefaultAccounts from '../internal/DefaultAccounts.js'
 import * as Dpop from '../internal/Dpop.js'
 import * as Plugin from '../Plugin.js'
 import { backend } from '../plugins/backend.js'
 import { viem } from '../plugins/viem.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
-import { ChainError, mpp } from './index.js'
+import { ChainError, LimitError, MaxAmountRequiredError, mpp } from './index.js'
 
 describe('mpp', () => {
   test.each([
@@ -804,6 +808,378 @@ describe('mpp', () => {
     `)
   })
 
+  test("signs a charge with a guest session's key pair, and refuses it with Accounts.SignedOutError once a sign-out during the request ends the session", async () => {
+    const store = Store.memory()
+    const endpoint = server()
+    const accounts = instance({ fetch: endpoint.fetch, store })
+    await accounts.renew.commit(await Guest.session(accounts.config))
+    const gate = Promise.withResolvers<void>()
+    const held = server({ hold: gate.promise })
+    const later = instance({ fetch: held.fetch, store })
+    await later.session.get()
+
+    // The endpoint's chain never answers, so it refuses the signed credential.
+    await accounts.fetch('http://mpp.test/proof').catch(() => undefined)
+    const pending = later
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+    await expect.poll(() => held.credentials).toEqual([false])
+    await later.signOut()
+    gate.resolve()
+    const error = await pending
+
+    expect({
+      error,
+      held: held.credentials,
+      signed: endpoint.credentials,
+    }).toMatchInlineSnapshot(`
+      {
+        "error": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "held": [
+          false,
+        ],
+        "signed": [
+          false,
+          true,
+        ],
+      }
+    `)
+  })
+
+  test('refuses a charge of a guest session with Accounts.SignedOutError, and sends no credential, once a sign-out during the read of its key pair ends the session', async () => {
+    const memory = Store.memory()
+    let armed = false
+    const endpoint = server()
+    const accounts = instance({
+      fetch: endpoint.fetch,
+      // The signature's read of the key pair signs the instance out first, once armed.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (armed && key.startsWith('tempo-id:guest:')) {
+            armed = false
+            await accounts.signOut()
+          }
+          return await memory.getItem(key)
+        },
+      }),
+    })
+    await accounts.renew.commit(await Guest.session(accounts.config))
+    await accounts.session.get()
+    armed = true
+
+    const error = await accounts
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+
+    expect({
+      armed,
+      credentials: endpoint.credentials,
+      error,
+      session: await accounts.session.get(),
+    }).toMatchInlineSnapshot(`
+      {
+        "armed": false,
+        "credentials": [
+          false,
+        ],
+        "error": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "session": undefined,
+      }
+    `)
+  })
+
+  test('refuses a charge of a guest session without `maxAmount` with mpp.MaxAmountRequiredError, before its key pair signs', async () => {
+    const endpoint = server({ amount: '1' })
+    const accounts = instance({ fetch: endpoint.fetch, store: Store.memory() })
+    await accounts.renew.commit(await Guest.session(accounts.config))
+
+    const error = await accounts
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+    // With `maxAmount`, the charge passes the check, and fails at the chain, where nothing listens.
+    const capped = await accounts
+      .mpp({ maxAmount: '1' })
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+
+    expect({
+      capped: capped instanceof MaxAmountRequiredError,
+      credentials: endpoint.credentials,
+      error,
+    }).toMatchInlineSnapshot(`
+      {
+        "capped": false,
+        "credentials": [
+          false,
+          false,
+        ],
+        "error": [mpp.MaxAmountRequiredError: Missing \`maxAmount\`: a guest account has no access key limits, so a charge needs a bound. Pass \`maxAmount\` to the payer, such as \`accounts.mpp({ maxAmount: '1' })\`.],
+      }
+    `)
+  })
+
+  test('sends the requests of a session manager of a guest session with `maxDeposit`, refuses them with Accounts.SignedOutError after a sign-out, and refuses a manager without `maxDeposit` with mpp.MaxDepositRequiredError', async () => {
+    const accounts = instance({ store: Store.memory() })
+    await accounts.renew.commit(await Guest.session(accounts.config))
+    const unbounded = (() => {
+      try {
+        return accounts.mpp.session()
+      } catch (error) {
+        return error
+      }
+    })()
+    const manager = accounts.mpp({ maxDeposit: '1' }).session()
+
+    // Nothing listens at the URL, so a request that the manager sends rejects with a network error.
+    const sent = await (async () =>
+      manager.fetch('http://127.0.0.1:9/content'))().catch(
+      (error: unknown) => error,
+    )
+    await accounts.signOut()
+    const ended = await (async () =>
+      manager.fetch('http://127.0.0.1:9/content'))().catch(
+      (error: unknown) => error,
+    )
+    // No channel is open, so the close signs nothing, and a sign-out never refuses it.
+    const closed = await manager.close().catch((error: unknown) => error)
+
+    expect([unbounded, sent, ended, closed]).toMatchInlineSnapshot(`
+      [
+        [mpp.MaxDepositRequiredError: Missing \`maxDeposit\`: a guest account has no access key limits, so a channel needs a bound. Pass \`maxDeposit\` to the payer, such as \`accounts.mpp({ maxDeposit: '1' })\`.],
+        [TypeError: fetch failed],
+        [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        undefined,
+      ]
+    `)
+  })
+
+  test("refuses the requests of the default plugin's session manager of a guest session with Accounts.SignedOutError after a sign-out and another guest session", async () => {
+    const store = Store.memory()
+    // Without an `mpp` plugin, the instance's default plugin loads `accounts/mpp` at the first request.
+    const accounts = DefaultAccounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      guest: true,
+      plugins: [viem({ transport: http('http://127.0.0.1:9') }), renew()],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    const first = await Guest.session(accounts.config)
+    await accounts.renew.commit(first)
+    const manager = accounts.mpp({ maxDeposit: '1' }).session()
+
+    await accounts.signOut()
+    await Guest.disconnect(accounts.config)
+    const second = await Guest.session(accounts.config)
+    await accounts.renew.commit(second)
+    const error = await (async () =>
+      manager.fetch('http://127.0.0.1:9/content'))().catch(
+      (error: unknown) => error,
+    )
+    // A manager created under the second guest session sends its request, which rejects with a
+    // network error, since nothing listens at the URL.
+    const current = await (async () =>
+      accounts
+        .mpp({ maxDeposit: '1' })
+        .session()
+        .fetch('http://127.0.0.1:9/content'))().catch((error: unknown) => error)
+
+    expect([first.address === second.address, error, current])
+      .toMatchInlineSnapshot(`
+        [
+          false,
+          [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+          [TypeError: fetch failed],
+        ]
+      `)
+  })
+
+  test("refuses a payer's charge and a session manager's request of a guest session with Accounts.SignedOutError, before its key pair signs, once another process on `Store.file` signs out and starts the guest session again", async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'session.json')
+    const endpoint = server()
+    const accounts = instance({
+      fetch: endpoint.fetch,
+      store: Store.file(path),
+    })
+    const started = await Guest.session(accounts.config)
+    await accounts.renew.commit(started)
+    const payer = accounts.mpp({ maxAmount: '1' })
+    const manager = accounts.mpp({ maxDeposit: '1' }).session()
+    // The endpoint's chain never answers, so it refuses the signed credential.
+    await payer.fetch('http://mpp.test/proof').catch(() => undefined)
+    // Another process sends this one no message, so this instance never holds the signed-out state.
+    // A sign-out keeps the key pair, so the next start holds the same guest account. Its revision is
+    // set explicitly, since two starts in one millisecond share `Date.now()`.
+    const output = await Esbuild.build({
+      bundle: true,
+      format: 'esm',
+      logLevel: 'silent',
+      platform: 'node',
+      stdin: {
+        contents: [
+          "import * as Guest from '../actions/guest.ts'",
+          "import * as Accounts from '../Accounts.ts'",
+          "import * as Plugin from '../Plugin.ts'",
+          "import * as Store from '../Store.ts'",
+          'const accounts = Accounts.create({',
+          '  chain: 42431,',
+          "  clientId: 'https://app.example.com',",
+          '  guest: true,',
+          '  plugins: [',
+          '    Plugin.from({',
+          '      actions: (context) => ({ commit: (value) => context.session.change().commit(value) }),',
+          "      id: 'renew',",
+          '    }),',
+          '  ],',
+          '  store: Store.file(process.env.STORE),',
+          "  url: 'http://127.0.0.1:9',",
+          '})',
+          'await accounts.session.get()',
+          'await accounts.signOut()',
+          'const session = await Guest.session(accounts.config)',
+          'await accounts.renew.commit({ ...session, revision: Number(process.env.REVISION) })',
+          'process.stdout.write(session.address)',
+          'process.exit(0)',
+        ].join('\n'),
+        loader: 'ts',
+        resolveDir: import.meta.dirname,
+      },
+      write: false,
+    })
+    const address = await new Promise<string>((resolve, reject) => {
+      const child = ChildProcess.spawn(
+        process.execPath,
+        ['--input-type=module'],
+        {
+          env: {
+            ...process.env,
+            REVISION: String(started.revision + 1),
+            STORE: path,
+          },
+        },
+      )
+      let stderr = ''
+      let stdout = ''
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString()
+      })
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString()
+      })
+      child.on('close', (code) => {
+        if (code === 0) resolve(stdout)
+        else reject(new Error(stderr))
+      })
+      child.stdin.end(output.outputFiles[0]!.text)
+    })
+
+    const error = await payer
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+    const ended = await (async () =>
+      manager.fetch('http://127.0.0.1:9/content'))().catch(
+      (error: unknown) => error,
+    )
+
+    expect({
+      credentials: endpoint.credentials,
+      ended,
+      error,
+      revision: await (async () => {
+        const current = await accounts.session.get()
+        return (
+          !!current &&
+          Session.guest(current) &&
+          current.revision === started.revision + 1
+        )
+      })(),
+      same: address === started.address,
+    }).toMatchInlineSnapshot(`
+      {
+        "credentials": [
+          false,
+          true,
+          false,
+        ],
+        "ended": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "error": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "revision": true,
+        "same": true,
+      }
+    `)
+  })
+
+  test.for([
+    [
+      "`maxDeposit: ''`",
+      { maxDeposit: '' },
+      undefined,
+      'mpp.MaxDepositInvalidError',
+    ],
+    [
+      "`maxDeposit: '0'`",
+      { maxDeposit: '0' },
+      undefined,
+      'mpp.MaxDepositInvalidError',
+    ],
+    [
+      '`maxDeposit` of 7 decimals',
+      { maxDeposit: '0.0000001' },
+      undefined,
+      'mpp.MaxDepositInvalidError',
+    ],
+    [
+      "a call's `maxDeposit: ''`",
+      { maxDeposit: '1' },
+      { maxDeposit: '' },
+      'mpp.MaxDepositInvalidError',
+    ],
+    [
+      "a call's absent `maxDeposit`, which keeps the payer's",
+      { maxDeposit: '1' },
+      { maxDeposit: undefined },
+      'TypeError',
+    ],
+  ] as const)(
+    'resolves the `maxDeposit` of a guest session manager with %s',
+    async ([, overrides, parameters, expected]) => {
+      const accounts = instance({ store: Store.memory() })
+      await accounts.renew.commit(await Guest.session(accounts.config))
+
+      // Nothing listens at the URL, so a request of a manager that its check accepts rejects with
+      // a network error, a `TypeError`.
+      const error = await (async () =>
+        accounts
+          .mpp(overrides)
+          .session(parameters)
+          .fetch('http://127.0.0.1:9/content'))().catch(
+        (error: unknown) => error,
+      )
+
+      expect(error instanceof Error && error.name).toBe(expected)
+    },
+  )
+
+  test("refuses a charge of a guest session with `maxAmount: ''` with mpp.MaxAmountInvalidError, before any request", async () => {
+    const endpoint = server({ amount: '1' })
+    const accounts = instance({ fetch: endpoint.fetch, store: Store.memory() })
+    await accounts.renew.commit(await Guest.session(accounts.config))
+
+    const error = await accounts
+      .mpp({ maxAmount: '' })
+      .fetch('http://mpp.test/proof')
+      .catch((error: unknown) => error)
+
+    expect({ credentials: endpoint.credentials, error }).toMatchInlineSnapshot(`
+      {
+        "credentials": [],
+        "error": [mpp.MaxAmountInvalidError: Invalid \`maxAmount\`: "" is not a decimal amount of 0 or more. Pass a decimal string, such as \`'0.1'\`.],
+      }
+    `)
+  })
+
   test('refuses a charge with Accounts.SignedOutError, before the access key signs, once the same user signs in again after a sign-out during the request', async () => {
     const store = Store.memory()
     const gate = Promise.withResolvers<void>()
@@ -995,6 +1371,26 @@ describe('mpp', () => {
           "0x20c0000000000000000000000000000000000000",
         ],
         "sends": [],
+      }
+    `)
+  })
+
+  test('holds the amount, the limit that is left, and the token of mpp.LimitError', () => {
+    const error = new LimitError({
+      amount: '0.5',
+      limit: '0.079289',
+      token: '0x20c0000000000000000000006a37DA5C996874BE',
+    })
+
+    expect({
+      amount: error.amount,
+      limit: error.limit,
+      token: error.token,
+    }).toMatchInlineSnapshot(`
+      {
+        "amount": "0.5",
+        "limit": "0.079289",
+        "token": "0x20c0000000000000000000006a37DA5C996874BE",
       }
     `)
   })
@@ -1193,6 +1589,81 @@ describe('mpp', () => {
       .catch((error: unknown) => error)
 
     expect(error).toMatchInlineSnapshot(`[TypeError: fetch failed]`)
+  })
+
+  test('sends the identity to an origin of `identity.scope` that the app names with a trailing slash', async () => {
+    const store = Store.memory()
+    await store.setItem(name, {
+      state: { session: { ...session({ expiry: 3600 }), idToken: 'id-token' } },
+      version: 0,
+    })
+    // A free API records the headers of each request that it receives.
+    const headers: Http.IncomingHttpHeaders[] = []
+    const api = Http.createServer((request, response) => {
+      headers.push(request.headers)
+      response.end('free')
+    })
+    await new Promise<void>((resolve) => api.listen(0, '127.0.0.1', resolve))
+    const address = api.address()
+    if (!address || typeof address === 'string') throw new Error('No port.')
+    const origin = `http://127.0.0.1:${address.port}`
+    const accounts = instance({
+      // An origin read from the environment often ends with a slash, such as `API_URL`.
+      identity: { scope: [`${origin}/`] },
+      store,
+    })
+
+    await accounts.mpp().fetch(`${origin}/fortune`)
+    await new Promise((resolve) => api.close(resolve))
+
+    expect(
+      headers.map((entry) => [entry.authorization, entry['tempo-id-token']]),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          "Bearer access-token",
+          "id-token",
+        ],
+      ]
+    `)
+  })
+
+  test('refuses an entry of `identity.scope` with a path, without its secrets in the error, before any request', () => {
+    expect(() =>
+      mpp({
+        identity: {
+          scope: ['https://user:secret@api.example.com/v1?key=secret'],
+        },
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[TypeError: Invalid identity scope: an entry of \`https://api.example.com\` names a path, a query, or a fragment. Name the origin alone.]`,
+    )
+  })
+
+  test('refuses a malformed entry of `identity.scope` without the entry in the error', () => {
+    const error = (() => {
+      try {
+        mpp({
+          identity: {
+            scope: ['https://user:secret@api.example.com:invalid/?key=secret'],
+          },
+        })
+      } catch (error) {
+        return error as Error
+      }
+    })()
+
+    expect({
+      cause: error?.cause,
+      error,
+      secret: JSON.stringify({ ...error }).includes('secret'),
+    }).toMatchInlineSnapshot(`
+      {
+        "cause": undefined,
+        "error": [TypeError: Invalid identity scope: an entry is no URL. Name each origin, such as \`https://api.example.com\`.],
+        "secret": false,
+      }
+    `)
   })
 
   test("sends the access token and the ID token of the instance's session to the origins of `identity.scope`, and none to another origin", async () => {
@@ -1487,6 +1958,7 @@ function instance(
     chain: options.chain ?? 42431,
     clientId: 'https://app.example.com',
     ...(options.dpop ? { dpop: options.dpop } : {}),
+    guest: true,
     ...(options.store ? { store: options.store } : {}),
     plugins: [
       viem({ transport: options.transport ?? http('http://127.0.0.1:9') }),

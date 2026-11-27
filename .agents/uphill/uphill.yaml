@@ -11,7 +11,7 @@
 setup: pnpm install --frozen-lockfile && pnpm build
 
 footprint:
-  run: node .agents/metrics/footprint.ts
+  run: node .agents/uphill/metrics/footprint.ts
   # Brotli bytes of the initial load of each case of `scripts/size.ts`, a small app of one typical
   # use, such as `Accounts.create` with the `dialog` plugin. The target is 20 kB, the floor of a
   # session that the XState machines of AGENTS.md hold: XState's `setup` and `createActor` bundle to
@@ -20,16 +20,22 @@ footprint:
   # and the Tempo actions it calls. The core cases load 110 kB, so `poor` sits there and each
   # removed kilobyte raises the score. A note names the packages of the initial load with the most
   # bytes.
-  initial-size: { poor: 110kB }
+  initial-size:
+    description: Keep the initial load of each typical use small. Load each flow that a user starts, such as a passkey ceremony, with a dynamic import.
+    poor: 110kB
   # Brotli bytes of every chunk of each case, including each chunk that a dynamic import reaches,
   # such as the passkey ceremony. The target is 60 kB, the initial floor and the lazy flows; every
   # core case bundles about 340 kB now.
-  total-size: { poor: 340kB }
+  total-size:
+    description: Keep every chunk of each typical use small, including each lazy flow. Reuse the dependencies of the initial load.
+    poor: 340kB
   # Runtime dependencies in package.json. No target: the baseline records the count, so an added
   # dependency shows in review.
-  dependencies: {}
+  dependencies:
+    description: Add a runtime dependency only with a stated reason. Prefer ox, XState, and Viem, which the package already loads.
   # Required peer dependencies in package.json, which every app installs. No target, as above.
-  peer-dependencies: {}
+  peer-dependencies:
+    description: Add a required peer dependency only with a stated reason, because every app installs it. Make a platform library an optional peer.
   # The typescript pack's gzipped bytes of each export, which targets the pack's 10 kB. The worst
   # tenth bundle 94 kB now.
   entry-size: { poor: 94kB }
@@ -38,19 +44,23 @@ footprint:
   hot-entry-size: { poor: 120kB }
 
 speed:
-  run: node --expose-gc --single-threaded .agents/metrics/requests.ts
+  run: node --expose-gc --single-threaded .agents/uphill/metrics/requests.ts
   # CPU time per call of the work that each request repeats: an API's `AccessToken.verify` of a
   # Bearer or DPoP token with the key set in memory, and a client's `Dpop.proof`. Each target is the
   # WebCrypto floor of its signatures, measured on the same machine on 2026-11-26: one RS256
   # verification takes 78 µs (target 80 µs), one RS256 and one ES256 verification 220 µs (target
   # 230 µs, so the proof's key imports once per key, not once per request), and one ES256 signature
   # 86 µs (target 90 µs).
-  request-time: {}
+  request-time:
+    description: Keep the work that each request repeats near the cost of its signatures. Import each public key once per key, not once per request.
   # Heap bytes that each of those calls allocates. A faster verification that allocates more costs
   # an API's garbage collector on every request. A token and a proof are under 1 kB each, so a call
   # targets 4 kB beside its signatures, and a DPoP verification, which checks two JWTs, 10 kB. The
   # calls allocate up to 52 kB now, and `poor` scales with each item's target.
-  request-memory: { poor: 25kB, varies: true }
+  request-memory:
+    description: Keep the heap bytes that each request allocates beside its signatures small. Parse each token and proof once.
+    poor: 25kB
+    varies: true
   # The typescript pack's import of each entry in a fresh Node process. The barrel entries take
   # about 800 ms and hold about 30 MB now. The targets of 60 ms and 3.5 MB are a tenth, near the
   # time to parse and run their modules once.
@@ -99,26 +109,29 @@ commits:
 # (`pnpm waterfall --local src`). AGENTS.md: "Never add a round trip to a flow." Tempo ID's
 # integration suite in `tempoxyz/id` records more flows than these tests drive.
 waterfall:
-  run: node .agents/metrics/waterfall.ts
+  run: node .agents/uphill/metrics/waterfall.ts
   timeout: 15m
   # The median rounds of each action and outcome: the longest chain of calls where each call opens
   # after the previous one settled. The target of each line is its ideal rounds, the longest chain
   # over data dependencies alone, which is the floor of its round trips. A note names the sequential
   # reads that wait for a call they do not depend on.
-  rounds: {}
+  rounds:
+    description: Never add a round trip to a flow. Run independent calls in `Promise.all`, and return the next step's data from the step that has it.
   # Whether each action's traces hold no call with the same label and arguments as an earlier call
   # of the trace, with no write between them. The note names the calls.
-  duplicate-calls: {}
+  duplicate-calls:
+    description: Make no call twice in one action. Reuse the result of an earlier read with the same arguments, unless a write comes between them.
   # The median calls of each action before it settles. No target: the baseline records each count,
   # so an added store read or request shows in review.
-  calls: {}
+  calls:
+    description: Add a store read, a request, or an RPC call to an action only when its flow needs the data.
 
 # The packs' categories run after these, and merge with the categories of the same name. The
 # typescript pack reads its project inputs from .agents/uphill/typescript/config.ts. Its
 # `coverage` and `fuzz` categories read the calls of the replay above, so they stay out.
 packs:
   - {
-      pack: wevm/uphill/packs/typescript@19cdac7a0f0f500d227f2bbf74b684af17478fd3,
+      pack: wevm/uphill/packs/typescript@2ac5afb68086f0914aebdd49d352b7fcaad64dc0,
       categories:
         [
           architecture,
@@ -136,10 +149,10 @@ packs:
       install: true,
     } # main
   - {
-      pack: wevm/uphill/packs/writing-docs@19cdac7a0f0f500d227f2bbf74b684af17478fd3,
+      pack: wevm/uphill/packs/writing-docs@2ac5afb68086f0914aebdd49d352b7fcaad64dc0,
       install: true,
     } # main
   - {
-      pack: wevm/uphill/packs/git@19cdac7a0f0f500d227f2bbf74b684af17478fd3,
+      pack: wevm/uphill/packs/git@2ac5afb68086f0914aebdd49d352b7fcaad64dc0,
       install: true,
     } # main

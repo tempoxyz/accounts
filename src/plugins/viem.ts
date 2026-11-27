@@ -49,6 +49,7 @@ import {
 } from '../Accounts.js'
 import * as AccessKey_internal from '../internal/AccessKey.js'
 import * as AccountActions from '../actions/account.js'
+import * as Guest from '../actions/guest.js'
 import * as Actions_accounts from '../internal/Actions.js'
 import * as Api from '../internal/Api.js'
 import * as BackendOperations from '../internal/BackendOperations.js'
@@ -249,7 +250,8 @@ export declare namespace RetryClosedError {
  * as on a backend, the access key of that session sends it. Without `relay`, the
  * limit of the fee token must also hold 0.1 for the fee: `feeToken` or the chain's, else the payment's token if
  * it is a `USD` stablecoin other than MACH. A sponsoring `transport` counts as
- * no relay. Outside a page, the access key sends any amount within the whole limit.
+ * no relay. Outside a page, the access key sends any amount within the whole limit. With the `device`
+ * plugin, it also sends an amount above the limit, and the retry of the spent limit raises it.
  *
  * @example
  * ```ts
@@ -1342,7 +1344,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       ) {
         const result = await fn(ownAccessToken(accessKey))
         const session = context.session.get()
-        if (!session) return result
+        // A guest session holds no access key.
+        if (!session || Session.guest(session)) return result
         const address = (
           typeof accessKey === 'string' ? accessKey : accessKey.accessKeyAddress
         ).toLowerCase()
@@ -1375,7 +1378,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * within 30 seconds.
        */
       async function refreshed(session: Session.Any) {
-        if (Session.local(session)) return undefined
+        if (!Session.tempoId(session)) return undefined
         if (session.expiresAt - 30_000 > Date.now()) return session.accessToken
         return (await Core.refresh(context, { margin: 30_000 }))?.accessToken
       }
@@ -1389,6 +1392,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         if (!byChain) accounts.set(chainId, (byChain = new WeakMap()))
         const session = context.session.get()
         if (!session) return undefined
+        // A guest session's key pair signs as the root account, on every chain, with no access key.
+        if (!byChain.has(session) && Session.guest(session))
+          byChain.set(session, Guest.account(config, { session }))
         if (!byChain.has(session))
           byChain.set(
             session,
@@ -1606,8 +1612,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         // permissions the new access key takes, such as after `switchChain`. A session that never
         // held an access key requests none.
         // Tempo ID holds no account of a local session, so neither its authorization nor its dialog
-        // renews the access key: the app signs a new one with `local.signIn`.
-        if (before && Session.local(before)) throw error
+        // renews the access key: the app signs a new one with `local.signIn`. A guest session holds
+        // no access key to renew.
+        if (before && !Session.tempoId(before)) throw error
         const onChain = accessKeyOn(before, { chainId })
         const previous = onChain ?? before?.accessKey ?? before?.accessKeys?.[0]
         if (!before || !previous) throw error
@@ -1910,6 +1917,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         await change.commit(
           moved.accessKey ||
             moved === next ||
+            Session.guest(moved) ||
             !Session.same(latest, moved) ||
             !latest.account ||
             latest.accessKey
@@ -2604,9 +2612,12 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
 
       // The clients that send a payment of `pay` with the session's access key, one for each chain.
       // On a page, a low balance shows the deposit page, and the access key sends again. The payment
-      // page takes each other refusal, so no other screen of a retry shows.
+      // page takes each other refusal, so no other screen of a retry shows. Outside a page, no
+      // payment page exists, so with the `device` plugin a spent limit retries through its grant.
       const payers = new Map<number, viem.Client>()
-      const payerRetry = page ? { accessKey: false, limit: false } : false
+      const payerRetry = page
+        ? { accessKey: false, limit: false }
+        : { balance: false }
 
       /**
        * Sends `transfer`, the transfer of `payment` that `Token.payable` returned, with the access
@@ -2616,7 +2627,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * the deposit arrives. A close of the deposit page rejects with {@link RetryClosedError}. On
        * a page, a refusal of the node that the payment page resolves returns `undefined`: a low
        * balance after the retry, a spent limit, an access key that the chain does not hold, or a
-       * call outside the access key's scopes. Outside a page, such a refusal rejects with
+       * call outside the access key's scopes. Outside a page, with the `device` plugin, a spent limit
+       * retries through a device grant first. Outside a page, such a refusal rejects with
        * `Actions.account.PageRequiredError`, whose cause is the refusal, except a low balance, which
        * rejects as it is, and a revoked access key, which rejects with
        * `Accounts.AccessKeyRequiredError`, whose cause is the refusal. A transfer that the chain reverts since its fee spent the rest of the
@@ -2717,11 +2729,18 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           if (typeof value === 'string' && Address.validate(value)) return value
           return undefined
         })()
+        // Outside a page, a client whose retry takes a spent limit, as with the `device` plugin,
+        // raises the limit for an amount above it. A fixed session never retries.
+        const retries = page
+          ? false
+          : kinds(resolve(payment.chainId).retry ?? true, payerRetry)
         const transfer = Token.payable(
           payment.session ?? context.session.get(),
           {
             ...payment,
             feeToken,
+            raises:
+              !payment.session && retries !== false && retries.limit !== false,
             // Outside a page, no payment page takes the payment, so the access key sends any amount
             // within the whole limit, as before the allowance, and the chain decides.
             relayed: !page || !!routing(payment.chainId).relay,
