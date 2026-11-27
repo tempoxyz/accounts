@@ -47,10 +47,6 @@ Only `main` deploys the Worker. No command deploys it from a checkout.
 
 `routes` of `wrangler.json` names `accounts.tempo.xyz` as the custom domain of the Worker. The broker verifies the domain on each deploy. It attaches the domain only to a hostname that holds no other DNS record. `public/_headers` sets `Strict-Transport-Security` on the domain, since the `tempo.xyz` zone sets none.
 
-Vercel's project `accounts-site` proxies each path to the workers.dev URL, for clients that still resolve the hostname to Vercel. `vercel.json` builds only `proxy.txt`, since Vercel refuses an empty output. Its `X-Robots-Tag` header replaces the `noindex` that `public/_headers` sets for workers.dev.
-
-Without `vercel.json`, the Git integration of the project builds the site on Vercel, so the file stays while the project exists. The Worker reads a request with `x-forwarded-host: accounts.tempo.xyz` as one to that origin, so the demos' client ID is the page's.
-
 `renderStrategy: 'full-static'` in `vocs.config.ts` writes each page as a file. A static build has no server for the redirects of `vocs.config.ts`, from `/docs` and the former path of "Getting started" to `/`, so `public/_redirects` repeats them for Cloudflare. It also serves the Markdown of a page at the page's path with `.md`.
 
 ## Sidebar
