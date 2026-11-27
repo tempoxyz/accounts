@@ -371,7 +371,7 @@ export async function device(page: Page): Promise<device.ReturnType> {
     denied: page.getByText('The device was not signed in'),
     message: page.getByRole('note').locator('pre'),
     note: page.getByRole('note').filter({ has: page.locator('pre') }),
-    unverified: page.getByText('an unverified app'),
+    unverified: page.getByRole('img', { name: 'Unverified' }),
   }
 }
 
@@ -389,7 +389,7 @@ export declare namespace device {
     message: Locator
     /** The note of a request that signs a message: who signs it, and the message. */
     note: Locator
-    /** The flag of the description for an app without a registration. */
+    /** The badge of the description for an app that Tempo ID has not verified. */
     unverified: Locator
   }
 }
