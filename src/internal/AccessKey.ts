@@ -29,9 +29,9 @@ export type AccessKey<chainId extends number = number> = {
   /** The signed authorization, in the node's RPC format. */
   keyAuthorization: KeyAuthorization.Rpc
   /**
-   * The seconds from the sign-in to the access key's expiry. A renewal through `session.get` with
-   * `reauthorize` requests the same lifetime again. Absent for an access key that never expires,
-   * and for one saved before the field existed.
+   * The seconds from the sign-in's request to the access key's expiry. A renewal through
+   * `session.get` with `reauthorize` requests the same lifetime again. Absent for an access key
+   * that never expires, and for one saved before the field existed.
    */
   lifetime?: number | undefined
 } & Material

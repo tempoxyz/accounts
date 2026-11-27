@@ -732,6 +732,7 @@ function finish(
       clientId: _clientId,
       issuer: _issuer,
       key: earlier,
+      lifetime,
       redirectUri: _redirectUri,
       state: _state,
       verifier: _verifier,
@@ -774,7 +775,7 @@ function finish(
         user: Api.user(tokens),
       }
     }
-    return Api.authorization(
+    const authorization = Api.authorization(
       {
         account: body.account,
         ...(body.challenge_signature
@@ -785,6 +786,11 @@ function finish(
       },
       { challenged, material, signer: AccessKey.own(options.accessKey) },
     )
+    if (lifetime === undefined) return authorization
+    return {
+      ...authorization,
+      accessKey: { ...authorization.accessKey, lifetime },
+    }
   } catch (error) {
     // A fault of the app's own access key, such as a callback without its `accessKey`, is no fault of
     // the token response, and every such callback repeats it. Its error passes as it is, and names

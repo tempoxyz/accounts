@@ -29,6 +29,12 @@ type Base = {
   /** The app that started the redirect. Absent in a redirect of an earlier version. */
   clientId?: string | undefined
   /**
+   * The seconds from the request to the access key's expiry, which a renewal requests again. Absent
+   * without an access key of the app's own, for one that never expires, and in a redirect of an
+   * earlier version.
+   */
+  lifetime?: number | undefined
+  /**
    * The origin of the Tempo ID deployment that the redirect signed in at, whose token endpoint
    * redeems its code. Absent in a redirect of an earlier version.
    */

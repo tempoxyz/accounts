@@ -30,6 +30,7 @@
  * | `retry=0`          | The Viem client shows no screen for a refused transaction, and rejects the call |
  * | `scope`            | The scopes beyond the instance's that the tokens of "Sign in" hold              |
  * | `second=1`         | On `/wagmi/`, the connector's config also holds the second node's chain         |
+ * | `signInKey=1`      | On `/redirect/`, only "Sign in" names the access key, not the instance          |
  * | `store=memory`     | The instance keeps its session in `Store.memory`, which only its page holds     |
  * | `typedData`        | The typed data that "Sign typed data as the owner" signs, as `Json` writes it   |
  *
@@ -290,8 +291,8 @@ export function plugins() {
 }
 
 /**
- * Returns the request items of a sign-in that the page's query sets: the challenge, `false` in
- * place of the access key, and the resource and the scopes that the tokens are for.
+ * Returns the request items of a sign-in that the page's query sets: the challenge, the access key
+ * or `false` in place of it, and the resource and the scopes that the tokens are for.
  */
 export function request() {
   const challenge = query.get('challenge')
@@ -300,6 +301,9 @@ export function request() {
   return {
     ...(query.get('accessKey') === 'false'
       ? { accessKey: false as const }
+      : {}),
+    ...(query.get('signInKey') === '1'
+      ? { accessKey: permissions({ limit: '100' }) }
       : {}),
     ...(challenge ? { challenge } : {}),
     ...(resource ? { resource } : {}),

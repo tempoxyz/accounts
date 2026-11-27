@@ -277,9 +277,11 @@ export function toSession(
 
 /**
  * Returns `accessKey` with the seconds from now to its expiry as `lifetime`, which a renewal requests
- * again. An access key that never expires has no lifetime.
+ * again. An access key whose request recorded its lifetime keeps it. An access key that never
+ * expires has no lifetime.
  */
 function withLifetime(accessKey: NonNullable<Session.Any['accessKey']>) {
+  if (accessKey.lifetime !== undefined) return accessKey
   const { expiry } = KeyAuthorization.fromRpc(accessKey.keyAuthorization)
   if (!expiry) return accessKey
   return { ...accessKey, lifetime: expiry - Math.floor(Date.now() / 1000) }
