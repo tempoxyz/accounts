@@ -39,7 +39,7 @@ const routes: Record<string, Route> = {
   [Subscriptions.path]: Subscriptions.fetch,
 }
 
-/** The site's production host, which a proxy names in `x-forwarded-host` until the Worker has its route. */
+/** The site's production host, which Vercel names in `x-forwarded-host` when it proxies to workers.dev. */
 const host = 'accounts.tempo.xyz'
 
 export default {

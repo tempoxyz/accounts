@@ -99,8 +99,8 @@ jobs:
           deployment-id: accounts-site
           module-digest: ${{ needs.attest.outputs.module-digest }}
 
-      # The verification URL is `accounts.tempo.xyz`, which Vercel proxies to the Worker's workers.dev
-      # URL. The check thus reaches the new version through the domain.
+      # The verification URL is `accounts.tempo.xyz`, the Worker's custom domain. The check thus
+      # reaches the new version through the domain.
       - name: Check deployment
         env:
           URL: ${{ steps.deploy.outputs.verification-url }}

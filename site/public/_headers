@@ -3,10 +3,15 @@
 https://:version.:subdomain.workers.dev/*
   X-Robots-Tag: noindex
 
+# Browsers reach the production origin only over HTTPS. The tempo.xyz zone sets no HSTS, so this rule
+# sets it for two years, without subdomains.
+https://accounts.tempo.xyz/*
+  Strict-Transport-Security: max-age=63072000
+
 # The Cloudflare Deploy Broker uploads a file whose extension its builder does not map with no media
 # type, and Cloudflare then serves it with no Content-Type. These rules set the types that Wrangler
 # sends. A rule matches the path of the request, before a rewrite of `_redirects`, and a header that
-# two rules set holds both values, so each path matches at most one rule.
+# two rules set holds both values, so each path matches at most one of these rules.
 /:page.md
   Content-Type: text/markdown; charset=utf-8
 
