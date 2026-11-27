@@ -2789,16 +2789,18 @@ export function create<
         // refresh, as `fetch` rejects at the abort.
         const signal = parameters.init?.signal ?? undefined
         if (signal?.aborted) throw aborted(signal)
-        const token = await (() => {
-          if (!signal) return accessToken()
-          return new Promise<string>((resolve, reject) => {
+        // Rejects at the abort, and leaves `promise` running, since other calls can share it.
+        const until = <value>(promise: Promise<value>) => {
+          if (!signal) return promise
+          return new Promise<value>((resolve, reject) => {
             const abort = () => reject(aborted(signal))
             signal.addEventListener('abort', abort, { once: true })
-            accessToken()
+            promise
               .then(resolve, reject)
               .finally(() => signal.removeEventListener('abort', abort))
           })
-        })()
+        }
+        const token = await until(accessToken())
         // The call started for the user of this token, so its retry never sends another user's token.
         const started = context.session.get()
         const subject = started && Session.subject(started)
@@ -2820,25 +2822,22 @@ export function create<
         if (!current?.refreshToken) return response
         if (current.accessToken === token) {
           // A refused refresh token ends the session, and the call returns the first response.
-          const failed = await refresh().then(
-            () => false,
-            () => true,
+          const failed = await until(
+            refresh().then(
+              () => false,
+              () => true,
+            ),
           )
           if (failed) return response
         }
+        // The resend takes the token of the session that the subject check read, so a sign-in of
+        // another user during the cancel of the first body never authenticates the request.
         const latest = context.session.get()
-        if (
-          !latest ||
-          Session.subject(latest) !== subject ||
-          latest.accessToken === token
-        )
-          return response
+        if (!latest || Session.subject(latest) !== subject) return response
+        const renewed = latest.accessToken
+        if (!renewed || renewed === token) return response
         await response.body?.cancel()
-        return Actions.fetch(config, {
-          ...parameters,
-          // The refreshed session holds a live access token, so the call sends no second refresh.
-          accessToken: await accessToken(),
-        })
+        return Actions.fetch(config, { ...parameters, accessToken: renewed })
       },
       get: (parameters: Core.getSession.Parameters | Request = {}) => {
         if (parameters instanceof Request)

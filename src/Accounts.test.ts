@@ -2290,6 +2290,86 @@ describe('session.fetch', () => {
     `)
   })
 
+  test('rejects at the abort while the refresh after a refused access token waits for its answer', async () => {
+    const store = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    const controller = new AbortController()
+    let answer = () => {}
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      // The token endpoint answers only after the abort, so only the abort ends the call.
+      fetch: ((input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        requests.push(`${request.method} ${pathname}`)
+        if (pathname === '/oauth2/token')
+          return new Promise<Response>((resolve) => {
+            answer = () =>
+              resolve(
+                Response.json(
+                  {
+                    error: 'invalid_grant',
+                    error_description: 'invalid refresh token',
+                  },
+                  { status: 400 },
+                ),
+              )
+          })
+        return Promise.resolve(
+          Response.json(
+            { error: 'invalid_token' },
+            {
+              headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
+              status: 401,
+            },
+          ),
+        )
+      }) as typeof globalThis.fetch,
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await store.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const result = accounts.session
+      .fetch({
+        init: { signal: controller.signal },
+        url: 'https://api.example.com/me',
+      })
+      .catch((error: Error) => `${error.name}: ${error.message}`)
+    await expect.poll(() => requests.length).toBe(2)
+    controller.abort()
+    const settled = await result
+    // The refresh holds the lock until its answer, which ends the session.
+    answer()
+    await expect
+      .poll(() => accounts.session.status.get().status)
+      .toBe('signedOut')
+
+    expect({ requests, result: settled }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          "GET /me",
+          "POST /oauth2/token",
+        ],
+        "result": "AbortError: This operation was aborted",
+      }
+    `)
+  })
+
   test('throws SignedOutError, and sends no request, when another context signs out while the access token expires', async () => {
     const store = Store.memory()
     const accounts = Accounts.create({
