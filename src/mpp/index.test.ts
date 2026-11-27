@@ -167,6 +167,82 @@ describe('mpp', () => {
     },
   )
 
+  test.each(['fixed', 'instance'] as const)(
+    'refuses a request of a session manager of the %s session with Accounts.AccessKeyRequiredError once the chain holds its access key revoked',
+    async (kind) => {
+      // The node refuses each call of the access key, as it refuses a revoked one.
+      const node = Http.createServer((request, response) => {
+        let body = ''
+        request.on('data', (chunk: Buffer) => (body += chunk))
+        request.on('end', () => {
+          const { id } = JSON.parse(body) as { id: number }
+          response.setHeader('content-type', 'application/json')
+          response.end(
+            JSON.stringify({
+              error: {
+                code: -32003,
+                message:
+                  'keychain validation failed: AccountKeychainError(KeyAlreadyRevoked(KeyAlreadyRevoked))',
+              },
+              id,
+              jsonrpc: '2.0',
+            }),
+          )
+        })
+      })
+      await new Promise<void>((resolve) => node.listen(0, '127.0.0.1', resolve))
+      onTestFinished(() => new Promise((resolve) => node.close(resolve)))
+      const address = node.address()
+      if (!address || typeof address === 'string') throw new Error('No port.')
+      const challenge = Challenge.fromMethod(Methods.session, {
+        id: 'revoked',
+        realm: 'mpp.test',
+        request: {
+          amount: '0.01',
+          chainId: 42431,
+          currency: '0x20c0000000000000000000000000000000000000',
+          decimals: 6,
+          recipient: '0x00000000000000000000000000000000000000aa',
+          sessionProtocol: 'v2',
+          suggestedDeposit: '0.05',
+          unitType: 'request',
+        },
+      })
+      const store = Store.memory()
+      if (kind === 'instance')
+        await store.setItem(name, {
+          state: { session: session({ expiry: 3600 }) },
+          version: 0,
+        })
+      const accounts = instance({
+        fetch: () =>
+          Promise.resolve(
+            new Response(null, {
+              headers: { 'WWW-Authenticate': Challenge.serialize(challenge) },
+              status: 402,
+            }),
+          ),
+        store,
+        transport: http(`http://127.0.0.1:${address.port}`, { retryCount: 0 }),
+      })
+      const manager =
+        kind === 'fixed'
+          ? accounts.mpp({ session: session({ expiry: 3600 }) }).session()
+          : accounts.mpp.session()
+
+      const error = await manager
+        .fetch('https://mpp.test/paid')
+        .catch((error: unknown) => error)
+
+      expect(error).toMatchInlineSnapshot(
+        `[Accounts.AccessKeyRequiredError: The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain.]`,
+      )
+      expect((error as Error).cause instanceof Error).toMatchInlineSnapshot(
+        `true`,
+      )
+    },
+  )
+
   test('preserves inherited payment opt-outs before creating a credential', async () => {
     const resolveAccount = vi.fn()
     const offer = Challenge.fromMethod(Methods.session, {
