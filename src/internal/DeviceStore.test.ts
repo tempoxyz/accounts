@@ -44,6 +44,45 @@ describe('create', () => {
     expect(await other.session.get()).toMatchInlineSnapshot(`undefined`)
   })
 
+  test("keeps another preset's write that starts during update, after the write of update", async () => {
+    const name = 'tempo-id:signed-out:["http://127.0.0.1:9","example-mobile"]'
+    const secureStore = memory()
+    // Each instance creates its own store, as two `expo` presets of one app do.
+    const store = DeviceStore.create(secureStore)
+    const other = DeviceStore.create(secureStore)
+    await store.setItem(name, 'flag-1')
+
+    // A sign-in removes the flag that it reads, while another instance's sign-out writes its own.
+    const [removed] = await Promise.all([
+      store.update!(name, (value) => ({ result: value, value: undefined })),
+      other.setItem(name, 'flag-2'),
+    ])
+
+    expect({ removed, stored: await store.getItem(name) })
+      .toMatchInlineSnapshot(`
+      {
+        "removed": "flag-1",
+        "stored": "flag-2",
+      }
+    `)
+  })
+
+  test('writes nothing in update for a value that the key already holds', async () => {
+    const name = 'tempo-id:signed-out:["http://127.0.0.1:9","example-mobile"]'
+    const secureStore = memory()
+    const store = DeviceStore.create(secureStore)
+    await store.setItem(name, 'flag-1')
+    secureStore.writes.length = 0
+
+    await store.update!(name, (value) => ({ result: undefined, value }))
+    await store.update!('absent', () => ({
+      result: undefined,
+      value: undefined,
+    }))
+
+    expect(secureStore.writes).toMatchInlineSnapshot(`[]`)
+  })
+
   test('sets local, since only the app reads its secure store, so a refusal of a refresh token is final', () => {
     const store = DeviceStore.create(memory())
 
@@ -61,19 +100,23 @@ describe('create', () => {
 
 /**
  * Returns the platform capability that `expo-secure-store` provides on a device: strings at keys, in
- * memory.
+ * memory. `writes` records each write and deletion.
  */
 function memory() {
   const values = new Map<string, string>()
+  const writes: string[] = []
   return {
     deleteItemAsync(key: string) {
+      writes.push(`delete ${key}`)
       values.delete(key)
       return Promise.resolve()
     },
     getItemAsync: (key: string) => Promise.resolve(values.get(key) ?? null),
     setItemAsync(key: string, value: string) {
+      writes.push(`set ${key}`)
       values.set(key, value)
       return Promise.resolve()
     },
-  } satisfies DeviceStore.create.SecureStore
+    writes,
+  } satisfies DeviceStore.create.SecureStore & { writes: string[] }
 }

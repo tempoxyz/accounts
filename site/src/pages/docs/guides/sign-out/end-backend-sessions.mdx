@@ -161,6 +161,46 @@ export const accounts = Accounts.create({
 
 :::
 
+### Disconnect the app
+
+<SourceLink name="backend.disconnect" path="src/plugins/backend.ts">`backend.disconnect`</SourceLink> ends the connection of the app and the session's user at Tempo ID. It then deletes the session without a revocation.
+
+:::code-group
+
+```ts [server.ts]
+import { Hono } from 'hono'
+import { deleteCookie, getCookie } from 'hono/cookie'
+import { csrf } from 'hono/csrf'
+import { accounts } from './tempo.config.js'
+
+const app = new Hono()
+
+// The browser sends the cookie with a form post of another site, so the route checks the origin.
+app.use(csrf())
+app.post('/auth/disconnect', async (c) => {
+  const id = getCookie(c, 'session')
+  if (id) await accounts.backend.disconnect({ id }) // [!code hl]
+
+  deleteCookie(c, 'session')
+  return c.body(null, 204)
+})
+
+export default app
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { backend } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: process.env.APP_URL,
+  plugins: [backend({ store: Store.memory() })],
+})
+```
+
+:::
+
 ### End a session after a logout token
 
 If a Tempo ID session ends, such as at a sign-out of every app, Tempo ID posts a logout token (OpenID Connect Back-Channel Logout) to each registered app. The back-channel logout route of <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> verifies it, and ends each session of the token's Tempo ID session.

@@ -10,6 +10,7 @@ import type * as Accounts from '../Accounts.js'
 import { GuestSessionError, LocalSessionError } from '../Accounts.js'
 import * as AccessToken from '../AccessToken.js'
 import type * as AccessToken_ from '../AccessToken.js'
+import type * as AccountActions from '../actions/account.js'
 import type * as Funding from '../internal/Funding.js'
 import * as Api from '../internal/Api.js'
 import * as BackendCookie from '../internal/BackendCookie.js'
@@ -24,10 +25,11 @@ import type { Store } from '../Store.js'
 /**
  * Returns the plugin of a backend's sessions: one for each of its users, under an opaque session ID
  * that the browser holds in an `HttpOnly` cookie. It adds `backend.start`, `backend.complete`,
- * `backend.save`, `backend.get`, `backend.fetch`, and `backend.end` by session ID, the reads of a
- * request's session `session.get(request)` and `session.fetch(request, options)`, and the sign-in
- * routes of `accounts.handler`, for a redirect or the dialog: `/auth/login`, `/auth/callback`,
- * `/auth/logout`, and `/auth/session`, and the back-channel logout route
+ * `backend.save`, `backend.get`, `backend.fetch`, `backend.disconnect`, and `backend.end` by
+ * session ID, the reads of a request's session `session.get(request)` and
+ * `session.fetch(request, options)`, and the sign-in routes of `accounts.handler`, for a redirect
+ * or the dialog: `/auth/login`, `/auth/callback`, `/auth/logout`, and `/auth/session`, and the
+ * back-channel logout route
  * `/auth/backchannel-logout`. The handler serves them under `/auth` of the `handler`
  * option's `basePath`, so under `/api/auth` by default, apart from its other routes, such as
  * `/relay`. An app with routes of its own calls `backend.start`, `backend.complete`, and
@@ -158,6 +160,55 @@ export function backend(options: backend.Options) {
           parameters: backend.complete.Parameters,
         ): Promise<backend.Session.TempoId> =>
           redeem({ id: parameters.id, url: parameters.url }),
+        /**
+         * Ends the connection of the app and the session's user at
+         * `POST /v1/connection/disconnect`, with the session's access token, after a refresh if
+         * necessary. Tempo ID removes the user's consent and every token of the app, and revokes each
+         * live access key of the connection, as `connection.disconnect` does on a page. The call then
+         * deletes the session without a revocation, as `end` with `revoke: false` does, since Tempo ID
+         * revoked its refresh token, and reads a second revocation as reuse. The user's Tempo ID
+         * session stays. Returns the revoked access keys, and in `remaining` those that Tempo ID could
+         * not revoke. A session that a sign-in stores under `id` during the request stays, if Tempo
+         * ID issued its tokens in a later second than the tokens of the request. Returns `undefined`
+         * without a session, and for a SIWE session, and sends no request. The app deletes the
+         * session cookie itself.
+         * @throws {Accounts.RequestError} With `invalid_token` or `invalid_dpop_proof` for an access
+         *   token that Tempo ID refuses, and `rate_limited` for too many requests. The session stays.
+         *   Also when a refresh fails, as `get` describes.
+         *
+         * @example
+         * ```ts
+         * const { remaining } = await accounts.backend.disconnect({ id })
+         * ```
+         */
+        async disconnect(
+          parameters: backend.disconnect.Parameters,
+        ): Promise<backend.disconnect.ReturnType | undefined> {
+          const { id } = parameters
+          const path = '/v1/connection/disconnect'
+          // The sessions sign the request with the configuration that redeemed the tokens, such as a
+          // Durable Object's, whose DPoP key bound them.
+          const tokenHeaders = await sessions.headers({
+            id,
+            method: 'POST',
+            url: new URL(path, config.url).href,
+          })
+          if (!tokenHeaders) return undefined
+          // A session that a sign-in stores under the ID during the request holds tokens that Tempo ID
+          // issued later, so the end keeps it.
+          const issuedAt = BackendSessions.issuedAt(
+            tokenHeaders.authorization?.split(' ')[1],
+          )
+          const body = await Api.json<AccountActions.disconnect.Response>(
+            await Api.post(config, path, {
+              credentials: 'omit',
+              headers: tokenHeaders,
+              json: { client_id: config.clientId },
+            }),
+          )
+          await sessions.end({ id, issuedAt, revoke: false })
+          return { remaining: body.remaining ?? [], revoked: body.revoked }
+        },
         /**
          * Revokes the session's refresh token at Tempo ID's `POST /oauth2/revoke`, then deletes the
          * session. A refresh or a `complete` in progress finishes first, so `end` revokes the token
@@ -792,6 +843,15 @@ export declare namespace backend {
       /** The callback URL that Tempo ID redirected to. */
       url: string
     }
+  }
+
+  namespace disconnect {
+    type Parameters = {
+      /** The session ID. */
+      id: string
+    }
+
+    type ReturnType = AccountActions.disconnect.ReturnType
   }
 
   namespace end {

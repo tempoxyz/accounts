@@ -1115,9 +1115,10 @@ export function create(options: create.Options): create.ReturnType {
 
   /**
    * Saves `overwritten`, the session of another context's sign-in that this instance's sign-in of
-   * `kept` replaced in the store, and holds it, and then revokes the refresh token of `kept`. The
-   * other context keeps `overwritten`, as `machines.yields` decides, so both hold one session, and
-   * no live token stays out of the store. Under the lock, a change since the save of `kept`, here
+   * `kept` replaced in the store, and holds it, and then revokes the refresh token of `kept`, unless
+   * `machines.revokesKept` is false. The other context keeps `overwritten`, as `machines.yields`
+   * decides, so both hold one session. Where `machines.revokesKept` is false, a context of an
+   * earlier release can still hold `kept`, so its refresh token stays live out of the store. Under the lock, a change since the save of `kept`, here
    * or in the store, keeps everything as it is. If a context rotated the refresh token of
    * `overwritten` since `since`, or the rotations are unknown, {@link revokeReplaced} decides in
    * place of the yield. The session takes the instance's chain, as a sign-in's commit does. A failed
@@ -1189,6 +1190,10 @@ export function create(options: create.Options): create.ReturnType {
         if (context().session === next) set(kept)
         return 'kept' as const
       }
+      // A context of an earlier release that holds `kept` can reject `overwritten`, so `kept`
+      // stays live, as `machines.revokesKept` decides.
+      if (!machines.revokesKept({ kept, overwritten }))
+        return 'yielded' as const
       // The list marks the token before its revocation, so a context that still holds it never
       // revokes it again, also if the revoked digests fail. A failed write leaves the token live.
       const marked = await rotations
@@ -2720,6 +2725,39 @@ function order(session: Session.Any) {
 }
 
 /**
+ * Returns whether `session` holds later tokens than `other` by {@link order}, or by `receivedAt`
+ * where both hold it. Another context's sign-in can send its request before a refresh here and
+ * receive its tokens after it, so its access token expires sooner. A context of an earlier release
+ * orders by {@link order} alone, and can revoke a token by that order, so that order still counts.
+ */
+function later(session: Session.Any, options: { other: Session.Any }) {
+  const { other } = options
+  if (order(session) > order(other)) return true
+  const { receivedAt } = session
+  return (
+    receivedAt !== undefined &&
+    other.receivedAt !== undefined &&
+    receivedAt > other.receivedAt
+  )
+}
+
+/**
+ * Returns whether `session` holds later tokens than `other` by both orders: by {@link order}, and by
+ * no earlier `receivedAt` where both hold it. A revocation of the tokens of `other` follows it, so
+ * no context of this release or an earlier one adopts them again, as {@link later} decides.
+ */
+function laterByBoth(session: Session.Any, options: { other: Session.Any }) {
+  const { other } = options
+  if (order(session) <= order(other)) return false
+  const { receivedAt } = session
+  return (
+    receivedAt === undefined ||
+    other.receivedAt === undefined ||
+    receivedAt >= other.receivedAt
+  )
+}
+
+/**
  * The clock of the session's actor, whose timers keep no dropped instance alive, such as a server's
  * instance for each request. The actor holds each pending timer, which it receives as the timer's
  * ID, and the platform's timer holds it only weakly. A delay above a timer's limit, about 24.8 days,
@@ -3707,12 +3745,24 @@ export namespace machines {
     const { entries, held, refreshToken, stored } = options
     // A local or guest session holds no tokens that another context rotates.
     if (!Session.tempoId(held)) return false
-    const expiresAt =
-      refreshToken === held.refreshToken
-        ? held.expiresAt
-        : entries.find((entry) => entry.to === refreshToken)?.expiresAt
+    const own = refreshToken === held.refreshToken
+    const entry = own
+      ? undefined
+      : entries.find((entry) => entry.to === refreshToken)
+    const expiresAt = own ? held.expiresAt : entry?.expiresAt
     if (!stored || expiresAt === undefined) return false
-    return newer(stored, { ...held, expiresAt, refreshToken })
+    if (Session.subject(stored) !== Session.subject(held)) return true
+    // A context of an earlier release adopts `stored` only by the `expiresAt` order, and this
+    // release by either order, so only a session later by both orders revokes the token. The save
+    // of a successor's rotation follows its receipt, so its time stands for that receipt.
+    return laterByBoth(stored, {
+      other: {
+        ...held,
+        expiresAt,
+        receivedAt: own ? held.receivedAt : entry?.at,
+        refreshToken,
+      },
+    })
   }
 
   export declare namespace adopts {
@@ -4090,7 +4140,8 @@ export namespace machines {
 
   /**
    * Returns whether the stored session is newer than the instance's: another tab's sign-out, another
-   * user's session, or the same user's session with later tokens, which a refresh issues.
+   * user's session, or the same user's session with later tokens, such as a refresh's, or another
+   * tab's sign-in that received its tokens later.
    */
   export function newer(
     stored: Session.Any | undefined,
@@ -4098,7 +4149,7 @@ export namespace machines {
   ) {
     if (!stored || !current) return stored !== current
     if (Session.subject(stored) !== Session.subject(current)) return true
-    return order(stored) > order(current)
+    return later(stored, { other: current })
   }
 
   /**
@@ -4130,8 +4181,8 @@ export namespace machines {
   /**
    * Returns whether a sign-in of `kept` yields to `overwritten`, the session of another context's
    * sign-in that its save replaced in the store. That context adopts `kept` only as `newer` decides,
-   * so only a session of the same user whose tokens Tempo ID issued later, such as from a request
-   * that was sent later and answered first, takes the place of `kept`. A session whose access token another DPoP key binds
+   * so only a session of the same user whose tokens expire later, or that the other context received
+   * later, takes the place of `kept`. A session whose access token another DPoP key binds
    * never takes the place of `kept`.
    */
   export function yields(
@@ -4145,13 +4196,13 @@ export namespace machines {
     if (Api.jkt(kept.accessToken) !== Api.jkt(overwritten.accessToken))
       return false
     // Another context that loaded `kept` adopts `overwritten` only if it is newer, so an equal
-    // expiry keeps `kept`, whose token that context can still hold.
+    // order keeps `kept`, whose token that context can still hold.
     if (Session.subject(kept) !== Session.subject(overwritten)) return false
     // A call in progress, such as a retry after a limit, checked the account of `kept`, so the yield
     // never switches the instance to another Tempo Account of the user.
     if (kept.address?.toLowerCase() !== overwritten.address?.toLowerCase())
       return false
-    return overwritten.expiresAt > kept.expiresAt
+    return later(overwritten, { other: kept })
   }
 
   /**
@@ -4206,6 +4257,30 @@ export namespace machines {
     }
 
     type ReturnType = 'declined' | 'kept' | 'rotated' | 'yield'
+  }
+
+  /**
+   * Returns whether a sign-in that yielded to `overwritten` revokes the refresh token of `kept`, only
+   * where `overwritten` is later by both orders. A context of an earlier release adopts by
+   * `expiresAt` alone, and this release by either order. Otherwise `kept` stays live, since a
+   * context can still hold it, and a revocation of it counts as a reuse at its next refresh.
+   */
+  export function revokesKept(
+    options: machines.revokesKept.Options,
+  ): machines.revokesKept.ReturnType {
+    const { kept, overwritten } = options
+    return laterByBoth(overwritten, { other: kept })
+  }
+
+  export declare namespace revokesKept {
+    type Options = {
+      /** The session that the sign-in saved, and then replaced with `overwritten`. */
+      kept: Session.Any
+      /** The session of another context that the sign-in yielded to. */
+      overwritten: Session.Any
+    }
+
+    type ReturnType = boolean
   }
 
   export declare namespace yields {
@@ -4373,7 +4448,7 @@ export namespace machines {
     if (!failed) return machines.newer(stored, current)
     if (!stored || !current) return false
     if (Session.subject(stored) !== Session.subject(current)) return false
-    return order(stored) > order(current)
+    return later(stored, { other: current })
   }
 
   export declare namespace replaces {
@@ -4448,6 +4523,14 @@ export namespace machines {
    */
   export function loaded(snapshot: machines.session.Snapshot): boolean {
     return snapshot.context.loaded
+  }
+
+  /**
+   * Returns the number of sign-ins that set the instance's session. A count that grew during a
+   * sign-in shows that the sign-in set its session, also after a sign-out ended it.
+   */
+  export function signIns(snapshot: machines.session.Snapshot): number {
+    return snapshot.context.signIns
   }
 
   /**

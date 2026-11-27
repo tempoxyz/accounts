@@ -316,10 +316,13 @@ export function sessions<env>(
       )
     }
 
-    discard(options: sessions.Call<{ id: string }>) {
+    discard(
+      options: sessions.Call<{ id: string; issuedAt?: number | undefined }>,
+    ) {
       return Rpc.wrap(async () =>
         (await this.#sessions(options)).end({
           id: options.id,
+          issuedAt: options.issuedAt,
           revoke: false,
         }),
       )
@@ -482,8 +485,13 @@ export declare namespace sessions {
         url: string
       }>,
     ) => Promise<Rpc.Result<Rpc.Wire<BackendSessions.BackendSession>>>
-    /** Deletes the session without a revocation, for a session that Tempo ID ended. */
-    discard: (options: Call<{ id: string }>) => Promise<Rpc.Result<void>>
+    /**
+     * Deletes the session without a revocation, for a session that Tempo ID ended. With `issuedAt`,
+     * in milliseconds, a session whose tokens Tempo ID issued later stays.
+     */
+    discard: (
+      options: Call<{ id: string; issuedAt?: number | undefined }>,
+    ) => Promise<Rpc.Result<void>>
     /** Revokes the session's refresh token, then deletes the session. */
     end: (options: Call<{ id: string }>) => Promise<Rpc.Result<void>>
     /**

@@ -160,6 +160,67 @@ test.describe('session', () => {
     })
   })
 
+  test('keeps the session hint at the expiry of the access key in an open page, so the next load renews the session', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    const hinted = async () =>
+      Hint.has(await page.evaluate(() => document.cookie))
+    // Tempo ID refuses an expiry that passed, so the expiry leaves time for a slow sign-in.
+    await page.goto(`${url}?expiry=15s&hint=1`)
+    const before = await enter(page, { code, email })
+
+    await test.step('keeps the hint at the expiry of the access key', async () => {
+      await expect(page.locator('#history')).toHaveText(
+        'pending signedOut signedIn signedOut',
+        { timeout: 30_000 },
+      )
+      expect(await hinted()).toBe(true)
+      await capture('expired')
+    })
+
+    await test.step('renews the session at the next load', async () => {
+      await page.goto(`${url}?hint=1`)
+
+      await expect(page.locator('#status')).toHaveText('signedIn')
+      const after = (await Playwright.run(page, { name: 'Session' })).value
+      expect(after.key.id).not.toBe(before.key.id)
+      expect(await hinted()).toBe(true)
+      await capture('renewed')
+    })
+  })
+
+  test('expires the session hint at a sign-out after the access key expires in an open page', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    const hinted = async () =>
+      Hint.has(await page.evaluate(() => document.cookie))
+    // Tempo ID refuses an expiry that passed, so the expiry leaves time for a slow sign-in.
+    await page.goto(`${url}?expiry=15s&hint=1`)
+    await enter(page, { code, email })
+
+    await test.step('keeps the hint at the expiry of the access key', async () => {
+      await expect(page.locator('#history')).toHaveText(
+        'pending signedOut signedIn signedOut',
+        { timeout: 30_000 },
+      )
+      expect(await hinted()).toBe(true)
+      await capture('expired')
+    })
+
+    await test.step('expires the hint at the sign-out', async () => {
+      await Playwright.run(page, { name: 'Sign out' })
+
+      await expect.poll(hinted).toBe(false)
+      await capture('signed out')
+    })
+  })
+
   test('refreshes the tokens, and keeps the access key', async ({
     capture,
     code,

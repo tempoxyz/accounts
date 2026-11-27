@@ -136,10 +136,18 @@ export class ConfigurableAccountError extends Error {
  * `fees`, pays only network fees, so its token counts as one that the limits do not name. Only such
  * a charge reads the chain's limits, since `updateLimit` can raise them.
  * In a browser, Tempo ID's payment page pays such a charge of the instance's session, so only a
- * charge that the page does not pay throws it.
+ * charge that the page does not pay throws it. Its `amount` and `token` name the charge that a new
+ * access key pays, such as for a sign-in with `permissions`. If the token also pays network fees,
+ * the new limit covers `amount` and the fees. `limit` describes only the current access key.
  */
 export class LimitError extends Error {
   override readonly name = 'mpp.LimitError'
+  /** The charge's amount, in the units of its token. */
+  readonly amount: string
+  /** The access key's limit of the token that is left, in its units. Absent for a token that the limits do not name. */
+  readonly limit: string | undefined
+  /** The charge's token. */
+  readonly token: Address.Address
 
   constructor(options: LimitError.Options) {
     super(
@@ -148,6 +156,9 @@ export class LimitError extends Error {
         : `The charge of ${options.amount} exceeds the access key's limit of ${options.limit} left for token ${options.token}. Sign in with an access key whose limit covers the charge.`,
       options.cause === undefined ? undefined : { cause: options.cause },
     )
+    this.amount = options.amount
+    this.limit = options.limit
+    this.token = options.token
   }
 }
 
@@ -160,7 +171,7 @@ export declare namespace LimitError {
     /** The access key's limit of the token that is left, in its units. Absent for a token that the limits do not name. */
     limit?: string | undefined
     /** The charge's token. */
-    token: string
+    token: Address.Address
   }
 }
 
@@ -388,6 +399,9 @@ type Turn = {
  * sends one transfer, so a charge of zero, a charge with splits, and a charge of an endpoint or a
  * payer that permits only `pull` need the access key.
  *
+ * @throws {TypeError} For an entry of `identity.scope` that is no URL, or one with a path, a query, or
+ *   a fragment. Name its origin, such as `https://api.example.com`.
+ *
  * @example
  * ```ts
  * import { Accounts } from 'accounts'
@@ -418,6 +432,7 @@ type Turn = {
  */
 export function mpp(options: mpp.Options = {}) {
   const { fetch } = options
+  const scope = options.identity && origins(options.identity.scope)
   // The context of each instance, by its configuration, since an app can pass one plugin to
   // several instances.
   const contexts = new WeakMap<Accounts.Config, Plugin.Context>()
@@ -737,8 +752,7 @@ export function mpp(options: mpp.Options = {}) {
        * it. Each request reads the session's current tokens, and none once `ended` returns true.
        */
       function prover(ended: () => boolean) {
-        if (!options.identity) return undefined
-        const { scope } = options.identity
+        if (!scope) return undefined
         const read = async () => {
           if (ended()) throw new Accounts.SignedOutError()
           const accessToken = await instance.session.accessToken()
@@ -1476,7 +1490,9 @@ export declare namespace mpp {
     /**
      * The origins that receive the access token and the ID token, such as
      * `['https://api.example.com']`, or `'*'` for every origin. Each origin receives tokens that
-     * act for the user, so name only endpoints that verify Tempo ID.
+     * act for the user, so name only endpoints that verify Tempo ID. An entry matches by its
+     * origin, so `https://API.example.com/` names `https://api.example.com`. `mpp` throws a
+     * `TypeError` for an entry with a path, a query, or a fragment.
      */
     scope: readonly string[] | '*'
   }
@@ -1877,6 +1893,37 @@ export declare namespace mpp {
    * with overrides, such as another session.
    */
   type Namespace = Pick<Payer, 'session'> & ((overrides?: Overrides) => Payer)
+}
+
+/**
+ * Returns each entry of `scope` as its serialized origin, such as `https://api.example.com` for
+ * `https://API.example.com/`, or `'*'`. mppx compares each entry with the request's origin as a
+ * string, so an entry in another form matches no request.
+ *
+ * @throws {TypeError} For an entry that is no URL, or one with a path, a query, or a fragment, since
+ * every path of its origin receives the tokens. The error names at most the origin, since the
+ * query or the user information of an entry can hold a secret.
+ */
+function origins(scope: mpp.Identity['scope']) {
+  if (scope === '*') return scope
+  return scope.map((entry) => {
+    // A malformed entry fails the parse, whose error holds the whole entry as its `input` in
+    // Node, so the plugin throws its own error, without that cause.
+    const url = (() => {
+      try {
+        return new URL(entry)
+      } catch {
+        throw new TypeError(
+          'Invalid identity scope: an entry is no URL. Name each origin, such as `https://api.example.com`.',
+        )
+      }
+    })()
+    if (url.pathname !== '/' || url.search || url.hash)
+      throw new TypeError(
+        `Invalid identity scope: an entry of \`${url.origin}\` names a path, a query, or a fragment. Name the origin alone.`,
+      )
+    return url.origin
+  })
 }
 
 /**
