@@ -12,7 +12,7 @@
     "@modelcontextprotocol/sdk": "^1.32.2",
     "accounts": "^1.0.0-alpha.2",
     "hono": "^4.13.16",
-    "mppx": "^0.17.1",
+    "mppx": "^0.21.1",
     "viem": "^2.58.6",
     "zod": "^4.6.7"
   },
