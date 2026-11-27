@@ -84,10 +84,13 @@ export type Policy = {
 /** The URL of a running `id-dev` instance that the suite uses in place of its own, from `TEMPO_ID_URL`. */
 export const external = process.env.TEMPO_ID_URL || undefined
 
-/** The image: `TEMPO_ID_IMAGE`, or a commit of `tempoxyz/id` that serves the deferred siwe challenge. */
+/**
+ * The image: `TEMPO_ID_IMAGE`, or a commit of `tempoxyz/id` that serves the deferred siwe challenge,
+ * and Continue as guest in the frame.
+ */
 export const image =
   process.env.TEMPO_ID_IMAGE ||
-  'ghcr.io/tempoxyz/id-dev:d130cf0d808bce2e3047044231923597b9510bbd'
+  'ghcr.io/tempoxyz/id-dev:f39289357b2da16021088b137d5f271098c3d318'
 
 /** The port that the container serves on, and publishes on the host. */
 export const port = 8787

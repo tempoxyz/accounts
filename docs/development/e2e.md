@@ -65,7 +65,7 @@ Each service has two variables. The image variable names another image for the c
 | `TEMPO_NODE_IMAGE`           | `ghcr.io/tempoxyz/tempo:latest`                                     | The image of each node that the suite starts          |
 | `TEMPO_RPC_URL`              | `http://127.0.0.1:9545/1`                                           | The RPC URL of a running node of chain 1337           |
 | `TEMPO_SECOND_RPC_URL`       | `http://127.0.0.1:9645/1`                                           | The RPC URL of a running node of chain 31318          |
-| `TEMPO_ID_IMAGE`             | `ghcr.io/tempoxyz/id-dev:d130cf0d808bce2e3047044231923597b9510bbd`  | The image of the Tempo ID that the suite starts       |
+| `TEMPO_ID_IMAGE`             | `ghcr.io/tempoxyz/id-dev:f39289357b2da16021088b137d5f271098c3d318`  | The image of the Tempo ID that the suite starts       |
 | `TEMPO_ID_URL`               | `http://localhost:8787`                                             | The URL of a running `id-dev` instance                |
 | `TEMPO_API_IMAGE`            | `ghcr.io/tempoxyz/api-dev:0dea25edcab7f3a4b55443064bc9d81bc6807383` | The image of the Tempo API that the suite starts      |
 | `TEMPO_API_URL`              | `http://127.0.0.1:9546`                                             | The URL of a running Tempo API                        |

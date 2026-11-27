@@ -504,13 +504,12 @@ test.describe('siwe', () => {
         await capture('shown before the message')
       })
 
-      await test.step('holds the sign-in until the message arrives, signs the message, and returns the verify route’s result', async () => {
+      await test.step('takes input while the message loads, signs the message once it arrives, and returns the verify route’s result', async () => {
         await Playwright.signIn(await Playwright.dialog(page), {
           code,
           email,
-          // The sign-in takes no action until its message shows, so the user sees what it signs.
+          // The frame takes input while the message loads, and holds a click until it arrives.
           filled: async (submit) => {
-            await expect(submit).toHaveAttribute('aria-busy', 'true')
             await capture('waiting for the message')
             release()
             // The message's statement resizes the dialog, so the click waits until it holds still.
