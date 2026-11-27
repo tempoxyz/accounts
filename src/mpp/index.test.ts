@@ -191,7 +191,9 @@ describe('mpp', () => {
         })
       })
       await new Promise<void>((resolve) => node.listen(0, '127.0.0.1', resolve))
-      onTestFinished(() => new Promise((resolve) => node.close(resolve)))
+      onTestFinished(
+        () => new Promise<void>((resolve) => node.close(() => resolve())),
+      )
       const address = node.address()
       if (!address || typeof address === 'string') throw new Error('No port.')
       const challenge = Challenge.fromMethod(Methods.session, {
