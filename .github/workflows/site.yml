@@ -105,7 +105,10 @@ jobs:
         env:
           URL: ${{ steps.deploy.outputs.verification-url }}
         run: |
-          curl --fail --output /dev/null --retry 10 --retry-all-errors --retry-delay 6 --show-error --silent "$URL/"
+          # Only a 200 proves the page is public. Access answers a visitor that no policy admits with
+          # a 302 to its sign-in page, which `--fail` accepts.
+          status=$(curl --fail --output /dev/null --retry 10 --retry-all-errors --retry-delay 6 --show-error --silent --write-out '%{http_code}' "$URL/")
+          [[ "$status" == 200 ]] || { echo "::error::$URL/ answered $status, not 200." >&2; exit 1; }
 
           # The tempo.xyz zone redirects plain HTTP to HTTPS. Without the redirect, a route of `/api/`
           # would name an `http:` client ID.
