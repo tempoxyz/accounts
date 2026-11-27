@@ -7,7 +7,11 @@
  */
 import { Base64, Bytes } from 'ox'
 import type * as Accounts from '../Accounts.js'
-import { GuestSessionError, LocalSessionError } from '../Accounts.js'
+import {
+  GuestSessionError,
+  LocalSessionError,
+  RequestError,
+} from '../Accounts.js'
 import * as AccessToken from '../AccessToken.js'
 import type * as AccessToken_ from '../AccessToken.js'
 import type * as AccountActions from '../actions/account.js'
@@ -565,7 +569,18 @@ export function backend(options: backend.Options) {
           },
           async get(request, options = {}) {
             const id = idOf(request)
-            const current = id ? await sessions.get({ id }) : undefined
+            // A refresh without a response, or with a 5xx status, ends the session, so the request
+            // names none, as `GET /auth/session` answers.
+            const current = id
+              ? await sessions.get({ id }).catch((error: unknown) => {
+                  if (
+                    error instanceof RequestError &&
+                    !BackendSessions.keeps(error)
+                  )
+                    return undefined
+                  throw error
+                })
+              : undefined
             if (current) return current
             // The `siwe` plugin's token mode hands a SIWE session's ID to the page, which sends it as
             // a bearer token. A Tempo ID session reads only from its cookie.
@@ -665,10 +680,13 @@ export declare namespace backend {
      * header. Without either, and with
      * `accessToken`, verifies an access token of the app in the `Authorization` header, and returns
      * `{ method: 'access-token', token }`. A header that holds no valid token, such as an API key,
-     * returns `undefined`. Returns `undefined` without either. The instance calls it as
-     * `session.get(request)`, beside the form without a request.
-     * @throws {Accounts.RequestError} With status 0, when the key set of the access token's
-     *   verifier cannot be fetched.
+     * returns `undefined`. Returns `undefined` without either. If a refresh of the cookie's session
+     * receives no response or a 5xx status, the session ends, and the call reads the request as
+     * without the cookie. The instance calls it as `session.get(request)`, beside the form without
+     * a request.
+     * @throws {Accounts.RequestError} When a refresh of the cookie's session fails with a 4xx
+     *   status other than `invalid_grant`, which keeps the session. With status 0, when the key set
+     *   of the access token's verifier cannot be fetched.
      *
      * @example
      * ```ts

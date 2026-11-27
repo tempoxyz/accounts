@@ -133,7 +133,7 @@ Without `redirect_uris`, the only redirect URI is the origin's root.
 
 A link to `/api/auth/login` leaves the page for Tempo ID's sign-in. The server keeps the PKCE verifier, so only the server can redeem the code.
 
-After the sign-in, the callback returns the browser to `returnTo` with the session cookie. <SourceLink name="session.get" path="src/Accounts.ts">`session.get(request)`</SourceLink> returns the session of the request's cookie, or `undefined`. It refreshes an [access token](/docs/guides/api-authentication/authenticate-requests) that expires within 30 seconds.
+After the sign-in, the callback returns the browser to `returnTo` with the session cookie. <SourceLink name="session.get" path="src/Accounts.ts">`session.get(request)`</SourceLink> returns the session of the request's cookie, or `undefined`. It refreshes an [access token](/docs/guides/api-authentication/authenticate-requests) that expires within 30 seconds. If the refresh receives no response or a 5xx status, the session ends, and the call returns `undefined`.
 
 :::code-group
 
