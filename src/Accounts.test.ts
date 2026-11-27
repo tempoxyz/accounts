@@ -2401,6 +2401,30 @@ describe('session.get', () => {
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
 
+  test('returns no session, and sends no request, with `reauthorize` outside a page for a redirect URI with a custom scheme', async () => {
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'f2d1c7a4-8b6e-4c1f-9a3d-5e7b2c4d6f80',
+      fetch: (input, init) => {
+        requests.push(String(input))
+        return globalThis.fetch(input, init)
+      },
+      redirectUri: 'myapp://callback',
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    // A native app signs in only in an authentication sheet, so the app shows its sign-in.
+    const session = await accounts.session.get({ reauthorize: true })
+
+    expect(session).toMatchInlineSnapshot(`undefined`)
+    expect(accounts.session.status.get().status).toMatchInlineSnapshot(
+      `"signedOut"`,
+    )
+    expect(requests).toMatchInlineSnapshot(`[]`)
+  })
+
   test('authorizes once for two instances on one store that restore together, and the later one returns the earlier one’s session', async () => {
     const name = 'tempo-id:session:["http://127.0.0.1:9","cli:mercator",4217]'
     const store = Store.memory()

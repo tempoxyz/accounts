@@ -232,7 +232,7 @@ export const accounts = Accounts.create({ chain: 'testnet' })
 
 ### Renew an expired session
 
-<SourceLink name="getSession.reauthorize" path="src/internal/Core.ts">`reauthorize: true`</SourceLink> renews a missing or expired session from the browser's Tempo ID session, with no prompt. The call returns `undefined` if only an interactive sign-in can renew it, so the page shows its sign-in. Outside a browser without <SourceLink name="Config.redirectUri" path="src/Accounts.ts">`redirectUri`</SourceLink>, such as in a CLI, it returns `undefined` with no request, and the program signs in again with the device grant.
+<SourceLink name="getSession.reauthorize" path="src/internal/Core.ts">`reauthorize: true`</SourceLink> renews a missing or expired session from the browser's Tempo ID session, with no prompt. The call returns `undefined` if only an interactive sign-in can renew it, so the page shows its sign-in. Outside a browser without <SourceLink name="Config.redirectUri" path="src/Accounts.ts">`redirectUri`</SourceLink>, such as in a CLI, it returns `undefined` with no request, and the program signs in again with the device grant. A native app whose `redirectUri` has a custom scheme also receives `undefined` with no request, and signs in again in an authentication sheet.
 
 :::code-group
 
