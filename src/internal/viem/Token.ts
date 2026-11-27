@@ -44,16 +44,18 @@ import * as Retry from './Retry.js'
  * | None                                   | none              | `true`  |
  * | None                                   | some              | `false` |
  *
+ * A guest session's key pair signs as the root account, so the owner sends nothing for it.
+ *
  * @example
  * ```ts
  * const remote = Token.ownerSends(accounts.session.status.get().session, { chainId: tempo.id })
  * ```
  */
 export function ownerSends(
-  session: Pick<Session.Any, 'accessKey' | 'accessKeys'> | undefined,
+  session: Pick<Session.Any, 'accessKey' | 'accessKeys' | 'kind'> | undefined,
   options: ownerSends.Options,
 ) {
-  if (!session) return false
+  if (!session || session.kind === 'guest') return false
   const key = accessKeyOn(session, options)
   if (key) return !AccessKey.held(key) && !AccessKey.expired(key)
   return !session.accessKey && !session.accessKeys?.length

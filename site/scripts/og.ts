@@ -14,6 +14,7 @@
  */
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import * as zlib from 'node:zlib'
 import { Renderer } from '@takumi-rs/core'
 import { container, image, text } from '@takumi-rs/helpers'
 
@@ -39,7 +40,7 @@ const renderer = new Renderer()
 await Promise.all([
   renderer.putPersistentImage(
     'logo',
-    fs.readFileSync(new URL('logo-dark.svg', root)),
+    fs.readFileSync(new URL('lockup-dark.svg', root)),
   ),
   renderer.putPersistentImage('pattern', new TextEncoder().encode(pattern())),
 ])
@@ -63,12 +64,56 @@ for (const file of fs.readdirSync(root, {
 
 await Promise.all(
   [...pages].map(async ([pathname, page]) => {
-    const png = await renderer.render(element(page), { ...size, format: 'png' })
+    const rgba = await renderer.render(element(page), {
+      ...size,
+      format: 'raw',
+    })
     const file = new URL(`.${pathname}`, root)
     fs.mkdirSync(path.dirname(file.pathname), { recursive: true })
-    fs.writeFileSync(file, png)
+    fs.writeFileSync(file, png(rgba))
   }),
 )
+
+/**
+ * Returns an opaque 8-bit RGB PNG of the RGBA pixels of a render.
+ *
+ * The PNG encoder of the renderer quantizes to a palette with an alpha of 252 in each entry.
+ * Some link previews show such an image with dither in the text, so the script drops the alpha
+ * and keeps each color.
+ */
+function png(rgba: Uint8Array) {
+  const row = size.width * 3
+  const pixels = Buffer.alloc((row + 1) * size.height)
+  for (let y = 0; y < size.height; y++)
+    for (let x = 0; x < size.width; x++)
+      for (let channel = 0; channel < 3; channel++)
+        // Each row starts with filter type 0, which stores the bytes as they are.
+        pixels[y * (row + 1) + 1 + x * 3 + channel] =
+          rgba[(y * size.width + x) * 4 + channel] ?? 0
+
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(size.width, 0)
+  header.writeUInt32BE(size.height, 4)
+  // Bit depth 8, color type 2 (RGB), and the default compression, filter, and interlace methods.
+  header.set([8, 2, 0, 0, 0], 8)
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', zlib.deflateSync(pixels, { level: 9 })),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
+}
+
+/** Returns a PNG chunk: its length, its type, its data, and the CRC-32 of its type and data. */
+function chunk(type: string, data: Buffer) {
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data])
+  const length = Buffer.alloc(4)
+  length.writeUInt32BE(data.length)
+  const crc = Buffer.alloc(4)
+  crc.writeUInt32BE(zlib.crc32(body))
+  return Buffer.concat([length, body, crc])
+}
 
 /** Returns the decoded `content` of the `<meta property>` tag of `property`, if the page holds one. */
 function meta(html: string, property: string) {
@@ -86,7 +131,10 @@ function meta(html: string, property: string) {
     .replaceAll('&amp;', '&')
 }
 
-/** Returns the node of the image of a page: the logo, the title, and the description. */
+/**
+ * Returns the node of the image of a page: the title and the description, centered vertically, and
+ * Tempo's wordmark at the bottom right.
+ */
 function element(page: { description: string; title: string }) {
   return container({
     children: [
@@ -94,7 +142,6 @@ function element(page: { description: string; title: string }) {
         src: 'pattern',
         style: { inset: 0, position: 'absolute', ...size },
       }),
-      image({ src: 'logo', style: { height: 80, width: 283 } }),
       container({
         children: [
           text(page.title, {
@@ -115,6 +162,17 @@ function element(page: { description: string; title: string }) {
           maxWidth: 980,
         },
       }),
+      // Absolute, so the wordmark leaves the text centered.
+      image({
+        src: 'logo',
+        style: {
+          bottom: 80,
+          height: 41,
+          position: 'absolute',
+          right: 80,
+          width: 184,
+        },
+      }),
     ],
     style: {
       alignItems: 'flex-start',
@@ -123,7 +181,7 @@ function element(page: { description: string; title: string }) {
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      justifyContent: 'space-between',
+      justifyContent: 'center',
       padding: 80,
       position: 'relative',
       width: '100%',

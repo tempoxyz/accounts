@@ -4,7 +4,7 @@
  * above `noteAbove` gets a note that names the packages of its initial load with the most bytes,
  * from `scripts/size.ts --inputs`.
  *
- * Usage: node .agents/metrics/footprint.ts
+ * Usage: node .agents/uphill/metrics/footprint.ts
  * @module
  */
 import * as ChildProcess from 'node:child_process'
@@ -13,7 +13,7 @@ import * as Os from 'node:os'
 import * as Path from 'node:path'
 
 /** The repository's root. */
-const root = Path.resolve(import.meta.dirname, '../..')
+const root = Path.resolve(import.meta.dirname, '../../..')
 
 /** The initial load, in bytes, above which a line names its largest packages. */
 const noteAbove = 15_000

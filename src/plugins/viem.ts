@@ -49,6 +49,7 @@ import {
 } from '../Accounts.js'
 import * as AccessKey_internal from '../internal/AccessKey.js'
 import * as AccountActions from '../actions/account.js'
+import * as Guest from '../actions/guest.js'
 import * as Actions_accounts from '../internal/Actions.js'
 import * as Api from '../internal/Api.js'
 import * as BackendOperations from '../internal/BackendOperations.js'
@@ -1343,7 +1344,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       ) {
         const result = await fn(ownAccessToken(accessKey))
         const session = context.session.get()
-        if (!session) return result
+        // A guest session holds no access key.
+        if (!session || Session.guest(session)) return result
         const address = (
           typeof accessKey === 'string' ? accessKey : accessKey.accessKeyAddress
         ).toLowerCase()
@@ -1376,7 +1378,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * within 30 seconds.
        */
       async function refreshed(session: Session.Any) {
-        if (Session.local(session)) return undefined
+        if (!Session.tempoId(session)) return undefined
         if (session.expiresAt - 30_000 > Date.now()) return session.accessToken
         return (await Core.refresh(context, { margin: 30_000 }))?.accessToken
       }
@@ -1390,6 +1392,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         if (!byChain) accounts.set(chainId, (byChain = new WeakMap()))
         const session = context.session.get()
         if (!session) return undefined
+        // A guest session's key pair signs as the root account, on every chain, with no access key.
+        if (!byChain.has(session) && Session.guest(session))
+          byChain.set(session, Guest.account(config, { session }))
         if (!byChain.has(session))
           byChain.set(
             session,
@@ -1607,8 +1612,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         // permissions the new access key takes, such as after `switchChain`. A session that never
         // held an access key requests none.
         // Tempo ID holds no account of a local session, so neither its authorization nor its dialog
-        // renews the access key: the app signs a new one with `local.signIn`.
-        if (before && Session.local(before)) throw error
+        // renews the access key: the app signs a new one with `local.signIn`. A guest session holds
+        // no access key to renew.
+        if (before && !Session.tempoId(before)) throw error
         const onChain = accessKeyOn(before, { chainId })
         const previous = onChain ?? before?.accessKey ?? before?.accessKeys?.[0]
         if (!before || !previous) throw error
@@ -1911,6 +1917,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         await change.commit(
           moved.accessKey ||
             moved === next ||
+            Session.guest(moved) ||
             !Session.same(latest, moved) ||
             !latest.account ||
             latest.accessKey

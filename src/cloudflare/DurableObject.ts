@@ -316,10 +316,13 @@ export function sessions<env>(
       )
     }
 
-    discard(options: sessions.Call<{ id: string }>) {
+    discard(
+      options: sessions.Call<{ id: string; issuedAt?: number | undefined }>,
+    ) {
       return Rpc.wrap(async () =>
         (await this.#sessions(options)).end({
           id: options.id,
+          issuedAt: options.issuedAt,
           revoke: false,
         }),
       )
@@ -353,9 +356,7 @@ export function sessions<env>(
       return Rpc.wrap(() => this.#store.getItem(options.key))
     }
 
-    headers(
-      options: sessions.Call<{ id: string; method: string; url: string }>,
-    ) {
+    headers(options: sessions.Call<BackendSessions.headers.Options>) {
       return Rpc.wrap(async () =>
         (await this.#sessions(options)).headers(options),
       )
@@ -484,8 +485,13 @@ export declare namespace sessions {
         url: string
       }>,
     ) => Promise<Rpc.Result<Rpc.Wire<BackendSessions.BackendSession>>>
-    /** Deletes the session without a revocation, for a session that Tempo ID ended. */
-    discard: (options: Call<{ id: string }>) => Promise<Rpc.Result<void>>
+    /**
+     * Deletes the session without a revocation, for a session that Tempo ID ended. With `issuedAt`,
+     * in milliseconds, a session whose tokens Tempo ID issued later stays.
+     */
+    discard: (
+      options: Call<{ id: string; issuedAt?: number | undefined }>,
+    ) => Promise<Rpc.Result<void>>
     /** Revokes the session's refresh token, then deletes the session. */
     end: (options: Call<{ id: string }>) => Promise<Rpc.Result<void>>
     /**
@@ -517,11 +523,7 @@ export declare namespace sessions {
     getItem: (options: { key: string }) => Promise<Rpc.Result<unknown>>
     /** Returns the headers that send the session's access token, signed with the object's key. */
     headers: (
-      options: Call<{
-        id: string
-        method: string
-        url: string
-      }>,
+      options: Call<BackendSessions.headers.Options>,
     ) => Promise<Rpc.Result<Record<string, string> | undefined>>
     /**
      * Stores a challenge of the session: its SIWE sign-in's, or an approval's. The `siwe` plugin
