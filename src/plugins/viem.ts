@@ -2582,6 +2582,13 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                     : client.sendTransaction(
                         parameters as never,
                       )) as typeof client.sendTransaction,
+                /**
+                 * Viem's `sendTransactionSync`, where the user's passkey approves a coordinated
+                 * transaction of a configurable account that names no `owner`, as
+                 * `sendTransaction` does. The receipt's status is `pending` until the owners reach the threshold.
+                 *
+                 * @throws {OwnerRequiredError} When no passkey of the user owns the account.
+                 */
                 sendTransactionSync: ((parameters: Coordinated) =>
                   coordinated(parameters)
                     ? approve(parameters).then((approval) =>
