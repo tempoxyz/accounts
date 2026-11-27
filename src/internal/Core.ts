@@ -59,6 +59,13 @@ export declare namespace authorize {
      * A sign-in on the app's page needs the `tempo-id:sign` scope.
      */
     challenge?: string | undefined
+    /**
+     * Whether the call reads `GET /v1/auth/session` before the authorization, so a visitor without
+     * a Tempo ID session sends no refused request. With `false`, the authorization is the only
+     * request. Use `false` where the user most likely holds the session, such as after an earlier
+     * sign-in in the browser. Defaults to `true` without a held or saved session, else `false`.
+     */
+    check?: boolean | undefined
     /** Runs the ceremony of a passkey that owns the account, in place of `navigator.credentials.get`. */
     getFn?: Actions.authorize.Options['getFn']
     /**
@@ -186,7 +193,8 @@ async function run(
             // A held or saved session shows that the user most likely holds the Tempo ID session. So
             // the call sends the authorization alone. Its `session_required` refusal returns no
             // session.
-            check: renewed === undefined && held === undefined,
+            check:
+              parameters.check ?? (renewed === undefined && held === undefined),
             getFn: parameters.getFn ?? config.getFn,
             passkey: parameters.passkey,
           })
@@ -229,6 +237,8 @@ async function run(
         ? result.account
         : undefined
     if (config.account === false) return undefined
+    // The response lists the accounts on the instance's chain, so no `GET /v1/account` follows.
+    if ('account' in result) return result.account
     return await SignIn.account(config, {
       getFn: (parameters.getFn ?? config.getFn) as never,
       userId: result.user.id,
