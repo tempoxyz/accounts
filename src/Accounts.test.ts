@@ -2146,6 +2146,150 @@ describe('RequestError', () => {
 })
 
 describe('session.fetch', () => {
+  test('refreshes once, and sends the request again with the new access token, when the API refuses the live access token', async () => {
+    const store = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        if (pathname === '/oauth2/token') {
+          requests.push(`${request.method} ${pathname}`)
+          return Response.json({
+            access_token: 'access-token-new',
+            expires_in: 300,
+            refresh_token: 'refresh-token-new',
+            token_type: 'Bearer',
+          })
+        }
+        requests.push(
+          `${request.method} ${pathname} ${request.headers.get('authorization')} ${await request.text()}`,
+        )
+        // The access token expired at the API before its `expiresAt` on the device, such as with a
+        // device clock that runs slow.
+        if (request.headers.get('authorization') === 'Bearer access-token')
+          return Response.json(
+            { error: 'invalid_token' },
+            {
+              headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
+              status: 401,
+            },
+          )
+        return Response.json({ ok: true })
+      }) as typeof globalThis.fetch,
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await store.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const response = await accounts.session.fetch({
+      init: { body: 'note', method: 'POST' },
+      url: 'https://api.example.com/notes',
+    })
+
+    expect({
+      body: await response.json(),
+      requests,
+      status: response.status,
+    }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "ok": true,
+        },
+        "requests": [
+          "POST /notes Bearer access-token note",
+          "POST /oauth2/token",
+          "POST /notes Bearer access-token-new note",
+        ],
+        "status": 200,
+      }
+    `)
+  })
+
+  test('returns the refusal, and signs out, when Tempo ID refuses the refresh token after the API refuses the access token', async () => {
+    const store = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      // The user's Tempo ID session ended elsewhere, so Tempo ID and the API refuse both tokens.
+      fetch: ((input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        requests.push(`${request.method} ${pathname}`)
+        if (pathname === '/oauth2/token')
+          return Promise.resolve(
+            Response.json(
+              {
+                error: 'invalid_grant',
+                error_description: 'invalid refresh token',
+              },
+              { status: 400 },
+            ),
+          )
+        return Promise.resolve(
+          Response.json(
+            { error: 'invalid_token' },
+            {
+              headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
+              status: 401,
+            },
+          ),
+        )
+      }) as typeof globalThis.fetch,
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await store.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const response = await accounts.session.fetch({
+      url: 'https://api.example.com/me',
+    })
+
+    expect({
+      requests,
+      status: response.status,
+      session: accounts.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          "GET /me",
+          "POST /oauth2/token",
+        ],
+        "session": "signedOut",
+        "status": 401,
+      }
+    `)
+  })
+
   test('throws SignedOutError, and sends no request, when another context signs out while the access token expires', async () => {
     const store = Store.memory()
     const accounts = Accounts.create({

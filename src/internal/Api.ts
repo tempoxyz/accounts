@@ -599,6 +599,34 @@ export function expired(token: string) {
 }
 
 /**
+ * Returns whether the response refuses its request's access token: status 401, with a
+ * `WWW-Authenticate` challenge that names `invalid_token` (RFC 6750 §3.1).
+ */
+export function refusesToken(response: Response) {
+  if (response.status !== 401) return false
+  const challenge = response.headers.get('www-authenticate') ?? ''
+  return /\berror="?invalid_token"?/i.test(challenge)
+}
+
+/**
+ * Returns whether a request body reads the same at a second send: absent, a string, a `Blob`, an
+ * `ArrayBuffer` or a view of one, `FormData`, or `URLSearchParams`. A stream or an iterable reads
+ * once.
+ */
+export function resendable(body: RequestInit['body']) {
+  return (
+    body === undefined ||
+    body === null ||
+    typeof body === 'string' ||
+    body instanceof Blob ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body) ||
+    body instanceof FormData ||
+    body instanceof URLSearchParams
+  )
+}
+
+/**
  * Throws `invalid_dpop_proof` for a DPoP token that the instance's `dpop` key does not bind: the
  * instance holds no key, or another key. Tempo ID and APIs refuse each request with such a token,
  * so the caller sends none.

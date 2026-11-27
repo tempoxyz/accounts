@@ -1378,6 +1378,13 @@ export type Accounts<
        * the `TypeError` of a relative `url` outside a page. A browser tab's sign-out that waits for
        * the refresh revokes its new tokens after the request.
        *
+       * If the response has status 401 and `WWW-Authenticate` names `invalid_token`, such as for an
+       * access token that expired at the API first, or after Tempo ID ended the user's session, the
+       * call refreshes the tokens once. New tokens send the request again, if its body reads twice,
+       * such as a string or a `Blob`. A stream body, a session without a refresh token, a refresh
+       * that fails, and a sign-in of another user return the first response. A refused refresh
+       * token ends the session.
+       *
        * With the `backend` plugin, `fetch(request, parameters)` sends the request with the access
        * token of the session that the server request's session cookie names, after a refresh if
        * necessary. It returns `undefined` without that session, and for a SIWE session, which holds
@@ -2792,7 +2799,46 @@ export function create<
               .finally(() => signal.removeEventListener('abort', abort))
           })
         })()
-        return Actions.fetch(config, { ...parameters, accessToken: token })
+        // The call started for the user of this token, so its retry never sends another user's token.
+        const started = context.session.get()
+        const subject = started && Session.subject(started)
+        const response = await Actions.fetch(config, {
+          ...parameters,
+          accessToken: token,
+        })
+        if (
+          !Api.refusesToken(response) ||
+          !Api.resendable(parameters.init?.body)
+        )
+          return response
+
+        // The API refused a live access token, such as one that expired before its `expiresAt` on a
+        // device clock that runs slow, or one of a Tempo ID session that ended elsewhere. One refresh
+        // tells that from a stale token, as `account.get` does. Another call can have replaced the
+        // refused token already, and then the request sends its token without a refresh.
+        const current = context.session.get()
+        if (!current?.refreshToken) return response
+        if (current.accessToken === token) {
+          // A refused refresh token ends the session, and the call returns the first response.
+          const failed = await refresh().then(
+            () => false,
+            () => true,
+          )
+          if (failed) return response
+        }
+        const latest = context.session.get()
+        if (
+          !latest ||
+          Session.subject(latest) !== subject ||
+          latest.accessToken === token
+        )
+          return response
+        await response.body?.cancel()
+        return Actions.fetch(config, {
+          ...parameters,
+          // The refreshed session holds a live access token, so the call sends no second refresh.
+          accessToken: await accessToken(),
+        })
       },
       get: (parameters: Core.getSession.Parameters | Request = {}) => {
         if (parameters instanceof Request)

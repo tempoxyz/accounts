@@ -42,7 +42,7 @@ bun add accounts react react-dom viem
 
 ### Send the access token<StepTag kind="client" />
 
-<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch`</SourceLink> sends the access token as a Bearer token, and refreshes it first if it expires soon. The <SourceLink name="react" path="src/react/index.ts">`react`</SourceLink> plugin adds <SourceLink name="useSession" path="src/react/index.ts">`useSession`</SourceLink>.
+<SourceLink name="session.fetch" path="src/Accounts.ts">`session.fetch`</SourceLink> sends the access token as a Bearer token, and refreshes it first if it expires soon. If the API refuses the token, the call refreshes it once and sends the request again. The <SourceLink name="react" path="src/react/index.ts">`react`</SourceLink> plugin adds <SourceLink name="useSession" path="src/react/index.ts">`useSession`</SourceLink>.
 
 :::code-group
 
@@ -113,7 +113,7 @@ const accounts = Accounts.create({
 
 <SourceLink name="tokens.verifyAccessToken" path="src/plugins/tokens.ts">`tokens.verifyAccessToken`</SourceLink> reads the token of the authorization header, and checks its signature, type, issuer, audience, expiry, and app. It returns the verified token, or `undefined` if the request holds no token that verifies.
 
-Without a verified token, the API answers 401. The API also refuses a DPoP token, which names a <SourceLink name="create.boundTo" path="src/AccessToken.ts">`boundTo`</SourceLink>, until it refuses a repeated proof, as [Bind DPoP keys](/docs/guides/api-authentication/bind-dpop-keys#refuse-a-repeated-proof) shows.
+Without a verified token, the API answers 401 with a `WWW-Authenticate` challenge that names `invalid_token` (RFC 6750), which tells the client to refresh the token. The API also refuses a DPoP token, which names a <SourceLink name="create.boundTo" path="src/AccessToken.ts">`boundTo`</SourceLink>, until it refuses a repeated proof, as [Bind DPoP keys](/docs/guides/api-authentication/bind-dpop-keys#refuse-a-repeated-proof) shows.
 
 ```ts [server.ts]
 import { Accounts } from 'accounts'
@@ -128,7 +128,13 @@ export default {
   async fetch(request: Request) {
     const token = await accounts.tokens.verifyAccessToken(request) // [!code hl]
     if (!token || token.boundTo)
-      return Response.json({ error: 'invalid_token' }, { status: 401 })
+      return Response.json(
+        { error: 'invalid_token' },
+        {
+          headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
+          status: 401,
+        },
+      )
 
     return Response.json({ userId: token.userId })
   },
@@ -272,7 +278,13 @@ export default {
         { status: 503 },
       )
     if (!token || token.boundTo)
-      return Response.json({ error: 'invalid_token' }, { status: 401 })
+      return Response.json(
+        { error: 'invalid_token' },
+        {
+          headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
+          status: 401,
+        },
+      )
 
     return Response.json({ userId: token.userId })
   },
@@ -296,7 +308,13 @@ export default {
   async fetch(request: Request) {
     const token = await accounts.tokens.verifyAccessToken(request)
     if (!token || token.boundTo)
-      return Response.json({ error: 'invalid_token' }, { status: 401 })
+      return Response.json(
+        { error: 'invalid_token' },
+        {
+          headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
+          status: 401,
+        },
+      )
 
     const user = await accounts.tokens.userInfo({ accessToken: token }) // [!code hl]
     return Response.json({ email: user.email })
