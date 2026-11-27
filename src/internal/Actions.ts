@@ -155,6 +155,9 @@ export async function authorize<
     // holds the access key alone. Without an access key, a listed response with no account names
     // `account` as `undefined`, so the caller reads no account either.
     ...(() => {
+      // A challenge names the chain that signs it, so Tempo ID lists the accounts also for an
+      // instance with `account: false`, which reads none.
+      if (!resolved && auth.account === false) return {}
       if (!first) return resolved || !body.tempo ? {} : { account: undefined }
       try {
         return {
