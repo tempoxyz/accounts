@@ -5,6 +5,7 @@
  * the node, and sends transactions inside and outside its bounds.
  * @module
  */
+import type { Page } from '@playwright/test'
 import type { Permissions } from 'accounts'
 import { formatUnits } from 'viem'
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts'
@@ -131,6 +132,34 @@ async function expired(key: Web.Key) {
   await expect
     .poll(() => Chain.time(), { timeout: 30_000 })
     .toBeGreaterThan(key.expiry!)
+}
+
+/**
+ * Starts a revocation and a change of the access key in a browser without a connection, and checks
+ * that each rejects with `server_error` and status 0, and that no dialog opens.
+ */
+async function offline(page: Page) {
+  for (const [name, noun] of [
+    ['Revoke the access key', 'revocation'],
+    ['Update the access key to a limit of 50', 'change'],
+  ] as const) {
+    await Playwright.start(page, { name })
+
+    expect(
+      await Playwright.outcome(page, { name, timeout: 2_000 }),
+    ).toMatchObject({
+      state: 'rejected',
+      value: {
+        code: 'server_error',
+        message: `The browser is offline, so the ${noun} receives no response. Check the connection, then try again.`,
+        name: 'Accounts.RequestError',
+        status: 0,
+      },
+    })
+  }
+  await expect(page.locator('dialog[data-tempo-id-dialog][open]')).toHaveCount(
+    0,
+  )
 }
 
 /** Returns what `key` may still send of a token, as the node holds it, in the token's base units. */
@@ -316,6 +345,61 @@ test.describe('access keys', () => {
         ).toBe(2_000_000n)
         await capture('sent again')
       })
+    })
+
+    test('rejects a revocation and a change of the access key in a browser without a connection at once, and opens no dialog', async ({
+      capture,
+      code,
+      context,
+      email,
+      errors,
+      page,
+    }) => {
+      await Web.enter_dialog(page, { capture, code, email })
+      await context.setOffline(true)
+
+      await test.step('rejects each with server_error and status 0, and opens no dialog', async () => {
+        await offline(page)
+        await capture('offline')
+      })
+
+      await context.setOffline(false)
+      // The browser logs the loads that failed offline.
+      errors.splice(0)
+    })
+
+    test('rejects a revocation and a change of the access key of the default dialog in a browser without a connection, after a reload that restores the session', async ({
+      capture,
+      code,
+      context,
+      email,
+      errors,
+      page,
+    }) => {
+      await page.goto(Web.url({ default: '1', path: Apps.web.paths.dialog }))
+
+      await test.step('signs in, and restores the session at a reload', async () => {
+        await Playwright.start(page, { name: 'Sign in' })
+        await Playwright.signIn(await Playwright.dialog(page), { code, email })
+        expect(
+          (await Playwright.outcome(page, { name: 'Sign in' })).value,
+        ).toMatchObject({ email })
+
+        await page.reload()
+        await expect(page.locator('#status')).toHaveText('signedIn')
+        await capture('restored')
+      })
+
+      await test.step('rejects each with server_error and status 0, and opens no dialog', async () => {
+        await context.setOffline(true)
+        await offline(page)
+        await expect(page.locator('#status')).toHaveText('signedIn')
+        await capture('offline')
+      })
+
+      await context.setOffline(false)
+      // The browser logs the load of the dialog's code that failed offline.
+      errors.splice(0)
     })
 
     test('requests a new access key for a transfer above the limit, and sends it again', async ({

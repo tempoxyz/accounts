@@ -454,6 +454,13 @@ export function mpp(options: mpp.Options = {}) {
       const clients = new Map<number, Client<Transport, Chain>>()
       // The payers of each access key, one for each setting of the charges.
       const payers = new WeakMap<AccessKey.AccessKey, Map<string, mpp.Payer>>()
+      // The node's refusal of a charge of each access key that the chain holds revoked, with the
+      // access key, by its Tempo Account, ID, and chain. A revoked access key never registers
+      // again. An expired access key refuses each charge before the read, so its entry goes.
+      const revocations = new Map<
+        string,
+        { accessKey: AccessKey.AccessKey; error: Error }
+      >()
       // The changes that ended the instance's session, or replaced it with one of another user,
       // Tempo Account, or start of a guest session. One subscription per instance holds it, so a
       // discarded manager holds none.
@@ -1001,6 +1008,20 @@ export function mpp(options: mpp.Options = {}) {
           if (ended()) throw new Accounts.SignedOutError()
           // The access key can also expire while the store read runs, such as a store's timeout.
           if (AccessKey.expired(accessKey)) throw new Accounts.SignedOutError()
+          // Once the node refused a charge of the access key as revoked, a later challenge that only
+          // the access key pays signs nothing and reads no chain. A payment page, a subscription's
+          // dialog, or a retry that signs in for a new access key still pays it. The check runs
+          // after the store read, so the instance adopts a new access key that another process saved.
+          const revocation = revocations.get(revocationName(accessKey))
+          if (revocation && !remote && !subscriber) {
+            const enabled = overrides.session
+              ? false
+              : retries(overrides, Number(accessKey.chainId))
+            if (enabled === false || enabled.accessKey === false)
+              throw new Accounts.AccessKeyRequiredError({
+                cause: revocation.error,
+              })
+          }
         }
         // Only a page shows the dialog where the user approves a subscription, and only for the
         // instance's own session. The tab may sign out or switch accounts before the challenge
@@ -1060,23 +1081,26 @@ export function mpp(options: mpp.Options = {}) {
           (paged && signing.signal) ||
           (maxAmount !== undefined && typeof maxAmount !== 'string')
         )
-          return create({
-            ...settings,
-            account,
-            address: account.address,
-            chainId,
-            fees,
-            fetch,
-            getClient,
-            identity,
-            landed: registrations.landed,
-            limits,
-            marks,
-            pay: remote,
-            subscribe: subscriber,
-            turn: registrations.turn,
-            verify,
-          })
+          return recording(
+            create({
+              ...settings,
+              account,
+              address: account.address,
+              chainId,
+              fees,
+              fetch,
+              getClient,
+              identity,
+              landed: registrations.landed,
+              limits,
+              marks,
+              pay: remote,
+              subscribe: subscriber,
+              turn: registrations.turn,
+              verify,
+            }),
+            accessKey,
+          )
         let byAccessKey = payers.get(current.accessKey)
         if (!byAccessKey)
           payers.set(current.accessKey, (byAccessKey = new Map()))
@@ -1098,25 +1122,71 @@ export function mpp(options: mpp.Options = {}) {
         const existing = byAccessKey.get(name)
         if (existing) return existing
 
-        const created = create({
-          ...settings,
-          account,
-          address: account.address,
-          chainId,
-          fees,
-          fetch,
-          getClient,
-          identity,
-          landed: registrations.landed,
-          limits,
-          marks,
-          pay: remote,
-          subscribe: subscriber,
-          turn: registrations.turn,
-          verify,
-        })
+        const created = recording(
+          create({
+            ...settings,
+            account,
+            address: account.address,
+            chainId,
+            fees,
+            fetch,
+            getClient,
+            identity,
+            landed: registrations.landed,
+            limits,
+            marks,
+            pay: remote,
+            subscribe: subscriber,
+            turn: registrations.turn,
+            verify,
+          }),
+          accessKey,
+        )
         byAccessKey.set(name, created)
         return created
+      }
+
+      /** Returns the name of `accessKey` in `revocations`. */
+      function revocationName(accessKey: AccessKey.AccessKey) {
+        return [
+          accessKey.account,
+          accessKey.keyAuthorization.keyId,
+          Number(accessKey.chainId),
+        ]
+          .join(':')
+          .toLowerCase()
+      }
+
+      /**
+       * Returns `payer`, which records the node's refusal of a charge of `accessKey` as revoked.
+       * Only a refusal that the transport marks counts, so no endpoint's response records one.
+       */
+      function recording(
+        payer: mpp.Payer,
+        accessKey: AccessKey.AccessKey,
+      ): mpp.Payer {
+        const record = (error: unknown): never => {
+          if (retry.errorName(error) === 'KeyAlreadyRevoked') {
+            for (const [name, entry] of revocations)
+              if (AccessKey.expired(entry.accessKey)) revocations.delete(name)
+            revocations.set(revocationName(accessKey), {
+              accessKey,
+              error: error as Error,
+            })
+          }
+          throw error
+        }
+        return {
+          ...payer,
+          fetch: (input, init) => payer.fetch(input, init).catch(record),
+          mcp: (client) => {
+            const inner = payer.mcp(client)
+            return {
+              callTool: (params, resultSchema, options) =>
+                inner.callTool(params, resultSchema, options).catch(record),
+            }
+          },
+        }
       }
 
       /** Returns the payer that resolves its access key at each call, as `payer` does. */
@@ -1695,7 +1765,9 @@ export declare namespace mpp {
      *   accounts.
      * @throws {Accounts.AccessKeyRequiredError} For a session without an access key. For a charge
      *   that the chain refuses, since it holds the access key revoked, with the chain's refusal as
-     *   `cause`, after a retry of the `accessKey` kind, if one runs. In a browser,
+     *   `cause`, after a retry of the `accessKey` kind, if one runs. If no such retry, payment page,
+     *   or dialog pays it, a later charge of the same access key throws it at its challenge, before
+     *   the access key signs or any read of the chain. In a browser,
      *   Tempo ID's payment page pays a charge of such an instance's session, if one transfer in
      *   `push` mode pays the charge. The error is then thrown only once a challenge needs an access
      *   key.

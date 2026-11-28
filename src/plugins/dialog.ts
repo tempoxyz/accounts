@@ -428,7 +428,8 @@ export function dialog<const options extends dialog.Options = {}>(
          *   the user selects Cancel, `login_required` without a Tempo ID session, or the page's
          *   refusal, such as
          *   [`unknown_key`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#unknown_key) for
-         *   an access key that Tempo ID did not sign for the app.
+         *   an access key that Tempo ID did not sign for the app. With `server_error` and status 0 in a
+         *   browser without a connection, before any dialog or popup opens.
          * @throws {Accounts.AccessKeyRequiredError} Without `accessKey` and `account`, when the
          *   session holds no access key on the chain, such as after a sign-in with `accessKey:
          *   false`.
