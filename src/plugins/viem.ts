@@ -1206,6 +1206,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         },
         retry: {
           classify: retry.classify,
+          errorName: retry.errorName,
           fix: (failure, options) =>
             fix_joined(failure, {
               ...options,
@@ -3314,6 +3315,11 @@ export declare namespace viem {
      * that the node may have taken a transaction for.
      */
     classify: (error: unknown) => Retry.Failure | undefined
+    /**
+     * Returns the name of the node's error of a refused send, such as `KeyAlreadyRevoked`, or
+     * `undefined` for an error that carries no mark of the transport.
+     */
+    errorName: (error: unknown) => string | undefined
     /**
      * Shows the screen that resolves `failure`, and resolves once the payment can send again: the
      * deposit page for a balance, and a sign-in for a new access key for an access key or its

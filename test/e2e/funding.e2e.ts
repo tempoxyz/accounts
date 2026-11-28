@@ -358,8 +358,9 @@ test.describe('funding', () => {
             }),
           ],
         )
+        // The deposit page names the app by the host of its redirect URI.
         await expect(deposit.hint).toHaveText(
-          'Web test app recommends you have at least $1,000 in OUSD in your wallet.',
+          `${new URL(Apps.web.url).host} recommends you have at least $1,000 in OUSD in your wallet.`,
         )
         await capture('hint')
         await deposit.faucet.click()

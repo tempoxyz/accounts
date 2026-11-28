@@ -573,9 +573,14 @@ test.describe('third-party app', () => {
         state: 'fulfilled',
         value: null,
       })
-      // `reauthorizeOnMount` defaults to `false` for a client ID that is an origin.
+      // `reauthorizeOnMount` defaults to `false` for a client ID that is an origin. The frame loads
+      // Tempo ID's own chunks, such as `/assets/authorize-*.js`, which request nothing.
       expect(
-        sent.filter((request) => /authorize|\/oauth2\/token/.test(request)),
+        sent.filter(
+          (request) =>
+            !request.includes('/assets/') &&
+            /authorize|\/oauth2\/token/.test(request),
+        ),
       ).toEqual([])
       await capture('signed out')
     })

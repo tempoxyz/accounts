@@ -3265,14 +3265,19 @@ type WithoutGuest<fn> = fn extends (
   : fn
 
 /**
- * The overload of a page's sign-in `fn` that also returns a guest session. A sign-in through a
- * backend returns none, so it takes no such overload.
+ * The overload of a page's sign-in `fn` that also returns a guest session, with the members that
+ * `fn`'s session adds, such as `auth`. A sign-in through a backend returns none, so it takes no
+ * such overload.
  */
 type WithGuest<fn> = fn extends (
   ...parameters: infer parameters
 ) => Promise<infer result>
   ? result extends Session.Session
-    ? (...parameters: parameters) => Promise<result | Session.GuestSession>
+    ? (
+        ...parameters: parameters
+      ) => Promise<
+        result | (Session.GuestSession & Omit<result, keyof Session.Session>)
+      >
     : unknown
   : unknown
 
