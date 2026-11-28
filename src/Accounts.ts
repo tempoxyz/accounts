@@ -1213,7 +1213,7 @@ export type Accounts<
      * instance reads the stored session first, and Tempo ID only if the session holds no account.
      * A third-party client ID, such as an origin, sends no read, and the payment page picks the
      * account. So does a session that signed in without a Tempo Account on an instance with
-     * `account: false`, so the read creates no account. Outside a page, a call without a session throws {@link SignedOutError} before any request.
+     * `account: false`, so the read creates no account. Outside a page, a call without a session, or with a session whose every access key expired, throws {@link SignedOutError} before any request.
      * Call it in a click handler, with `account` for a popup on another chain than the instance's,
      * since a popup opens only before any read. Throws the
      * errors of `Actions.account.pay`, and {@link SignedOutError} without an account.
@@ -2726,6 +2726,15 @@ export function create<
           return { ...paid, authError: error }
         }
       }
+      // Outside a page, a session whose every access key expired sends nothing, and no page takes the
+      // payment, so it is signed out, as its status shows.
+      const current = fixed ? undefined : context.session.get()
+      if (
+        typeof document === 'undefined' &&
+        current &&
+        Session.expired(current)
+      )
+        throw new SignedOutError()
       const held = named() ?? parameters.account ?? own()
       const resolved = held
         ? { account: held, chainId: chainOf() }

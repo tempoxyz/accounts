@@ -1882,6 +1882,73 @@ describe('pay', () => {
     expect(requests).toMatchInlineSnapshot(`[]`)
   })
 
+  test("throws SignedOutError once the session's only access key expires, as the session's status shows, and sends no request", async () => {
+    const owner = Account.fromSecp256k1(
+      '0x0123456789012345678901234567890123456789012345678901234567890123',
+    )
+    const privateKey =
+      '0x0123456789012345678901234567890123456789012345678901234567890124'
+    const accessKey = Account.fromSecp256k1(privateKey, { access: owner })
+    const store = Store.memory()
+    // A native app's session, whose access key expires in a second.
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",1337]',
+      {
+        state: {
+          session: Session.from({
+            accessKey: {
+              account: owner.address,
+              chainId: 1337,
+              keyAuthorization: KeyAuthorization.toRpc(
+                await owner.signKeyAuthorization(accessKey, {
+                  chainId: 1337n,
+                  expiry: Math.floor(Date.now() / 1000) + 1,
+                }),
+              ),
+              privateKey,
+            },
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 3_600_000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 1337,
+      clientId: 'client_1',
+      fetch: (input, init) => {
+        requests.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      plugins: [viem()],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+    await expect
+      .poll(() => accounts.session.status.get().status, { timeout: 5_000 })
+      .toBe('signedOut')
+
+    const error = await accounts
+      .pay({
+        amount: '5',
+        to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+        token: 'pathusd',
+      })
+      .then(
+        () => undefined,
+        (error: Error) => error,
+      )
+
+    expect(error?.name).toMatchInlineSnapshot(`"Accounts.SignedOutError"`)
+    expect(requests).toMatchInlineSnapshot(`[]`)
+  })
+
   test("rejects an `account` other than the account of a fixed session's access key with `invalid_field`, and sends no request", async () => {
     const owner = Account.fromSecp256k1(
       '0x0123456789012345678901234567890123456789012345678901234567890123',
