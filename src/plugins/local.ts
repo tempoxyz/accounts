@@ -306,8 +306,8 @@ export function local(options: local.Options = {}) {
                 return { auth, signature }
               })()
             : undefined
-          // The live access keys of other chains, once each: a switch keeps the moved key in both
-          // `accessKey` and `accessKeys`.
+          // The live access keys of other chains, once each. `accessKeys` never holds the access key
+          // of `accessKey`, so a switch keeps one access key for each chain.
           const others = [own?.accessKey, ...(own?.accessKeys ?? [])].filter(
             (entry, index, entries): entry is AccessKey.AccessKey =>
               !!entry &&
@@ -321,7 +321,7 @@ export function local(options: local.Options = {}) {
           )
           const session = Session.from({
             accessKey,
-            accessKeys: [accessKey, ...others],
+            ...(others.length ? { accessKeys: others } : {}),
             address: owner.address,
             ...(challenged ? { challengeSignature: challenged.signature } : {}),
             kind: 'local',

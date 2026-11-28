@@ -154,6 +154,46 @@ describe('local.signIn', () => {
     expect(session.address).toBe(address)
     expect(signer(session)).toBe(address)
   })
+
+  test('holds the access key once, so a switch keeps one access key for each chain', async () => {
+    const accounts = Accounts.create({
+      chain: 4217,
+      chains: [4217, 1337],
+      clientId: 'cli:mercator',
+      plugins: [local(), viem()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.local.create()
+
+    const session = await accounts.local.signIn()
+    await accounts.switchChain({ chainId: 1337 })
+    const moved = await accounts.session.get()
+
+    expect({
+      moved: {
+        accessKey: moved?.accessKey?.chainId,
+        accessKeys: moved?.accessKeys?.map((entry) => entry.chainId),
+      },
+      signedIn: {
+        accessKey: session.accessKey?.chainId,
+        accessKeys: session.accessKeys?.map((entry) => entry.chainId),
+      },
+    }).toMatchInlineSnapshot(`
+      {
+        "moved": {
+          "accessKey": undefined,
+          "accessKeys": [
+            4217,
+          ],
+        },
+        "signedIn": {
+          "accessKey": 4217,
+          "accessKeys": undefined,
+        },
+      }
+    `)
+  })
 })
 
 describe('local.import', () => {
@@ -422,9 +462,7 @@ describe('local with Tempo ID calls', () => {
     expect(accounts.chain.get()).toBe(42431)
     expect(session.address).toBe(address)
     expect(session.accessKey!.chainId).toBe(42431)
-    expect(
-      session.accessKeys!.map((entry) => entry.chainId).sort((a, b) => a - b),
-    ).toEqual([4217, 42431])
+    expect(session.accessKeys!.map((entry) => entry.chainId)).toEqual([4217])
   })
 
   test('account.get throws LocalSessionError, and sends no request', async () => {
