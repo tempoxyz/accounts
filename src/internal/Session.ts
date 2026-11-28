@@ -1485,13 +1485,14 @@ export function create(options: create.Options): create.ReturnType {
 
   return {
     actor,
-    async authorize(fn) {
+    async authorize(fn, options = {}) {
+      const { lock = true } = options
       if (!actor) return await fn()
       // Only the first authorization of the instance takes the lock. A nested one, or one beside
       // another, runs as it is, since the one that holds the lock can wait for it.
       const first = authorizations.size === 0 && context().delegations === 0
       actor.send({ type: 'authorize.start' })
-      const promise = first ? serialized(fn) : fn()
+      const promise = first && lock ? serialized(fn) : fn()
       const entry = promise.then(
         () => undefined,
         () => undefined,
@@ -2422,7 +2423,17 @@ export declare namespace create {
      * Runs `fn`, an authorization of the browser's Tempo ID session, and holds the status at
      * `pending`, or at `reauthorizing` while it renews a saved session whose access key expired.
      */
-    authorize: <value>(fn: () => Promise<value>) => Promise<value>
+    authorize: <value>(
+      fn: () => Promise<value>,
+      options?: {
+        /**
+         * Whether the authorization waits for one of another instance on the store, such as another
+         * tab's restore. A renewal that a transaction retries waits for none, so its request starts
+         * at once. Defaults to `true`.
+         */
+        lock?: boolean | undefined
+      },
+    ) => Promise<value>
     /** Begins a change to the session, or with `update`, a change of the current session's tokens. */
     change: (options?: ChangeOptions) => Change
     /**

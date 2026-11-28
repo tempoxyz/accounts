@@ -221,7 +221,17 @@ export type Context = {
      * Runs `fn`, an authorization of the browser's Tempo ID session, and holds the session's status at
      * `pending`, or at `reauthorizing` while it renews a saved session that expired.
      */
-    authorize: <value>(fn: () => Promise<value>) => Promise<value>
+    authorize: <value>(
+      fn: () => Promise<value>,
+      options?: {
+        /**
+         * Whether the authorization waits for one of another instance on the store, such as another
+         * tab's restore. A renewal that a transaction retries waits for none, so its request starts
+         * at once. Defaults to `true`.
+         */
+        lock?: boolean | undefined
+      },
+    ) => Promise<value>
     /**
      * Begins a change to the session. The only way to change it: the change holds the race guard
      * and saves the session.
