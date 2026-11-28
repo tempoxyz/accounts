@@ -1,5 +1,7 @@
 # Agent Guidelines
 
+Follow the [Uphill rules](.agents/uphill/rules.md), which `uphill rules --write` rewrites from each metric's description: @.agents/uphill/rules.md
+
 ## Project Principles
 
 - `accounts` is the SDK of Tempo ID (`id.tempo.xyz`). Apps use it to sign users in, keep their session and access key, and act on Tempo with it.
@@ -14,24 +16,17 @@
 
 ## TypeScript Conventions
 
-- Treat `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` as constraints. Add `| undefined` where an optional property can receive `undefined`. Narrow indexed reads.
-- Use `readonly T[]`, unless mutation is part of the contract.
-- Use `type`. Use `interface` only for declaration merging, such as `cloudflare:workers` in `src/cloudflare/workers.d.ts`.
-- Use `.js` extensions on relative imports.
-- Write everything in TypeScript. `.js` files are banned, except the `metro.config.js` of an Expo app, since Metro fails to load the TypeScript form of Expo 58. Run scripts with `node script.ts`.
-- Import internal modules as namespaces (`import * as Session from './Session.js'`). Named imports are fine for types, leaf helpers, and third-party APIs.
-- Import Node built-ins as namespaces, unless a named import is clearer.
-- Use static imports. Use dynamic imports only at a real runtime or bundle boundary, such as `Accounts.handler`'s server.
+The Uphill rules hold the general TypeScript rules. These add the rules and exceptions of this repository.
+
+- Add `| undefined` where an optional property can receive `undefined`. Narrow indexed reads.
+- Use `interface` only for declaration merging, such as `cloudflare:workers` in `src/cloudflare/workers.d.ts`.
+- `.js` files are banned, except the `metro.config.js` of an Expo app, since Metro fails to load the TypeScript form of Expo 58. Run scripts with `node script.ts`.
+- Named imports are fine for leaf helpers and third-party APIs, and for a Node built-in where they are clearer.
 - Load Node built-ins in shared code with `process.getBuiltinModule`, as `Store.file` does. Webpack fails on each `node:` import, also a dynamic one.
-- Use `import type` and `export type` for type-only imports and exports.
-- Use functions and plain data. Classes are only for errors and framework entrypoints such as Durable Objects.
-- Put error classes at the top of the module, after imports, in alphabetical order. Name them in namespaced form, such as `Accounts.RequestError`.
-- Use unions or `as const` objects, not enums.
-- Use `camelCase` constants, unless the name mirrors an external protocol.
+- Put error classes at the top of the module, after imports, in alphabetical order.
+- Keep an uppercase constant only where the name mirrors an external protocol.
 - Use `const` generics when callers keep literal or tuple types.
-- Default option bags in the signature: `options: fn.Options = {}`.
-- Name option bags `options`.
-- Take at most two positional parameters: an optional receiver (`accounts`, `client`, `store`) or the inspected value (`error`, `session`), then one options object.
+- Make the first positional parameter an optional receiver (`accounts`, `client`, `store`) or the inspected value (`error`, `session`).
 
   ```ts
   Actions.authorize(accounts, { permissions }) // not authorize(accounts, permissions)
@@ -40,25 +35,19 @@
 
   Exempt: framework-dictated signatures, such as callbacks and Durable Object methods.
 
-- Put a function's types in a matching `declare namespace` (`create.Options`, `create.ReturnType`, `create.ErrorType`).
-- Do not annotate locals with inline object types. Name the type above the use instead.
+- Declare a function's types in a matching `declare namespace` (`create.Options`, `create.ReturnType`, `create.ErrorType`).
 - Give each module that owns a public data type a `from` instantiator (`Permissions.from({ ... })`). Do not annotate, `as`, or `satisfies` the binding.
 - Extract a named type only when it is reused or clarifies a hard shape.
 - Keep shared domain types beside the module that owns the concept.
 - Group Zod schemas in a `schema` namespace, with derived types beside them. Export it only when another module validates the same shape.
 - Let declared return types constrain expressions. Avoid redundant annotations.
-- Return values directly unless a binding is reused or names a complex expression.
-- Use an IIFE with early returns instead of nested ternaries, or a mutable variable across `try`/`catch`.
-- Never destructure parameters in definitions. Destructure in the body.
 - Declare props as `Component.Props` in the component's namespace.
 - Prefer short names clear from context: `options`, `client`, `entry`, `fn`.
 - On a name conflict, keep the existing name and suffix the new one, such as `revoke_remote`. No synonyms or past tenses.
 - Keep order-sensitive shapes (wire formats, tuples, protocol fields) in their order.
-- Avoid new `any`.
 - Separate logical steps with one blank line: setup, guards, derivation, mutation, return.
 - Keep a lookup with its guard, and consecutive assertions together. Avoid both dense blocks and a blank line after every statement.
 - Separate test setup, execution, and assertions.
-- No section-divider comments.
 - Comment invariants and non-obvious reasons only. Never reference plans, task IDs, or prior versions.
 
 ## Alphabetical Ordering
@@ -66,7 +55,6 @@
 - Alphabetize imports, specifiers, exports, type and object properties, union members, unordered lists, config maps, scripts, and dependencies. Case-insensitive.
 - Keep docs with their declaration, and overloads with their namespace. Never reorder execution or cause use-before-initialization.
 - Preserve meaningful order: plugin arrays, Vite plugins, CSS declarations, tuples, workflow steps. Comment intentional exceptions.
-- In GitHub workflows, keep `name` and `on` first, then alphabetize.
 
 ## Module and Instance Conventions
 
@@ -78,7 +66,6 @@
 - `Accounts.create` is the authoritative instance. Plugins and actions derive from it. No module-scope singletons, except a lock or a `connect` on a resource of the whole device that no instance owns, such as the `expo` preset's lock and `connect` on the device's secure store.
 - Inject platform capabilities (fetch, storage, clock, `open`) through options. Keep them out of pure modules.
 - Type dependencies by the smallest capability used.
-- Factory operations close over state. Never depend on `this`.
 - Keep caches and registries private to the instance.
 - No side-effect registration. `sideEffects` in `package.json` lists the only exceptions, the React Native polyfills.
 - Framework classes, such as Durable Objects, stay thin and delegate to module functions.
@@ -187,7 +174,7 @@ Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustan
 
 - Module scope holds only constants and immutable data. Never cache a `Request`, `Response`, stream, or session there.
 - Read `Date.now()` inside the call, never at module scope.
-- Use `crypto.getRandomValues()` and `crypto.randomUUID()`. `Math.random()` is banned.
+- Use `crypto.randomUUID()` for random identifiers.
 - Compare secrets in constant time with `crypto.subtle.timingSafeEqual`, after SHA-256 for variable lengths.
 - Await or return every promise. Mark `void` only with a reason.
 - Run independent calls in `Promise.all`.
@@ -195,7 +182,7 @@ Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustan
 - Check the waterfall of each changed action. See `docs/development/waterfall.md`.
 - A change adds no duplicate call, no round, and no sequential call without a dependency. State the reason for each exception in the PR body.
 - Fix a waterfall finding in code that a change touches.
-- `console` is banned in `src/`. Report failures through errors.
+- Report failures in `src/` through errors.
 
 ## Errors
 
@@ -206,9 +193,8 @@ Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustan
 
 ## Code Documentation
 
-- Start every module with a `@module` TSDoc comment, before imports, including tests and scripts.
-- Add TSDoc to every export and every property of an exported type.
-- A function's `Options`, `ReturnType`, `ErrorType`, `Parameters`, and `Props` share its TSDoc. Each property has its own. Overloads share the first signature's TSDoc.
+- Put the `@module` comment before imports, in tests and scripts too.
+- A function's `Options`, `ReturnType`, `ErrorType`, `Parameters`, and `Props` share its TSDoc. Each property has its own.
 - A property comment states meaning, units, default, or absence. Never repeat the name or type.
 - Document purpose, inputs, output, defaults, errors, and side effects.
 - TSDoc is the API reference. No Markdown page repeats it. State each fact once, on the declaration it describes.
@@ -219,25 +205,22 @@ Use XState v5 for lifecycles and `@xstate/store` for event-driven stores. Zustan
 
 ## Prose Conventions
 
-Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
+Applies to docs, comments, TSDoc, interface copy, commits, and pull requests. The Uphill rules hold the general prose rules.
 
-- Write about the code, not the reader. No second person outside interface copy.
-- Write formally and technically. Use precise verbs ("returns", "rejects", "issues"), not conversational ones ("gets", "gives", "tells").
+- Address the reader only in interface copy.
+- Write formally and technically.
 - State invariants and reasons the code cannot show.
 - Follow ASD-STE100 writing rules, not its dictionary.
-- Use short words: "use", "start", "before", not "utilize", "commence", "prior to".
 - Use one word per concept. No synonyms for variety.
 - Write "access key", never "key" alone. Identifiers keep their names.
 - Keep instructions to 20 words, descriptions to 25.
-- Keep paragraphs to one topic and six sentences.
+- Keep paragraphs to one topic.
 - Put conditions first: "If the code expires, request a new one."
-- Use active voice and simple tenses. No progressive or perfect main verbs.
 - Stack at most three nouns.
 - Keep articles ("the", "a").
 - Use diagrams for flows: Mermaid `sequenceDiagram`, `flowchart`, or `stateDiagram-v2`. Keep each to about 12 nodes or 15 arrows.
 - Use tables for comparisons and mappings.
 - Write "Viem" in prose, `viem` in code.
-- No semicolons or em dashes in prose.
 
 ## Documentation
 
@@ -303,7 +286,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - Integration tests run the package against a real Tempo ID. They live in `tempoxyz/id`.
 - Develop a change in the `accounts` submodule of `tempoxyz/id`, whose integration and end-to-end suites run against it. CI here runs the tests in `src/` and the end-to-end suite.
 - No mocks, stubs, fakes, fake timers, stubbed globals, or MSW in `src/`.
-- Keep a module's tests in one `Module.test.ts` beside it. Never split into variant files.
+- Keep a module's tests in its `Module.test.ts`, beside it.
 - Group tests in a `describe` named for the entrypoint.
 - Use inline snapshots, one value each. Use property matchers only for nondeterministic fields. Never derive expectations from the implementation.
 - Add a regression test for every bug fix.
@@ -329,8 +312,10 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 
 ## Git Conventions
 
-- Conventional commits, lowercase, no trailing period: `feat:`, `fix:`, `perf:`, `refactor:`, `docs:`, `test:`, `ci:`, `chore:`. Mark a breaking change with `!`, such as `feat(dialog)!:`.
-- Name what changed, with codebase identifiers. State the change, not the reason.
+The Uphill rules hold the commit message rules. These add the rules of this repository.
+
+- Use the commit types `feat:`, `fix:`, `perf:`, `refactor:`, `docs:`, `test:`, `ci:`, and `chore:`. Mark a breaking change with `!`, such as `feat(dialog)!:`.
+- Name what changed, with codebase identifiers.
 - Each message stands alone.
 - Keep the PR title accurate, since it becomes the squash commit.
 - Keep PR bodies short. Open with the release note: one or two sentences in the past tense that start with the verb, such as "Added `loginHint` to `dialog.signIn`." or "Fixed `accounts.pay` to throw `Accounts.SignedOutError` for a session whose access keys expired." No "now", "before", or background. Name exports in backticks. For a breaking change, add the migration and at most one short `ts` block.
@@ -363,7 +348,7 @@ Applies to docs, comments, TSDoc, interface copy, commits, and pull requests.
 - `src/stores/` holds each store that `Store` exports, such as `Store.memory`. `Store.ts` holds only the `Store` type and `Store.from`.
 - `src/internal/handlers/` holds each route handler, such as `Relay.ts`, the relay route. `src/internal/Handler.ts` holds the `Handler` type that each returns.
 - `docs/development/` holds the development notes of the repository.
-- `site/` is the documentation site of `accounts.tempo.xyz`, a Vocs project. Its pages are in `site/src/pages/`, its demos in `site/src/demos/`, the routes of its demos in `site/src/server/`, its components in `site/src/components/`, and the icons of its sidebar in `site/icons/`. `.github/workflows/site.yml` deploys it to `accounts.tempo.xyz` through the Cloudflare Deploy Broker, and builds each pull request.
+- `site/` is the documentation site of `accounts.tempo.com`, a Vocs project. Its pages are in `site/src/pages/`, its demos in `site/src/demos/`, the routes of its demos in `site/src/server/`, its components in `site/src/components/`, and the icons of its sidebar in `site/icons/`. `.github/workflows/site.yml` deploys it to `accounts.tempo.com` through the Cloudflare Deploy Broker, and builds each pull request.
 - `examples/` holds one small app per platform (`backend`, `cli`, `mobile`, `wagmi`, `web`). Each names a published range, so a copy installs as it is. CI type-checks them.
 - `test/` holds the end-to-end suite: the specs in `test/e2e/`, the test apps in `test/apps/`, and one module per local service. `test/waterfall/` holds the waterfall.
 

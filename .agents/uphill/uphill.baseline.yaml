@@ -1116,9 +1116,9 @@ call-types:
 
 documentation:
   module-docs:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -1513,9 +1513,9 @@ documentation:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: fail }
   export-docs:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: fail }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -1910,9 +1910,9 @@ documentation:
     test/waterfall/vite.config.ts: { baseline: fail }
     vite.config.ts: { baseline: fail }
   property-docs:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -3679,9 +3679,9 @@ waterfall:
 
 correctness:
   type-errors:
-    ".agents/metrics/footprint.ts": { baseline: skip }
-    ".agents/metrics/requests.ts": { baseline: skip }
-    ".agents/metrics/waterfall.ts": { baseline: skip }
+    ".agents/uphill/metrics/footprint.ts": { baseline: skip }
+    ".agents/uphill/metrics/requests.ts": { baseline: skip }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: skip }
     ".agents/uphill/typescript/config.ts": { baseline: skip }
     examples/authenticated-api/api.ts: { baseline: skip }
     examples/authenticated-api/main.tsx: { baseline: skip }
@@ -4081,9 +4081,9 @@ correctness:
     strict: { baseline: pass }
     verbatimModuleSyntax: { baseline: pass }
   explicit-any:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -4478,9 +4478,9 @@ correctness:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   lint:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -4875,9 +4875,9 @@ correctness:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   math-random:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -5479,9 +5479,9 @@ correctness:
 
 style:
   formatted:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -5876,9 +5876,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   enums:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -6273,9 +6273,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   interfaces:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: fail }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -6670,9 +6670,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   mutable-arrays:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: fail }
     examples/authenticated-api/main.tsx: { baseline: fail }
@@ -7067,9 +7067,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   import-extensions:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -7464,9 +7464,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   type-imports:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -7861,9 +7861,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   uppercase-constants:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: fail }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -8258,9 +8258,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   optional-options:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -8655,9 +8655,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   option-names:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -9052,9 +9052,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   positional-parameters:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -9449,9 +9449,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   destructured-parameters:
-    ".agents/metrics/footprint.ts": { baseline: fail }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: fail }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -9846,9 +9846,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   nested-ternaries:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -10243,9 +10243,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   inline-object-types:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -10640,9 +10640,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   function-namespaces:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -11037,9 +11037,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   immediate-returns:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -11434,9 +11434,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   let-across-try:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -11831,9 +11831,9 @@ style:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   section-dividers:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -12229,9 +12229,9 @@ style:
     vite.config.ts: { baseline: pass }
   whitespace:
     ".agents/friction-log/config.json": { baseline: pass }
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill.baseline.yaml": { baseline: pass }
     ".agents/uphill.yaml": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
@@ -12478,7 +12478,6 @@ style:
     site/src/server/Subscriptions.ts: { baseline: pass }
     site/src/server/Worker.ts: { baseline: pass }
     site/tsconfig.json: { baseline: pass }
-    site/vercel.json: { baseline: pass }
     site/vite.config.ts: { baseline: pass }
     site/vocs.config.ts: { baseline: pass }
     site/wrangler.json: { baseline: pass }
@@ -12812,9 +12811,9 @@ style:
 
 architecture:
   import-cycles:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -13209,9 +13208,9 @@ architecture:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   namespace-imports:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -13606,9 +13605,9 @@ architecture:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   node-imports:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -14003,9 +14002,9 @@ architecture:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   flat-reexports:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -14400,9 +14399,9 @@ architecture:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   dynamic-imports:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -14797,9 +14796,9 @@ architecture:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   side-effect-imports:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -15194,9 +15193,9 @@ architecture:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   classes:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -15591,9 +15590,9 @@ architecture:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   error-names:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -15988,9 +15987,9 @@ architecture:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   this-outside-classes:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }
@@ -16385,9 +16384,9 @@ architecture:
     test/waterfall/vite.config.ts: { baseline: pass }
     vite.config.ts: { baseline: pass }
   module-state:
-    ".agents/metrics/footprint.ts": { baseline: pass }
-    ".agents/metrics/requests.ts": { baseline: pass }
-    ".agents/metrics/waterfall.ts": { baseline: pass }
+    ".agents/uphill/metrics/footprint.ts": { baseline: pass }
+    ".agents/uphill/metrics/requests.ts": { baseline: pass }
+    ".agents/uphill/metrics/waterfall.ts": { baseline: pass }
     ".agents/uphill/typescript/config.ts": { baseline: pass }
     examples/authenticated-api/api.ts: { baseline: pass }
     examples/authenticated-api/main.tsx: { baseline: pass }

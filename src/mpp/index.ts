@@ -399,6 +399,9 @@ type Turn = {
  * sends one transfer, so a charge of zero, a charge with splits, and a charge of an endpoint or a
  * payer that permits only `pull` need the access key.
  *
+ * @throws {TypeError} For an entry of `identity.scope` that is no URL, or one with a path, a query, or
+ *   a fragment. Name its origin, such as `https://api.example.com`.
+ *
  * @example
  * ```ts
  * import { Accounts } from 'accounts'
@@ -429,6 +432,7 @@ type Turn = {
  */
 export function mpp(options: mpp.Options = {}) {
   const { fetch } = options
+  const scope = options.identity && origins(options.identity.scope)
   // The context of each instance, by its configuration, since an app can pass one plugin to
   // several instances.
   const contexts = new WeakMap<Accounts.Config, Plugin.Context>()
@@ -748,8 +752,7 @@ export function mpp(options: mpp.Options = {}) {
        * it. Each request reads the session's current tokens, and none once `ended` returns true.
        */
       function prover(ended: () => boolean) {
-        if (!options.identity) return undefined
-        const { scope } = options.identity
+        if (!scope) return undefined
         const read = async () => {
           if (ended()) throw new Accounts.SignedOutError()
           const accessToken = await instance.session.accessToken()
@@ -1487,7 +1490,9 @@ export declare namespace mpp {
     /**
      * The origins that receive the access token and the ID token, such as
      * `['https://api.example.com']`, or `'*'` for every origin. Each origin receives tokens that
-     * act for the user, so name only endpoints that verify Tempo ID.
+     * act for the user, so name only endpoints that verify Tempo ID. An entry matches by its
+     * origin, so `https://API.example.com/` names `https://api.example.com`. `mpp` throws a
+     * `TypeError` for an entry with a path, a query, or a fragment.
      */
     scope: readonly string[] | '*'
   }
@@ -1888,6 +1893,37 @@ export declare namespace mpp {
    * with overrides, such as another session.
    */
   type Namespace = Pick<Payer, 'session'> & ((overrides?: Overrides) => Payer)
+}
+
+/**
+ * Returns each entry of `scope` as its serialized origin, such as `https://api.example.com` for
+ * `https://API.example.com/`, or `'*'`. mppx compares each entry with the request's origin as a
+ * string, so an entry in another form matches no request.
+ *
+ * @throws {TypeError} For an entry that is no URL, or one with a path, a query, or a fragment, since
+ * every path of its origin receives the tokens. The error names at most the origin, since the
+ * query or the user information of an entry can hold a secret.
+ */
+function origins(scope: mpp.Identity['scope']) {
+  if (scope === '*') return scope
+  return scope.map((entry) => {
+    // A malformed entry fails the parse, whose error holds the whole entry as its `input` in
+    // Node, so the plugin throws its own error, without that cause.
+    const url = (() => {
+      try {
+        return new URL(entry)
+      } catch {
+        throw new TypeError(
+          'Invalid identity scope: an entry is no URL. Name each origin, such as `https://api.example.com`.',
+        )
+      }
+    })()
+    if (url.pathname !== '/' || url.search || url.hash)
+      throw new TypeError(
+        `Invalid identity scope: an entry of \`${url.origin}\` names a path, a query, or a fragment. Name the origin alone.`,
+      )
+    return url.origin
+  })
 }
 
 /**

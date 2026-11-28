@@ -9,7 +9,7 @@ export default defineConfig({
     // `uphill --update` writes the baseline file.
     ignorePatterns: [
       ...ignorePatterns,
-      '.agents/uphill.baseline.yaml',
+      '.agents/uphill/uphill.baseline.yaml',
       'CHANGELOG.md',
       'pnpm-lock.yaml',
     ],

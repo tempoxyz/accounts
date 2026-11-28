@@ -1178,6 +1178,54 @@ describe('tempoId', () => {
     `)
   })
 
+  test('throws `Accounts.SupersededError` from `connect` when a sign-out ends the session that its sign-in set', async () => {
+    const holder: { context?: Plugin.Context } = {}
+    const config = createConfig({
+      chains: [tempo],
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          plugins: [
+            Plugin.from({
+              id: 'capture',
+              setup(context) {
+                holder.context = context
+              },
+            }),
+          ],
+          store: Store.memory(),
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
+    })
+    const connector = config.connectors[0]!
+    const owner = Secp256k1.randomPrivateKey()
+    const session = Session.from({
+      accessKey: createAccessKey({ chainId: tempo.id, owner }),
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      user: { email: 'user@example.com', id: 'user_1' },
+    })
+
+    // The sign-in sets its session, and a sign-out ends it before `connect` returns.
+    const error = await connect(config, {
+      connector,
+      signIn: async (instance) => {
+        await holder.context!.session.change().commit(session)
+        await instance.signOut()
+      },
+    }).catch((error: Error) => error.name)
+
+    expect({ error, status: getConnection(config).status })
+      .toMatchInlineSnapshot(`
+        {
+          "error": "Accounts.SupersededError",
+          "status": "disconnected",
+        }
+      `)
+  })
+
   test('rejects a call that names the connected account by address once the session ends', async () => {
     const store = await sessionStore()
     const config = createConfig({
