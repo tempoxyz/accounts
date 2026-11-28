@@ -178,6 +178,53 @@ describe('passkey', () => {
     `)
   })
 
+  test('prepare returns a handle whose concurrent signIn calls, such as a double click, share one sign-in, since the browser refuses a second ceremony while one runs', async () => {
+    const paths: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (input, init) => {
+        paths.push(
+          new URL(input instanceof Request ? input.url : input).pathname,
+        )
+        return fetch(input, init)
+      },
+      plugins: [passkey()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const prepared = accounts.passkey.prepare({
+      accessKey: false,
+      available: false,
+    })
+    const [first, second] = await Promise.allSettled([
+      prepared.signIn(),
+      prepared.signIn(),
+    ])
+    const later = await prepared.signIn().catch((error: unknown) => error)
+
+    // Nothing answers, so each sign-in rejects. The two concurrent calls send one options request,
+    // and the call after them sends its own.
+    expect({
+      later: later === (first as PromiseRejectedResult).reason,
+      paths,
+      shared:
+        first.status === 'rejected' &&
+        second.status === 'rejected' &&
+        first.reason === second.reason,
+    }).toMatchInlineSnapshot(`
+      {
+        "later": false,
+        "paths": [
+          "/v1/auth/passkey/options",
+          "/v1/auth/passkey/options",
+        ],
+        "shared": true,
+      }
+    `)
+  })
+
   test('prepare requests options that offer every passkey at the signIn of a handle that a signOut without everywhere followed', async () => {
     const allows: unknown[] = []
     const accounts = Accounts.create({
