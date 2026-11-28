@@ -107,6 +107,17 @@ export declare namespace checkRedirectUri {
 }
 
 /**
+ * Returns whether `redirectUri` has a scheme other than `http` and `https`, such as
+ * `myapp://callback`, which names a native app. The text is parsed, since React Native's own `URL`
+ * does not give a custom scheme the opaque origin. `false` for a value without a scheme.
+ */
+export function native(redirectUri: string): boolean {
+  const match = /^[\0- ]*([a-z][a-z\d+.-]*):/i.exec(redirectUri)
+  if (!match) return false
+  return !Object.hasOwn(webPorts, match[1]!.toLowerCase())
+}
+
+/**
  * Returns the scheme, authority, and path of an absolute URL in one canonical form, so that two
  * spellings of one URL, such as the redirect URI and its WHATWG serialization, compare equal. The
  * scheme and authority are in lowercase, without a default port. The path holds no dot segments, and

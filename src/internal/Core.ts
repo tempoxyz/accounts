@@ -11,6 +11,7 @@ import * as Actions from './Actions.js'
 import { RequestError, SupersededError } from '../Accounts.js'
 import * as AccessKey from './AccessKey.js'
 import * as Api from './Api.js'
+import * as Callback from './Callback.js'
 import * as ClientId from './ClientId.js'
 import * as Permissions from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
@@ -656,8 +657,15 @@ export async function getSession(
       // Outside a browser without `redirectUri`, such as a CLI or a server, no page origin can
       // serve as the redirect URI, so Tempo ID would refuse the authorization. The program signs in
       // again, such as with the device grant. `Api.page` counts a `location` getter that throws, as
-      // in Deno without `--location`, as no page.
-      if (context.config.redirectUri === undefined && Api.page() === undefined)
+      // in Deno without `--location`, as no page. A redirect URI without a web origin, such as
+      // `myapp://callback`, names a native app, whose headless authorization Tempo ID refuses
+      // without a client attestation, which the instance never sends. The app signs in again in
+      // an authentication sheet.
+      if (
+        Api.page() === undefined &&
+        (context.config.redirectUri === undefined ||
+          Callback.native(context.config.redirectUri))
+      )
         return undefined
       const authorized = await run(context, {
         ...parameters,

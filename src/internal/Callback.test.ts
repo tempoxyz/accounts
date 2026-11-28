@@ -413,6 +413,19 @@ describe('Callback.checkRedirectUri', () => {
   })
 })
 
+describe('Callback.native', () => {
+  test.for([
+    ['myapp://callback', true],
+    ['com.example.app:/callback', true],
+    ['HTTPS://app.example.com/callback', false],
+    ['http://localhost/callback', false],
+    ['constructor://callback', true],
+    ['not a url', false],
+  ] as const)('returns %s as %s', ([redirectUri, expected]) => {
+    expect(Callback.native(redirectUri)).toBe(expected)
+  })
+})
+
 describe('Callback.error', () => {
   test('returns `guest_selected` for a return with `guest=1` and no code', () => {
     const error = Callback.error(
