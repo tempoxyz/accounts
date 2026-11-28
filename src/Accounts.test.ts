@@ -2443,6 +2443,64 @@ describe('session.fetch', () => {
     `)
   })
 
+  test('rejects at the abort while the call reads the JSON body of a 401 without a challenge', async () => {
+    const store = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    const controller = new AbortController()
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      // The API sends the headers of its refusal, and its body never ends.
+      fetch: ((input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        requests.push(`${request.method} ${new URL(request.url).pathname}`)
+        return Promise.resolve(
+          new Response(new ReadableStream({ start() {} }), {
+            headers: { 'content-type': 'application/json' },
+            status: 401,
+          }),
+        )
+      }) as typeof globalThis.fetch,
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await store.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const result = accounts.session
+      .fetch({
+        init: { signal: controller.signal },
+        url: 'https://api.example.com/me',
+      })
+      .then(
+        (response) => response.status,
+        (error: Error) => `${error.name}: ${error.message}`,
+      )
+    await expect.poll(() => requests.length).toBe(1)
+    controller.abort()
+
+    expect({ requests, result: await result }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          "GET /me",
+        ],
+        "result": "AbortError: This operation was aborted",
+      }
+    `)
+  })
+
   test('throws SignedOutError, and sends no request, when another context signs out while the access token expires', async () => {
     const store = Store.memory()
     const accounts = Accounts.create({

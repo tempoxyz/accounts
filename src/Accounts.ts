@@ -2829,7 +2829,8 @@ export function create<
         })
         if (
           !Api.resendable(parameters.init?.body) ||
-          !(await Api.refusesToken(response))
+          // An abort during the read of a slow body rejects at once, as the waits above do.
+          !(await until(Api.refusesToken(response)))
         )
           return response
 
