@@ -178,6 +178,49 @@ describe('passkey', () => {
     `)
   })
 
+  test('prepare returns a handle whose signIn calls during a request each send their own, so a stalled request holds no retry', async () => {
+    const paths: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (input, init) => {
+        paths.push(
+          new URL(input instanceof Request ? input.url : input).pathname,
+        )
+        return fetch(input, init)
+      },
+      plugins: [passkey()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const prepared = accounts.passkey.prepare({
+      accessKey: false,
+      available: false,
+    })
+    const [first, second] = await Promise.allSettled([
+      prepared.signIn(),
+      prepared.signIn(),
+    ])
+
+    // Nothing answers, so no ceremony starts, and each call rejects with its own request's error.
+    expect({
+      paths,
+      shared:
+        first.status === 'rejected' &&
+        second.status === 'rejected' &&
+        first.reason === second.reason,
+    }).toMatchInlineSnapshot(`
+      {
+        "paths": [
+          "/v1/auth/passkey/options",
+          "/v1/auth/passkey/options",
+        ],
+        "shared": false,
+      }
+    `)
+  })
+
   test('prepare requests options that offer every passkey at the signIn of a handle that a signOut without everywhere followed', async () => {
     const allows: unknown[] = []
     const accounts = Accounts.create({
