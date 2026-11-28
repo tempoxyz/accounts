@@ -168,7 +168,8 @@ export class StoreRequiredError extends Error {
  * `Accounts.AccessKeyRequiredError` for a transaction of a session without an access key, as the
  * `viem` plugin lists. A call that names the connected account by address as `account`, such as
  * `sendTransaction(config, { account: address, … })`, signs as a call without `account` does. A
- * call that names another account keeps it.
+ * call that names another account by address throws `Provider.UnauthorizedError`, as the provider
+ * does, and sends no request. A call with a local account, such as `privateKeyToAccount`, keeps it.
  *
  * On a page, a transaction that the node refuses for a low balance, a spent limit, or an access key
  * that the chain does not hold retries through wagmi's actions too. The `retry` option of the
@@ -192,6 +193,8 @@ export class StoreRequiredError extends Error {
  * @throws {StoreRequiredError} From `connect`, before a sign-in outside a browser without `store`.
  * @throws {SignInRequiredError} From `connect`, before a sign-in without `signIn`, when no plugin
  *   signs in without input here, such as `dialog` outside a page.
+ * @throws {Provider.UnauthorizedError} From wagmi's actions that sign, such as `signMessage`, for an
+ *   `account` that names another address than the session's account. The call sends no request.
  *
  * @example
  * ```ts
@@ -1093,7 +1096,15 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           return undefined
         }
       })()
-      if (!current || !Address.isEqual(from, current)) return undefined
+      // The node holds no account that signs, so a request of another account, or of any account
+      // while signed out, would only send the message or transaction to the RPC. It throws as the
+      // connector's provider does, and sends no request.
+      if (!current || !Address.isEqual(from, current))
+        return Promise.reject(
+          new Provider.UnauthorizedError({
+            message: `Invalid account: ${from} is not the session's account. Sign with the connected account.`,
+          }),
+        )
       // The client's own actions send their requests through the client's `request`, which applies
       // the signal of a scope, and retry for a new access key as the client's actions do.
       const actions = client as {
@@ -1122,7 +1133,8 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
      * Returns `client`, whose actions sign with the client's account also for a call that names that
      * account by address, as wagmi's actions pass the connected address. Viem reads an address as an
      * account of the node, which holds no access key, so the call would reach the chain's RPC. A call
-     * that names another account keeps it.
+     * that names another account by address throws `Provider.UnauthorizedError`, and sends no
+     * wallet request.
      */
     function ownAccount<value extends object>(client: value): value {
       /** Returns `args` without an `account` that names the client's account by address. */
@@ -1154,16 +1166,28 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           }
         })()
         if (current === 'signedOut') return [other, ...rest]
-        if (!current || !Address.isEqual(address, current)) return args
+        if (!current) return args
+        // The node holds no account that signs, so another account's call would only send its
+        // message or transaction to the RPC. It throws as the connector's provider does.
+        if (!Address.isEqual(address, current))
+          return new Provider.UnauthorizedError({
+            message: `Invalid account: ${address} is not the session's account. Sign with the connected account.`,
+          })
         return [other, ...rest]
       }
 
-      /** Returns `fn`, called without an `account` that names the client's account by address. */
+      /**
+       * Returns `fn`, called without an `account` that names the client's account by address. A call
+       * that names another account by address rejects, and sends no request.
+       */
       function signer(fn: Function, object: object) {
         // A function proxy keeps the action's own members, such as `transfer.estimateGas`.
         return new Proxy(fn, {
-          apply: (target, _, args: readonly unknown[]) =>
-            Reflect.apply(target, object, strip(args)),
+          apply: (target, _, args: readonly unknown[]) => {
+            const stripped = strip(args)
+            if (stripped instanceof Error) return Promise.reject(stripped)
+            return Reflect.apply(target, object, stripped)
+          },
         })
       }
 

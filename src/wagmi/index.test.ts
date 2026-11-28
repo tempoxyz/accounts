@@ -711,6 +711,74 @@ describe('tempoId', () => {
     ).toMatchInlineSnapshot(`"function"`)
   })
 
+  test('refuses a call that names another account by address with `Provider.UnauthorizedError`, and sends no wallet request to the RPC', async () => {
+    const methods: string[] = []
+    const store = await sessionStore()
+    const config = createConfig({
+      chains: [tempo],
+      connectors: [
+        tempoId({
+          clientId: 'https://app.example.com',
+          store,
+          url: 'http://127.0.0.1:9',
+        }),
+      ],
+      transports: {
+        // An RPC that records each request that reaches it, and refuses every method but the chain's.
+        [tempo.id]: custom(
+          {
+            request(args) {
+              methods.push(args.method)
+              if (args.method === 'eth_chainId')
+                return Promise.resolve('0x1079')
+              return Promise.reject(new Error('Method not supported.'))
+            },
+          },
+          { retryCount: 0 },
+        ),
+      },
+    })
+    await reconnect(config)
+    const other = '0x0000000000000000000000000000000000000001'
+
+    const errors = await Promise.all(
+      [
+        signMessage(config, { account: other, message: 'hello' }),
+        signTypedData(config, {
+          account: other,
+          domain: { name: 'Example' },
+          message: { contents: 'hello' },
+          primaryType: 'Mail',
+          types: { Mail: [{ name: 'contents', type: 'string' }] },
+        }),
+        sendTransaction(
+          (await config.connectors[0]!.getClient!()) as never,
+          {
+            account: other,
+            chain: null,
+            to: other,
+          } as never,
+        ),
+      ].map((promise) => promise.catch((error: Error) => error.message)),
+    )
+
+    expect(errors).toMatchInlineSnapshot(`
+      [
+        "Invalid account: 0x0000000000000000000000000000000000000001 is not the session's account. Sign with the connected account.",
+        "Invalid account: 0x0000000000000000000000000000000000000001 is not the session's account. Sign with the connected account.",
+        "An error occurred.
+
+      Request Arguments:
+        from:  0x0000000000000000000000000000000000000001
+        to:    0x0000000000000000000000000000000000000001
+
+      Details: Invalid account: 0x0000000000000000000000000000000000000001 is not the session's account. Sign with the connected account.
+      Version: viem@2.58.8",
+      ]
+    `)
+    expect(methods).toMatchInlineSnapshot(`[]`)
+  })
+
   test('sends the calls of `sendCalls`, `sendCallsSync`, and tree-shakable actions with the access key, for a call that names the connected account', async () => {
     const methods: string[] = []
     const store = await sessionStore()
