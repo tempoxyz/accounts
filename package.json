@@ -58,7 +58,7 @@
     "viem",
     "wagmi"
   ],
-  "homepage": "https://accounts.tempo.xyz",
+  "homepage": "https://accounts.tempo.com",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "sideEffects": [
