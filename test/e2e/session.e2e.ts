@@ -435,9 +435,10 @@ test.describe('session', () => {
     await page.goto(url)
     await enter(page, { code, email })
     // The second tab keeps its own copy of the session, which the first tab's sign-out cannot empty.
+    // A local store authorizes nothing at a mount by default, so the tab asks for it.
     const tab = await context.newPage()
     const sent = grants(tab)
-    await tab.goto(`${url}?store=memory`)
+    await tab.goto(`${url}?store=memory&reauthorize=1`)
     await expect(tab.locator('#status')).toHaveText('signedIn')
 
     await test.step('signs the second tab out at the first tab’s logout', async () => {
