@@ -85,6 +85,12 @@ export async function authorize<
         .filter(Boolean)
         .join(' '),
     )
+  // React Native's `AbortSignal` has no `reason`, and Hermes has no `DOMException`.
+  const aborted = () =>
+    options.signal?.reason ??
+    Object.assign(new Error('The code request was aborted.'), {
+      name: 'AbortError',
+    })
   const code = await Api.json<{
     device_code: string
     expires_in: number
@@ -100,14 +106,7 @@ export async function authorize<
       redirect: 'manual',
       signal: options.signal ?? null,
     }).catch((error: unknown) => {
-      // React Native's `AbortSignal` has no `reason`, and Hermes has no `DOMException`.
-      if (options.signal?.aborted)
-        throw (
-          options.signal.reason ??
-          Object.assign(new Error('The code request was aborted.'), {
-            name: 'AbortError',
-          })
-        )
+      if (options.signal?.aborted) throw aborted()
       throw new RequestError({
         cause: error,
         code: 'server_error',
@@ -116,7 +115,11 @@ export async function authorize<
         status: 0,
       })
     }),
-  )
+  ).catch((error: unknown) => {
+    // An abort while the body arrives fails the read of the body, which is no network failure.
+    if (options.signal?.aborted) throw aborted()
+    throw error
+  })
 
   // Whether the grant carries a challenge, whose signature the approval must hold.
   const challenged = options.challenge !== undefined

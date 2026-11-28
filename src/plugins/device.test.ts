@@ -213,6 +213,50 @@ describe('device', () => {
     }
   })
 
+  test('authorize rejects with the reason of signal, for an abort while the body of the code response stalls', async () => {
+    // The server sends the headers of a response, and never its body.
+    const sockets: Net.Socket[] = []
+    const server = Net.createServer((socket) => {
+      sockets.push(socket)
+      socket.once('data', () =>
+        socket.write(
+          'HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 100\r\n\r\n{',
+        ),
+      )
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as Net.AddressInfo
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'cli:acme-example',
+      plugins: [device()],
+      store: Store.memory(),
+      url: `http://127.0.0.1:${port}`,
+    })
+    const controller = new AbortController()
+
+    try {
+      const authorize = accounts.device
+        .authorize({
+          accessKey: {
+            expiry: '7d',
+            limits: [{ limit: '100', token: 'ousd' }],
+          },
+          signal: controller.signal,
+        })
+        .catch((error: unknown) => error)
+      await expect.poll(() => sockets.length).toBe(1)
+      await expect.poll(() => sockets[0]?.bytesWritten ?? 0).toBeGreaterThan(0)
+      controller.abort(new Error('Timed out.'))
+      const error = await authorize
+
+      expect(error).toMatchInlineSnapshot(`[Error: Timed out.]`)
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise((resolve) => server.close(resolve))
+    }
+  })
+
   test('signIn throws RequestError with status 0, and keeps the user signed out in the file, when the code request receives no response', async () => {
     const directory = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'accounts-device-'))
     const file = Path.join(directory, 'session.json')
