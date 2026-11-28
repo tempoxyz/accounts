@@ -74,7 +74,12 @@ export async function authorizeUrl(
     // The lifetime counts from the request, so the user's time on Tempo ID's pages leaves it whole.
     // Only the app's own access key renews, so only it keeps one.
     ...(resolved && authorization?.expiry
-      ? { lifetime: authorization.expiry - Math.floor(Date.now() / 1000) }
+      ? {
+          lifetime: {
+            expiry: authorization.expiry,
+            seconds: authorization.expiry - Math.floor(Date.now() / 1000),
+          },
+        }
       : {}),
     redirectUri,
     // `Bytes.random` needs only `crypto.getRandomValues`, which React Native polyfills.

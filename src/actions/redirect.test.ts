@@ -3,7 +3,8 @@
  * posted refusal, a body without a token response, a token response whose ID token is absent or
  * unreadable, a callback without the app's own access key, a pushed request without a response, and
  * the index read of `start` after its pushed request. Also the result of a redirect for another
- * party's access key, without the access key at the callback.
+ * party's access key, without the access key at the callback, and the lifetime of the app's own
+ * access key for a granted and a shortened expiry.
  * @module
  */
 import { Address, Base64, Secp256k1 } from 'ox'
@@ -12,6 +13,7 @@ import { Account } from 'viem/tempo'
 import { describe, expect, test } from 'vite-plus/test'
 import { from, RequestError } from '../Accounts.js'
 import * as Pending from '../internal/Pending.js'
+import * as SignIn from '../internal/SignIn.js'
 import * as Store from '../Store.js'
 import { createUrl, handleCallback, handleResult, start } from './redirect.js'
 
@@ -468,7 +470,87 @@ describe("handleResult with the app's own access key", () => {
       }
     `)
   })
+
+  test('keeps the lifetime of the request for the expiry that the request named', async () => {
+    const { lifetime, pending } = await granted({ shortenBy: 0 })
+
+    expect({ lifetime, recorded: pending.lifetime?.seconds })
+      .toMatchInlineSnapshot(`
+      {
+        "lifetime": 3600,
+        "recorded": 3600,
+      }
+    `)
+  })
+
+  test('counts the lifetime from the granted expiry when Tempo ID shortens the request', async () => {
+    const { lifetime } = await granted({ shortenBy: 1800 })
+
+    // The granted expiry is 1800 seconds earlier, and the response arrives in the same second.
+    expect(lifetime! <= 1800 && lifetime! >= 1799).toMatchInlineSnapshot(`true`)
+  })
 })
+
+/**
+ * Starts a redirect for the app's own access key of one hour, and returns the lifetime of the
+ * result's access key, for a grant `shortenBy` seconds before the requested expiry.
+ */
+async function granted(options: granted.Options) {
+  const auth = from({
+    chain: 42431,
+    clientId: 'https://app.example.com',
+    url: 'https://id.example.com',
+  })
+  const owner = Secp256k1.randomPrivateKey()
+  const own = Account.fromSecp256k1(Secp256k1.randomPrivateKey())
+  const started = await createUrl(auth, {
+    accessKey: { account: own, expiry: '1h', limits },
+    redirectUri: 'https://app.example.com/',
+  })
+  const authorization = KeyAuthorization.from({
+    address: own.address,
+    chainId: 42431n,
+    expiry: started.pending.lifetime!.expiry - options.shortenBy,
+    type: 'secp256k1',
+  })
+  const signature = Secp256k1.sign({
+    payload: KeyAuthorization.getSignPayload(authorization),
+    privateKey: owner,
+  })
+  const claims = Base64.fromString(
+    JSON.stringify({ email: 'user@example.com', sub: 'user_1' }),
+    { pad: false, url: true },
+  )
+
+  const result = handleResult({
+    accessKey: { account: own },
+    authorization: {
+      access_token: 'access-token',
+      account: Address.fromPublicKey(
+        Secp256k1.getPublicKey({ privateKey: owner }),
+      ),
+      expires_in: 3600,
+      id_token: `e30.${claims}.signature`,
+      key_authorization: KeyAuthorization.toRpc(
+        KeyAuthorization.from(authorization, { signature }),
+      ),
+    },
+    pending: started.pending,
+    state: started.pending.state,
+  })
+
+  return {
+    lifetime: SignIn.toSession(result).accessKey?.lifetime,
+    pending: started.pending,
+  }
+}
+
+declare namespace granted {
+  type Options = {
+    /** The seconds that Tempo ID takes off the requested expiry. */
+    shortenBy: number
+  }
+}
 
 describe('handleResult with an addressed access key', () => {
   test("returns the addressed authorization of another party's access key, without `accessKey` at the callback", async () => {
