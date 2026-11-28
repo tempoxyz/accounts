@@ -1068,10 +1068,16 @@ const account = privateKeyToAccount(
   process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
 )
 const contract = '0x000000000000000000000000000000000000dEaD'
+// An access key's first transaction carries its key authorization, about 5 million gas.
+const maxGas = 6_000_000n
+const maxFeePerGas = 10_000_000_000n
 
-// Sponsors a transaction whose every call targets `contract`. A transaction without `calls`
-// carries one call in `to`.
+// Sponsors a transaction within the caps whose every call targets `contract`. A transaction
+// without `calls` carries one call in `to`.
 function validate(request: Transaction.TransactionRequest) {
+  if (!request.gas || request.gas > maxGas) return false
+  if (!request.maxFeePerGas || request.maxFeePerGas > maxFeePerGas) return false
+
   const calls = request.calls ?? [
     { data: request.data, to: request.to, value: request.value },
   ]
