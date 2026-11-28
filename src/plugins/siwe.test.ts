@@ -23,6 +23,7 @@ import { parseSiweMessage } from 'viem/siwe'
 import { Account } from 'viem/tempo'
 import { describe, expect, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
+import * as Guest from '../actions/guest.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
 import { backend } from './backend.js'
@@ -951,6 +952,48 @@ describe('siwe.complete', () => {
     `)
   })
 
+  test("verifies a guest account's P256 signature as the account's own, and refuses it for another address", async () => {
+    // The account's address holds no code, so the P256 envelope verifies without a call.
+    const { sent, transport } = node({ code: '0x' })
+    const { accounts } = instance({ transport })
+    const client = Accounts.create({
+      chain: 4217,
+      clientId: origin,
+      guest: true,
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const session = await Guest.session(client.config)
+    const account = Guest.account(client.config, { session })
+    const attempt = async (address: `0x${string}`) => {
+      const { id, message } = await start(accounts)
+      return accounts.siwe
+        .complete({
+          address,
+          id,
+          message,
+          signature: await account.signMessage({ message }),
+        })
+        .then(reason, reason)
+    }
+
+    const signed = await attempt(session.address)
+    const refused = await attempt(
+      privateKeyToAccount(generatePrivateKey()).address,
+    )
+
+    expect({ refused, sent, signed }).toMatchInlineSnapshot(`
+      {
+        "refused": "signer",
+        "sent": [
+          "eth_getCode",
+          "eth_getCode",
+        ],
+        "signed": "verified",
+      }
+    `)
+  })
+
   test("rejects with the transport's error, and stores no session, if the chain does not answer", async () => {
     const { transport } = node({ answer: () => undefined })
     const { accounts } = instance({ transport })
@@ -1479,16 +1522,20 @@ function closed() {
 /**
  * Returns the transport of a scripted chain, and the requests that it receives, each as its method
  * and the address that it calls. The chain answers an `eth_call` with the result of `answer` for
- * the called address, which a call that deploys its own code lacks, and no other request. Defaults
- * to a config commitment of zero for each account, and no answer of another call.
+ * the called address, which a call that deploys its own code lacks, an `eth_getCode` with `code`,
+ * and no other request. Defaults to a config commitment of zero for each account, and no answer of
+ * another call or of `eth_getCode`.
  */
 function node(
   options: {
     answer?: ((to: string | undefined) => `0x${string}` | undefined) | undefined
+    code?: `0x${string}` | undefined
   } = {},
 ) {
-  const { answer = (to) => (to === accountConfiguration ? zero : undefined) } =
-    options
+  const {
+    answer = (to) => (to === accountConfiguration ? zero : undefined),
+    code,
+  } = options
   const sent: string[] = []
   const transport = custom(
     {
@@ -1497,7 +1544,11 @@ function node(
         const to = call?.to?.toLowerCase()
         sent.push(to ? `${args.method} ${to}` : args.method)
 
-        const result = args.method === 'eth_call' ? answer(to) : undefined
+        const result = (() => {
+          if (args.method === 'eth_getCode') return code
+          if (args.method === 'eth_call') return answer(to)
+          return undefined
+        })()
         if (result === undefined)
           return Promise.reject(new Error('No node listens.'))
         return Promise.resolve(result)

@@ -709,9 +709,9 @@ async function authorize<
                 return rest.challenge
               })(),
               display: 'popup',
-              // A guest session signs no challenge, so a request whose challenge arrives later
-              // offers no guest.
-              ...(deferred ? { guest: false } : {}),
+              // A request whose challenge arrives later offers a guest only for a caller whose
+              // guest key pair signs it.
+              ...(deferred && rest.guest !== true ? { guest: false } : {}),
               redirectUri,
               ...(responseMode ? { responseMode } : {}),
             }))().then((value) => ({ ...value, state: value.pending.state })),
@@ -1041,6 +1041,12 @@ export declare namespace signIn {
      * `false`: the dialog shows once the function returns. A popup opens at the call either way.
      */
     deferred?: boolean | undefined
+    /**
+     * Whether the request offers "Continue as guest" also with `challenge`, on an instance with
+     * `guest: true`. The caller then signs the challenge with the guest key pair, as the `dialog`
+     * plugin does for a plugin's challenge. Absent, a request with `challenge` offers no guest.
+     */
+    guest?: boolean | undefined
     /**
      * `iframe` to sign in in a dialog on the page, or `popup` for a popup window. Defaults to
      * `iframe`, which falls back to `popup` outside a secure context, on a page on `http:` for a

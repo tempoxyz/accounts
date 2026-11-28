@@ -107,12 +107,16 @@ export async function authorize<
   // issues the tokens during the request that returns them, so their lifetime counts from its start.
   const { response, sentAt } = await Headless.post(answered, {
     getFn: options.getFn,
-    json: request(auth, {
-      accessKey: resolved &&
-        accessKey && { ...accessKey, account: resolved.signer },
-      account: options.account,
-      challenge: options.challenge,
-    }),
+    json: {
+      ...request(auth, {
+        accessKey: resolved &&
+          accessKey && { ...accessKey, account: resolved.signer },
+        account: options.account,
+        challenge: options.challenge,
+      }),
+      // Without an access key, the chain names where the response lists the user's accounts.
+      ...(resolved ? {} : { chain_id: auth.chainId }),
+    },
     passkey: options.passkey ?? false,
   })
   // Without the check, `session_required` means no session. With it, the session can end between
@@ -141,23 +145,26 @@ export async function authorize<
             sentAt,
           }),
   })
-  const result: Headless.Result & { account?: TempoAccount.TempoAccount } = {
+  const result: Headless.Result & {
+    account?: TempoAccount.TempoAccount | undefined
+  } = {
     ...authorization,
-    // The response lists the access key's account first, so the app reads no `GET /v1/account`.
-    // An account that the client cannot rebuild stays absent, so the session holds the access key alone.
-    ...(resolved && first
-      ? (() => {
-          try {
-            return {
-              account: Api.tempoAccount(first, {
-                getFn: options.getFn as Api.tempoAccount.Options['getFn'],
-              }),
-            }
-          } catch {
-            return {}
-          }
-        })()
-      : {}),
+    // The response lists the authorization's account first, so the app reads no
+    // `GET /v1/account`. An account that the client cannot rebuild stays absent, so the session
+    // holds the access key alone. Without an access key, a listed response with no account names
+    // `account` as `undefined`, so the caller reads no account either.
+    ...(() => {
+      if (!first) return resolved || !body.tempo ? {} : { account: undefined }
+      try {
+        return {
+          account: Api.tempoAccount(first, {
+            getFn: options.getFn as Api.tempoAccount.Options['getFn'],
+          }),
+        }
+      } catch {
+        return {}
+      }
+    })(),
     upgradeAvailable: body.upgrade_available === true,
   }
   // `accessKey` decides both the type and the runtime value of the result.
@@ -219,8 +226,9 @@ export declare namespace authorize {
         ? Omit<Authorization<chainId>, 'accessKey' | 'signer'>
         : Authorization<chainId>) & {
         /**
-         * The user's Tempo Account that the access key acts for, as Tempo ID lists it on the access
-         * key's chain. Absent without an access key, or where Tempo ID returns no accounts.
+         * The user's Tempo Account that the authorization acts for, as Tempo ID lists it on the
+         * access key's chain, else on the instance's chain. Absent where Tempo ID lists no accounts.
+         * Without an access key, `undefined` for a user whom Tempo ID lists with no account.
          */
         account?: TempoAccount.TempoAccount | undefined
         /**

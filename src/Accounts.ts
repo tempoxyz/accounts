@@ -1205,7 +1205,9 @@ export type Accounts<
      * lands shows no dialog. On a page, a transfer that the chain refuses for a low balance opens the
      * deposit page, unless the plugin's `retry` turns off `balance`, and the access key sends again
      * once the deposit arrives. A close of the deposit page rejects with
-     * `Plugins.viem.RetryClosedError`. On a page, the payment page shows after a transfer that the
+     * `Plugins.viem.RetryClosedError`. Outside a page, with the `device` plugin, a payment above the
+     * access key's limit starts a device grant for an access key whose limit adds the amount, and the
+     * access key sends again after the approval. On a page, the payment page shows after a transfer that the
      * chain refuses for the access key, such as for its scopes or a spent limit, or for a balance
      * that is still low after the deposit. Without `account`, the session's account on the chain pays. The
      * instance reads the stored session first, and Tempo ID only if the session holds no account.
@@ -3263,14 +3265,19 @@ type WithoutGuest<fn> = fn extends (
   : fn
 
 /**
- * The overload of a page's sign-in `fn` that also returns a guest session. A sign-in through a
- * backend returns none, so it takes no such overload.
+ * The overload of a page's sign-in `fn` that also returns a guest session, with the members that
+ * `fn`'s session adds, such as `auth`. A sign-in through a backend returns none, so it takes no
+ * such overload.
  */
 type WithGuest<fn> = fn extends (
   ...parameters: infer parameters
 ) => Promise<infer result>
   ? result extends Session.Session
-    ? (...parameters: parameters) => Promise<result | Session.GuestSession>
+    ? (
+        ...parameters: parameters
+      ) => Promise<
+        result | (Session.GuestSession & Omit<result, keyof Session.Session>)
+      >
     : unknown
   : unknown
 

@@ -180,6 +180,10 @@ const webAuthnLimit = 1 + 2048
  *    challenge without one. The call returns the route's JSON object, such as `{ token }`, as
  *    `auth`.
  *
+ * With `guest: true`, `dialog.signIn` also offers "Continue as guest". The guest key pair, the P256
+ * root key of the guest account, then signs the message in step 2, and `complete` verifies it as
+ * the account's own. A payment with the plugin offers no guest.
+ *
  * Both routes receive the page's cookies only on the page's origin. A failed challenge request
  * closes the dialog or the popup, and rejects, before any transfer. A failed verification rejects
  * `dialog.signIn`. After a payment, it resolves with the transaction and `authError` instead,
@@ -250,6 +254,8 @@ function page(options: siwe.PageOptions) {
         // the signed one.
         let issued: { id?: string; message: string } | undefined
         return {
+          // `complete` verifies the guest account's P256 signature as the account's own.
+          guest: true,
           async message(options) {
             const body = await post(fetchFn, {
               body: { chainId: options.chainId },

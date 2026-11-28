@@ -17,6 +17,7 @@ import {
   Hash,
   Hex,
   P256,
+  PersonalMessage,
   PublicKey,
   Signature,
   WebCryptoP256,
@@ -265,14 +266,17 @@ describe('Actions.guest.check', () => {
 
 /**
  * Returns a plugin whose `pick.guest` starts the instance's guest session, as a sign-in that selects
- * "Continue as guest" does, whose `pick.current` returns the instance's session, and whose `pick.reload` reads the stored session again, as each send of
+ * "Continue as guest" does, also with a plugin's challenge, whose `pick.current` returns the instance's session, and whose `pick.reload` reads the stored session again, as each send of
  * `Accounts.pay` for a guest session does.
  */
 function pick() {
   return Plugin.from({
     actions: (context) => ({
-      guest: (options: { signal?: AbortSignal | undefined } = {}) =>
+      guest: (
+        options: Pick<SignIn.guest.Options, 'challenge' | 'signal'> = {},
+      ) =>
         SignIn.guest(context, {
+          challenge: options.challenge,
           change: context.session.change(),
           signal: options.signal,
         }),
@@ -423,6 +427,38 @@ describe('Actions.guest.session on each store preset', () => {
     expect(restored).toEqual({ privateKey, type: 'p256' })
     // A non-extractable WebCrypto key pair has no JSON form, so the store could not keep it.
     expect(() => StoreValue.stringify(keyPair)).toThrow()
+  })
+
+  test("reads the guest account's entry once as the first guest session creates it on a `local` store, such as `Store.memory`", async () => {
+    // The store records each call, and delegates it to `Store.memory`, whose `local` and `lock` it keeps.
+    const calls: string[] = []
+    const memory = Store.memory()
+    const store = Store.from({
+      ...memory,
+      async getItem(key) {
+        calls.push(`get ${key}`)
+        return await memory.getItem(key)
+      },
+      async removeItem(key) {
+        calls.push(`remove ${key}`)
+        await memory.removeItem(key)
+      },
+      async setItem(key, value, options) {
+        calls.push(`set ${key}`)
+        await memory.setItem(key, value, options)
+      },
+    })
+
+    await Guest.session(config(store))
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        "get tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]",
+        "set tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]",
+        "get tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]:revision",
+        "set tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]:revision",
+      ]
+    `)
   })
 
   test('refuses a shared store of JSON, such as `Store.postgres`, before any query', async () => {
@@ -1701,6 +1737,13 @@ describe('Accounts.create with guest', () => {
     expectTypeOf<Session.GuestSession>().toExtend<
       Awaited<ReturnType<typeof guestSignIn>>
     >()
+    // A guest that signs a plugin's challenge returns the verification's result too.
+    expectTypeOf<
+      Extract<
+        Awaited<ReturnType<typeof guestSignIn>>,
+        Session.GuestSession
+      >['auth']
+    >().toEqualTypeOf<Plugin.Challenge.Result | undefined>()
   })
 
   test("`pay` of a new instance reads the stored session first, so a signed-in user's payment takes no guest path", async () => {
@@ -1817,6 +1860,88 @@ describe('Accounts.create with guest', () => {
       [
         "Accounts.SupersededError",
         undefined,
+      ]
+    `)
+  })
+
+  test("a guest session with a plugin's challenge signs its message with the guest key pair, verifies it before the commit, and returns `auth`", async () => {
+    const { accounts, requests } = create(true)
+    const message =
+      'app.example wants you to sign in with your Ethereum account'
+    const settled: Plugin.Challenge.Signed[] = []
+    const committed: (Session.Any | undefined)[] = []
+
+    const session = await accounts.pick.guest({
+      challenge: {
+        message: () => Promise.resolve(message),
+        settle: async (signed) => {
+          settled.push(signed)
+          committed.push(await accounts.session.get())
+          return { token: 'app-token' }
+        },
+      },
+    })
+    const [signed] = settled
+    const stored = await accounts.session.get()
+    const envelope = SignatureEnvelope.deserialize(signed!.signature)
+
+    expect({
+      address: signed!.address === session.address,
+      auth: session.auth,
+      committed,
+      message: signed!.message,
+      requests,
+      // The instance stores the guest session without the verification's result.
+      stored: stored?.address === session.address && !('auth' in stored),
+      type: envelope.type,
+      verified: SignatureEnvelope.verify(envelope, {
+        address: session.address,
+        payload: PersonalMessage.getSignPayload(Hex.fromString(message)),
+      }),
+    }).toMatchInlineSnapshot(`
+      {
+        "address": true,
+        "auth": {
+          "token": "app-token",
+        },
+        "committed": [
+          undefined,
+        ],
+        "message": "app.example wants you to sign in with your Ethereum account",
+        "requests": [],
+        "stored": true,
+        "type": "p256",
+        "verified": true,
+      }
+    `)
+  })
+
+  test("a refused verification of a guest's challenge rejects with its error, and commits no session", async () => {
+    const { accounts } = create(true)
+    const refusal = new Accounts.RequestError({
+      code: 'access_denied',
+      message: 'Refused.',
+      status: 403,
+    })
+
+    const error = await accounts.pick
+      .guest({
+        challenge: {
+          message: () => Promise.resolve('Sign in to app.example.'),
+          settle: () => Promise.reject(refusal),
+        },
+      })
+      .catch((error: unknown) => error)
+
+    expect([
+      error === refusal,
+      await accounts.session.get(),
+      (await accounts.guest.get()) !== undefined,
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        undefined,
+        true,
       ]
     `)
   })

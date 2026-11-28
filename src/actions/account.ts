@@ -447,7 +447,8 @@ export declare namespace get {
  * signature. `access_denied` when the user rejects the payment. `server_error` with status 0 in a
  * browser without a connection, before any page opens.
  * @throws {PageRequiredError} Outside a browser page, for a payment that the session's access key
- * does not send, such as one above its limits or after its expiry, also when the node refuses it,
+ * does not send, such as one above its limits without the `device` plugin's retry, or after its
+ * expiry, also when the node refuses it,
  * with the refusal as its `cause`. Its message names that fix: a sign-in for an access key that
  * holds the payment, since the payment page has no redirect.
  * @throws {Accounts.AccessKeyRequiredError} Outside a browser page, when the node refuses the
