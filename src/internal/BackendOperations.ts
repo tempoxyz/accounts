@@ -19,7 +19,7 @@ export const key = Symbol('backend.operations')
 /**
  * The key of the configuration property that holds the store of `backend({ store })`. The `viem`
  * actions read it, from the `viem` plugin or another plugin that builds them, such as `mpp`, and
- * keep their marks of registered access keys there when the instance has no `store`.
+ * keep their marks of registered access keys there, also when the instance has a `store`.
  *
  * @example
  * ```ts

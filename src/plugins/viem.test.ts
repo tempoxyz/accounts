@@ -1131,6 +1131,46 @@ describe('viem', () => {
     expect(pending).toMatchInlineSnapshot(`undefined`)
   })
 
+  test("reads and writes the registration mark of a fixed session's access key in the store of `backend({ store })` also when the instance has a `store`, so a new backend instance attaches no key authorization", async () => {
+    const store = Store.memory()
+    const owner = Secp256k1.randomPrivateKey()
+    const session = Session.from({
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      accessKey: createAccessKey({ chainId: 4217, owner }),
+      user: { email: 'user@example.com', id: 'user_1' },
+    })
+    const address = KeyAuthorization.fromRpc(
+      session.accessKey!.keyAuthorization,
+    ).address
+    const registration = {
+      accessKey: address,
+      address: session.accessKey!.account,
+      chainId: 4217,
+    }
+    // Each isolate of a Worker, or each replica, creates its own instance, with a store of its own
+    // process, on the shared store of the backend.
+    const create = () =>
+      Accounts.create({
+        chain: 4217,
+        clientId: 'https://app.example.com',
+        plugins: [backend({ store }), viem()],
+        store: Store.memory(),
+        url: 'http://127.0.0.1:9',
+      })
+    const manager = (accounts: ReturnType<typeof create>) =>
+      (accounts.viem({ session }).account as Account.AccessKeyAccount)
+        .keyAuthorizationManager!
+
+    // Viem removes the key authorization once the chain registered the access key, which marks it.
+    await manager(create()).remove(registration)
+    const name = `tempo-id:registered:${JSON.stringify([4217, session.accessKey!.account.toLowerCase(), address.toLowerCase()])}`
+    await expect.poll(() => store.getItem(name)).toBeDefined()
+    const pending = await manager(create()).get(registration)
+
+    expect(pending).toMatchInlineSnapshot(`undefined`)
+  })
+
   test('deletes the registration mark at a sign-out after a write of it that the store holds in flight', async () => {
     const memory = Store.memory()
     let release = () => {}

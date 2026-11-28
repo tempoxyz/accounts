@@ -111,7 +111,7 @@ export function backend(options: backend.Options) {
         })
       })()
       // The `viem` actions keep their marks of registered access keys in the store, also those that
-      // another plugin builds, such as `mpp`. A backend's instance has no `store` of its own.
+      // another plugin builds, such as `mpp`. The instance's own `store` holds them only without it.
       const store = options.store ?? sessions.store
       if (store)
         Object.defineProperty(config, BackendOperations.store, {
@@ -717,7 +717,7 @@ export declare namespace backend {
          * plugin, `tempo-id:challenge:` or `tempo-id:approval:`. A session ID holds only `A-Z`,
          * `a-z`, `0-9`, `-`, and `_`, so no session's key names the session of an instance that
          * shares the store, whose keys start with `tempo-id:session:[`. A session that an earlier
-         * release stored under another `id` still reads and ends. If the instance has no `store`, the store also holds the `viem`
+         * release stored under another `id` still reads and ends. The store also holds the `viem`
          * plugin's marks of registered access keys, under `tempo-id:registered:`. A redirect in
          * progress passes `expiresAt` to `setItem`, so the
          * store deletes an abandoned sign-in after 10 minutes, or 20 with `funding`. A session
@@ -732,10 +732,11 @@ export declare namespace backend {
          * The sessions that live outside the process, one process for each session ID, in place of
          * `store`, such as `Sessions.durableObject` of `accounts/cloudflare` returns for a Durable
          * Object namespace. The plugin calls it once with the instance's `clientId`, and calls the
-         * returned `backend.Sessions` for each session. If the instance has no `store`, the `store`
-         * of the returned `backend.Sessions` holds the `viem` plugin's marks of registered access
-         * keys. Without either, the marks live only in the instance, so each new instance attaches
-         * the key authorization again, and the node refuses it.
+         * returned `backend.Sessions` for each session. The `store` of the returned
+         * `backend.Sessions` holds the `viem` plugin's marks of registered access keys, also when
+         * the instance has a `store`. Without it, the marks live in the instance's `store`. Without
+         * both, they live only in the instance, so each new instance attaches the key authorization
+         * again, and the node refuses it.
          */
         sessions: Sessions.Adapter
         store?: undefined
@@ -818,9 +819,10 @@ export declare namespace backend {
     ) => Promise<{ id: string; url: string }>
     /**
      * The store that every process of the app shares, which holds the `viem` plugin's marks of
-     * registered access keys, unless the instance has a `store`. Absent, the marks live only in the
-     * instance, so the first transaction of a session in each new instance attaches the key
-     * authorization again, and the node refuses it.
+     * registered access keys, also when the instance has a `store`. Absent, the marks live in the
+     * instance's `store`. Without both, they live only in the instance, so the first transaction
+     * of a session in each new instance attaches the key authorization again, and the node
+     * refuses it.
      */
     store?: Store | undefined
     /** Deletes a challenge of the session, and returns it, once. */

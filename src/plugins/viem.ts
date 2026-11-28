@@ -377,13 +377,12 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       // The store reads of registration marks in progress, by registration, which `hydrate` starts
       // when a client of the session is created, and which the access key's next fill awaits.
       const reads_mark = new Map<string, Promise<void>>()
-      // A backend's instance has no store of its own, so the marks live in the backend plugin's store,
-      // which replicas and the instances of other requests share.
+      // On a backend, the marks live in the backend plugin's store, which replicas and the instances
+      // of other requests share, also when the instance has a store of its own process.
       const store = () =>
-        DefaultStore.get(config.store) ??
         ((config as Record<symbol, unknown>)[BackendOperations.store] as
           | Store
-          | undefined)
+          | undefined) ?? DefaultStore.get(config.store)
       // The signed transactions that attach a key authorization, by their serialized form, with the
       // registration that each makes once it lands.
       const attaching = new Map<string, Registration>()
