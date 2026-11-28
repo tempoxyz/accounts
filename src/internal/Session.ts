@@ -186,9 +186,9 @@ export function create(options: create.Options): create.ReturnType {
       ? new BroadcastChannel(`${name}:session`)
       : undefined
   // A sign-out applies at once, since the tab that signs out holds the lock through its logout
-  // request, unless this instance runs a refresh. The refresh then saves its new tokens first, and
-  // the sign-out revokes them. Any other change waits for the lock, so it follows a sign-out that
-  // asked for the lock first, which empties the tokens that another tab's refresh saved after it.
+  // request, unless this instance runs a refresh. The refresh then reads the sign-out from the
+  // store, and revokes its new tokens. Any other change waits for the lock. It then follows a
+  // sign-out that asked for the lock first.
   const receive = (data: unknown, connected?: boolean) => {
     const message = data as Message | undefined
     const options = {
@@ -633,6 +633,10 @@ export function create(options: create.Options): create.ReturnType {
     const session = context().session
     if (options.hooks && machines.signsIn({ current, session }))
       void (async () => onSignIn?.(session!))().catch(() => undefined)
+    // Another context's sign-out emptied the session. Its message then finds no session here, so the
+    // reload runs the sign-out hooks. No commit restores the session after it.
+    if (current && !session)
+      void (async () => onSignOut?.())().catch(() => undefined)
     return session
   }
 

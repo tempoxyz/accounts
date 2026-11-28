@@ -512,11 +512,12 @@ export function refresh(
       return change.fail(error, { unanswered: rotating || refused })
     })
     if (!tokens) return replaced
-    // A sign-in in another tab takes no lock, so the refresh reads the store again, and a newer
-    // session there overtakes it. The commit of an overtaken refresh changes nothing. After a
-    // sign-out, here or in another tab, it revokes the new tokens, and records the sent token as
-    // rotated, so a sign-out that waits for the lock revokes neither. The session stays empty, so
-    // the status never shows the signed-out user again, and the refresh returns no session.
+    // A sign-in in another tab takes no lock, so the refresh reads the store again. A newer session
+    // there overtakes the refresh, and its commit changes nothing.
+    //
+    // After a sign-out, here or in another tab, the commit revokes the new tokens. It records the
+    // sent token as rotated, so a sign-out that waits for the lock revokes neither. The session
+    // stays empty, and the refresh returns no session.
     await context.session.reload()
     // A refresh may omit the ID token, which still names the same user, so the session keeps it.
     const session = {
