@@ -2457,8 +2457,8 @@ export declare namespace create {
      */
     load: (options?: {
       /**
-       * What the load does with a saved session whose access key expired: `'empty'` empties it and
-       * revokes its refresh token, and `'keep'` leaves it for a later read. Defaults to `'empty'`.
+       * The handling of a saved session whose access key expired. `'empty'` empties it and revokes
+       * its refresh token, and `'keep'` leaves it for a later read. Defaults to `'empty'`.
        */
       expired?: 'empty' | 'keep' | undefined
       locked?: boolean | undefined

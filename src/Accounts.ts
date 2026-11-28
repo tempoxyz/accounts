@@ -1512,13 +1512,14 @@ export type Accounts<
        * status and the one before it, and returns the function that unsubscribes. `signedOut` for
        * an instance without a session, such as a backend's, which never calls the listener. `get`
        * returns the same object while the status is unchanged, so the pair fits
-       * `useSyncExternalStore` as it is. `accounts.useSession()` reads it in React. The first
-       * `subscribe` before any read loads the saved session, after the code that subscribes, so the
-       * status leaves `pending` with no other call. A `session.get` in that code reads first. The
-       * load runs no restore hook, so an instance with a plugin that restores, such as `redirect`,
-       * loads nothing at a subscription, and its status leaves `pending` at the page's
-       * `session.get`. If the store rejects the read, or the saved session's access key expired, the
-       * status stays `pending`.
+       * `useSyncExternalStore` as it is. `accounts.useSession()` reads it in React.
+       *
+       * The first `subscribe` before any read loads the saved session, after the code that
+       * subscribes, so the status leaves `pending` with no other call. A `session.get` in that code
+       * reads first. The load runs no restore hook, so an instance with a plugin that restores, such
+       * as `redirect`, loads nothing at a subscription, and its status leaves `pending` at the
+       * page's `session.get`. If the store rejects the read, or the saved session's access key
+       * expired, the status stays `pending`.
        *
        * @example
        * ```ts
@@ -2870,8 +2871,8 @@ export function create<
           // subscribes, where a page's own `session.get` reads first. The load runs no restore hook,
           // such as a redirect's callback, which only `session.get` completes and reports, so an
           // instance with one loads nothing here. A failed read keeps `pending`, as `session.get`
-          // does. An expired access key keeps its session in the store and the status `pending`, so
-          // the page's `session.get` renews it inside an authorization, with no `signedOut` first.
+          // does. An expired access key keeps its session in the store and the status `pending`.
+          // The page's `session.get` then renews it inside an authorization, with no `signedOut`.
           if (!restores)
             queueMicrotask(() => {
               if (
