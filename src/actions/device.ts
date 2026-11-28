@@ -10,6 +10,7 @@ import * as AccessKey from '../internal/AccessKey.js'
 import * as Api from '../internal/Api.js'
 import {
   fundingParameters,
+  guestParameters,
   keyAuthorization,
   resources,
 } from '../internal/Request.js'
@@ -58,6 +59,7 @@ export async function authorize<
     client_id: auth.clientId,
     device: options.device ?? hostname(),
     ...fundingParameters(options.funding),
+    ...guestParameters(auth, { challenge: options.challenge }),
     ...(resolved && accessKey
       ? {
           key_authorization: Base64.fromString(
@@ -273,6 +275,92 @@ export declare namespace authorize {
       signal?: AbortSignal | undefined
     }
   }
+}
+
+/**
+ * Starts the funding code of a guest account, for a guest payment outside a page. The user enters
+ * `userCode` at `verificationUri` in any browser, and Tempo ID's deposit pages fund the guest
+ * account that `guest` proves, with no sign-in. The code needs no poll of the token endpoint: the
+ * payment reads the guest account's balance until the funds arrive or the code expires.
+ *
+ * @throws {RequestError} When Tempo ID refuses the code request, or with `server_error` and status 0
+ *   when it receives no response. A malformed `funding` throws `invalid_field` with status 0, before
+ *   any request.
+ * @throws {RequestError} With `upstream_unavailable` and status 503 when Tempo ID cannot read the
+ *   guest account's balance. The request moves no funds, so a retry later is safe.
+ *
+ * @example
+ * ```ts
+ * const { value } = await Actions.guest.request(auth, { chainId, checkout, redirectUri: '' })
+ * const code = await Actions.device.fund(auth, {
+ *   chainId,
+ *   funding: { amount: '5', token: 'ousd' },
+ *   guest: value,
+ * })
+ * console.log(`Open ${code.verificationUriComplete}`)
+ * ```
+ */
+export async function fund(
+  auth: Config,
+  options: fund.Options,
+): Promise<fund.ReturnType> {
+  // `guest` names a sign-in's guest offer, so the guest request goes as `guest_request`.
+  const body = new URLSearchParams({
+    chain_id: String(options.chainId),
+    client_id: auth.clientId,
+    device: hostname(),
+    ...fundingParameters(options.funding),
+    guest_request: options.guest,
+  })
+  const code = await Api.json<{
+    expires_in: number
+    interval: number
+    user_code: string
+    verification_uri: string
+    verification_uri_complete: string
+  }>(
+    await (auth.fetch ?? fetch)(new URL('/device/code', auth.url), {
+      body,
+      method: 'POST',
+      // A redirect would post the request to another origin.
+      redirect: 'manual',
+      signal: options.signal ?? null,
+    }).catch((error: unknown) => {
+      if (options.signal?.aborted) throw options.signal.reason
+      throw new RequestError({
+        cause: error,
+        code: 'server_error',
+        message:
+          'The funding code request received no response. Check the connection, and request a new code.',
+        status: 0,
+      })
+    }),
+  )
+  return {
+    expiresIn: code.expires_in,
+    interval: code.interval,
+    userCode: code.user_code,
+    verificationUri: code.verification_uri,
+    verificationUriComplete: code.verification_uri_complete,
+  }
+}
+
+export declare namespace fund {
+  type Options = {
+    /** The chain of the guest account's funds, which the guest request signs. */
+    chainId: number
+    /** The amount and token that the guest account needs. */
+    funding: Funding.Funding
+    /**
+     * The guest request that proves the guest account, from `Actions.guest.request` without a
+     * redirect URI. The request sends it as `guest_request`.
+     */
+    guest: string
+    /** Rejects the request with the signal's reason. */
+    signal?: AbortSignal | undefined
+  }
+
+  type ReturnType = Omit<authorize.ReturnType, 'deviceCode' | 'wait'>
 }
 
 /**

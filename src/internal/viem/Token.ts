@@ -44,16 +44,18 @@ import * as Retry from './Retry.js'
  * | None                                   | none              | `true`  |
  * | None                                   | some              | `false` |
  *
+ * A guest session's key pair signs as the root account, so the owner sends nothing for it.
+ *
  * @example
  * ```ts
  * const remote = Token.ownerSends(accounts.session.status.get().session, { chainId: tempo.id })
  * ```
  */
 export function ownerSends(
-  session: Pick<Session.Any, 'accessKey' | 'accessKeys'> | undefined,
+  session: Pick<Session.Any, 'accessKey' | 'accessKeys' | 'kind'> | undefined,
   options: ownerSends.Options,
 ) {
-  if (!session) return false
+  if (!session || session.kind === 'guest') return false
   const key = accessKeyOn(session, options)
   if (key) return !AccessKey.held(key) && !AccessKey.expired(key)
   return !session.accessKey && !session.accessKeys?.length
@@ -72,8 +74,9 @@ export declare namespace ownerSends {
  * payment's account, and its limits hold the amount. The fee of the transaction spends the limit of
  * the fee token too: `options.feeToken`, else the payment's token if it is a `USD` stablecoin
  * other than MACH. So the payment's limit also holds a fee allowance of 0.1, unless
- * `options.relayed` or another fee token. The chain takes a transfer whose fee exceeds the limit,
- * and reverts it. Returns `undefined` for any
+ * `options.relayed` or another fee token. With `options.raises`, an amount above the whole limit
+ * of its token still returns, since the retry of the node's refusal raises the limit. The chain
+ * takes a transfer whose fee exceeds the limit, and reverts it. Returns `undefined` for any
  * other payment, and for a token or an amount that does not resolve, which the payment page takes.
  * The chain decides the rest, such as the access key's scopes and its remaining limit.
  *
@@ -129,7 +132,8 @@ export function payable(
       return Address.isEqual(feeToken, resolved.token) ? Retry.fees : 0n
     return paysFees(resolved.token) ? Retry.fees : 0n
   })()
-  if (limits && Retry.within(limits, { fees, parameters }) !== true)
+  const within = limits && Retry.within(limits, { fees, parameters })
+  if (limits && within !== true && !(options.raises && within === false))
     return undefined
   return parameters
 }
@@ -141,6 +145,11 @@ export declare namespace payable {
      * payment's token pays it if it is a `USD` stablecoin other than MACH.
      */
     feeToken?: Address.Address | undefined
+    /**
+     * Whether a retry of a spent limit raises the limit of the payment's token, so an amount above
+     * it still sends. Defaults to `false`.
+     */
+    raises?: boolean | undefined
     /**
      * Whether the relay's fee payer pays the fee of the transaction, so the fee spends no limit.
      * Defaults to `false`.

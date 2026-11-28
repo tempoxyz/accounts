@@ -7,6 +7,8 @@ import { WebCryptoP256 } from 'ox'
 import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
 import * as BackendSessions from '../internal/BackendSessions.js'
+import * as Session from '../Session.js'
+import type * as Store from '../Store.js'
 import * as Postgres from './Postgres.js'
 
 describe('Store.postgres', () => {
@@ -51,6 +53,168 @@ describe('Store.postgres', () => {
           "key": "session",
         },
       ]
+    `)
+  })
+
+  test('behavior: a store on a table that exists sends no check before its first query, as the store of each request of a Worker', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    await Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    }).setItem('session', 'kept')
+    // A Worker connects a client for each request, so each request creates its store.
+    const queries: string[] = []
+    const store = Postgres.create({
+      query(text, values) {
+        queries.push(text.split(' ').slice(0, 2).join(' '))
+        return database.query(text, [...values])
+      },
+    })
+
+    const value = await store.getItem('session')
+
+    expect({ queries, value }).toMatchInlineSnapshot(`
+      {
+        "queries": [
+          "select value",
+        ],
+        "value": "kept",
+      }
+    `)
+  })
+
+  test('behavior: the first operations of two replicas on a missing table each land, with one creation for each replica', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    // Each replica holds a store of its own, and records the statements that start with `do`.
+    const creates = [0, 0]
+    const [a, b] = [0, 1].map((index) =>
+      Postgres.create({
+        query(text, values) {
+          if (text.startsWith('do ')) creates[index]! += 1
+          return database.query(text, [...values])
+        },
+      }),
+    ) as [Store.Store, Store.Store]
+
+    await Promise.all([
+      a.setItem('a', 'kept'),
+      a.setItem('pending', 'new', { expiresAt: Date.now() + 60_000 }),
+      b.setItem('b', 'kept'),
+      b.getItem('a'),
+    ])
+
+    expect({
+      creates,
+      rows: (
+        await database.query(
+          'select key, value from tempo_id_store order by key',
+        )
+      ).rows,
+    }).toMatchInlineSnapshot(`
+      {
+        "creates": [
+          1,
+          1,
+        ],
+        "rows": [
+          {
+            "key": "a",
+            "value": ""kept"",
+          },
+          {
+            "key": "b",
+            "value": ""kept"",
+          },
+          {
+            "key": "pending",
+            "value": ""new"",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('error: a client in a transaction whose first query finds no table rejects with the refusal of that query', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+
+    const error = await database
+      .transaction((transaction) =>
+        Postgres.create({
+          query: (text, values) => transaction.query(text, [...values]),
+        }).getItem('session'),
+      )
+      .catch((error: { code?: string; message: string }) => error)
+
+    expect(error).toMatchObject({ code: '42P01' })
+    expect((error as Error).message).toMatchInlineSnapshot(
+      `"relation "tempo_id_store" does not exist"`,
+    )
+  })
+
+  test('behavior: a first query that finds no table runs again once another replica created the table before the read', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const other = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+    // The first query of the store finds no table. The other replica then creates it, before the
+    // store reads whether the table exists.
+    let refused = false
+    const store = Postgres.create({
+      async query(text, values) {
+        try {
+          return await database.query(text, [...values])
+        } catch (error) {
+          if (refused) throw error
+          refused = true
+          await other.setItem('other', 'kept')
+          throw error
+        }
+      },
+    })
+
+    await store.setItem('session', 'kept')
+
+    expect({ refused, value: await store.getItem('session') })
+      .toMatchInlineSnapshot(`
+        {
+          "refused": true,
+          "value": "kept",
+        }
+      `)
+  })
+
+  test('error: a first query that the database refuses for another cause rejects, and runs once', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    await Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    }).setItem('session', 'kept')
+    await database.exec(`
+      create function refuse() returns trigger language plpgsql as $$ begin raise exception 'refused'; end $$;
+      create trigger refuse before delete on tempo_id_store for each row execute function refuse();
+    `)
+    const queries: string[] = []
+    const store = Postgres.create({
+      query(text, values) {
+        queries.push(text.split(' ')[0]!)
+        return database.query(text, [...values])
+      },
+    })
+
+    const error = await store.takeItem!('session').catch(
+      (error: Error) => error.message,
+    )
+
+    expect({ error, queries }).toMatchInlineSnapshot(`
+      {
+        "error": "refused",
+        "queries": [
+          "delete",
+        ],
+      }
     `)
   })
 
@@ -624,5 +788,56 @@ describe('Store.postgres', () => {
         "name": "Store.InvalidValueError",
       }
     `)
+  })
+
+  test('behavior: a sign-out of one instance empties the session of another instance on the store in the same process', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const store = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 3_600_000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    // The session holds no refresh token, so its sign-out sends no request.
+    const create = () =>
+      Accounts.create({
+        chain: 1337,
+        clientId: 'https://app.example.com',
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const first = create()
+    const second = create()
+    await Promise.all([first.session.get(), second.session.get()])
+    const statuses: string[] = []
+    second.session.status.subscribe((status) => statuses.push(status.status))
+
+    // The second instance reads no store before its next refresh, so only a message tells it of the
+    // sign-out.
+    await first.signOut()
+    await expect
+      .poll(() => second.session.status.get().status, { timeout: 1_000 })
+      .toBe('signedOut')
+
+    expect({ session: await second.session.get(), statuses })
+      .toMatchInlineSnapshot(`
+        {
+          "session": undefined,
+          "statuses": [
+            "signedOut",
+          ],
+        }
+      `)
   })
 })

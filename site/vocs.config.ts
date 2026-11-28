@@ -7,7 +7,7 @@ const repository = 'https://github.com/tempoxyz/accounts'
 
 export default defineConfig({
   // Production origin. The sitemap and the canonical URLs of every deployment name it.
-  baseUrl: 'https://accounts.tempo.xyz',
+  baseUrl: 'https://accounts.tempo.com',
   description:
     'The SDK of Tempo ID. Sign users in, and keep their session, their access key, and a Viem client that signs with it.',
   editLink: {
@@ -96,6 +96,11 @@ export default defineConfig({
           text: 'Sign-In With Ethereum',
         }),
         item({ icon: 'key', link: '/docs/guides/local', text: 'Local' }),
+        item({
+          icon: 'user',
+          link: '/docs/guides/guest-checkout',
+          text: 'Guest checkout',
+        }),
         item({ icon: 'flask', link: '/docs/guides/testing', text: 'Test' }),
       ],
       text: 'Sign-in flows',

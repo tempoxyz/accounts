@@ -1,0 +1,240 @@
+# Scores each pull request and each push to main with Uphill against the targets of
+# `.agents/uphill.baseline.yaml`, and compares its sizes, counts, and checks with the committed
+# baselines. The measure job runs the code without write access, and writes the report to the job
+# summary. On a pull request, the comment job runs none of the code, and alone may write the pull
+# request's comment. On main, the measure job keeps the run as Git notes, and the notes job, which
+# runs none of the code, alone pushes them, so `report.html` and `uphill log` draw trends. A pull
+# request's comment reads the base branch's scores from the report that the newest noted commit of
+# the base branch keeps, so the job measures only the pull request.
+name: Uphill
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A run on main waits for the previous one, so each run's notes start from the notes it pushed.
+concurrency:
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+
+jobs:
+  measure:
+    name: Measure
+    # The secure-runner action authenticates with an OIDC token.
+    permissions:
+      contents: read
+      id-token: write
+    # Uphill runs its scripts one after another, and the bundler, tsc, and vitest in them use every
+    # CPU.
+    runs-on: depot-ubuntu-latest-8
+    timeout-minutes: 45
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      # The git pack reads the last 50 commits, and the comment reads the base branch's notes.
+      - name: Clone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies # zizmor: ignore[self-repository]
+
+      # The packs' scripts run on Bun. The organization allows only GitHub-owned actions, so Bun comes
+      # from npm, and Uphill from its GitHub release, each at a pinned version.
+      - name: Install Bun
+        run: npm install --global bun@1.4.4 # zizmor: ignore[adhoc-packages]
+
+      # The digest is the release's entry in its sha256sums.txt.
+      - name: Install Uphill
+        env:
+          SHA256: 40a3af250b4861e62cf62e5e14d29e4f20d01e62de32b947f8a784cde0d9449d
+          VERSION: 0.0.11
+        run: |
+          asset=uphill-x86_64-unknown-linux-gnu.tar.gz
+          mkdir -p "$RUNNER_TEMP/uphill-bin"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$asset" "https://github.com/wevm/uphill/releases/download/v$VERSION/$asset"
+          echo "$SHA256  $RUNNER_TEMP/$asset" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/uphill-bin" uphill
+          echo "$RUNNER_TEMP/uphill-bin" >> "$GITHUB_PATH"
+
+      # The library metrics of the typescript pack read the build.
+      - name: Build
+        run: pnpm build
+
+      # The notes of earlier runs on main give the report its trends. A repository without notes
+      # has none to fetch. `--note` writes its notes with this identity.
+      - name: Fetch notes
+        run: |
+          git fetch origin 'refs/notes/uphill*:refs/notes/uphill*' || true
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      # A missed target is a step to climb, not a failure, so only a script that cannot measure
+      # fails the job.
+      - name: Run Uphill
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then uphill --note; else uphill; fi
+          cat .uphill/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # The table of `.uphill/comment.md`, with a column of the base branch's scores. `--compare`
+      # would run each script of the base branch once more, and each timed script 16 times, so the
+      # column reads the report that the newest noted commit of the base branch keeps instead.
+      - name: Write comment
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          base="$RUNNER_TEMP/base.json"
+          header=''
+          : > "$base"
+          for commit in $(git rev-list --max-count=50 "origin/$BASE_REF"); do
+            if git notes --ref uphill-report show "$commit" > "$base" 2> /dev/null; then
+              header="$BASE_REF<br><sub>${commit:0:7}</sub>"
+              break
+            fi
+            : > "$base"
+          done
+          mkdir -p "$RUNNER_TEMP/uphill"
+          {
+            echo '<!-- accounts-uphill -->'
+            jq -r --arg header "$header" --slurpfile base "$base" '
+              def gauge($label):
+                (if .score != null then .score elif .error != null then "failed" else null end) as $file
+                | if $file == null then "–"
+                  else "<img src=\"https://raw.githubusercontent.com/wevm/uphill/main/assets/gauges/\($file).svg\" width=\"48\" height=\"48\" alt=\"\($label | @html): \($file)\">"
+                  end;
+              ($base[0].categories // []) as $before
+              | "## Uphill\n\n<table><tr><th align=\"left\">Category</th>"
+                + (if $header == "" then "" else "<th>\($header)</th>" end)
+                + "<th>This run</th></tr>"
+                + ([.categories[]
+                    | . as $category
+                    | ((if .subject then "\(.subject) · " else "" end) + .title) as $label
+                    | "<tr><td><b>\($label | @html)</b></td>"
+                      + (if $header == "" then ""
+                         else "<td align=\"center\">"
+                           + ([$before[] | select(.name == $category.name and .subject == $category.subject)][0]
+                              | if . == null then "–" else gauge($label) end)
+                           + "</td>"
+                         end)
+                      + "<td align=\"center\">\(gauge($label))</td></tr>"
+                  ] | join(""))
+                + "</table>"
+            ' .uphill/report.json
+          } > "$RUNNER_TEMP/uphill/comment.md"
+
+      # An artifact without an archive opens in the browser.
+      - name: Upload report
+        id: report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          archive: false
+          if-no-files-found: error
+          path: .uphill/report.html
+          retention-days: 14
+
+      # The report's URL exists only after its upload.
+      - name: Link report
+        if: github.event_name == 'pull_request'
+        env:
+          REPORT_URL: ${{ steps.report.outputs.artifact-url }}
+        run: printf '\n[Full report](%s)\n' "$REPORT_URL" >> "$RUNNER_TEMP/uphill/comment.md"
+
+      - name: Upload comment
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          name: uphill-comment
+          path: ${{ runner.temp }}/uphill/comment.md
+          retention-days: 1
+
+      # A bundle carries the notes to the notes job, which alone may push.
+      - name: Bundle notes
+        if: github.event_name == 'push'
+        run: git bundle create "$RUNNER_TEMP/notes.bundle" refs/notes/uphill refs/notes/uphill-report
+
+      - name: Upload notes
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          name: uphill-notes
+          path: ${{ runner.temp }}/notes.bundle
+          retention-days: 1
+
+  # Pushes the notes of a run on main. It runs none of the code, and alone may write the repository.
+  notes:
+    name: Notes
+    if: github.event_name == 'push'
+    needs: measure
+    permissions:
+      contents: write
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      - name: Download notes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: uphill-notes
+          path: ${{ runner.temp }}/notes
+
+      # The bundle holds the notes that the measure job fetched, and one note more for this commit,
+      # so the push fast-forwards each notes ref.
+      - name: Push notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init -q notes && cd notes
+          git fetch -q "$RUNNER_TEMP/notes/notes.bundle" 'refs/notes/uphill*:refs/notes/uphill*'
+          git -c "http.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            push "https://github.com/$GITHUB_REPOSITORY.git" 'refs/notes/uphill*:refs/notes/uphill*'
+
+  # A pull request from a fork receives a read-only token, so its report stays in the job summary.
+  comment:
+    name: Comment
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: measure
+    permissions:
+      id-token: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@35019557465e3c38ee3468be171771fd73577584 # 2026-10-20T06-22-38Z-35019557
+
+      - name: Download comment
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: uphill-comment
+          path: ${{ runner.temp }}/uphill
+
+      # One comment per pull request, which each run updates.
+      - name: Write comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          body="$RUNNER_TEMP/uphill/comment.md"
+          id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- accounts-uphill -->"))) | .id' | head -n 1)"
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" > /dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -F "body=@$body" > /dev/null
+          fi
+
+permissions: {}

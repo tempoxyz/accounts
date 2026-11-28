@@ -96,6 +96,10 @@ export async function authorizeUrl(
         }),
     ...(options.display ? { display: options.display } : {}),
     ...fundingParameters(options.funding),
+    ...guestParameters(auth, {
+      challenge: options.challenge,
+      guest: options.guest,
+    }),
     ...(authorization
       ? {
           key_authorization: Base64.fromString(
@@ -156,6 +160,12 @@ export declare namespace authorizeUrl {
      * holds less opens Tempo ID's funding page before the callback. Absent, no funding page opens.
      */
     funding?: Funding.Funding | undefined
+    /**
+     * Whether the request offers "Continue as guest", as {@link guestParameters} decides. `false`
+     * for a backend sign-in, which starts no guest session. `true` also with a challenge, which the
+     * guest key pair signs. Absent, a request offers a guest only without a challenge.
+     */
+    guest?: boolean | undefined
     /** The address that the sign-in page's email field holds, as OpenID Connect's `login_hint`. */
     loginHint?: string | undefined
     /** Whether the request goes to `/oauth2/par` first. Defaults to {@link pushes}. */
@@ -522,6 +532,34 @@ export declare namespace keyAuthorization {
     accessKey: AccessKey | Permissions.WithAddress
     /** The Tempo Account the access key acts for, in place of the one `accessKey.account` names. */
     account?: `0x${string}` | undefined
+  }
+}
+
+/**
+ * Returns `guest=offer` for a sign-in request of an instance with `guest: true`, so Tempo ID's
+ * sign-in page offers "Continue as guest". A request with a challenge offers one only with
+ * `guest: true`, whose caller signs the challenge with the guest key pair, such as for the `siwe`
+ * plugin. `guest: false` offers none. Returns none otherwise.
+ */
+export function guestParameters(
+  auth: Pick<Config, 'guest'>,
+  options: guestParameters.Options,
+): Record<string, string> {
+  const { challenge, guest } = options
+  if (auth.guest !== true || guest === false) return {}
+  if (challenge !== undefined && guest !== true) return {}
+  return { guest: 'offer' }
+}
+
+export declare namespace guestParameters {
+  type Options = {
+    /** The request's challenge. Absent, the request names none. */
+    challenge: unknown
+    /**
+     * `true` to offer a guest also with a challenge, which the guest key pair signs, and `false`
+     * to offer none. Absent, the request offers a guest only without a challenge.
+     */
+    guest?: boolean | undefined
   }
 }
 

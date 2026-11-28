@@ -84,6 +84,10 @@ describe('ownerSends', () => {
     expect(Token.ownerSends({}, { chainId: 4217 })).toBe(true)
   })
 
+  test('returns false for a guest session, whose key pair signs the transfer as the guest account', () => {
+    expect(Token.ownerSends({ kind: 'guest' }, { chainId: 4217 })).toBe(false)
+  })
+
   test('returns false for a session whose access keys are on other chains, which a sign-in adds one to', () => {
     const session = { accessKeys: [key({ chainId: 42431, material: true })] }
 
@@ -208,7 +212,18 @@ describe('payable', () => {
     expect(Token.payable(session, payment)).toBe(undefined)
   })
 
-  test('returns undefined for a token that the limits do not name', () => {
+  test('returns the transfer for an amount above the whole limit of its token with `raises`, whose retry raises the limit', () => {
+    const limits = [{ limit: 4_999_999n, token: pathUsd }] as const
+    const session = {
+      accessKey: key({ chainId: 4217, limits, material: true }),
+    }
+
+    expect(
+      Token.payable(session, { ...payment, raises: true })?.amount,
+    ).toMatchInlineSnapshot(`5000000n`)
+  })
+
+  test('returns undefined for a token that the limits do not name, also with `raises`', () => {
     const limits = [
       {
         limit: 5_000_000n,
@@ -220,6 +235,7 @@ describe('payable', () => {
     }
 
     expect(Token.payable(session, payment)).toBe(undefined)
+    expect(Token.payable(session, { ...payment, raises: true })).toBe(undefined)
   })
 
   test('returns undefined without a session', () => {

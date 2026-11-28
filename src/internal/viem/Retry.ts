@@ -727,12 +727,13 @@ function named(error: unknown, options: { name: string }) {
  * Returns whether a call with `args` signs with the client's account, which the session's access key
  * follows. A call that names the client's own account, as Viem's contract actions and wagmi's
  * actions do, follows it too. A call that names another `account`, such as the account's root key,
- * does not.
+ * does not, nor does an approval by `hash` of a stored operation, which names its own account.
  */
 function follows(args: readonly unknown[], options: follows.Options) {
   const [parameters] = args
   if (!parameters || typeof parameters !== 'object') return true
-  const { account } = parameters as { account?: unknown }
+  const { account, hash } = parameters as { account?: unknown; hash?: unknown }
+  if (hash !== undefined) return false
   return account === undefined || account === options.account
 }
 

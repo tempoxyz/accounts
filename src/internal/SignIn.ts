@@ -7,6 +7,7 @@ import { KeyAuthorization } from 'ox/tempo'
 import { RequestError } from '../Accounts.js'
 import type { Permissions } from '../Permissions.js'
 import type * as Plugin from '../Plugin.js'
+import type * as InternalSession from './Session.js'
 import * as Session from '../Session.js'
 import * as AccessKey from './AccessKey.js'
 import type * as TempoAccount from './TempoAccount.js'
@@ -146,6 +147,101 @@ export type AccountOption<accessKey> =
        */
       account: false
     }
+
+/**
+ * Commits a new guest session of the instance with `options.change`, and returns it. The guest
+ * account's key pair loads from the store, or the call creates and saves one. The call sends no
+ * request. A failure, or an abort of `options.signal` before the commit, rejects through the change.
+ *
+ * With `options.challenge`, a plugin's challenge, the guest key pair signs its message as the guest
+ * account, as `signMessage` does. The call then settles the signature before the commit, and
+ * returns the result as `auth`. A refused verification commits no session.
+ */
+export async function guest(
+  context: Pick<Plugin.Context, 'config'>,
+  options: guest.Options,
+): Promise<guest.ReturnType> {
+  const { challenge, change } = options
+  try {
+    // The guest module loads at the first guest session, so an instance without one bundles none of
+    // its signing.
+    const Guest = await import('../actions/guest.js')
+    const session = await Guest.session(context.config)
+    const auth = challenge
+      ? await (async () => {
+          const message = await challenge.message()
+          const signature = await Guest.account(context.config, {
+            session,
+          }).signMessage({ message })
+          return await challenge.settle({
+            address: session.address,
+            message,
+            signature,
+          })
+        })()
+      : undefined
+    throwIfAborted(options.signal)
+    await change.commit(session)
+    return auth ? { ...session, auth } : session
+  } catch (error) {
+    return await change.fail(error)
+  }
+}
+
+export declare namespace guest {
+  type Options = {
+    /**
+     * A plugin's challenge, such as the `siwe` plugin's, which the guest key pair signs. Its
+     * `message` returns the message to sign. Absent, the guest signs nothing.
+     */
+    challenge?:
+      | {
+          /** Returns the message to sign, such as one that the sign-in received already. */
+          message: () => Promise<string>
+          /** Verifies the signature, as the plugin's `settle` does. */
+          settle: Plugin.Challenge['settle']
+        }
+      | undefined
+    /** The sign-in's change, which the guest session commits. */
+    change: Pick<InternalSession.Change, 'commit' | 'fail'>
+    /** The sign-in's signal, whose abort before the commit rejects with its reason. */
+    signal?: AbortSignal | undefined
+  }
+
+  /** The guest session, with the verification's result as `auth` for a challenge. */
+  type ReturnType = Session.GuestSession & {
+    /** The verify route's JSON object, such as `{ token }`. Absent without a challenge. */
+    auth?: Plugin.Challenge.Result | undefined
+  }
+}
+
+/**
+ * Returns whether `error` is the refusal of a sign-in whose user selected "Continue as guest", the
+ * reason `guest_selected`, on an instance with `guest`. The sign-in then starts the guest session.
+ */
+export function guestSelected(
+  context: Pick<Plugin.Context, 'config'>,
+  error: unknown,
+): boolean {
+  return (
+    context.config.guest === true &&
+    error instanceof RequestError &&
+    error.reason === 'guest_selected'
+  )
+}
+
+/**
+ * Throws the reason of `signal` once it aborted. React Native's `AbortSignal` has no reason, so an
+ * abort without one throws an `AbortError`.
+ */
+function throwIfAborted(signal: AbortSignal | undefined) {
+  if (!signal?.aborted) return
+  throw signal.reason !== undefined
+    ? signal.reason
+    : Object.assign(new Error('The sign-in was aborted.'), {
+        name: 'AbortError',
+      })
+}
 
 /** Returns the session of a sign-in's result: its tokens, its user, its access key, and its account. */
 export function toSession(

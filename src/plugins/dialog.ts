@@ -302,9 +302,25 @@ export function dialog<const options extends dialog.Options = {}>(
             // The plugin's challenge comes from the app's server, so the dialog shows at the click.
             deferred: source !== undefined,
             funding: page.funding,
+            // The guest key pair signs a plugin's challenge that accepts it, so an instance with
+            // `guest` offers a guest with it too. Otherwise, the request decides the offer itself.
+            ...(source?.guest ? { guest: true } : {}),
             loginHint: page.loginHint,
             mode: page.mode ?? (popup ? 'popup' : 'iframe'),
             resource: page.resource,
+            // Each ID token needs `openid` and `email`, so the call's scopes add to the instance's,
+            // as the device grant's do.
+            scope:
+              page.scope === undefined
+                ? undefined
+                : [
+                    ...new Set([
+                      ...context.config.scope.split(' '),
+                      ...page.scope.split(' '),
+                    ]),
+                  ]
+                    .filter(Boolean)
+                    .join(' '),
             // A sign-out cancels only the wait for the approval. Tokens that Tempo ID issued before
             // it reach the commit, whose cleanup of the overtaken change revokes them.
             cancel: controller.signal,
@@ -315,8 +331,30 @@ export function dialog<const options extends dialog.Options = {}>(
             // send a second logout after a sign-out with `everywhere`.
             if (controller.signal.aborted && error === controller.signal.reason)
               throw error
+            // The user selected "Continue as guest", which issues no tokens.
+            if (SignIn.guestSelected(context, error)) return undefined
             return change.fail(error)
           })
+          if (!result)
+            return await SignIn.guest(context, {
+              // The end of the sign-in aborts a request of the message that is still pending, so
+              // a guest that the page selected before the message arrived requests it again.
+              // Tempo ID's frame holds the choice until the message arrives, and a popup opens
+              // with it.
+              challenge: source?.guest
+                ? {
+                    message: async () =>
+                      message ??
+                      (await source.message({
+                        chainId: context.config.chainId,
+                        signal: page.signal ?? new AbortController().signal,
+                      })),
+                    settle: (signed) => source.settle(signed),
+                  }
+                : undefined,
+              change,
+              signal: page.signal,
+            })
           const session = SignIn.toSession(result)
           // A refused verification fails the sign-in, and revokes the refresh token that no change
           // saves.
@@ -449,9 +487,9 @@ export function dialog<const options extends dialog.Options = {}>(
          */
         session: (async () => {
           if (backend === undefined) {
-            // The dialog shows a Tempo ID session, not a `local` plugin's beside it.
+            // The dialog shows a Tempo ID session, not a `local` plugin's or a guest session beside it.
             const stored = await context.session.load()
-            return stored && !Session.local(stored) ? stored : null
+            return stored && Session.tempoId(stored) ? stored : null
           }
           const coordinator = backendOf(context, { backend })
           if (machines.signingIn(coordinator.getSnapshot()))
@@ -486,6 +524,13 @@ export function dialog<const options extends dialog.Options = {}>(
          * Signs the user in, sets the instance's session, and returns it. Call it in a click
          * handler, before any `await`, since a popup opens only within the gesture. The session
          * holds no Tempo Account, so read it with `accounts.account.get` if necessary.
+         *
+         * With `guest: true`, a request without `challenge` adds `guest=offer`, so Tempo ID's page
+         * offers "Continue as guest". That choice returns `guest=1`, or posts `guest: true`, and the
+         * call sets and returns a guest session. Without a plugin's challenge, it sends no request.
+         * With the `siwe` plugin's `auth`, or another plugin's challenge with `guest: true`, the
+         * guest key pair signs the plugin's message as the guest account. The call posts the signature to the verify route before it sets the guest
+         * session, and returns the route's result as `auth`, as for a Tempo ID sign-in.
          *
          * With the `siwe` plugin's `auth`, and without `challenge`, the sign-in also signs the user
          * in to the app: the dialog opens, then requests the message from the app's challenge
@@ -527,6 +572,8 @@ export function dialog<const options extends dialog.Options = {}>(
          *     or
          *     [`empty_scopes`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#empty_scopes)
          *     for an empty `accessKey.limits` or `accessKey.scopes`.
+         *   - With `server_error` and status 0, in a browser without a connection, before the
+         *     dialog or the popup opens.
          *   - With `server_error` and status 0, when the instance pushes its requests, with `par`,
          *     and `POST /oauth2/par` receives no response, such as offline.
          *   - With `invalid_request`, when the `state` of the callback or of the posted
@@ -804,9 +851,9 @@ export declare namespace dialog {
      * signs in through the backend's `GET /auth/login` redirect instead.
      *
      * The backend's instance names the request's `resource`, after the dialog chooses the frame or
-     * the popup. Tempo ID's frame issues tokens for its own origin alone. So if the backend's
-     * instance names a `resource`, the page's instance names the same `resource`, and the sign-in
-     * runs in a popup.
+     * the popup. The dialog takes the frame for a resource only if the frame reports that it
+     * issues tokens for one. So if the backend's instance names a `resource`, the page's instance
+     * names the same `resource`.
      */
     backend?: string | true | undefined
     /**
@@ -960,7 +1007,8 @@ export declare namespace dialog {
     /**
      * The session, or with `backend`, the Tempo ID session that the page reads. With a plugin's
      * challenge, such as the `siwe` plugin's `auth`, the session holds the verification's result as
-     * `auth`, which the instance does not store.
+     * `auth`, which the instance does not store. An instance with `guest` also returns a guest
+     * session, as its type of `signIn` states.
      */
     type ReturnType<options extends Options = {}> = options extends {
       backend: string | true
@@ -1050,8 +1098,9 @@ export declare namespace dialog {
       /**
        * Whether the sign-in shows in a frame or in a popup window. Defaults to the plugin's `mode`.
        * A popup opens only within a click. Outside a secure context, on a page on `http:` such as
-       * `http://localhost`, for a pushed request, for a request with a `resource`, and with `funding`
-       * for a hint of `MACH` on Tempo mainnet on iOS or iPadOS, `iframe` runs as `popup`. A page on
+       * `http://localhost`, for a pushed request, for a request with a `resource` that the preloaded
+       * frame does not take, and with `funding` for a hint of `MACH` on Tempo mainnet on iOS or
+       * iPadOS, `iframe` runs as `popup`. A page on
        * `http:` keeps the frame only for a Tempo ID on `http:`, such as a local one.
        */
       mode?: 'iframe' | 'popup' | undefined
@@ -1061,10 +1110,22 @@ export declare namespace dialog {
        * names them as `aud`, and each refresh keeps them. A pushed request, with `par`, names at
        * most one. An unknown or disabled resource fails with
        * [`invalid_target`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_target).
-       * Tempo ID's frame issues tokens for its own origin alone, so a sign-in with a resource runs
-       * in a popup. Defaults to the instance's `resource`, or else Tempo ID's origin.
+       * The sign-in runs in the frame if the preloaded frame reports that it issues tokens for a
+       * resource, and in a popup otherwise. A frame that cannot serve the request offers the popup,
+       * such as for an app that no resource's scopes link, or for an access key or a `challenge`
+       * beside the resource's scopes. After the sign-in,
+       * `accounts.session.accessToken()` returns the resource's access token. Defaults to the
+       * instance's `resource`, or else Tempo ID's origin.
        */
       resource?: Accounts.Config['resource']
+      /**
+       * The space-separated scopes of the tokens beyond the instance's `scope`, such as a
+       * resource's own scopes, `rpc-relay:read rpc-relay:sponsor`. The call adds them to the
+       * instance's `scope`. An unknown scope, or a resource's scope without its `resource`, fails
+       * with [`invalid_scope`](https://github.com/tempoxyz/id/blob/main/docs/errors.md#invalid_scope).
+       * Absent, the tokens hold the instance's `scope`.
+       */
+      scope?: string | undefined
       /**
        * Rejects the sign-in with the signal's reason, such as on a cancel button, and closes the
        * dialog or the popup.

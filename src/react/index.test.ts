@@ -14,6 +14,7 @@ import {
 } from 'xstate'
 import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
+import * as Store from '../Store.js'
 import { machines } from './index.js'
 
 describe('machines.restore', () => {
@@ -249,6 +250,20 @@ describe('machines.restore', () => {
           }),
         ),
       ).toMatchInlineSnapshot(`true`)
+    })
+
+    test('declines the refusal of an authorization for an instance with resource, which throws before any request at every attempt', async () => {
+      const accounts = Accounts.create({
+        chain: 1337,
+        clientId: 'acme',
+        resource: 'https://api.example.com',
+        store: Store.memory(),
+        url: 'http://127.0.0.1:9',
+      })
+
+      const error = await accounts.authorize().catch((error: unknown) => error)
+
+      expect(machines.transient(error)).toMatchInlineSnapshot(`false`)
     })
 
     test('declines a passkey ceremony that failed on the page, which refuses with status 0 and repeats its prompt at every attempt', () => {

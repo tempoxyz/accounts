@@ -5,7 +5,7 @@
  * in a dialog, or a popup.
  * @module
  */
-import { Address, Base64, Hex } from 'ox'
+import { Address, Base64, Bytes, Hex } from 'ox'
 import { Authentication, type Types } from 'ox/webauthn'
 import {
   formatTransactionReceipt,
@@ -14,7 +14,22 @@ import {
   type TypedData,
   type TypedDataDefinition,
 } from 'viem'
-import { type Config, RequestError } from '../Accounts.js'
+import {
+  type ActorRefFrom,
+  assertEvent,
+  assign,
+  createActor,
+  fromPromise,
+  setup,
+  type SnapshotFrom,
+  waitFor,
+} from 'xstate'
+import {
+  type Config,
+  RequestError,
+  SignedOutError,
+  SupersededError,
+} from '../Accounts.js'
 import * as Api from '../internal/Api.js'
 import * as AccessKey from '../internal/AccessKey.js'
 import * as Callback from '../internal/Callback.js'
@@ -23,6 +38,7 @@ import * as Payment from '../internal/Payment.js'
 import * as Popup from '../internal/Popup.js'
 import type * as Sheet from '../internal/Sheet.js'
 import type { Permissions } from '../Permissions.js'
+import type * as Session from '../Session.js'
 import type { TempoAccount } from '../internal/TempoAccount.js'
 
 /**
@@ -430,7 +446,8 @@ export declare namespace get {
  * without resources, and for a return without a transaction hash, an account, or the challenge's
  * signature. `access_denied` when the user rejects the payment.
  * @throws {PageRequiredError} Outside a browser page, for a payment that the session's access key
- * does not send, such as one above its limits or after its expiry, also when the node refuses it,
+ * does not send, such as one above its limits without the `device` plugin's retry, or after its
+ * expiry, also when the node refuses it,
  * with the refusal as its `cause`. Its message names that fix: a sign-in for an access key that
  * holds the payment, since the payment page has no redirect.
  * @throws {Accounts.AccessKeyRequiredError} Outside a browser page, when the node refuses the
@@ -470,6 +487,7 @@ export async function pay<const options extends pay.Options>(
     throw new PageRequiredError({ payment: true })
   }
   const redirectUri = approvalRedirectUri(auth, options)
+  const chainId = options.chainId ?? auth.chainId
   // A function's message arrives while the dialog or the popup opens, so the user waits for the
   // slower of the two only. Its signal aborts once the call ends.
   const ending = new AbortController()
@@ -488,7 +506,7 @@ export async function pay<const options extends pay.Options>(
     query: {
       ...(account !== undefined ? { account } : {}),
       amount,
-      chain_id: String(options.chainId ?? auth.chainId),
+      chain_id: String(chainId),
       ...(typeof challenge === 'string' ? { challenge } : {}),
       client_id: auth.clientId,
       ...(memo !== undefined ? { memo } : {}),
@@ -628,6 +646,170 @@ export declare namespace pay {
           /** The account's signature of `challenge`. Present only for a request with one. */
           challengeSignature?: `0x${string}` | undefined
         })
+}
+
+/**
+ * Requests one payment from the guest account of `session` on Tempo ID's payment page: a transfer
+ * of `amount` of `token` to `to`. The page opens with a guest request that the guest account's key
+ * pair signs, reads the payment, and offers a deposit for a shortfall. It then posts the transfer,
+ * which the key pair signs on the app's page, and Tempo ID's sponsor pays its fee. The key pair
+ * signs only the requested transfer, and only one transaction for each payment. Each popup that
+ * the page opens later, such as the deposit's, holds a fresh guest request, and the page renews the
+ * request before it expires. The call sends no request before the page shows.
+ *
+ * With `session` as a function, the call makes a guest offer: the page opens as the signed-out
+ * payment page with `guest=offer` and a random `state`, and signs the user in. If the user selects
+ * Continue as guest, the page posts `tempo-id:guest.request` with the `state`. The call then runs
+ * the function, which starts the guest session, and answers with the first guest request, so the
+ * same page pays from the guest account. If the user signs in instead, the page pays from the
+ * user's account. The call returns the account that the return URL names as `address`: the guest
+ * account once its transfer landed, and otherwise the account of the user that signed in, also after
+ * a failed start of the guest session or a guest transfer that never landed.
+ *
+ * @throws {RequestError} As {@link pay} throws it for `amount`, `memo`, and `to`, before any page
+ *   opens, and `access_denied` when the user rejects the payment.
+ * @throws {PageRequiredError} Outside a browser page.
+ * @throws {SupersededError} For a guest offer, when a sign-out since the call started supersedes the
+ *   guest session that Continue as guest starts. The page closes.
+ * @throws {Accounts.SignedOutError} When the store holds another key pair than the session's.
+ * @throws {OriginError} For a redirect URI on another origin than the page.
+ * @throws {BlockedError} When the browser blocks the popup.
+ *
+ * @example
+ * ```ts
+ * import { Actions } from 'accounts/internal'
+ *
+ * const session = await Actions.guest.session(accounts.config)
+ * const { transaction } = await Actions.account.pay_guest(accounts.config, {
+ *   amount: '12.5',
+ *   session,
+ *   to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+ *   token: 'ousd',
+ * })
+ * ```
+ */
+export async function pay_guest(
+  auth: Config,
+  options: pay_guest.Options,
+): Promise<pay_guest.ReturnType> {
+  const { note, to, token } = options
+  const amount = Payment.amount(options.amount)
+  Payment.to(to)
+  const memo =
+    options.memo === undefined ? undefined : Payment.memo(options.memo)
+  if (typeof document === 'undefined')
+    throw new PageRequiredError({ payment: true })
+  const redirectUri = approvalRedirectUri(auth, options)
+  const chainId = options.chainId ?? auth.chainId
+  // The guest module loads at the first guest payment, and signs from the store, with no request.
+  const loading = import('./guest.js')
+  loading.catch(() => {})
+  // The checkout ID names this payment. Each guest request of the payment, also a renewal, signs the
+  // same one, so Tempo ID keeps one record for it, and another payment never shares that record.
+  // `Bytes.random` needs only `crypto.getRandomValues`, which React Native polyfills, and the
+  // URL-safe Base64 holds only letters, digits, `-`, and `_`.
+  const checkout = Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
+  // A guest offer binds the page's selection of Continue as guest to this payment.
+  const state =
+    typeof options.session === 'function'
+      ? Base64.fromBytes(Bytes.random(16), { pad: false, url: true })
+      : undefined
+
+  /**
+   * Returns the guest module, or throws `SignedOutError` once the instance's session no longer holds
+   * the guest session `held`, such as after a sign-out, which keeps the key pair.
+   */
+  const holding = async (held: Session.GuestSession) => {
+    const Guest = await loading
+    if (
+      options.current &&
+      !Guest.active({ current: options.current(), started: held })
+    )
+      throw new SignedOutError()
+    return Guest
+  }
+
+  const url = await approve(auth, {
+    guest: {
+      request: async (held) => {
+        const Guest = await holding(held)
+        const { address, value } = await Guest.request(auth, {
+          chainId,
+          checkout,
+          redirectUri,
+        })
+        // A store that lost the session's key pair holds a new guest account, which pays nothing
+        // for this session.
+        if (!Address.isEqual(address, held.address)) throw new SignedOutError()
+        return value
+      },
+      session: options.session,
+      // The instance's session must hold the guest session before and after the signature.
+      sign: async (transaction, held) =>
+        (await loading).transfer(auth, {
+          amount,
+          chainId,
+          current: options.current,
+          memo,
+          session: held,
+          to,
+          token,
+          transaction,
+        }),
+      state,
+    },
+    label: 'Pay with Tempo',
+    mode: options.mode ?? 'iframe',
+    noun: 'payment',
+    path: '/pay',
+    query: {
+      amount,
+      chain_id: String(chainId),
+      client_id: auth.clientId,
+      ...(state !== undefined ? { guest: 'offer' } : {}),
+      ...(memo !== undefined ? { memo } : {}),
+      ...(note !== undefined ? { note } : {}),
+      redirect_uri: redirectUri,
+      ...(state !== undefined ? { state } : {}),
+      to,
+      token,
+    },
+    signal: options.signal,
+    skeleton: 'payment',
+    text: 'Continue in a Tempo ID window to pay.',
+  })
+  const transaction = transactionOf(url, { redirectUri })
+  if (!transaction) throw transactionOf.missing()
+  const address = machines.payer({
+    account: Callback.parameter(url, { name: 'account', redirectUri }),
+    held:
+      typeof options.session === 'function'
+        ? undefined
+        : options.session.address,
+  })
+  if (!address) throw missing('account')
+  return { address, transaction }
+}
+
+export declare namespace pay_guest {
+  type Options = Omit<pay.Options, 'account' | 'attempt' | 'challenge'> & {
+    /**
+     * Returns the instance's session. Once it no longer holds the guest session, as
+     * `Actions.guest.active` decides, the guest account signs no transfer and no renewal of the guest
+     * request, and the page receives the refusal. Absent, only the stored key pair counts.
+     */
+    current?: (() => Session.Any | undefined) | undefined
+    /**
+     * The guest session whose guest account pays, or a function that starts it, for a guest offer
+     * on the signed-out payment page. The function runs when the user selects Continue as guest,
+     * again after a failure. A close of the page aborts its `signal`, and discards its result.
+     */
+    session:
+      | Session.GuestSession
+      | ((options: { signal: AbortSignal }) => Promise<Session.GuestSession>)
+  }
+
+  type ReturnType = pay.ReturnType<Omit<Options, 'session'>>
 }
 
 /**
@@ -1421,7 +1603,7 @@ async function approve<held = never>(
   auth: Config,
   options: approve.Options<held>,
 ): Promise<URL | held> {
-  const { challenge, hold, mode, path, query, signal } = options
+  const { challenge, guest, hold, mode, path, query, signal } = options
   const redirectUri = query.redirect_uri
   signal?.throwIfAborted()
   // React Native defines `window` without `location`, so the check reads `document`.
@@ -1431,15 +1613,104 @@ async function approve<held = never>(
     throw new OriginError({ origin: window.location.origin, redirectUri })
 
   const origin = new URL(auth.url).origin
-  // The message of `challenge`, once it resolves. The frame receives it with the lift of its cover,
-  // and a popup in its URL.
-  let message: string | undefined
-  challenge?.then(
-    (value) => {
-      message = value
+  /** Returns the message of `error` that the page shows. */
+  const fault = (error: unknown) =>
+    error instanceof Error ? error.message : 'Signing failed.'
+  // The values of the page's URL, the guest requests of the payment, and the guest account's one
+  // signature, which the machine holds.
+  // A guest offer opens the signed-out page, whose URL waits for no guest request. The guest
+  // request arrives once the user selects Continue as guest.
+  const actor = createActor(
+    machines.approval.provide({
+      actors: {
+        // The machine's end aborts the signature, such as at a close of the dialog or an abort of
+        // the payment, so the page receives no signature that the call no longer awaits.
+        sign: fromPromise<void, machines.approval.Signature>(async (args) => {
+          const { id, source, transaction } = args.input
+          const post = (message: object) => {
+            if (args.signal.aborted) return
+            source.postMessage(
+              { id, type: 'tempo-id:guest.signature', ...message },
+              origin,
+            )
+          }
+          if (!guest) throw new Error('No guest payment.')
+          try {
+            post({
+              transaction: await guest.sign(transaction, await session()),
+            })
+          } catch (error) {
+            // No signature exists, so the page can post the transaction again.
+            post({ error: fault(error) })
+            throw error
+          }
+        }),
+        start: fromPromise((args) =>
+          typeof guest?.session === 'function'
+            ? guest.session({ signal: args.signal })
+            : Promise.reject(new Error('No guest offer.')),
+        ),
+      },
+    }),
+    {
+      input: {
+        challenge: challenge !== undefined,
+        guest: guest !== undefined && guest.state === undefined,
+        offer: typeof guest?.session === 'function',
+      },
     },
+  ).start()
+  challenge?.then(
+    (message) => actor.send({ message, type: 'challenge.resolve' }),
     () => {},
   )
+  /**
+   * Returns the guest session: the held one, or the guest offer's, which the machine starts once at
+   * the user's selection. A failed start lets the next selection try again, and fails no payment,
+   * since the user can still sign in on the page. A supersession ends the call below.
+   */
+  const session = async () => {
+    if (!guest) throw new Error('No guest payment.')
+    if (typeof guest.session !== 'function') return guest.session
+    actor.send({ type: 'offer.start' })
+    const result = machines.guest(
+      await waitFor(
+        actor,
+        (snapshot) => !snapshot.matches({ offer: 'starting' }),
+      ),
+    )
+    if (result.type === 'started') return result.session
+    if (result.type === 'failed' || result.type === 'superseded')
+      throw result.error
+    throw new Error('No guest offer.')
+  }
+  // A sign-out since the payment started supersedes the whole payment, so its guest offer ends the
+  // page, and the call rejects with `SupersededError`.
+  const superseded = new Promise<never>((_, reject) => {
+    const subscription = actor.subscribe((snapshot) => {
+      const result = machines.guest(snapshot)
+      if (result.type !== 'superseded') return
+      subscription.unsubscribe()
+      reject(result.error)
+    })
+  })
+  superseded.catch(() => {})
+  /** Signs a fresh guest request, which the page's URL holds from then on. */
+  const renew = async () => {
+    if (!guest) throw new Error('No guest payment.')
+    const value = await guest.request(await session())
+    actor.send({ type: 'guest.resolve', value })
+    return value
+  }
+  // The first guest request, which the guest account signs from the store, with no request. A
+  // guest offer signs none until the user selects Continue as guest.
+  const requested = guest && guest.state === undefined && renew()
+  // The values that the page's URL waits for. Each rejects the call itself, so `pending` only signals.
+  const pending =
+    challenge || requested
+      ? Promise.all([challenge, requested]).then(() => undefined)
+      : undefined
+  pending?.catch(() => {})
   /**
    * Returns the page's URL: in a frame at `/embed` and the path, or in a popup at the path. A popup
    * keeps the method that the frame requests, such as `mach` for Buy MACH.
@@ -1448,32 +1719,47 @@ async function approve<held = never>(
     display: 'frame' | 'popup',
     method?: Sheet.load.Popup['method'],
   ) => {
+    const values = machines.values(actor.getSnapshot())
     const url = new URL(display === 'frame' ? `/embed${path}` : path, auth.url)
     url.search = new URLSearchParams({
       ...query,
-      ...(display === 'popup' && message !== undefined
-        ? { challenge: message }
+      ...(display === 'popup' && values.message !== undefined
+        ? { challenge: values.message }
         : {}),
+      ...(values.guest !== undefined ? { guest: values.guest } : {}),
       ...(display === 'popup' ? { display } : {}),
       ...(method ? { method } : {}),
     }).toString()
     return url.href
   }
+  // The windows of this payment's frame and popups, the only sources of its guest messages, so a
+  // concurrent payment's page never reaches this one's listener.
+  const sources = new Set<Window>()
   /**
-   * Opens the popup within the gesture: at the page, or blank until the challenge's message
-   * arrives, since a popup blocker accepts `window.open` only within the gesture.
+   * Opens the popup within the gesture: at the page, or blank until the values of its URL arrive,
+   * since a popup blocker accepts `window.open` only within the gesture. A later popup of a guest
+   * payment, such as the frame's deposit, holds a fresh guest request, since the first one expires.
+   * Returns the popup, and the navigation of a blank popup, which rejects as its values do.
    */
-  const open = (method?: Sheet.load.Popup['method']) => {
-    if (!challenge || message !== undefined)
-      return Popup.openPopup(toUrl('popup', method))
+  const open = (entry: approve.Popup = {}) => {
+    // A guest offer that the user has not taken signs no guest request for a later popup.
+    const renewal =
+      entry.later && guest && machines.values(actor.getSnapshot()).guest
+        ? renew()
+        : undefined
+    if (!renewal && machines.ready(actor.getSnapshot())) {
+      const popup = Popup.openPopup(toUrl('popup', entry.method))
+      if (popup) sources.add(popup)
+      return { popup }
+    }
     const popup = Popup.openPopup('about:blank')
-    challenge.then(
-      () => {
-        if (popup && !popup.closed) popup.location.href = toUrl('popup', method)
-      },
-      () => {},
-    )
-    return popup
+    if (popup) sources.add(popup)
+    const shown = (renewal ?? pending ?? Promise.resolve()).then(() => {
+      if (popup && !popup.closed)
+        popup.location.href = toUrl('popup', entry.method)
+    })
+    shown.catch(() => {})
+    return { popup, shown }
   }
   const closed = () =>
     new DOMException(`The user closed the ${options.noun}.`, 'AbortError')
@@ -1485,8 +1771,11 @@ async function approve<held = never>(
     return url
   }
 
-  /** Resolves once the page in `popup` returns to the app, or the user closes the popup. */
-  const watch = async (popup: Window) => {
+  /**
+   * Resolves once the page in `popup` returns to the app, or the user closes the popup. `shown` is
+   * the navigation of a blank popup.
+   */
+  const watch = async (popup: Window, shown?: Promise<void>) => {
     let abort: (() => void) | undefined
     let settled = false
     let unblock: (() => void) | undefined
@@ -1506,9 +1795,11 @@ async function approve<held = never>(
         )
         abort = () => reject(signal?.reason)
         signal?.addEventListener('abort', abort, { once: true })
-        // A rejected challenge closes the blank popup before any page shows. A blank popup sends no
-        // `tempo-id:popup.open`, so the watcher misses its close, which the challenge's end reads.
-        challenge?.then(() => {
+        superseded.catch(reject)
+        // A rejected challenge or guest request closes the blank popup before any page shows. A
+        // blank popup sends no `tempo-id:popup.open`, so the watcher misses its close, which the
+        // end of `shown` reads.
+        shown?.then(() => {
           if (popup.closed) reject(closed())
         }, reject)
         unwatch = Popup.watchPopup(popup, {
@@ -1544,96 +1835,191 @@ async function approve<held = never>(
     }
   }
 
-  // A popup blocker accepts `window.open` only within the gesture, so the popup opens before any
-  // `await`. A popup cannot cover a send in progress, so `hold` settles first. As in a sign-in, a
-  // browser without IntersectionObserver v2 opens the popup within the gesture unless the preloaded
-  // frame reports the app as trusted. A plugin's send that outlasts the gesture leaves no popup to
-  // open, so the frame's page offers it, and the user's click on Continue opens it.
-  const direct =
-    mode === 'popup' || (Popup.activated() && !FrameTrust.frames(auth))
-  if (direct) {
-    const held = hold && (await hold)
-    if (held) return held
-    if (mode === 'popup' || Popup.activated()) {
-      const popup = open()
-      if (popup === null) throw new BlockedError()
-      return await watch(popup)
+  // The page posts the guest payment's transaction for the guest account to sign, and asks for a
+  // fresh guest request before the last one expires, from Tempo ID's origin, with a guest request of
+  // this payment. The check accepts only the requested transfer, and the guest account signs one
+  // transaction for each payment, so no second prepared transaction ever lands.
+  const listener = (event: MessageEvent) => {
+    // Only this payment's own frame or popups post its messages.
+    if (!event.source || !sources.has(event.source as Window)) return
+    const data = event.data as {
+      guest?: unknown
+      id?: unknown
+      state?: unknown
+      transaction?: unknown
+      type?: unknown
+    } | null
+    if (!guest || event.origin !== origin) return
+    // The guest requests are unique to this payment, so another payment's page never reaches it. A
+    // guest offer's selection names the offer's `state` in place of a guest request, and asks for
+    // the first one.
+    const offered =
+      guest.state !== undefined &&
+      data?.type === 'tempo-id:guest.request' &&
+      data.state === guest.state
+    if (
+      !offered &&
+      (typeof data?.guest !== 'string' ||
+        !machines.issued(actor.getSnapshot(), { value: data.guest }))
+    )
+      return
+    const source = event.source as Window
+    if (data.type === 'tempo-id:guest.request') {
+      renew().then(
+        (value) =>
+          source.postMessage(
+            { id: data.id, type: 'tempo-id:guest.requested', value },
+            origin,
+          ),
+        (error: unknown) =>
+          source.postMessage(
+            {
+              error: fault(error),
+              id: data.id,
+              type: 'tempo-id:guest.requested',
+            },
+            origin,
+          ),
+      )
+      return
     }
-  }
-  // A send that settled before the frame leaves its page without a cover.
-  const covering = direct ? undefined : hold
-
-  const Sheet = await import('../internal/Sheet.js')
-  // An abort while the dialog's module loads fired before the listener below, so it rejects here.
-  signal?.throwIfAborted()
-  const sheet = Sheet.load({
-    // The page runs the passkey ceremony of the account's owner, for Tempo ID's origin. The payment
-    // page also signs a visitor without a session in, which creates a new user's passkey account.
-    allow:
-      options.path === '/pay'
-        ? `publickey-credentials-create ${origin}; publickey-credentials-get ${origin}`
-        : `publickey-credentials-get ${origin}`,
-    // A page that waits for `hold` takes no input until it settles. A page that waits for the
-    // challenge's message shows the payment meanwhile, and keeps Pay busy itself.
-    covered: covering !== undefined,
-    deferred: challenge !== undefined,
-    label: options.label,
-    origin,
-    // The payment page's sign-in opens its legal links in a new, unsandboxed tab.
-    sandbox:
-      'allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts',
-    skeleton: options.skeleton,
-    text: options.text,
-    // A covered page shows its own skeleton, measured from its screen, until the cover lifts.
-    url: `${toUrl('frame')}${covering ? '&covered=true' : ''}${challenge ? '&deferred=true' : ''}`,
-  })
-  let abort: (() => void) | undefined
-  try {
-    return await new Promise<URL | held>((resolve, reject) => {
-      abort = () => reject(signal?.reason)
-      signal?.addEventListener('abort', abort, { once: true })
-      const show = () =>
-        sheet.show({
-          onCallback: (value) => {
-            try {
-              resolve(finish(value))
-            } catch (error) {
-              reject(error)
-            }
-          },
-          onCancel: () => reject(closed()),
-          onPopup: (entry) => {
-            // The payment page opens the deposit pages at once for a frame's Buy MACH.
-            const popup = open(entry.method)
-            if (popup === null) {
-              // The offer's Continue is the user's click, so only a blocker refuses it.
-              if (!entry.automatic) reject(new BlockedError())
-              return false
-            }
-            sheet.close()
-            watch(popup).then(resolve, reject)
-            return true
-          },
-        })
-      // The page loads in the hidden dialog while `hold` runs, so an access key's send shows no
-      // dialog. A send of `hold` ends the call, and the dialog shows only once it sends nothing.
-      if (covering)
-        covering.then((held) => (held ? resolve(held) : show()), reject)
-      else show()
-      // The cover lifts once, after `hold` sends nothing and the message arrives, so the page takes
-      // no input while `hold` can still send, and receives the message with the lift.
-      if (covering || challenge)
-        Promise.all([covering, challenge]).then(([held, value]) => {
-          if (!held) sheet.uncover({ challenge: value })
-        }, reject)
+    if (data.type !== 'tempo-id:guest.sign') return
+    if (!machines.signs(actor.getSnapshot())) {
+      source.postMessage(
+        {
+          error:
+            'Refused signature: the guest account signs one transaction for each payment. Start the payment again.',
+          id: data.id,
+          type: 'tempo-id:guest.signature',
+        },
+        origin,
+      )
+      return
+    }
+    actor.send({
+      id: data.id,
+      source,
+      transaction: data.transaction,
+      type: 'sign.start',
     })
+  }
+  if (guest) window.addEventListener('message', listener)
+  try {
+    return await present()
   } finally {
-    if (abort) signal?.removeEventListener('abort', abort)
-    sheet.close()
+    if (guest) window.removeEventListener('message', listener)
+    actor.stop()
+  }
+
+  /** Shows the page in a popup or in the dialog's frame, and resolves with its return. */
+  async function present(): Promise<URL | held> {
+    // A popup blocker accepts `window.open` only within the gesture, so the popup opens before any
+    // `await`. A popup cannot cover a send in progress, so `hold` settles first. As in a sign-in, a
+    // browser without IntersectionObserver v2 opens the popup within the gesture unless the preloaded
+    // frame reports the app as trusted. A plugin's send that outlasts the gesture leaves no popup to
+    // open, so the frame's page offers it, and the user's click on Continue opens it.
+    const direct =
+      mode === 'popup' || (Popup.activated() && !FrameTrust.frames(auth))
+    if (direct) {
+      const held = hold && (await hold)
+      if (held) return held
+      if (mode === 'popup' || Popup.activated()) {
+        const { popup, shown } = open()
+        if (popup === null) throw new BlockedError()
+        return await watch(popup, shown)
+      }
+    }
+    // A send that settled before the frame leaves its page without a cover.
+    const covering = direct ? undefined : hold
+
+    const Sheet = await import('../internal/Sheet.js')
+    // The guest request is local work, so the frame's URL waits for it with no request.
+    if (requested) await requested
+    // An abort while the dialog's module loads fired before the listener below, so it rejects here.
+    signal?.throwIfAborted()
+    const sheet = Sheet.load({
+      // The page runs the passkey ceremony of the account's owner, for Tempo ID's origin. The payment
+      // page also signs a visitor without a session in, which creates a new user's passkey account.
+      allow:
+        options.path === '/pay'
+          ? `publickey-credentials-create ${origin}; publickey-credentials-get ${origin}`
+          : `publickey-credentials-get ${origin}`,
+      // A page that waits for `hold` takes no input until it settles. A page that waits for the
+      // challenge's message shows the payment meanwhile, and keeps Pay busy itself.
+      covered: covering !== undefined,
+      deferred: challenge !== undefined,
+      label: options.label,
+      origin,
+      // The payment page's sign-in opens its legal links in a new, unsandboxed tab.
+      sandbox:
+        'allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts',
+      skeleton: options.skeleton,
+      text: options.text,
+      // A covered page shows its own skeleton, measured from its screen, until the cover lifts.
+      url: `${toUrl('frame')}${covering ? '&covered=true' : ''}${challenge ? '&deferred=true' : ''}`,
+    })
+    const framed = sheet.window()
+    if (framed) sources.add(framed)
+    let abort: (() => void) | undefined
+    try {
+      return await new Promise<URL | held>((resolve, reject) => {
+        abort = () => reject(signal?.reason)
+        signal?.addEventListener('abort', abort, { once: true })
+        superseded.catch(reject)
+        const show = () =>
+          sheet.show({
+            onCallback: (value) => {
+              try {
+                resolve(finish(value))
+              } catch (error) {
+                reject(error)
+              }
+            },
+            onCancel: () => reject(closed()),
+            onPopup: (entry) => {
+              // The payment page opens the deposit pages at once for a frame's Buy MACH.
+              const { popup, shown } = open({
+                later: true,
+                method: entry.method,
+              })
+              if (popup === null) {
+                // The offer's Continue is the user's click, so only a blocker refuses it.
+                if (!entry.automatic) reject(new BlockedError())
+                return false
+              }
+              sheet.close()
+              watch(popup, shown).then(resolve, reject)
+              return true
+            },
+          })
+        // The page loads in the hidden dialog while `hold` runs, so an access key's send shows no
+        // dialog. A send of `hold` ends the call, and the dialog shows only once it sends nothing.
+        if (covering)
+          covering.then((held) => (held ? resolve(held) : show()), reject)
+        else show()
+        // The cover lifts once, after `hold` sends nothing and the message arrives, so the page takes
+        // no input while `hold` can still send, and receives the message with the lift.
+        if (covering || challenge)
+          Promise.all([covering, challenge]).then(([held, value]) => {
+            if (!held) sheet.uncover({ challenge: value })
+          }, reject)
+      })
+    } finally {
+      if (abort) signal?.removeEventListener('abort', abort)
+      sheet.close()
+    }
   }
 }
 
 declare namespace approve {
+  /** A popup that the approval opens. */
+  type Popup = {
+    /** Whether the frame's page opens the popup, after the page showed. */
+    later?: boolean | undefined
+    /** The method that the frame requests, such as `mach` for Buy MACH. */
+    method?: Sheet.load.Popup['method']
+  }
+
   type Options<held = never> = {
     /**
      * The message that the account signs before the transfer, once it resolves. The frame's page
@@ -1642,6 +2028,41 @@ declare namespace approve {
      * holds any challenge.
      */
     challenge?: Promise<string> | undefined
+    /**
+     * The guest account of a guest payment: the signer of each guest request, which the page's URL
+     * holds, and of the one transaction that the page posts. A popup opens blank until the request
+     * arrives. Absent, the page signs the user in.
+     */
+    guest?:
+      | {
+          /** Signs a fresh guest request of the guest session, with no request. */
+          request: (session: Session.GuestSession) => Promise<string>
+          /**
+           * The guest session, or a function that starts it, for a guest offer. The approval's
+           * machine runs the function at the user's selection, and aborts its `signal` at its end.
+           */
+          session:
+            | Session.GuestSession
+            | ((options: {
+                signal: AbortSignal
+              }) => Promise<Session.GuestSession>)
+          /**
+           * Checks and signs the transaction that the page posts as the guest session, and returns
+           * it serialized.
+           */
+          sign: (
+            transaction: unknown,
+            session: Session.GuestSession,
+          ) => Promise<`0x${string}`>
+          /**
+           * The `state` of a guest offer, which the signed-out page's URL holds beside
+           * `guest=offer`. The page's `tempo-id:guest.request` names it once the user selects
+           * Continue as guest, and the answer holds the first guest request. Absent, the page's URL
+           * holds the first guest request.
+           */
+          state?: string | undefined
+        }
+      | undefined
     /**
      * Another send of the same payment, which resolves with its result, or `undefined` if it sent
      * nothing. The frame loads in a hidden dialog until it settles, and a result returns with no
@@ -1894,3 +2315,359 @@ transactionOf.missing = () =>
       'Invalid `transaction` in the return URL: it is not a transaction hash. Check the account on Tempo ID, then try again.',
     status: 0,
   })
+
+export namespace machines {
+  /**
+   * The approval page's readiness, the guest account's signature, and the start of a guest offer's
+   * guest session, in two parallel regions. The page's URL waits for the challenge's message and the
+   * first guest request, and the guest account signs one transaction for each payment.
+   *
+   * | Region  | State        | Meaning                                                                  |
+   * | ------- | ------------ | ------------------------------------------------------------------------ |
+   * | `page`  | `settling`   | Transient. Routes to the status that {@link select} returns.             |
+   * | `page`  | `waiting`    | The challenge's message or the first guest request has not arrived.      |
+   * | `page`  | `ready`      | The page's URL holds its values. The guest account signs no transaction. |
+   * | `page`  | `signing`    | The guest account signs a transaction, and refuses another. The machine's end aborts the signature. |
+   * | `page`  | `signed`     | The guest account signed the payment's transaction, and signs no other.  |
+   * | `offer` | `settling`   | Transient. Routes to `idle` for a guest offer, or `none`.                |
+   * | `offer` | `none`       | No guest offer: a held guest session, or no guest payment.               |
+   * | `offer` | `idle`       | The user has not selected Continue as guest.                             |
+   * | `offer` | `starting`   | The guest session starts. The machine's end aborts the start.            |
+   * | `offer` | `started`    | The guest session started.                                               |
+   * | `offer` | `failed`     | The last start failed. The next selection starts it again.               |
+   * | `offer` | `superseded` | A sign-out since the payment started superseded the payment.             |
+   */
+  export const approval = setup({
+    actions: {
+      /** Adds the event's guest request, which the page's URL holds from then on. */
+      addRequest: assign({
+        requests: (args) => {
+          assertEvent(args.event, 'guest.resolve')
+          return [...args.context.requests, args.event.value]
+        },
+      }),
+      /** Drops the failure of the last start of the guest session, before another start. */
+      clearFailure: assign({ failure: undefined }),
+      /** Holds the failure of the last start of the guest session, which its waiters throw. */
+      setFailure: assign((_, params: { error: unknown }) => ({
+        failure: params.error,
+      })),
+      /** Holds the challenge's message. */
+      setMessage: assign({
+        message: (args) => {
+          assertEvent(args.event, 'challenge.resolve')
+          return args.event.message
+        },
+      }),
+      /** Holds the started guest session. */
+      setSession: assign((_, params: { session: Session.GuestSession }) => ({
+        failure: undefined,
+        session: params.session,
+      })),
+    },
+    actors: {
+      /**
+       * Signs the page's transaction as the guest session, and posts the signature or the failure
+       * to the page, unless the machine ended. `approve` provides it from `guest.sign`.
+       */
+      sign: fromPromise<void, approval.Signature>(() =>
+        Promise.reject(new Error('No guest payment.')),
+      ),
+      /** Starts the guest session of a guest offer. `approve` provides it from `guest.session`. */
+      start: fromPromise<Session.GuestSession>(() =>
+        Promise.reject(new Error('No guest offer.')),
+      ),
+    },
+    guards: {
+      /** Whether the approval offers a guest session that the user's selection starts. */
+      offers: (args) => args.context.offer,
+      /** Whether {@link select} returns `params.status`. */
+      selects: (args, params: { status: approval.Status }) =>
+        select(args.context) === params.status,
+      /** Whether a sign-out since the payment started superseded the start of the guest session. */
+      supersedes: (_, params: { error: unknown }) =>
+        params.error instanceof SupersededError,
+    },
+    types: {
+      context: {} as approval.Context,
+      events: {} as approval.Event,
+      input: {} as approval.Input,
+    },
+  }).createMachine({
+    context: (args) => ({
+      challenge: args.input.challenge,
+      failure: undefined,
+      guest: args.input.guest,
+      message: undefined,
+      offer: args.input.offer,
+      requests: [],
+      session: undefined,
+    }),
+    id: 'approval',
+    states: {
+      offer: {
+        initial: 'settling',
+        states: {
+          failed: {
+            on: {
+              'offer.start': { actions: 'clearFailure', target: 'starting' },
+            },
+          },
+          idle: { on: { 'offer.start': { target: 'starting' } } },
+          none: {},
+          settling: {
+            always: [{ guard: 'offers', target: 'idle' }, { target: 'none' }],
+          },
+          started: {},
+          starting: {
+            invoke: {
+              id: 'start',
+              onDone: {
+                actions: {
+                  params: (args) => ({ session: args.event.output }),
+                  type: 'setSession',
+                },
+                target: 'started',
+              },
+              onError: [
+                {
+                  actions: {
+                    params: (args) => ({ error: args.event.error }),
+                    type: 'setFailure',
+                  },
+                  guard: {
+                    params: (args) => ({ error: args.event.error }),
+                    type: 'supersedes',
+                  },
+                  target: 'superseded',
+                },
+                {
+                  actions: {
+                    params: (args) => ({ error: args.event.error }),
+                    type: 'setFailure',
+                  },
+                  target: 'failed',
+                },
+              ],
+              src: 'start',
+            },
+          },
+          superseded: {},
+        },
+      },
+      page: {
+        initial: 'settling',
+        states: {
+          ready: {
+            on: {
+              'guest.resolve': { actions: 'addRequest' },
+              'sign.start': { target: 'signing' },
+            },
+            tags: 'ready',
+          },
+          settling: {
+            always: [
+              {
+                guard: { params: { status: 'ready' }, type: 'selects' },
+                target: 'ready',
+              },
+              { target: 'waiting' },
+            ],
+          },
+          signed: {
+            on: { 'guest.resolve': { actions: 'addRequest' } },
+            tags: 'ready',
+          },
+          signing: {
+            invoke: {
+              id: 'sign',
+              input: (args) => {
+                assertEvent(args.event, 'sign.start')
+                const { id, source, transaction } = args.event
+                return { id, source, transaction }
+              },
+              onDone: { target: 'signed' },
+              // No signature exists, so the page can post a transaction again.
+              onError: { target: 'ready' },
+              src: 'sign',
+            },
+            on: { 'guest.resolve': { actions: 'addRequest' } },
+            tags: 'ready',
+          },
+          waiting: {
+            on: {
+              'challenge.resolve': {
+                actions: 'setMessage',
+                target: 'settling',
+              },
+              'guest.resolve': { actions: 'addRequest', target: 'settling' },
+            },
+          },
+        },
+      },
+    },
+    type: 'parallel',
+  })
+
+  export declare namespace approval {
+    type Context = {
+      /** Whether the page's URL waits for the challenge's message. */
+      challenge: boolean
+      /** The failure of the last start of the guest session. Absent outside `failed` and `superseded`. */
+      failure: unknown
+      /** Whether the page's URL waits for a guest request. */
+      guest: boolean
+      /** The challenge's message. Absent until it arrives, and without a challenge. */
+      message: string | undefined
+      /** Whether the approval offers a guest session that the user's selection starts. */
+      offer: boolean
+      /** The guest requests of the payment, in the order of their signatures. Empty without one. */
+      requests: readonly string[]
+      /** The guest offer's started guest session. Absent before its start, and without an offer. */
+      session: Session.GuestSession | undefined
+    }
+
+    type Event =
+      | {
+          /** The challenge's message. */
+          message: string
+          /** The challenge's message arrived. */
+          type: 'challenge.resolve'
+        }
+      | {
+          /** The guest account signed a fresh guest request. */
+          type: 'guest.resolve'
+          /** The guest request. */
+          value: string
+        }
+      | {
+          /** The user selected Continue as guest, which starts the guest offer's guest session. */
+          type: 'offer.start'
+        }
+      | (Signature & {
+          /** The page posted a transaction for the guest account to sign. */
+          type: 'sign.start'
+        })
+
+    type Input = Pick<Context, 'challenge' | 'guest' | 'offer'>
+
+    /** A transaction that the page posted for the guest account to sign. */
+    type Signature = {
+      /** The ID of the page's message, which the answer names. */
+      id: unknown
+      /** The page that posted the transaction, which receives the answer. */
+      source: Pick<Window, 'postMessage'>
+      /** The transaction, as the page posted it. */
+      transaction: unknown
+    }
+
+    /** The readiness of the page's URL. */
+    type Status = 'ready' | 'waiting'
+
+    type Actor = ActorRefFrom<typeof approval>
+
+    type Snapshot = SnapshotFrom<typeof approval>
+  }
+
+  /**
+   * Returns the start of the guest offer's guest session: `none` without an offer, `idle` before the
+   * user's selection, `starting`, `started` with the session, or `failed` or `superseded` with the
+   * failure.
+   */
+  export function guest(snapshot: approval.Snapshot): guest.ReturnType {
+    const { failure, session } = snapshot.context
+    if (snapshot.matches({ offer: 'started' }) && session)
+      return { session, type: 'started' }
+    if (snapshot.matches({ offer: 'failed' }))
+      return { error: failure, type: 'failed' }
+    if (snapshot.matches({ offer: 'superseded' }))
+      return { error: failure, type: 'superseded' }
+    if (snapshot.matches({ offer: 'starting' })) return { type: 'starting' }
+    if (snapshot.matches({ offer: 'idle' })) return { type: 'idle' }
+    return { type: 'none' }
+  }
+
+  export declare namespace guest {
+    type ReturnType =
+      | {
+          /** The failure of the start. */
+          error: unknown
+          type: 'failed' | 'superseded'
+        }
+      | { type: 'idle' | 'none' | 'starting' }
+      | {
+          /** The started guest session. */
+          session: Session.GuestSession
+          type: 'started'
+        }
+  }
+
+  /** Returns whether `snapshot` holds a guest request of the payment that equals `options.value`. */
+  export function issued(
+    snapshot: approval.Snapshot,
+    options: { value: string },
+  ) {
+    return snapshot.context.requests.includes(options.value)
+  }
+
+  /**
+   * Returns the account that paid a guest payment. A payment of a held guest session returns its
+   * guest account, also when the return URL names no `account`, and `undefined` for an `account`
+   * that names another address. A guest offer's payment returns the account that the return URL
+   * names as `account`: the guest account after its transfer landed, or the account of a user that
+   * signed in on the page. A signature of the guest account proves no payment there, since its
+   * transfer can fail to land, and the relay's fee payer signature changes the hash of a sponsored
+   * transfer. Returns `undefined` for a missing or malformed `account` of a guest offer.
+   */
+  export function payer(options: payer.Options): `0x${string}` | undefined {
+    const { account, held } = options
+    const named =
+      account !== undefined && Address.validate(account, { strict: false })
+        ? Address.checksum(account)
+        : undefined
+    if (held === undefined) return named
+    if (account === undefined) return held
+    return named && Address.isEqual(named, held) ? held : undefined
+  }
+
+  export declare namespace payer {
+    type Options = {
+      /** The `account` parameter of the return URL. Absent when the page returned none. */
+      account: string | undefined
+      /** The guest account of a held guest session. Absent for a guest offer. */
+      held?: `0x${string}` | undefined
+    }
+  }
+
+  /** Returns whether the page's URL holds its values. */
+  export function ready(snapshot: approval.Snapshot) {
+    return snapshot.hasTag('ready')
+  }
+
+  /**
+   * Returns the readiness of the page's URL:
+   *
+   * | Status    | When                                                                   |
+   * | --------- | ---------------------------------------------------------------------- |
+   * | `waiting` | A challenge without its message, or a guest payment without a request. |
+   * | `ready`   | Otherwise.                                                             |
+   */
+  export function select(context: approval.Context): approval.Status {
+    if (context.challenge && context.message === undefined) return 'waiting'
+    if (context.guest && context.requests.length === 0) return 'waiting'
+    return 'ready'
+  }
+
+  /** Returns whether the guest account signs a transaction that the page posts now. */
+  export function signs(snapshot: approval.Snapshot) {
+    return snapshot.matches({ page: 'ready' })
+  }
+
+  /** Returns the values of the page's URL: the challenge's message, and the latest guest request. */
+  export function values(snapshot: approval.Snapshot) {
+    return {
+      guest: snapshot.context.requests.at(-1),
+      message: snapshot.context.message,
+    }
+  }
+}

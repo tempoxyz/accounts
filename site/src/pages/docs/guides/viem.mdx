@@ -694,6 +694,63 @@ export const accounts = Accounts.create({
 
 :::
 
+### Approve a shared account's transaction
+
+A configurable account with several owners sends once enough of them approve, as Viem's [coordinated signing](https://viem.sh/tempo/guides/configurable-accounts/send#coordinated-signing) describes. If the user's passkey is one of its owners, <SourceLink name="sendTransactionSync" path="src/plugins/viem.ts">`sendTransactionSync`</SourceLink> approves without an `owner`: with the account's transaction, or with the operation `hash` alone. Coordination needs the plugin's `relay`, and the passkey signs only on the page of a first-party app with the `tempo-id:sign` scope.
+
+:::code-group
+
+```tsx [Approve.tsx]
+import { Account } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+// A 2-of-2 account of the user's passkey and the app's cosigner.
+const account = Account.fromConfig('0x7a3f2c1d5e8b9a0f4c6d3e2b1a0f9e8d7c6b5a49')
+
+export function Approve(props: Approve.Props) {
+  return (
+    <button
+      onClick={async () => {
+        // [!code hl:start]
+        const receipt = props.hash
+          ? await accounts.viem.sendTransactionSync({ hash: props.hash })
+          : await accounts.viem.sendTransactionSync({
+              account,
+              calls: [{ to: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326', value: 0n }],
+            })
+        // [!code hl:end]
+        console.log(receipt.status, receipt.operation)
+      }}
+      type="button"
+    >
+      Approve
+    </button>
+  )
+}
+
+export declare namespace Approve {
+  type Props = {
+    /** The operation hash of a transaction that another owner sent. */
+    hash?: `0x${string}` | undefined
+  }
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  plugins: [react(), viem({ relay: '/api/relay' })],
+})
+```
+
+:::
+
+A pending receipt's `transactionHash` is the operation hash, which the app passes to the next owner. If no passkey of the user owns the account, the call throws <SourceLink name="OwnerRequiredError" path="src/plugins/viem.ts">`Plugins.viem.OwnerRequiredError`</SourceLink>.
+
 ### Accept the tokens of several apps
 
 The plugin's <SourceLink name="viem.accessTokens" path="src/plugins/viem.ts">`accessTokens`</SourceLink> takes the options of the verifier of the access tokens that a verification reads. With <SourceLink name="create.clientIds" path="src/AccessToken.ts">`clientIds`</SourceLink>, a server counts the access keys of each named app, as [Verify signed messages](/docs/guides/account-proof/verify-signed-messages#accept-the-tokens-of-several-apps) shows.

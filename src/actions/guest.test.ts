@@ -1,0 +1,2021 @@
+/**
+ * Tests the guest account without a server: `Actions.guest.check`, which accepts only the requested
+ * transfer from a transaction that Tempo ID's page posts, the guest session and its key pair in the
+ * store, the signature of its account, and the guest session of an instance with `guest`.
+ * @module
+ */
+import { PGlite } from '@electric-sql/pglite'
+import * as Esbuild from 'esbuild'
+import * as ChildProcess from 'node:child_process'
+import * as Fs from 'node:fs/promises'
+import * as Os from 'node:os'
+import * as Path from 'node:path'
+import {
+  Address,
+  Base64,
+  Bytes,
+  Hash,
+  Hex,
+  P256,
+  PersonalMessage,
+  PublicKey,
+  Signature,
+  WebCryptoP256,
+} from 'ox'
+import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
+import { token as TokenActions } from 'viem/tempo/actions'
+import {
+  describe,
+  expect,
+  expectTypeOf,
+  onTestFinished,
+  test,
+} from 'vite-plus/test'
+import * as Accounts from '../Accounts.js'
+import * as DefaultAccounts from '../internal/DefaultAccounts.js'
+import * as DeviceStore from '../internal/DeviceStore.js'
+import * as StoreValue from '../internal/StoreValue.js'
+import * as SignIn from '../internal/SignIn.js'
+import { device, dialog, redirect } from '../plugins/index.js'
+import * as Plugin from '../Plugin.js'
+import * as Session from '../Session.js'
+import * as Store from '../Store.js'
+import * as Postgres from '../stores/Postgres.js'
+import * as Guest from './guest.js'
+
+/** Tempo mainnet's chain ID. */
+const chainId = 4217
+
+/** OUSD, at its mainnet address. */
+const ousd = '0x20c0000000000000000000006a37da5c996874be'
+
+/** The recipient of the requested payment. */
+const to = '0x1f9090aae28b8a3dceadf281b0f12828e676c326'
+
+/** The requested payment: 12.5 OUSD to `to`. */
+const payment = { amount: '12.5', chainId, to, token: 'ousd' } as const
+
+/** The requested transfer's call. */
+const transfer = TokenActions.transfer.call({
+  amount: 12_500_000n,
+  to,
+  token: ousd,
+})
+
+/** Returns a serialized transaction with the transfer and the sponsor's marker, with `fields`. */
+function transaction(fields: Partial<TxEnvelopeTempo.TxEnvelopeTempo> = {}) {
+  return TxEnvelopeTempo.serialize(
+    TxEnvelopeTempo.from({
+      calls: [transfer],
+      chainId,
+      feePayerSignature: null,
+      gas: 100_000n,
+      maxFeePerGas: 1n,
+      nonce: 0n,
+      ...fields,
+    }),
+  )
+}
+
+describe('Actions.guest.check', () => {
+  test.for([
+    ['with the sponsor marker', transaction()],
+    [
+      'without the sponsor marker, whose fee the guest account pays',
+      transaction({ feePayerSignature: undefined }),
+    ],
+  ] as const)('accepts the requested transfer %s', ([, value]) => {
+    const envelope = Guest.check(value, payment)
+
+    expect(envelope.calls).toHaveLength(1)
+  })
+
+  const refused = [
+    ['a value that is no Tempo transaction', '0x02f8'],
+    ['a transaction on another chain', transaction({ chainId: 4218 })],
+    [
+      'another amount',
+      transaction({
+        calls: [
+          TokenActions.transfer.call({ amount: 12_500_001n, to, token: ousd }),
+        ],
+      }),
+    ],
+    [
+      'another recipient',
+      transaction({
+        calls: [
+          TokenActions.transfer.call({
+            amount: 12_500_000n,
+            to: '0x000000000000000000000000000000000000dEaD',
+            token: ousd,
+          }),
+        ],
+      }),
+    ],
+    ['a second call', transaction({ calls: [transfer, transfer] })],
+    [
+      "a fee payer's signature",
+      transaction({ feePayerSignature: { r: 1n, s: 1n, yParity: 0 } }),
+    ],
+  ] as const
+
+  /** A quote of a fee that the guest account pays: 1 base unit of OUSD. */
+  const unsponsored = {
+    fee: { amount: '1', token: ousd },
+    sponsored: false,
+  } as const
+
+  test.for([
+    [
+      'accepts a sponsored payment that keeps the sponsor marker',
+      {},
+      { fee: null, sponsored: true },
+      undefined,
+    ],
+    [
+      'refuses a sponsored payment whose transaction drops the sponsor marker',
+      { feePayerSignature: undefined, feeToken: ousd },
+      { fee: null, sponsored: true },
+      'it drops the sponsor that the quote names.',
+    ],
+    [
+      'accepts a guest-paid fee in the quoted fee token, at the quoted fee',
+      { feePayerSignature: undefined, feeToken: ousd },
+      unsponsored,
+      undefined,
+    ],
+    [
+      'refuses a guest-paid fee whose gas at its fee cap exceeds the approved fee',
+      // 100,000 gas at 2e7 attodollars per gas is 2 base units, above the approved 1 base unit.
+      {
+        feePayerSignature: undefined,
+        feeToken: ousd,
+        maxFeePerGas: 20_000_000n,
+      },
+      unsponsored,
+      'its fee exceeds the quoted fee.',
+    ],
+    [
+      'accepts a guest-paid fee whose gas at its fee cap costs exactly the approved fee',
+      // 100,000 gas at 1e7 attodollars per gas is 1e12 attodollars, 1 base unit.
+      {
+        feePayerSignature: undefined,
+        feeToken: ousd,
+        maxFeePerGas: 10_000_000n,
+      },
+      unsponsored,
+      undefined,
+    ],
+    [
+      'refuses a guest-paid fee whose gas at its fee cap costs a fraction of a base unit above the approved fee',
+      {
+        feePayerSignature: undefined,
+        feeToken: ousd,
+        maxFeePerGas: 10_000_001n,
+      },
+      unsponsored,
+      'its fee exceeds the quoted fee.',
+    ],
+    [
+      'refuses a guest-paid fee in another fee token than the quoted one',
+      {
+        feePayerSignature: undefined,
+        feeToken: '0x20c0000000000000000000000000000000000001',
+      },
+      unsponsored,
+      'its fee token is not the quoted one.',
+    ],
+    [
+      'refuses a guest-paid fee of a quote that names no fee',
+      { feePayerSignature: undefined },
+      { fee: null, sponsored: false },
+      'the quote names no fee for the guest account.',
+    ],
+    [
+      'accepts a sponsored fee in any fee token, which the guest account never pays',
+      { feeToken: '0x20c0000000000000000000000000000000000001' },
+      unsponsored,
+      undefined,
+    ],
+    [
+      "accepts a guest-paid fee in any TIP-20 token without a quote, as Tempo ID's page posts it",
+      {
+        feePayerSignature: undefined,
+        feeToken: '0x20c0000000000000000000000000000000000001',
+      },
+      undefined,
+      undefined,
+    ],
+    [
+      'refuses a guest-paid fee in a token that is no TIP-20 token, without a quote',
+      {
+        feePayerSignature: undefined,
+        feeToken: '0x000000000000000000000000000000000000dEaD',
+      },
+      undefined,
+      'its fee token is not the quoted one.',
+    ],
+  ] as const)('%s', ([, fields, quote, refusal]) => {
+    const check = () =>
+      Guest.check(transaction(fields as never), { ...payment, quote })
+
+    if (refusal === undefined) expect(check().calls).toHaveLength(1)
+    else expect(check).toThrow(refusal)
+  })
+
+  test("names the fee payer's signature that it refuses", () => {
+    const value = transaction({
+      feePayerSignature: { r: 1n, s: 1n, yParity: 0 },
+    })
+
+    expect(() => Guest.check(value, payment)).toThrow(
+      'it holds a fee payer signature.',
+    )
+  })
+
+  for (const [name, value] of refused)
+    test(`refuses ${name}`, () => {
+      expect(() => Guest.check(value, payment)).toThrow(
+        'Invalid prepared transaction',
+      )
+    })
+
+  test('accepts a transfer of a TIP-20 token that no chain lists, by its address', () => {
+    const token = '0x20c00000000000000000000000000000000004d2'
+    const value = transaction({
+      calls: [TokenActions.transfer.call({ amount: 1_500_000n, to, token })],
+    })
+
+    const envelope = Guest.check(value, { ...payment, amount: '1.5', token })
+
+    expect(envelope.calls).toHaveLength(1)
+  })
+
+  test('refuses a token address that is no TIP-20 token', () => {
+    const token = '0x000000000000000000000000000000000000dEaD'
+    const value = transaction({
+      calls: [TokenActions.transfer.call({ amount: 1_500_000n, to, token })],
+    })
+
+    expect(() =>
+      Guest.check(value, { ...payment, amount: '1.5', token }),
+    ).toThrow('its token is no TIP-20 token.')
+  })
+})
+
+/**
+ * Returns a plugin whose `pick.guest` starts the instance's guest session, as a sign-in that selects
+ * "Continue as guest" does, also with a plugin's challenge, whose `pick.current` returns the instance's session, and whose `pick.reload` reads the stored session again, as each send of
+ * `Accounts.pay` for a guest session does.
+ */
+function pick() {
+  return Plugin.from({
+    actions: (context) => ({
+      guest: (
+        options: Pick<SignIn.guest.Options, 'challenge' | 'signal'> = {},
+      ) =>
+        SignIn.guest(context, {
+          challenge: options.challenge,
+          change: context.session.change(),
+          signal: options.signal,
+        }),
+      current: () => context.session.get(),
+      reload: () => context.session.reload(),
+    }),
+    id: 'pick',
+  })
+}
+
+/** Returns the configuration of an app whose Tempo ID never answers, with `store`. */
+function config(store: Store.Store = Store.memory()) {
+  return Accounts.from({
+    chain: 4217,
+    clientId: 'cli:guest-example',
+    store,
+    url: 'http://127.0.0.1:9',
+  })
+}
+
+describe('Actions.guest.session', () => {
+  test('keeps the key pair in the store, and the session holds only its address and public key', async () => {
+    const store = Store.memory()
+    const auth = config(store)
+
+    const session = await Guest.session(auth)
+    const again = await Guest.session(auth)
+    const address = await Guest.get(auth)
+
+    expect(Object.keys(session).sort()).toMatchInlineSnapshot(`
+      [
+        "address",
+        "kind",
+        "publicKey",
+        "revision",
+      ]
+    `)
+    expect([
+      Session.guest(session),
+      Session.expired(session),
+      again.address === session.address,
+      address === session.address,
+      Address.isEqual(
+        Address.fromPublicKey(PublicKey.fromHex(session.publicKey)),
+        session.address,
+      ),
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        false,
+        true,
+        true,
+        true,
+      ]
+    `)
+  })
+
+  test('keeps a P256 private key, and no `CryptoKey`, in a private store of JSON', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'guest-'))
+    const file = Path.join(directory, 'accounts.json')
+    try {
+      const auth = config(Store.file(file))
+
+      const session = await Guest.session(auth)
+      const text = await Fs.readFile(file, 'utf8')
+      const address = await Guest.get(config(Store.file(file)))
+
+      expect([text.includes('"type":"p256"'), address === session.address])
+        .toMatchInlineSnapshot(`
+        [
+          true,
+          true,
+        ]
+      `)
+    } finally {
+      await Fs.rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  test('refuses a store that other parties read', async () => {
+    const store = Store.from({ ...Store.memory(), json: true })
+
+    const error = await Guest.session(config(store)).catch(
+      (error: unknown) => error,
+    )
+
+    expect(error).toMatchInlineSnapshot(
+      `[TypeError: Invalid \`store\`: other parties read it, so it keeps no key pair of a guest account. Use IndexedDB in a browser, or \`Store.file\`.]`,
+    )
+  })
+})
+
+describe('Actions.guest.session on each store preset', () => {
+  test.for([
+    // A store that keeps values as they are keeps a non-extractable WebCrypto key pair, as the
+    // default IndexedDB store of a page does.
+    ['Store.memory', () => ({ store: Store.memory() }), 'webCrypto'],
+    [
+      'Store.file',
+      () => {
+        const path = Path.join(
+          Os.tmpdir(),
+          `accounts-${crypto.randomUUID()}`,
+          'store.json',
+        )
+        return { store: Store.file(path) }
+      },
+      'p256',
+    ],
+  ] as const)(
+    'creates a guest account that signs and persists on %s',
+    async ([, create, type]) => {
+      const { store } = create()
+
+      const session = await Guest.session(config(store))
+      const restored = await Guest.session(config(store))
+      const signature = await Guest.account(config(store), {
+        session,
+      }).sign({ hash: `0x${'11'.repeat(32)}` })
+      const stored = (await store.getItem(
+        'tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]',
+      )) as { privateKey?: unknown; type?: unknown } | undefined
+
+      expect([
+        restored.address === session.address,
+        typeof signature,
+        stored?.type === 'p256' ? 'p256' : 'webCrypto',
+      ]).toEqual([true, 'string', type])
+    },
+  )
+
+  test("selects the P256 key path on the `expo` preset's store, whose JSON keeps the key pair and no `CryptoKey`", async () => {
+    // The store's flags select the key path, so the secure store's functions never run.
+    const unused = () => Promise.reject(new Error('Not called.'))
+    const store = DeviceStore.create({
+      deleteItemAsync: unused,
+      getItemAsync: unused,
+      setItemAsync: unused,
+    })
+    const privateKey = P256.randomPrivateKey()
+    const keyPair = await WebCryptoP256.createKeyPair()
+
+    const restored = StoreValue.parse(
+      StoreValue.stringify({ privateKey, type: 'p256' }),
+    )
+
+    expect([store.json, store.private]).toEqual([true, true])
+    expect(restored).toEqual({ privateKey, type: 'p256' })
+    // A non-extractable WebCrypto key pair has no JSON form, so the store could not keep it.
+    expect(() => StoreValue.stringify(keyPair)).toThrow()
+  })
+
+  test("reads the guest account's entry once as the first guest session creates it on a `local` store, such as `Store.memory`", async () => {
+    // The store records each call, and delegates it to `Store.memory`, whose `local` and `lock` it keeps.
+    const calls: string[] = []
+    const memory = Store.memory()
+    const store = Store.from({
+      ...memory,
+      async getItem(key) {
+        calls.push(`get ${key}`)
+        return await memory.getItem(key)
+      },
+      async removeItem(key) {
+        calls.push(`remove ${key}`)
+        await memory.removeItem(key)
+      },
+      async setItem(key, value, options) {
+        calls.push(`set ${key}`)
+        await memory.setItem(key, value, options)
+      },
+    })
+
+    await Guest.session(config(store))
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        "get tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]",
+        "set tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]",
+        "get tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]:revision",
+        "set tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]:revision",
+      ]
+    `)
+  })
+
+  test('refuses a shared store of JSON, such as `Store.postgres`, before any query', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const queries: string[] = []
+    const store = Postgres.create({
+      async query(text, values) {
+        queries.push(text)
+        return await database.query(text, [...values])
+      },
+    })
+
+    const error = await Guest.session(config(store)).catch(
+      (error: Error) => error.message,
+    )
+
+    expect([error, queries]).toMatchInlineSnapshot(`
+      [
+        "Invalid \`store\`: other parties read it, so it keeps no key pair of a guest account. Use IndexedDB in a browser, or \`Store.file\`.",
+        [],
+      ]
+    `)
+  })
+})
+
+describe('Actions.guest.request', () => {
+  test('signs the checkout ID in the JSON and in the message, after `chain_id`, and keeps it across renewals', async () => {
+    const auth = config()
+    const options = {
+      chainId,
+      checkout: 'c8f2a1d4-3b6e-4f70-9a51-0d2e7c4b9f13',
+      redirectUri: 'https://example.com/',
+    }
+
+    const first = await Guest.request(auth, options)
+    const renewed = await Guest.request(auth, options)
+    const json = JSON.parse(Base64.toString(first.value)) as {
+      chain_id: number
+      checkout: string
+      client_id: string
+      exp: number
+      public_key: `0x${string}`
+      redirect_uri: string
+      signature: `0x${string}`
+    }
+    const message = [
+      'tempo-id:guest',
+      `chain_id=${json.chain_id}`,
+      `checkout=${json.checkout}`,
+      `client_id=${json.client_id}`,
+      `exp=${json.exp}`,
+      `redirect_uri=${json.redirect_uri}`,
+    ].join('\n')
+    const verified = P256.verify({
+      payload: Hash.sha256(Bytes.fromString(message)),
+      publicKey: PublicKey.fromHex(json.public_key),
+      signature: Signature.from({
+        r: Hex.toBigInt(Hex.slice(json.signature, 0, 32)),
+        s: Hex.toBigInt(Hex.slice(json.signature, 32, 64)),
+        yParity: 0,
+      }),
+    })
+    const checkouts = [first, renewed].map(
+      (entry) =>
+        (JSON.parse(Base64.toString(entry.value)) as { checkout: string })
+          .checkout,
+    )
+
+    expect({
+      checkout: first.checkout,
+      checkouts,
+      keys: Object.keys(json),
+      verified,
+    }).toMatchInlineSnapshot(`
+      {
+        "checkout": "c8f2a1d4-3b6e-4f70-9a51-0d2e7c4b9f13",
+        "checkouts": [
+          "c8f2a1d4-3b6e-4f70-9a51-0d2e7c4b9f13",
+          "c8f2a1d4-3b6e-4f70-9a51-0d2e7c4b9f13",
+        ],
+        "keys": [
+          "chain_id",
+          "checkout",
+          "client_id",
+          "exp",
+          "public_key",
+          "redirect_uri",
+          "signature",
+        ],
+        "verified": true,
+      }
+    `)
+  })
+
+  test.for(['', 'a\nexp=0', 'a'.repeat(129)])(
+    'refuses the checkout ID %j, before it signs',
+    async (checkout) => {
+      const store = Store.memory()
+
+      const error = await Guest.request(config(store), {
+        chainId,
+        checkout,
+        redirectUri: 'https://example.com/',
+      }).catch((error: unknown) => error)
+
+      expect([
+        error instanceof TypeError,
+        await Guest.get(config(store)),
+      ]).toEqual([true, undefined])
+    },
+  )
+})
+
+describe('Actions.guest.session in other processes', () => {
+  /** Bundles `lines`, a program that imports this folder's modules, for Node to run. */
+  async function bundle(lines: readonly string[]) {
+    const output = await Esbuild.build({
+      bundle: true,
+      format: 'esm',
+      logLevel: 'silent',
+      platform: 'node',
+      stdin: {
+        contents: lines.join('\n'),
+        loader: 'ts',
+        resolveDir: import.meta.dirname,
+      },
+      write: false,
+    })
+    return output.outputFiles[0]!.text
+  }
+
+  /** Runs `program` in Node with `args`, and resolves with its output. */
+  function run(program: string, args: readonly string[] = []) {
+    return new Promise<string>((resolve, reject) => {
+      const child = ChildProcess.spawn(process.execPath, [
+        '--input-type=module',
+        ...args,
+      ])
+      let stderr = ''
+      let stdout = ''
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString()
+      })
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString()
+      })
+      child.on('close', (code) => {
+        if (code === 0) resolve(stdout)
+        else reject(new Error(stderr))
+      })
+      child.stdin.end(program)
+    })
+  }
+
+  /**
+   * Starts `program` in Node with an IPC channel, and returns the messages that it sends, a `send`
+   * to it, and its output once it exits.
+   */
+  function start(program: string) {
+    const child = ChildProcess.spawn(
+      process.execPath,
+      ['--input-type=module'],
+      {
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      },
+    )
+    const messages: string[] = []
+    child.on('message', (message) => messages.push(String(message)))
+    let stderr = ''
+    let stdout = ''
+    child.stderr!.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString()
+    })
+    child.stdout!.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString()
+    })
+    const output = new Promise<string>((resolve, reject) => {
+      child.on('close', (code) => {
+        if (code === 0) resolve(stdout.trim())
+        else reject(new Error(stderr))
+      })
+    })
+    child.stdin!.end(program)
+    return {
+      /** Ends the process at once, as a crash or a closed terminal does. */
+      kill: () => child.kill('SIGKILL'),
+      messages,
+      output,
+      send: (message: string) => child.send(message),
+    }
+  }
+
+  /**
+   * The `plugins` option of a program's instance, whose `pick.guest` starts the guest session as a
+   * selection of "Continue as guest" does.
+   */
+  const picks = [
+    '  plugins: [',
+    '    Plugin.from({',
+    '      actions: (context) => ({',
+    '        guest: () => SignIn.guest(context, { change: context.session.change() }),',
+    '      }),',
+    "      id: 'pick',",
+    '    }),',
+    '  ],',
+  ]
+
+  test("creates and saves the guest account in a `cli:` client's default store, whose instance in another process adopts it", async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    // Each process reads `TEMPO_HOME` at its first store call, so the default store is the file in
+    // the folder.
+    const program = await bundle([
+      "import * as Accounts from '../Accounts.ts'",
+      "import * as SignIn from '../internal/SignIn.ts'",
+      "import * as Plugin from '../Plugin.ts'",
+      `process.env.TEMPO_HOME = ${JSON.stringify(directory)}`,
+      'const accounts = Accounts.create({',
+      "  clientId: 'cli:test',",
+      '  guest: true,',
+      ...picks,
+      '})',
+      'const held = await accounts.session.get()',
+      'const session = held ?? (await accounts.pick.guest())',
+      'process.stdout.write(JSON.stringify([session.address, await accounts.guest.get()]))',
+      'process.exit(0)',
+    ])
+
+    const [created, stored] = JSON.parse(await run(program))
+    const [adopted, kept] = JSON.parse(await run(program))
+    const text = await Fs.readFile(
+      Path.join(directory, 'id', 'store.json'),
+      'utf8',
+    )
+
+    expect({
+      adopted: adopted === created,
+      kept: kept === created,
+      p256: text.includes('"type":"p256"'),
+      stored: stored === created,
+    }).toMatchInlineSnapshot(`
+      {
+        "adopted": true,
+        "kept": true,
+        "p256": true,
+        "stored": true,
+      }
+    `)
+  })
+
+  test('gives a new guest session a later revision than a stored one ahead of the clock, which an instance on `Store.file` in another process adopts', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: true,
+      plugins: [
+        Plugin.from({
+          actions: (context) => ({
+            commit: (value: Session.Any) =>
+              context.session.change().commit(value),
+            reload: () => context.session.reload(),
+          }),
+          id: 'held',
+        }),
+      ],
+      store: Store.file(path),
+      url: 'http://127.0.0.1:9',
+    })
+    // A session started before the clock stepped back by an hour holds a revision ahead of it.
+    const ahead = Date.now() + 3_600_000
+    await accounts.held.commit({
+      ...(await Guest.session(accounts.config)),
+      revision: ahead,
+    })
+    await Store.file(path).setItem(
+      'tempo-id:guest:["http://127.0.0.1:9","cli:guest-example"]:revision',
+      ahead,
+    )
+    // The other process sends this one no message, so only a reload reads its session.
+    const program = await bundle([
+      "import * as Accounts from '../Accounts.ts'",
+      "import * as SignIn from '../internal/SignIn.ts'",
+      "import * as Plugin from '../Plugin.ts'",
+      "import * as Store from '../Store.ts'",
+      'const accounts = Accounts.create({',
+      '  chain: 4217,',
+      "  clientId: 'cli:guest-example',",
+      '  guest: true,',
+      ...picks,
+      `  store: Store.file(${JSON.stringify(path)}),`,
+      "  url: 'http://127.0.0.1:9',",
+      '})',
+      'await accounts.session.get()',
+      'await accounts.signOut()',
+      'const session = await accounts.pick.guest()',
+      'process.stdout.write(String(session.revision))',
+      'process.exit(0)',
+    ])
+
+    const revision = Number(await run(program))
+    await accounts.held.reload()
+    const current = await accounts.session.get()
+
+    expect({
+      adopted:
+        !!current && 'revision' in current && current.revision === revision,
+      later: revision > ahead,
+    }).toMatchInlineSnapshot(`
+      {
+        "adopted": true,
+        "later": true,
+      }
+    `)
+  })
+
+  test('keeps one guest account for two processes that create it at once on `Store.file`', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    // Each process runs Node with its global `navigator`, whose Web Locks span only that process.
+    // The parent steps both processes over IPC: each reports `ready` and waits for `go`, reports
+    // `lock` when it asks for the file's lock, and reports `read` after its read of the guest
+    // account's entry, then waits for `continue` before it creates the key pair.
+    const program = await bundle([
+      "import * as Accounts from '../Accounts.ts'",
+      "import * as Store from '../Store.ts'",
+      "import * as Guest from './guest.ts'",
+      'const queue = []',
+      'const waiters = []',
+      "process.on('message', (message) => { const waiter = waiters.shift(); if (waiter) waiter(message); else queue.push(message) })",
+      'const next = () => (queue.length > 0 ? Promise.resolve(queue.shift()) : new Promise((resolve) => waiters.push(resolve)))',
+      `const file = Store.file(${JSON.stringify(path)})`,
+      'const store = Store.from({',
+      '  ...file,',
+      '  async getItem(key) {',
+      '    const value = await file.getItem(key)',
+      "    if (key.startsWith('tempo-id:guest:')) {",
+      "      process.send('read')",
+      '      await next()',
+      '    }',
+      '    return value',
+      '  },',
+      '  lock(name, fn) {',
+      "    process.send('lock')",
+      '    return file.lock(name, fn)',
+      '  },',
+      '})',
+      "process.send('ready')",
+      'await next()',
+      "const session = await Guest.session(Accounts.from({ chain: 4217, clientId: 'cli:guest-example', store, url: 'http://127.0.0.1:9' }))",
+      'console.log(session.address)',
+      'process.disconnect()',
+    ])
+    const options = { timeout: 30_000 }
+
+    const first = start(program)
+    const second = start(program)
+    await expect
+      .poll(
+        () =>
+          first.messages.includes('ready') && second.messages.includes('ready'),
+        options,
+      )
+      .toBe(true)
+    // The first process reads the entry, which holds no key pair, under the file's lock.
+    first.send('go')
+    await expect.poll(() => first.messages.includes('read'), options).toBe(true)
+    // The second process asks for the lock while the first holds it. Without the lock, it reads the
+    // empty entry at once, so both create a key pair.
+    second.send('go')
+    await expect
+      .poll(
+        () =>
+          second.messages.includes('lock') || second.messages.includes('read'),
+        options,
+      )
+      .toBe(true)
+    first.send('continue')
+    await expect
+      .poll(() => second.messages.includes('read'), options)
+      .toBe(true)
+    second.send('continue')
+    const addresses = await Promise.all([first.output, second.output])
+    const kept = await Guest.get(config(Store.file(path)))
+    await Fs.rm(directory, { force: true, recursive: true })
+
+    expect([addresses[0] === addresses[1], addresses[0] === kept])
+      .toMatchInlineSnapshot(`
+      [
+        true,
+        true,
+      ]
+    `)
+  }, 60_000)
+
+  test('keeps the first saved key pair when a process that paused past the stale lock resumes on `Store.file`', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    const path = Path.join(directory, 'store.json')
+    // The first process blocks its event loop on a read of the FIFO, as a stalled process does, so
+    // it renews no lock. The parent writes to the FIFO to let it go on.
+    const fifo = Path.join(directory, 'stall')
+    ChildProcess.execFileSync('mkfifo', [fifo])
+    const program = await bundle([
+      "import * as NodeFs from 'node:fs'",
+      "import * as Accounts from '../Accounts.ts'",
+      "import * as Store from '../Store.ts'",
+      "import * as Guest from './guest.ts'",
+      'const queue = []',
+      'const waiters = []',
+      "process.on('message', (message) => { const waiter = waiters.shift(); if (waiter) waiter(message); else queue.push(message) })",
+      'const next = () => (queue.length > 0 ? Promise.resolve(queue.shift()) : new Promise((resolve) => waiters.push(resolve)))',
+      `const file = Store.file(${JSON.stringify(path)})`,
+      'const role = await next()',
+      'let stalled = false',
+      'const store = Store.from({',
+      '  ...file,',
+      '  async getItem(key) {',
+      '    const value = await file.getItem(key)',
+      "    if (role === 'stall' && !stalled && key.startsWith('tempo-id:guest:')) {",
+      '      stalled = true',
+      "      process.send('read')",
+      `      NodeFs.readFileSync(${JSON.stringify(fifo)})`,
+      '    }',
+      '    return value',
+      '  },',
+      '})',
+      "const session = await Guest.session(Accounts.from({ chain: 4217, clientId: 'cli:guest-example', store, url: 'http://127.0.0.1:9' }))",
+      'console.log(session.address)',
+      'process.disconnect()',
+    ])
+    const options = { timeout: 30_000 }
+
+    const first = start(program)
+    first.send('stall')
+    // The first process read the empty entry under the lock, and stalls before it creates a key pair.
+    await expect.poll(() => first.messages.includes('read'), options).toBe(true)
+    // The stall outlasts the lock, so its lock file is older than the stale lock.
+    const past = new Date(Date.now() - 60 * 60 * 1000)
+    for (const name of await Fs.readdir(directory))
+      if (name.endsWith('.lock'))
+        await Fs.utimes(Path.join(directory, name), past, past)
+    // The second process takes the stale lock over, and saves its key pair, whose guest account it
+    // can show for funding.
+    const second = start(program)
+    second.send('run')
+    const saved = await second.output
+    await Fs.writeFile(fifo, 'go')
+    const resumed = await first.output
+    const kept = await Guest.get(config(Store.file(path)))
+    await Fs.rm(directory, { force: true, recursive: true })
+
+    expect([resumed === saved, kept === saved]).toMatchInlineSnapshot(`
+      [
+        true,
+        true,
+      ]
+    `)
+  }, 60_000)
+
+  test('refuses to create a guest account in a runtime without Web Locks, on a store without `lock`', async () => {
+    // The program runs in Node without `navigator`, as a runtime without Web Locks. The store has
+    // no `lock`, so nothing serializes two creations of the guest account.
+    const program = await bundle([
+      "import * as Accounts from '../Accounts.ts'",
+      "import * as Store from '../Store.ts'",
+      "import * as Guest from './guest.ts'",
+      'const memory = Store.memory()',
+      'const store = Store.from({ getItem: memory.getItem, json: true, private: true, removeItem: memory.removeItem, setItem: memory.setItem })',
+      "const config = Accounts.from({ chain: 4217, clientId: 'cli:guest-example', store, url: 'http://127.0.0.1:9' })",
+      'const error = await Guest.session(config).catch((error) => error)',
+      'console.log(JSON.stringify({ address: (await Guest.get(config)) ?? null, error: error.message, locks: typeof navigator }))',
+    ])
+
+    const output = await run(program, ['--no-experimental-global-navigator'])
+
+    expect(JSON.parse(output)).toMatchInlineSnapshot(`
+      {
+        "address": null,
+        "error": "Invalid \`store\`: the runtime has no Web Locks, and the store has no \`lock\`, so two callers could create two guest accounts. Use a store with \`lock\`.",
+        "locks": "undefined",
+      }
+    `)
+  }, 60_000)
+})
+
+describe('Actions.guest.coverage', () => {
+  const token: `0x${string}` = '0x20C0000000000000000000000000000000000000'
+  const fee: `0x${string}` = '0x20C0000000000000000000000000000000000001'
+  const now = 1_700_000_000_000
+  const lacking = (address?: `0x${string}`) => ({
+    shortfall: {
+      amount: '1',
+      formatted: '0.000001',
+      listed: true,
+      symbol: 'T',
+      ...(address ? { token: address } : {}),
+    },
+    token,
+  })
+
+  test.for([
+    [
+      'returns `covered` without a shortfall',
+      { quote: { shortfall: null, token } },
+      'covered',
+    ],
+    [
+      'waits for a shortfall of the funded token before the deadline',
+      { funded: [token.toLowerCase()], quote: lacking(token) },
+      'wait',
+    ],
+    [
+      'expires a shortfall of the funded token at the deadline',
+      { deadline: now, funded: [token.toLowerCase()], quote: lacking(token) },
+      'expired',
+    ],
+    [
+      'asks for a funding code of a second token that no code named, also after the deadline',
+      { deadline: now, funded: [token.toLowerCase()], quote: lacking(fee) },
+      'fund',
+    ],
+    [
+      'waits once each token received a code, so the funding ends',
+      {
+        funded: [token.toLowerCase(), fee.toLowerCase()],
+        quote: lacking(fee),
+      },
+      'wait',
+    ],
+    [
+      "reads a shortfall without a token, from an earlier Tempo ID, as the payment's token",
+      { funded: [token.toLowerCase()], quote: lacking() },
+      'wait',
+    ],
+    [
+      'never asks for a code without `funded`, such as for the faucet',
+      { quote: lacking(fee) },
+      'wait',
+    ],
+  ] as const)('%s', ([, options, expected]) => {
+    expect(Guest.coverage({ deadline: now + 1, now, ...options }).type).toBe(
+      expected,
+    )
+  })
+})
+
+describe('Actions.guest.expiry', () => {
+  /** The local time when the prepare returned, in Unix milliseconds. */
+  const returned = 1_700_000_000_000
+
+  test.for([
+    [
+      "times the window from Tempo ID's time at the prepare, whatever the local clock reads",
+      { now: 1_699_990_000, validBefore: 1_699_990_290 },
+      290,
+    ],
+    [
+      "bounds the window from Tempo ID's time to the longest window",
+      { now: 1_700_000_000, validBefore: 1_700_001_000 },
+      300,
+    ],
+    [
+      "bounds a window from Tempo ID's time that already ended to 0",
+      { now: 1_700_000_000, validBefore: 1_699_999_990 },
+      0,
+    ],
+    [
+      "times the window from the local time at the prepare without Tempo ID's time",
+      { validBefore: 1_700_000_290 },
+      290,
+    ],
+    [
+      'gives the longest window to a local clock ahead of Tempo ID by more than the window',
+      { validBefore: 1_699_999_000 },
+      300,
+    ],
+    [
+      'gives the longest window to a local clock behind Tempo ID by more than the window',
+      { validBefore: 1_700_001_000 },
+      300,
+    ],
+    [
+      'gives the guest request lifetime to a transaction without a window',
+      {},
+      240,
+    ],
+  ] as const)('%s', ([, options, seconds]) => {
+    const end = Guest.expiry({ returned, ...options })
+
+    expect((end - returned) / 1_000).toBe(seconds)
+  })
+})
+
+describe('Actions.guest.funding', () => {
+  const ousd = '0x20C0000000000000000000000000000000000000'
+  const fee = '0x20C0000000000000000000000000000000000001'
+
+  test.for([
+    [
+      "funds the missing part of the payment's token",
+      {
+        amount: '5',
+        quote: {
+          shortfall: {
+            amount: '1500000',
+            formatted: '1.5',
+            listed: true,
+            symbol: 'OUSD',
+            token: ousd,
+          },
+          token: ousd,
+        },
+      },
+      { amount: '1.5', token: ousd },
+    ],
+    [
+      'funds the fee token of a transfer whose fee the guest account pays',
+      {
+        amount: '5',
+        quote: {
+          shortfall: {
+            amount: '20000',
+            formatted: '0.02',
+            listed: false,
+            symbol: 'FEE',
+            token: fee,
+          },
+          token: ousd,
+        },
+      },
+      { amount: '0.02', token: fee },
+    ],
+    [
+      "funds the payment's amount and token without a shortfall token, from an earlier Tempo ID",
+      {
+        amount: '5',
+        quote: {
+          shortfall: {
+            amount: '1500000',
+            formatted: '1.5',
+            listed: true,
+            symbol: 'OUSD',
+          },
+          token: ousd,
+        },
+      },
+      { amount: '5', token: ousd },
+    ],
+  ] as const)('%s', ([, options, expected]) => {
+    expect(Guest.funding(options)).toEqual(expected)
+  })
+})
+
+describe('Actions.guest.requote', () => {
+  const changed = new Accounts.RequestError({
+    code: 'invalid_request',
+    message: 'The quote changed.',
+    reason: 'quote_changed',
+    status: 400,
+  })
+  const token: `0x${string}` = ousd
+  const quote = (fee: string, shortfall = false) => ({
+    faucet: false,
+    fee: { amount: fee, formatted: fee, token },
+    refusal: null,
+    shortfall: shortfall
+      ? {
+          amount: '1',
+          formatted: '0.000001',
+          listed: true,
+          symbol: 'OUSD',
+          token,
+        }
+      : null,
+    sponsored: false,
+    token,
+  })
+  const failed = { error: changed, type: 'failed' } as const
+  const prepared = { prepared: 'tx', type: 'prepared' } as const
+  /** Returns each step's type, and the fee of each `prepare` step's quote. */
+  const steps = (
+    results: readonly (readonly [number, Guest.requote.Options['result']])[],
+  ) =>
+    results.map(([attempt, result]) => {
+      const step = Guest.requote({ attempt, result })
+      return step.type === 'prepare'
+        ? `prepare ${step.quote.fee?.amount}`
+        : step.type
+    })
+
+  test.for([
+    ['signs at the first prepare', [[1, prepared]], ['sign']],
+    [
+      'quotes again after `quote_changed`, and signs the prepare at the new quote',
+      [
+        [1, failed],
+        [1, { quote: quote('7'), type: 'quoted' }],
+        [2, prepared],
+      ],
+      ['quote', 'prepare 7', 'sign'],
+    ],
+    [
+      'rejects with `quote_changed` at the third prepare that receives it',
+      [
+        [1, failed],
+        [1, { quote: quote('7'), type: 'quoted' }],
+        [2, failed],
+        [2, { quote: quote('8'), type: 'quoted' }],
+        [3, failed],
+      ],
+      ['quote', 'prepare 7', 'quote', 'prepare 8', 'throw'],
+    ],
+    [
+      'rejects with `insufficient_balance` for a shortfall at the new quote',
+      [
+        [1, failed],
+        [1, { quote: quote('7', true), type: 'quoted' }],
+      ],
+      ['quote', 'short'],
+    ],
+    [
+      'rejects with any other refusal of the prepare',
+      [[1, { error: new Error('Network.'), type: 'failed' }]],
+      ['throw'],
+    ],
+  ] as const)('%s', ([, results, expected]) => {
+    expect(steps(results)).toEqual(expected)
+  })
+})
+
+describe('Actions.guest.retryFunding', () => {
+  const unavailable = new Accounts.RequestError({
+    code: 'server_error',
+    message: 'The balance read failed.',
+    reason: 'upstream_unavailable',
+    status: 503,
+  })
+  const refused = new Accounts.RequestError({
+    code: 'invalid_request',
+    message: 'The app is disabled.',
+    reason: 'rejected',
+    status: 400,
+  })
+  const offline = new Accounts.RequestError({
+    code: 'server_error',
+    message: 'No response.',
+    status: 0,
+  })
+
+  test.for([
+    [
+      'requests again after 1 second at the first `upstream_unavailable`',
+      { attempt: 1, error: unavailable },
+      'retry 1000',
+    ],
+    [
+      'requests again after 2 seconds at the second `upstream_unavailable`',
+      { attempt: 2, error: unavailable },
+      'retry 2000',
+    ],
+    [
+      'rejects with `upstream_unavailable` at the third request',
+      { attempt: 3, error: unavailable },
+      'throw upstream_unavailable',
+    ],
+    [
+      'rejects with another refusal at once',
+      { attempt: 1, error: refused },
+      'throw rejected',
+    ],
+    [
+      'rejects with a request without a response at once',
+      { attempt: 1, error: offline },
+      'throw undefined',
+    ],
+    [
+      'rejects with an error other than a refusal at once',
+      { attempt: 1, error: new Error('Aborted.') },
+      'throw undefined',
+    ],
+  ] as const)('%s', ([, options, expected]) => {
+    const step = Guest.retryFunding(options)
+    expect(
+      step.type === 'retry'
+        ? `retry ${step.delay}`
+        : `throw ${step.error instanceof Accounts.RequestError ? step.error.reason : undefined}`,
+    ).toBe(expected)
+  })
+})
+
+describe('Actions.guest.settlement', () => {
+  /** The time of each row, in Unix milliseconds: 100 seconds after the transaction's window. */
+  const now = 1_700_000_100_000
+  const hash = `0x${'ab'.repeat(32)}` as const
+  const paid = `0x${'cd'.repeat(32)}` as const
+  /** A checkout whose window ended at `now` minus 100 seconds, past `settleMargin`. */
+  const ended = { expiry: 1_700_000_000_000, hash }
+  /** A checkout whose window ended at `now` minus 30 seconds, within `settleMargin`. */
+  const recent = { expiry: 1_700_000_070_000, hash }
+  /** A checkout whose window ends 100 seconds after `now`. */
+  const open = { expiry: 1_700_000_200_000, hash }
+  const unpaid = { paid: null, pending: false } as const
+
+  test.for([
+    [
+      "returns the paid transaction of Tempo ID's status, nested as the route returns it",
+      { entry: ended, receipt: 'unknown', status: { paid, pending: false } },
+      `paid ${paid}`,
+    ],
+    [
+      'returns the signed transaction that the chain holds a receipt of, though Tempo ID refuses the status',
+      { entry: ended, receipt: 'success', status: 'refused' },
+      `paid ${hash}`,
+    ],
+    [
+      'cancels a checkout that Tempo ID reads as unpaid after the window, without a receipt',
+      { entry: recent, receipt: 'missing', status: unpaid },
+      'cancel',
+    ],
+    [
+      'cancels a sponsored checkout that Tempo ID reads as unpaid after the window, with no known hash',
+      {
+        entry: { ...recent, hash: undefined },
+        receipt: 'unreadable',
+        status: unpaid,
+      },
+      'cancel',
+    ],
+    [
+      'cancels a checkout whose transaction reverted',
+      { entry: open, receipt: 'reverted', status: unpaid },
+      'cancel',
+    ],
+    [
+      'waits after a failed receipt read within the window',
+      { entry: open, receipt: 'unknown', status: unpaid },
+      'wait',
+    ],
+    [
+      'waits for a checkout within its window, whose transaction can still land',
+      { entry: open, receipt: 'missing', status: unpaid },
+      'wait',
+    ],
+    [
+      'waits for a send that can still land, within the margin after the window',
+      {
+        entry: recent,
+        receipt: 'missing',
+        status: { paid: null, pending: true },
+      },
+      'wait',
+    ],
+    [
+      'rejects as pending a send that can still land after the window and its margin',
+      {
+        entry: ended,
+        receipt: 'missing',
+        status: { paid: null, pending: true },
+      },
+      'pending',
+    ],
+    [
+      'returns a checkout that Tempo ID refuses for good as unpaid, whose transaction reverted',
+      { entry: ended, receipt: 'reverted', status: 'refused' },
+      'unpaid',
+    ],
+    [
+      'waits for a checkout that Tempo ID refuses for good without a receipt, since the node can lag behind the chain',
+      { entry: recent, receipt: 'missing', status: 'refused' },
+      'wait',
+    ],
+    [
+      'rejects as pending a checkout that Tempo ID refuses for good without a receipt, past the margin',
+      { entry: ended, receipt: 'missing', status: 'refused' },
+      'pending',
+    ],
+    [
+      'rejects as pending a sponsored checkout that Tempo ID refuses for good, past the margin',
+      {
+        entry: { ...ended, hash: undefined },
+        receipt: 'unreadable',
+        status: 'refused',
+      },
+      'pending',
+    ],
+    [
+      'waits after a failed status read within the margin',
+      { entry: recent, receipt: 'missing', status: 'unknown' },
+      'wait',
+    ],
+    [
+      'rejects as pending after failed status reads, past the margin',
+      { entry: ended, receipt: 'missing', status: 'unknown' },
+      'pending',
+    ],
+    [
+      'returns a checkout whose cancellation Tempo ID refuses for good as unpaid, whose transaction reverted',
+      {
+        cancellation: 'refused',
+        entry: ended,
+        receipt: 'reverted',
+        status: unpaid,
+      },
+      'unpaid',
+    ],
+    [
+      'rejects as pending a checkout whose cancellation Tempo ID refuses for good, without a receipt, past the margin',
+      {
+        cancellation: 'refused',
+        entry: ended,
+        receipt: 'missing',
+        status: unpaid,
+      },
+      'pending',
+    ],
+    [
+      'cancels again after a cancellation that failed on the network, within the margin',
+      {
+        cancellation: 'unknown',
+        entry: recent,
+        receipt: 'missing',
+        status: unpaid,
+      },
+      'cancel',
+    ],
+    [
+      'rejects as pending after cancellations that failed on the network, past the margin',
+      {
+        cancellation: 'unknown',
+        entry: ended,
+        receipt: 'missing',
+        status: unpaid,
+      },
+      'pending',
+    ],
+  ] as const)('%s', ([, options, expected]) => {
+    const step = Guest.settlement({
+      now,
+      ...options,
+    } as Guest.settlement.Options)
+
+    expect(step.type === 'paid' ? `paid ${step.transaction}` : step.type).toBe(
+      expected,
+    )
+  })
+})
+
+describe('Actions.guest.active', () => {
+  const started = Session.from({
+    address: '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326',
+    kind: 'guest',
+    publicKey: '0x04',
+    revision: 1,
+  })
+
+  test.for([
+    ['the same guest session', started, true],
+    ['no session, after a sign-out', undefined, false],
+    [
+      'another start of the same guest account, after a sign-out and a sign-in',
+      { ...started, revision: 2 },
+      false,
+    ],
+    [
+      'another guest account',
+      {
+        ...started,
+        address: '0x000000000000000000000000000000000000dEaD',
+      },
+      false,
+    ],
+  ] as const)('returns for %s', ([, current, expected]) => {
+    expect(Guest.active({ current, started })).toBe(expected)
+  })
+})
+
+describe('Actions.guest.account', () => {
+  test("signs a transaction as the root account, with a prehashed P256 envelope of the store's key pair", async () => {
+    const auth = config()
+    const session = await Guest.session(auth)
+    const envelope = Guest.check(transaction(), payment)
+
+    const signed = TxEnvelopeTempo.deserialize(
+      (await Guest.sign(envelope, {
+        account: Guest.account(auth, { session }),
+      })) as TxEnvelopeTempo.Serialized,
+    )
+
+    expect([
+      signed.signature?.type,
+      signed.signature?.type === 'p256' && signed.signature.prehash,
+      SignatureEnvelope.verify(signed.signature!, {
+        address: session.address,
+        payload: TxEnvelopeTempo.getSignPayload(envelope),
+      }),
+    ]).toMatchInlineSnapshot(`
+      [
+        "p256",
+        true,
+        true,
+      ]
+    `)
+  })
+
+  test('throws `SignedOutError` once `disconnect` forgets the key pair', async () => {
+    const auth = config()
+    const session = await Guest.session(auth)
+    const account = Guest.account(auth, { session })
+    await Guest.disconnect(auth)
+
+    const error = await account
+      .sign({ hash: `0x${'00'.repeat(32)}` })
+      .catch((error: unknown) => error)
+
+    expect(error).toBeInstanceOf(Accounts.SignedOutError)
+    expect(await Guest.get(auth)).toMatchInlineSnapshot(`undefined`)
+  })
+})
+
+describe('Accounts.create with guest', () => {
+  /** Returns an instance with the `device` plugin whose Tempo ID never answers, and its requests. */
+  function create(guest: Accounts.Config['guest']) {
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      fetch: (input, init) => {
+        requests.push(
+          `${new URL(String(input)).pathname} ${String(init?.body)}`,
+        )
+        return globalThis.fetch(input, init)
+      },
+      guest,
+      plugins: [device({ onCode: () => {} }), pick()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    return { accounts, requests }
+  }
+
+  test('a selection of "Continue as guest" starts the guest session, with no request, and `signOut` keeps the guest account', async () => {
+    const { accounts, requests } = create(true)
+
+    const session = await accounts.pick.guest()
+    const status = accounts.session.status.get().status
+    await accounts.signOut()
+    const kept = await accounts.guest.get()
+    const again = await accounts.pick.guest()
+
+    expect([
+      Session.guest(session),
+      status,
+      kept === session.address,
+      again.address === session.address,
+      requests,
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        "signedIn",
+        true,
+        true,
+        [],
+      ]
+    `)
+  })
+
+  test("a reload of the stored session, as each guest send reads it, ends the guest session of another instance's sign-out on the same `Store.file`, which keeps the key pair", async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'guest-'))
+    try {
+      const path = Path.join(directory, 'store.json')
+      const options = {
+        chain: 4217,
+        clientId: 'cli:guest-example',
+        guest: true,
+        plugins: [device({ onCode: () => {} }), pick()],
+        url: 'http://127.0.0.1:9',
+      } as const
+      const a = Accounts.create({ ...options, store: Store.file(path) })
+      const b = Accounts.create({ ...options, store: Store.file(path) })
+      const started = await a.pick.guest()
+
+      const adopted = await b.session.get()
+      await b.signOut()
+      const reloaded = await a.pick.reload()
+      const kept = await Guest.get(config(Store.file(path)))
+
+      expect([
+        adopted?.address === started.address,
+        Session.guest(started) && Guest.active({ current: reloaded, started }),
+        kept === started.address,
+      ]).toMatchInlineSnapshot(`
+        [
+          true,
+          false,
+          true,
+        ]
+      `)
+    } finally {
+      await Fs.rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  test("`Actions.guest.transfer` releases no signature after a sign-out during the read of the guest account's key pair", async () => {
+    const memory = Store.memory()
+    let armed = false
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: true,
+      plugins: [device({ onCode: () => {} }), pick()],
+      // The signature's read of the key pair signs the instance out first, once armed.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (armed && key.startsWith('tempo-id:guest:')) {
+            armed = false
+            await accounts.signOut()
+          }
+          return await memory.getItem(key)
+        },
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+    const session = await accounts.pick.guest()
+    const options = {
+      ...payment,
+      current: () => accounts.pick.current(),
+      session,
+      transaction: transaction(),
+    }
+    const before = await Guest.transfer(accounts.config, options)
+    armed = true
+
+    const error = await Guest.transfer(accounts.config, options).catch(
+      (error: unknown) => error,
+    )
+
+    expect([
+      typeof before,
+      error instanceof Accounts.SignedOutError,
+      armed,
+      accounts.pick.current(),
+      (await accounts.guest.get()) === session.address,
+    ]).toMatchInlineSnapshot(`
+      [
+        "string",
+        true,
+        false,
+        undefined,
+        true,
+      ]
+    `)
+  })
+
+  test('`guest.disconnect` forgets the guest account, and signs out its session', async () => {
+    const { accounts } = create(true)
+    const session = await accounts.pick.guest()
+
+    await accounts.guest.disconnect()
+    const status = accounts.session.status.get().status
+    const address = await accounts.guest.get()
+    const next = await accounts.pick.guest()
+
+    expect([status, address, next.address === session.address])
+      .toMatchInlineSnapshot(`
+      [
+        "signedOut",
+        undefined,
+        false,
+      ]
+    `)
+  })
+
+  test('an instance without `guest` reads a stored guest session as signed out, and keeps it for an instance with `guest`', async () => {
+    const store = Store.memory()
+    const options = {
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      plugins: [device({ onCode: () => {} })],
+      store,
+      url: 'http://127.0.0.1:9',
+    } as const
+    const plain = Accounts.create(options)
+    await plain.session.get()
+
+    const session = await Accounts.create({
+      ...options,
+      guest: true,
+      plugins: [...options.plugins, pick()],
+    }).pick.guest()
+    // The instance on the same store hears the saved change, and reads the store again.
+    const adopted = await plain.session.get()
+    const hydrated = await Accounts.create(options).session.get()
+    const restored = await Accounts.create({
+      ...options,
+      guest: true,
+    }).session.get()
+
+    expect([
+      adopted,
+      plain.session.status.get().status,
+      hydrated,
+      restored?.address === session.address,
+    ]).toMatchInlineSnapshot(`
+      [
+        undefined,
+        "signedOut",
+        undefined,
+        true,
+      ]
+    `)
+  })
+
+  test('`pay` of `guest: true` without a session outside a page rejects with `SignedOutError`, and starts no guest session', async () => {
+    const { accounts, requests } = create(true)
+
+    // Only a page shows the signed-out payment page, which offers Continue as guest.
+    const error = await accounts.pay(payment).catch((error: unknown) => error)
+
+    expect([error, await accounts.guest.get(), requests])
+      .toMatchInlineSnapshot(`
+        [
+          [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+          undefined,
+          [],
+        ]
+      `)
+  })
+
+  test('`guest: true` adds `guest=offer` to the code request', async () => {
+    const { accounts, requests } = create(true)
+
+    await accounts.device.signIn().catch(() => undefined)
+
+    expect(requests.map((entry) => entry.includes('guest=offer')))
+      .toMatchInlineSnapshot(`
+      [
+        true,
+      ]
+    `)
+  })
+
+  test('types a guest session of a sign-in only for an instance with `guest`', () => {
+    const options = {
+      clientId: 'cli:guest-example',
+      plugins: [device({ onCode: () => {} }), dialog(), redirect()],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    } as const
+    const plain = Accounts.create(options)
+    const off = Accounts.create({ ...options, guest: false })
+    const guest = Accounts.create({ ...options, guest: true })
+
+    expectTypeOf<
+      Awaited<ReturnType<typeof plain.device.signIn>>
+    >().toEqualTypeOf<Session.Session>()
+    expectTypeOf<
+      Awaited<ReturnType<typeof off.device.signIn>>
+    >().toEqualTypeOf<Session.Session>()
+    expectTypeOf<
+      Awaited<ReturnType<typeof plain.redirect.signIn>>
+    >().toEqualTypeOf<Session.Session | undefined>()
+    // The calls are never made, so their types alone are read.
+    const plainSignIn = () => plain.dialog.signIn()
+    const guestSignIn = () => guest.dialog.signIn()
+    expectTypeOf<
+      Awaited<ReturnType<typeof plainSignIn>>
+    >().not.toExtend<Session.GuestSession>()
+    expectTypeOf<
+      Awaited<ReturnType<typeof guest.device.signIn>>
+    >().toEqualTypeOf<Session.GuestSession | Session.Session>()
+    expectTypeOf<Awaited<ReturnType<typeof guestSignIn>>>().toExtend<
+      Session.GuestSession | Session.Session
+    >()
+    expectTypeOf<Session.GuestSession>().toExtend<
+      Awaited<ReturnType<typeof guestSignIn>>
+    >()
+    // A guest that signs a plugin's challenge returns the verification's result too.
+    expectTypeOf<
+      Extract<
+        Awaited<ReturnType<typeof guestSignIn>>,
+        Session.GuestSession
+      >['auth']
+    >().toEqualTypeOf<Plugin.Challenge.Result | undefined>()
+  })
+
+  test("`pay` of a new instance reads the stored session first, so a signed-in user's payment takes no guest path", async () => {
+    const store = Store.memory()
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","cli:guest-example",4217]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: true,
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+
+    // Node holds no page, so the payment of the signed-in user rejects. A guest payment would read
+    // the guest account's key pair.
+    await accounts.pay(payment).catch(() => undefined)
+
+    expect([
+      (await accounts.session.get())?.user?.id,
+      await accounts.guest.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        "user_1",
+        undefined,
+      ]
+    `)
+  })
+
+  test('`pay` of `guest: true` rejects after a sign-out during the read of the stored session, and starts no guest session', async () => {
+    const memory = Store.memory()
+    const gate = Promise.withResolvers<void>()
+    const reading = Promise.withResolvers<void>()
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: true,
+      // The first read of the stored session waits for the gate.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (!key.startsWith('tempo-id:guest:')) {
+            reading.resolve()
+            await gate.promise
+          }
+          return await memory.getItem(key)
+        },
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+
+    const pending = accounts.pay(payment).catch((error: unknown) => error)
+    await reading.promise
+    const signedOut = accounts.signOut()
+    gate.resolve()
+    await signedOut
+    const error = await pending
+
+    expect([
+      error instanceof Error ? error.name : error,
+      await accounts.session.get(),
+      await accounts.guest.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        "Accounts.SignedOutError",
+        undefined,
+        undefined,
+      ]
+    `)
+  })
+
+  test('Continue as guest of an offer whose change started before a sign-out rejects with `SupersededError`, and commits no guest session', async () => {
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: true,
+      plugins: [
+        Plugin.from({
+          actions: (context) => ({
+            /** Starts a change, as `pay` of `guest: true` does before its read of the stored session. */
+            start: () => context.session.change(),
+          }),
+          id: 'offer',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const change = accounts.offer.start()
+    await accounts.session.get()
+    await accounts.signOut()
+
+    // The selection of Continue as guest on the payment page starts the guest session.
+    const error = await SignIn.guest(
+      { config: accounts.config },
+      { change },
+    ).catch((error: unknown) => error)
+
+    expect([
+      error instanceof Error ? error.name : error,
+      await accounts.session.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        "Accounts.SupersededError",
+        undefined,
+      ]
+    `)
+  })
+
+  test("a guest session with a plugin's challenge signs its message with the guest key pair, verifies it before the commit, and returns `auth`", async () => {
+    const { accounts, requests } = create(true)
+    const message =
+      'app.example wants you to sign in with your Ethereum account'
+    const settled: Plugin.Challenge.Signed[] = []
+    const committed: (Session.Any | undefined)[] = []
+
+    const session = await accounts.pick.guest({
+      challenge: {
+        message: () => Promise.resolve(message),
+        settle: async (signed) => {
+          settled.push(signed)
+          committed.push(await accounts.session.get())
+          return { token: 'app-token' }
+        },
+      },
+    })
+    const [signed] = settled
+    const stored = await accounts.session.get()
+    const envelope = SignatureEnvelope.deserialize(signed!.signature)
+
+    expect({
+      address: signed!.address === session.address,
+      auth: session.auth,
+      committed,
+      message: signed!.message,
+      requests,
+      // The instance stores the guest session without the verification's result.
+      stored: stored?.address === session.address && !('auth' in stored),
+      type: envelope.type,
+      verified: SignatureEnvelope.verify(envelope, {
+        address: session.address,
+        payload: PersonalMessage.getSignPayload(Hex.fromString(message)),
+      }),
+    }).toMatchInlineSnapshot(`
+      {
+        "address": true,
+        "auth": {
+          "token": "app-token",
+        },
+        "committed": [
+          undefined,
+        ],
+        "message": "app.example wants you to sign in with your Ethereum account",
+        "requests": [],
+        "stored": true,
+        "type": "p256",
+        "verified": true,
+      }
+    `)
+  })
+
+  test("a refused verification of a guest's challenge rejects with its error, and commits no session", async () => {
+    const { accounts } = create(true)
+    const refusal = new Accounts.RequestError({
+      code: 'access_denied',
+      message: 'Refused.',
+      status: 403,
+    })
+
+    const error = await accounts.pick
+      .guest({
+        challenge: {
+          message: () => Promise.resolve('Sign in to app.example.'),
+          settle: () => Promise.reject(refusal),
+        },
+      })
+      .catch((error: unknown) => error)
+
+    expect([
+      error === refusal,
+      await accounts.session.get(),
+      (await accounts.guest.get()) !== undefined,
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        undefined,
+        true,
+      ]
+    `)
+  })
+
+  test('a guest session aborted during the creation of its key pair rejects with the reason, and commits nothing', async () => {
+    const memory = Store.memory()
+    const controller = new AbortController()
+    const reason = new Error('Cancelled.')
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: true,
+      plugins: [device({ onCode: () => {} }), pick()],
+      // The read of the guest account's entry aborts the sign-in.
+      store: Store.from({
+        ...memory,
+        getItem: async (key) => {
+          if (key.startsWith('tempo-id:guest:')) controller.abort(reason)
+          return await memory.getItem(key)
+        },
+      }),
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+
+    const error = await accounts.pick
+      .guest({ signal: controller.signal })
+      .catch((error: unknown) => error)
+
+    expect([
+      error === reason,
+      await accounts.session.get(),
+      accounts.session.status.get().status,
+      await Accounts.create({
+        chain: 4217,
+        clientId: 'cli:guest-example',
+        guest: true,
+        store: memory,
+        url: 'http://127.0.0.1:9',
+      }).session.get(),
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        undefined,
+        "signedOut",
+        undefined,
+      ]
+    `)
+  })
+
+  test.for([
+    ['the default dialog', [pick()]],
+    ['dialog()', [dialog(), pick()]],
+  ] as const)(
+    '`dialog.session` of %s returns no guest session',
+    async ([, plugins]) => {
+      const accounts = DefaultAccounts.create({
+        chain: 4217,
+        clientId: 'cli:guest-example',
+        guest: true,
+        plugins,
+        store: Store.memory(),
+        url: 'http://127.0.0.1:9',
+      })
+      const session = await accounts.pick.guest()
+
+      const shown = await accounts.dialog.session()
+
+      expect([Session.guest(session), shown]).toMatchInlineSnapshot(`
+        [
+          true,
+          null,
+        ]
+      `)
+    },
+  )
+})

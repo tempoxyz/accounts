@@ -151,8 +151,8 @@ export async function callback(auth: Config): Promise<boolean> {
  * frame, which starts the sign-in again. A call while the page holds a frame of the same redirect
  * URI that has not failed loads nothing. Outside a secure context, on a page on `http:` for a Tempo
  * ID on `https:`, and for an instance that pushes its requests with `par`, it loads nothing, since
- * `signIn` then opens a popup. An instance with a `resource` loads the frame, since
- * `signMessage` signs in it. On a page that is not on the redirect URI's origin it loads nothing
+ * `signIn` then opens a popup. An instance with a `resource` loads the frame, since the frame
+ * reports whether its sign-in takes the resource, and `signMessage` signs in it. On a page that is not on the redirect URI's origin it loads nothing
  * either, since `signIn` then throws.
  *
  * @example
@@ -219,8 +219,9 @@ export declare namespace preload {
  * `http://localhost`, signs in with `popup` too, unless Tempo ID is on `http:` itself, such as a
  * local one. An instance that pushes its requests with `par` signs in with `popup` as well, since the
  * frame takes the request's own parameters, and Tempo ID reads a pushed request only from its push.
- * A request with a `resource`, its own or the instance's, signs in with `popup` too, since the frame's
- * tokens are for Tempo ID's origin alone.
+ * A request with a `resource`, its own or the instance's, signs in in the frame only if the preloaded
+ * frame reported that it issues tokens for a resource. Otherwise it signs in with `popup`. A frame
+ * that cannot serve the request, such as for an app that no resource's scopes link, offers a popup.
  * A request with `funding` signs in in the
  * frame. If the account holds less than the hint, the call redeems the code, then opens the deposit
  * page as `Actions.funding.open` does in `frame` mode, and resolves once that page returns or closes.
@@ -229,6 +230,9 @@ export declare namespace preload {
  * the user closes rejects the call with an `AbortError` too. A page that sends
  * `Cross-Origin-Opener-Policy: same-origin` severs its handle to the popup, so a popup that the user
  * closes there leaves the call pending until `signal` aborts or the next call replaces it.
+ *
+ * In a browser without a connection, the call throws `Accounts.RequestError` with `server_error`
+ * and status 0, before the dialog or the popup opens.
  *
  * With `backend`, the path where the app mounts `accounts.handler`, the handler's sign-in routes
  * run the sign-in. `POST /login` builds the request, and `POST /callback` redeems the callback's
@@ -501,6 +505,16 @@ async function authorize<
   // either mode ends when the next one starts.
   const actor = slot(auth)
   actor.send({ type: 'replace' })
+  // Without a connection, the frame and the popup load no page of Tempo ID, so the dialog would
+  // offer a popup at its timeout that fails too. The call fails as a request without a response,
+  // after the checks of its options and after it replaced the pending sign-in.
+  if (navigator.onLine === false)
+    throw new RequestError({
+      code: 'server_error',
+      message:
+        'The browser is offline, so the sign-in receives no response. Check the connection, then sign in again.',
+      status: 0,
+    })
   const entry = machines.entry(actor.getSnapshot())
   const mode =
     requested === 'iframe' &&
@@ -512,11 +526,15 @@ async function authorize<
       })
     ) &&
     !pushed &&
-    // Tempo ID's frame sets the request's resource to its own origin, so only a popup issues tokens
-    // for a registered resource.
-    resources(auth, rest).length === 0 &&
     framed(auth, { redirectUri }) &&
-    (visibility() || entry?.sheet.trusted() === true)
+    // A frame issues tokens for a registered resource only if its loaded page reports it. An older
+    // Tempo ID's frame sets the request's resource to its own origin, so a popup issues them there.
+    Sheet.machines.frames({
+      resource: resources(auth, rest).length > 0,
+      resources: entry?.sheet.resources(),
+      trusted: entry?.sheet.trusted(),
+      visibility: visibility(),
+    })
       ? 'iframe'
       : 'popup'
 
@@ -691,6 +709,9 @@ async function authorize<
                 return rest.challenge
               })(),
               display: 'popup',
+              // A request whose challenge arrives later offers a guest only for a caller whose
+              // guest key pair signs it.
+              ...(deferred && rest.guest !== true ? { guest: false } : {}),
               redirectUri,
               ...(responseMode ? { responseMode } : {}),
             }))().then((value) => ({ ...value, state: value.pending.state })),
@@ -813,6 +834,19 @@ async function authorize<
     // redeems.
     unblock?.()
 
+    // The user selected "Continue as guest" on a request in the web message mode, which issues no
+    // tokens. A sign-in plugin starts the guest session.
+    if ('guest' in callback) {
+      if (callback.state !== state)
+        throw new RequestError({
+          code: 'invalid_request',
+          field: 'state',
+          message:
+            'Invalid `state` in the posted result. Start sign-in again from this app.',
+          status: 400,
+        })
+      throw Callback.guestSelected()
+    }
     // Tempo ID redeemed the code of a request in the web message mode, and posted its authorization.
     if ('authorization' in callback) {
       const authorization = await (async () => {
@@ -1007,6 +1041,12 @@ export declare namespace signIn {
      * `false`: the dialog shows once the function returns. A popup opens at the call either way.
      */
     deferred?: boolean | undefined
+    /**
+     * Whether the request offers "Continue as guest" also with `challenge`, on an instance with
+     * `guest: true`. The caller then signs the challenge with the guest key pair, as the `dialog`
+     * plugin does for a plugin's challenge. Absent, a request with `challenge` offers no guest.
+     */
+    guest?: boolean | undefined
     /**
      * `iframe` to sign in in a dialog on the page, or `popup` for a popup window. Defaults to
      * `iframe`, which falls back to `popup` outside a secure context, on a page on `http:` for a

@@ -27,9 +27,14 @@ const connect = Broadcast.create()
 
 /**
  * Returns a store on the device's secure store, with its keys encoded to the characters that it
- * accepts, and each value as ox's `Json`, which keeps a `bigint`. Every store that this function
+ * accepts, and each value as ox's `Json`, which keeps a `bigint`. The store is `json` and `private`,
+ * since only the app reads the secure store, so it keeps private keys as JSON. Every store that this function
  * returns shares the device's secure store, so its `lock` serializes their session refreshes, and its
- * `connect` carries a sign-out of one instance to the others at once, as `Store.memory` does.
+ * `connect` carries a sign-out of one instance to the others at once, as `Store.memory` does. Its
+ * `update` reads and writes a key while every other write of the key on the device waits, so the
+ * `redirect` plugin's sign-in never removes the sign-out flag that another instance wrote since. It
+ * sets `local`, since only the app's process reads the secure store, so a refused refresh token
+ * signs out after one request.
  *
  * @throws {Store.InvalidValueError} From a read, for a stored value that holds no valid JSON.
  *
@@ -62,10 +67,34 @@ export function create(secureStore: create.SecureStore): Store.Store {
       const text = await secureStore.getItemAsync(encode(key))
       return text === null ? undefined : StoreValue.parse(text)
     },
+    // Each value goes through ox's `Json`, which has no form of a `CryptoKey`, so the store keeps
+    // JSON. Only the app reads the device's secure store, so it keeps private keys, such as the
+    // guest account's P256 private key.
+    json: true,
+    local: true,
     lock,
-    removeItem: (key) => secureStore.deleteItemAsync(encode(key)),
+    private: true,
+    // Each write of a key waits for the earlier writes of the key on the device, also of another
+    // preset's store, so no write lands between the read and the write of an `update`.
+    removeItem: (key) =>
+      lock(`${key}:write`, () => secureStore.deleteItemAsync(encode(key))),
     setItem: (key, value) =>
-      secureStore.setItemAsync(encode(key), StoreValue.stringify(value)),
+      lock(`${key}:write`, () =>
+        secureStore.setItemAsync(encode(key), StoreValue.stringify(value)),
+      ),
+    update: (key, fn) =>
+      lock(`${key}:write`, async () => {
+        const text = await secureStore.getItemAsync(encode(key))
+        const { result, value } = fn(
+          text === null ? undefined : StoreValue.parse(text),
+        )
+        const next = value === undefined ? null : StoreValue.stringify(value)
+        // A value that the key already holds, or an absent key that stays absent, needs no write.
+        if (next === text) return result
+        if (next === null) await secureStore.deleteItemAsync(encode(key))
+        else await secureStore.setItemAsync(encode(key), next)
+        return result
+      }),
   })
 }
 

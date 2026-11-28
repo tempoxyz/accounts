@@ -440,6 +440,21 @@ export const accounts = Accounts.create({
 
 :::
 
+### Continue as a guest
+
+With <SourceLink name="Config.guest" path="src/Accounts.ts">`guest: true`</SourceLink>, the device page offers Continue as guest. If the user selects it, `device.signIn` resolves with a guest session, whose key pair the instance keeps in its store, such as <SourceLink name="create" path="src/stores/File.ts">`Store.file`</SourceLink>. The guest session pays with `pay`, sends with Viem, and pays MPP charges, with no page. A short guest account receives the faucet's funds on a test chain, and a funding code through `onCode` on another chain. See [Guest checkout](/docs/guides/guest-checkout#pay-from-a-cli).
+
+```ts [index.ts]
+import { Session } from 'accounts'
+import { accounts } from './tempo.config.js'
+
+const session = await accounts.device.signIn()
+// [!code hl:start]
+if (Session.guest(session)) console.log(`Signed in as guest ${session.address}.`)
+else console.log(`Signed in as ${session.user.email}.`)
+// [!code hl:end]
+```
+
 ### Sign in for an API
 
 <SourceLink name="signIn.resource" path="src/plugins/device.ts">`resource`</SourceLink> names a [registered resource](https://github.com/tempoxyz/id/blob/main/docs/resources.md), such as an MCP server. Each access token then names it as its audience, so only that API accepts the token.
@@ -554,6 +569,8 @@ export const accounts = Accounts.create({
 ### Send above the limit or the balance
 
 With the <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin, a transfer above the limit of the access key, or above the balance, starts a new device grant. <SourceLink name="onCode" path="src/plugins/device.ts">`onCode`</SourceLink> shows its code. After the approval, the transfer sends again.
+
+A payment of <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> above the limit retries in the same way. A payment above the balance rejects with the node's error.
 
 | Refusal     | The grant requests                                                                         |
 | ----------- | ------------------------------------------------------------------------------------------ |

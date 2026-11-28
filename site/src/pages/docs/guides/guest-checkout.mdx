@@ -1,0 +1,528 @@
+import { Cards } from 'vocs'
+import { Demo } from '../../../components/Demo.tsx'
+import { PageCard } from '../../../components/PageCard.tsx'
+import { SourceLink } from '../../../components/SourceLink.tsx'
+
+# Guest checkout [A visitor pays from a guest account, whose key pair the app keeps in its store, with no Tempo ID user.]
+
+## Overview
+
+A guest session signs a visitor in with no Tempo ID user. The instance keeps a P256 key pair in its [store](/docs/guides/user-session/store-sessions), and the key pair owns a root Tempo Account, the guest account.
+
+Tempo ID issues a guest session no tokens and no [access key](/docs/guides/access-keys). The key pair signs each payment and transaction of the visitor in the app. [Guest sessions](https://github.com/tempoxyz/id/blob/main/docs/guest-checkout.md) describes the side of Tempo ID.
+
+The demo signs a visitor in as a guest, and pays 1 OUSD from the guest account. A new guest account holds no funds, so Deposit on the payment page offers the testnet faucet.
+
+<Demo name="GuestCheckout" title="Pay as a guest" />
+
+## Walkthrough
+
+These steps build a React app that signs a visitor in as a guest, and takes a payment from the guest account.
+
+::::steps
+
+### Install the packages
+
+:::code-group
+
+```sh [npm]
+npm install accounts react react-dom viem
+```
+
+```sh [pnpm]
+pnpm add accounts react react-dom viem
+```
+
+```sh [bun]
+bun add accounts react react-dom viem
+```
+
+:::
+
+### Create the instance
+
+With <SourceLink name="Config.guest" path="src/Accounts.ts">`guest: true`</SourceLink>, each sign-in offers Continue as guest, beside the passkey and the emailed code. An instance without it never holds a guest session.
+
+In a browser, the default store is IndexedDB. It keeps the key pair as a non-extractable `CryptoKey`.
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  guest: true, // [!code hl]
+  plugins: [react(), viem()],
+})
+```
+
+### Sign the visitor in
+
+<SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> opens the sign-in of Tempo ID. If the visitor selects Continue as guest, the instance loads or creates the key pair, and resolves with a guest session.
+
+A guest session holds the address of the guest account, and its <SourceLink name="GuestSession.kind" path="src/Session.ts">`kind`</SourceLink> is `'guest'`. The store keeps the key pair under its own entry, so the session holds no private key.
+
+:::code-group
+
+```tsx [App.tsx]
+import { Checkout } from './Checkout.js'
+import { accounts } from './tempo.config.js'
+
+export function App() {
+  const { session } = accounts.useSession()
+
+  if (!session)
+    return (
+      <button onClick={() => accounts.dialog.signIn()} type="button">
+        Sign in with Tempo
+      </button>
+    )
+
+  // [!code hl:start]
+  const label =
+    session.kind === 'guest'
+      ? `Guest account ${session.address}`
+      : `Signed in as ${session.user.email}`
+  // [!code hl:end]
+
+  return (
+    <main>
+      <p>{label}</p>
+      <Checkout />
+    </main>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  guest: true,
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+A call that reads Tempo ID, such as a read of the access token, throws <SourceLink name="GuestSessionError" path="src/Accounts.ts">`Accounts.GuestSessionError`</SourceLink> with a guest session.
+
+### Pay
+
+With a guest session, <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> opens the payment page of Tempo ID for the guest account, in a dialog. The visitor selects Pay, and the key pair signs the transfer in the page of the app.
+
+The token is a symbol that the chain lists, such as `ousd`, or the address of a TIP-20 token. The key pair signs one transaction for each call, which makes exactly the requested transfer.
+
+:::code-group
+
+```tsx [Checkout.tsx]
+import { useState } from 'react'
+import { accounts } from './tempo.config.js'
+
+export function Checkout() {
+  const [transaction, setTransaction] = useState<string>()
+
+  return (
+    <>
+      <button
+        onClick={async () => {
+          // [!code hl:start]
+          const { transaction } = await accounts.pay({
+            amount: '5',
+            to: '0x000000000000000000000000000000000000dEaD',
+            token: 'ousd',
+          })
+          // [!code hl:end]
+          setTransaction(transaction)
+        }}
+        type="button"
+      >
+        Pay 5 OUSD
+      </button>
+      {transaction && <p>Paid in {transaction}.</p>}
+    </>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  guest: true,
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+A new guest account holds no funds. If it holds less than the payment, Deposit on the payment page opens the deposit pages of Tempo ID for the guest account.
+
+| Deposit method        | For a guest                                            |
+| --------------------- | ------------------------------------------------------ |
+| Tempo transfer        | Offered on every chain, to the guest account's address |
+| EVM bridge            | Offered on Tempo mainnet, for an OUSD payment          |
+| Buy MACH              | Not offered, since its cards and receipts need a user  |
+| Swap from the balance | Not offered, since the key pair signs only the payment |
+
+Done returns to the same checkout, and Pay enables once the funds arrive. On a test chain, the deposit pages also offer the faucet of the token.
+
+::::
+
+## Use cases
+
+### Pay without a session
+
+With `guest: true` and no session, <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> opens the signed-out payment page, which offers Continue as guest. That selection starts the guest session, and the same page pays from the guest account.
+
+If the visitor signs in instead, the page pays from the account of the user. A call with `challenge`, or an instance with the `siwe` plugin, offers no guest.
+
+:::code-group
+
+```tsx [Checkout.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Checkout() {
+  return (
+    <button
+      onClick={async () => {
+        // With no session, the payment page signs the visitor in, or starts a guest session.
+        const { transaction } = await accounts.pay({
+          amount: '5',
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: 'ousd',
+        })
+        console.log(transaction)
+      }}
+      type="button"
+    >
+      Pay 5 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  guest: true,
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Offer a guest in each sign-in flow
+
+With `guest: true`, each sign-in plugin offers Continue as guest, and resolves with a guest session after that selection.
+
+| Sign-in                                                                                                    | Returns the selection                                                                  |
+| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink>, in a frame or a popup | The frame's or the popup's message                                                     |
+| <SourceLink name="signIn" path="src/plugins/redirect.ts">`redirect.signIn`</SourceLink>                    | The redirect URI with `guest=1`, which the next load of the page completes             |
+| <SourceLink name="signIn" path="src/plugins/device.ts">`device.signIn`</SourceLink>                        | The refusal `guest_selected` of the next poll, which the plugin turns into the session |
+
+Outside a browser, <SourceLink name="create" path="src/stores/File.ts">`Store.file`</SourceLink> keeps the key pair in a file that only the user reads. The `expo` preset keeps it in the secure store of the device.
+
+A store that other parties read, such as <SourceLink name="create" path="src/stores/Postgres.ts">`Store.postgres`</SourceLink>, refuses the key pair. So does <SourceLink name="create" path="src/stores/Memory.ts">`Store.memory`</SourceLink> in a page, since a reload loses the funds.
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { device } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'cli:acme-example',
+  guest: true, // [!code hl]
+  plugins: [
+    device({
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+  ],
+  // The key pair of the guest account stays in this file.
+  store: Store.file('~/.acme/accounts.json'),
+})
+```
+
+### Sign a guest in to the app
+
+With the <SourceLink name="siwe" path="src/plugins/siwe.ts">`siwe`</SourceLink> plugin on the page, <SourceLink name="signIn" path="src/plugins/dialog.ts">`dialog.signIn`</SourceLink> offers Continue as guest too. After that selection, the guest key pair signs the plugin's message, and the call posts the signature to the verify route before it sets the guest session.
+
+The call returns the verify route's JSON object as `auth`, as for a Tempo ID sign-in. The guest account is a root Tempo Account, so the route verifies its P256 signature as the account's own. [Sign in with the plugin on the page](/docs/guides/siwe#sign-in-with-the-plugin-on-the-page) describes the routes.
+
+:::code-group
+
+```tsx [SignIn.tsx]
+import { accounts } from './tempo.config.js'
+
+export function SignIn() {
+  return (
+    <button
+      onClick={async () => {
+        // A guest or a Tempo ID user, signed in to the app's routes either way.
+        const { auth } = await accounts.dialog.signIn()
+        console.log(auth)
+      }}
+      type="button"
+    >
+      Sign in
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { siwe, viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  guest: true,
+  plugins: [react(), siwe({ auth: '/api/auth' }), viem()], // [!code hl]
+})
+```
+
+:::
+
+### Pay from a CLI
+
+Outside a page, <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> pays from the guest account through the routes of Tempo ID, with no page. <SourceLink name="pay" path="src/actions/guest.ts">`Actions.guest.pay`</SourceLink> describes each request and check.
+
+| Guest account           | What `pay` does                                                                                                                                |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Holds the payment       | Pays at once                                                                                                                                   |
+| Short, on a test chain  | Requests the chain's faucet, then pays                                                                                                         |
+| Short, on another chain | Passes a funding code to the `device` plugin's `onCode`, waits for the funds until the code expires, then pays                                 |
+| Short, without `device` | Rejects with <SourceLink name="RequestError" path="src/Accounts.ts">`Accounts.RequestError`</SourceLink> and the reason `insufficient_balance` |
+
+If Tempo ID and the chain confirm no outcome, the call rejects with <SourceLink name="PendingError" path="src/actions/guest.ts">`Actions.guest.PendingError`</SourceLink>, which names the checkout. The store keeps no record of the checkout, so the app confirms its outcome before it pays again.
+
+:::code-group
+
+```ts [index.ts]
+import { accounts } from './tempo.config.js'
+
+const session = (await accounts.session.get()) ?? (await accounts.device.signIn())
+if (session.kind === 'guest') console.log(`Paying as guest ${session.address}.`)
+
+// [!code hl:start]
+const { transaction } = await accounts.pay({
+  amount: '5',
+  to: '0x000000000000000000000000000000000000dEaD',
+  token: 'ousd',
+})
+// [!code hl:end]
+console.log(`Paid in ${transaction}.`)
+```
+
+```ts [tempo.config.ts]
+import { Accounts, Store } from 'accounts'
+import { device } from 'accounts/plugins'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  clientId: 'cli:acme-example',
+  guest: true,
+  plugins: [
+    device({
+      // Shows the sign-in code, and the funding code of a short guest account.
+      onCode: (code) =>
+        console.log(
+          `Open ${code.verificationUriComplete} and confirm the code ${code.userCode}.`,
+        ),
+    }),
+  ],
+  store: Store.file('~/.acme/accounts.json'),
+})
+```
+
+:::
+
+### Send a transaction with Viem
+
+The <SourceLink name="viem" path="src/plugins/viem.ts">`viem`</SourceLink> plugin's client signs each transaction of a guest session with the key pair, as the root account. Its <SourceLink name="viem.relay" path="src/plugins/viem.ts">`relay`</SourceLink> pays fees as for any session. [Viem](/docs/guides/viem) covers the client.
+
+:::code-group
+
+```tsx [Send.tsx]
+import { parseUnits } from 'viem'
+import { Addresses } from 'viem/tempo'
+import { accounts } from './tempo.config.js'
+
+export function Send() {
+  return (
+    <button
+      onClick={async () => {
+        // [!code hl:start]
+        const { receipt } = await accounts.viem.token.transferSync({
+          amount: parseUnits('1', 6),
+          to: '0x000000000000000000000000000000000000dEaD',
+          token: Addresses.ousd,
+        })
+        // [!code hl:end]
+        console.log(receipt.transactionHash)
+      }}
+      type="button"
+    >
+      Send 1 OUSD
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  guest: true,
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+### Pay MPP charges
+
+With a guest session, the <SourceLink name="mpp" path="src/mpp/index.ts">`mpp`</SourceLink> plugin pays each charge and voucher with the key pair. No access key limits the guest account, so a charge needs <SourceLink name="mpp.maxAmount" path="src/mpp/index.ts">`maxAmount`</SourceLink>, and a payment session <SourceLink name="mpp.maxDeposit" path="src/mpp/index.ts">`maxDeposit`</SourceLink>.
+
+| Without the cap          | Error                                                                                                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A charge above 0         | <SourceLink name="MaxAmountRequiredError" path="src/mpp/index.ts">`mpp.MaxAmountRequiredError`</SourceLink>, before the key pair signs                                        |
+| A payment session        | <SourceLink name="MaxDepositRequiredError" path="src/mpp/index.ts">`mpp.MaxDepositRequiredError`</SourceLink>, before any request                                             |
+| A malformed `maxDeposit` | <SourceLink name="MaxDepositInvalidError" path="src/mpp/index.ts">`mpp.MaxDepositInvalidError`</SourceLink>, for a value other than a decimal above 0 with at most 6 decimals |
+
+:::code-group
+
+```tsx [Fortune.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Fortune() {
+  return (
+    <button
+      onClick={async () => {
+        const response = await accounts
+          .mpp({ maxAmount: '0.05' }) // [!code hl]
+          .fetch('https://api.example.com/fortune')
+        console.log(await response.json())
+      }}
+      type="button"
+    >
+      Fetch a fortune
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { mpp } from 'accounts/mpp'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  guest: true,
+  // Each payment session holds at most 1 OUSD.
+  plugins: [mpp({ maxDeposit: '1' }), react()],
+})
+```
+
+:::
+
+### Forget the guest account
+
+<SourceLink name="signOut" path="src/Accounts.ts">`accounts.signOut`</SourceLink> ends the guest session and keeps the key pair, so the next guest session holds the same guest account. <SourceLink name="Accounts.guest.get" path="src/Accounts.ts">`accounts.guest.get`</SourceLink> returns its address.
+
+<SourceLink name="Accounts.guest.disconnect" path="src/Accounts.ts">`accounts.guest.disconnect`</SourceLink> removes the key pair from the store, and signs out a guest session. The funds stay on the address, and no key signs for it again.
+
+:::code-group
+
+```tsx [Forget.tsx]
+import { accounts } from './tempo.config.js'
+
+export function Forget() {
+  return (
+    <button
+      onClick={async () => {
+        const address = await accounts.guest.get()
+        if (!address) return
+        // The funds of `address` stay there, with no signer.
+        await accounts.guest.disconnect() // [!code hl]
+      }}
+      type="button"
+    >
+      Forget the guest account
+    </button>
+  )
+}
+```
+
+```ts [tempo.config.ts]
+import { Accounts } from 'accounts'
+import { viem } from 'accounts/plugins'
+import { react } from 'accounts/react'
+
+export const accounts = Accounts.create({
+  chain: 'testnet',
+  guest: true,
+  plugins: [react(), viem()],
+})
+```
+
+:::
+
+## Limitations
+
+- A guest pays only in the token of the payment. A payment that needs a swap shows a shortfall.
+- The deposit pages offer a guest no Buy MACH and no swap. The EVM bridge pays only an OUSD payment on Tempo mainnet.
+- A guest session holds no access key. It takes no `accessKey` or `challenge` sign-in, and pays no MPP subscription.
+- The guest key pair signs the `siwe` plugin's message only in `dialog.signIn`. A payment with the plugin and without a session offers no guest.
+- A sign-in through the <SourceLink name="backend" path="src/plugins/backend.ts">`backend`</SourceLink> plugin never offers a guest.
+- A guest account has no passkey and no Tempo ID user. No sign-in turns it into a configurable account.
+- Outside a page, a short guest account on a chain without a faucet needs the `device` plugin's `onCode` to show its funding code.
+
+## Next steps
+
+<Cards>
+  <PageCard
+    description="Send a payment with the access key, or on Tempo ID's payment page."
+    icon="arrow-up-right"
+    title="Send payments"
+    to="/docs/guides/payments/self-managed"
+  />
+  <PageCard
+    description="Pay the 402 charge of an MPP endpoint."
+    icon="payment-flow"
+    title="Pay MPP charges"
+    to="/docs/guides/payments/mpp"
+  />
+  <PageCard
+    description="Send transactions with the Viem client of the instance."
+    icon="viem"
+    title="Viem"
+    to="/docs/guides/viem"
+  />
+  <PageCard
+    description="Sign a user in through Tempo ID's dialog on the page of the app."
+    icon="browser-window"
+    title="Web"
+    to="/docs/guides/dialog"
+  />
+</Cards>

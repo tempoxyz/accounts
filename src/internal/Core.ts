@@ -59,6 +59,13 @@ export declare namespace authorize {
      * A sign-in on the app's page needs the `tempo-id:sign` scope.
      */
     challenge?: string | undefined
+    /**
+     * Whether the call reads `GET /v1/auth/session` before the authorization, so a visitor without
+     * a Tempo ID session sends no refused request. With `false`, the authorization is the only
+     * request. Use `false` where the user most likely holds the session, such as after an earlier
+     * sign-in in the browser. Defaults to `true` without a held or saved session, else `false`.
+     */
+    check?: boolean | undefined
     /** Runs the ceremony of a passkey that owns the account, in place of `navigator.credentials.get`. */
     getFn?: Actions.authorize.Options['getFn']
     /**
@@ -108,8 +115,8 @@ async function run(
     // Only a call that requests nothing beyond the held session returns it. A challenge, an access
     // key, a passkey, or another account needs a new authorization, which only a sign-in on a page
     // sends, so the call never returns the held session as its result. A local session is no
-    // Tempo ID sign-in, so it never answers the call either.
-    if (held && !Session.local(held) && holds(held, parameters))
+    // Tempo ID sign-in, so it never answers the call either, nor does a guest session.
+    if (held && Session.tempoId(held) && holds(held, parameters))
       return { ...held, upgradeAvailable: false }
     if (!held) {
       // Without a session, the status settles as for an authorization that finds no Tempo ID
@@ -186,7 +193,8 @@ async function run(
             // A held or saved session shows that the user most likely holds the Tempo ID session. So
             // the call sends the authorization alone. Its `session_required` refusal returns no
             // session.
-            check: renewed === undefined && held === undefined,
+            check:
+              parameters.check ?? (renewed === undefined && held === undefined),
             getFn: parameters.getFn ?? config.getFn,
             passkey: parameters.passkey,
           })
@@ -229,6 +237,8 @@ async function run(
         ? result.account
         : undefined
     if (config.account === false) return undefined
+    // The response lists the accounts on the instance's chain, so no `GET /v1/account` follows.
+    if ('account' in result) return result.account
     return await SignIn.account(config, {
       getFn: (parameters.getFn ?? config.getFn) as never,
       userId: result.user.id,
@@ -827,7 +837,7 @@ export async function upgradeAccount(
       const latest = await context.session.reload()
       // An account belongs to one chain, so a switch during the upgrade keeps the session's account.
       if (context.chain.get() !== chainId) return
-      if (!Session.same(latest, current)) return
+      if (!Session.same(latest, current) || Session.guest(latest)) return
       const change = context.session.change({ update: true })
       await change.commit({ ...latest, account: upgraded })
     })

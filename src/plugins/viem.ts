@@ -16,6 +16,7 @@ import {
   parseUnits,
   type Transport,
 } from 'viem'
+import { getTransaction } from 'viem/actions'
 import {
   type Account,
   Actions,
@@ -49,6 +50,7 @@ import {
 } from '../Accounts.js'
 import * as AccessKey_internal from '../internal/AccessKey.js'
 import * as AccountActions from '../actions/account.js'
+import * as Guest from '../actions/guest.js'
 import * as Actions_accounts from '../internal/Actions.js'
 import * as Api from '../internal/Api.js'
 import * as BackendOperations from '../internal/BackendOperations.js'
@@ -87,6 +89,22 @@ export class AccessKeyExpiredError extends Error {
 }
 
 /**
+ * No passkey of the user owns the configurable account of a coordinated transaction, so the
+ * transaction did not send. A call that names no `owner`, such as an approval by `hash` alone,
+ * throws it when the user's Tempo Account holds no passkey owner, or none that the configuration
+ * names. Match it by `name`.
+ */
+export class OwnerRequiredError extends Error {
+  override readonly name = 'Plugins.viem.OwnerRequiredError'
+
+  constructor() {
+    super(
+      "No passkey of the user owns the account. Pass the owner that approves the transaction as `owner`, or sign in as one of the account's owners.",
+    )
+  }
+}
+
+/**
  * The sign-in for a new access key returned another user or Tempo Account, so the transaction did
  * not send. A transaction whose retry signed in for a new access key throws it. The instance keeps
  * its session. Its `cause` is the transaction's error. Match it by `name`.
@@ -108,20 +126,36 @@ export class RetryAccountError extends Error {
 /**
  * The user closed the screen that a failed transaction showed, so the transaction did not send. A
  * transaction whose retry the user ended throws it: a close of the deposit page before a deposit,
- * **Continue to** the app without one, or a close of the sign-in for a new access key. Its `cause`
- * is the transaction's error. The same transaction, sent again, retries. Match it by `name`.
+ * **Continue to** the app without one, a close of the sign-in for a new access key, or, outside a
+ * page, a denial of the retry's device code. Its `cause` is the transaction's error. The same
+ * transaction, sent again, retries. Match it by `name`.
  */
 export class RetryClosedError extends Error {
   override readonly name = 'Plugins.viem.RetryClosedError'
   /** The failure that the screen resolves: `accessKey`, `balance`, or `limit`. */
   readonly kind: Retry.Kind
 
-  constructor(options: { cause: unknown; kind: Retry.Kind }) {
+  constructor(options: RetryClosedError.Options) {
+    const messages = options.denied ? deniedMessages : closedMessages
     super(
-      `${closedMessages[options.kind]} The transaction did not send. Send it again to retry.`,
+      `${messages[options.kind]} The transaction did not send. Send it again to retry.`,
       { cause: options.cause },
     )
     this.kind = options.kind
+  }
+}
+
+export declare namespace RetryClosedError {
+  type Options = {
+    /** The transaction's error. */
+    cause: unknown
+    /**
+     * Whether the user denied the device code of the retry outside a page, in place of a close of
+     * its screen. Defaults to `false`.
+     */
+    denied?: boolean | undefined
+    /** The failure that the screen resolves. */
+    kind: Retry.Kind
   }
 }
 
@@ -235,7 +269,8 @@ export class RetryClosedError extends Error {
  * as on a backend, the access key of that session sends it. Without `relay`, the
  * limit of the fee token must also hold 0.1 for the fee: `feeToken` or the chain's, else the payment's token if
  * it is a `USD` stablecoin other than MACH. A sponsoring `transport` counts as
- * no relay. Outside a page, the access key sends any amount within the whole limit.
+ * no relay. Outside a page, the access key sends any amount within the whole limit. With the `device`
+ * plugin, it also sends an amount above the limit, and the retry of the spent limit raises it.
  *
  * @example
  * ```ts
@@ -1306,6 +1341,88 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       }
 
       /**
+       * Returns the user's passkey that approves a coordinated transaction of a configurable account
+       * on `chainId`: the passkey owner of the session's Tempo Account that the account's
+       * configuration names. The configuration is the account's, else the stored
+       * operation's of `hash`, else the chain's. The session's account serves when it belongs to the
+       * chain, else a read of Tempo ID returns it.
+       *
+       * @throws {OwnerRequiredError} When no passkey of the user owns the account.
+       */
+      async function owner(
+        client: Client,
+        options: {
+          account: Account.ConfigurableAccount | undefined
+          chainId: number
+          hash: `0x${string}` | undefined
+        },
+      ) {
+        const { account, chainId, hash } = options
+        const session = context.session.get()
+        if (!session) throw new SignedOutError()
+        const owners = await (async () => {
+          // The session's account belongs to the chain of its access key, or without one to the
+          // instance's chain, as for the owner's signatures.
+          const held = session.accessKey
+            ? Number(session.accessKey.chainId) === chainId
+            : chainId === config.chainId
+          if (held && session.account) return session.account.owners
+          const token = await accessToken(session)
+          const read = await AccountActions.get(config, {
+            ...(token ? { accessToken: token } : {}),
+            chain: chainId,
+            getFn: config.getFn,
+          })
+          return read?.owners ?? []
+        })()
+        if (owners.length === 0) throw new OwnerRequiredError()
+
+        // Even one passkey reads the configuration, so a non-owner throws before any ceremony.
+        const configuration = await (async () => {
+          if (account?.config) return account.config
+          if (hash) {
+            // A pending operation reads as a transaction that holds it, on a Tempo chain.
+            const transaction = (await getTransaction(client, { hash })) as {
+              operation?: { config: Account.ConfigurableAccount['config'] }
+            }
+            return transaction.operation?.config
+          }
+          if (account)
+            return await Actions.accounts.getConfig(client, {
+              address: account.address,
+            })
+          return undefined
+        })()
+        const found = owners.find((entry) =>
+          configuration?.owners.some((item) =>
+            Address.isEqual(item.owner, entry.address),
+          ),
+        )
+        if (!found) throw new OwnerRequiredError()
+        return found
+      }
+
+      /**
+       * Returns whether a transaction of the instance's session coordinates owner approvals without
+       * an owner, so the user's passkey approves: an approval by `hash` alone, or a transaction or an
+       * approval of a configurable account that holds no local owner.
+       */
+      function coordinated(parameters: Coordinated) {
+        const { account, hash, owner } = parameters
+        if (owner) return false
+        const configurable =
+          !!account &&
+          typeof account === 'object' &&
+          account.source === 'configurable'
+        if (hash && account === undefined) return true
+        // A configurable account with a local owner approves as Viem does, by `hash` or not.
+        return (
+          configurable &&
+          (account as Account.ConfigurableAccount).owners.length === 0
+        )
+      }
+
+      /**
        * Returns the access token of the instance's session for `accessKey` when the session holds
        * it, on any chain, since Tempo ID revokes an app's own access key with that token for any app.
        * Returns `undefined` for another access key, or without a session.
@@ -1342,7 +1459,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
       ) {
         const result = await fn(ownAccessToken(accessKey))
         const session = context.session.get()
-        if (!session) return result
+        // A guest session holds no access key.
+        if (!session || Session.guest(session)) return result
         const address = (
           typeof accessKey === 'string' ? accessKey : accessKey.accessKeyAddress
         ).toLowerCase()
@@ -1375,7 +1493,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * within 30 seconds.
        */
       async function refreshed(session: Session.Any) {
-        if (Session.local(session)) return undefined
+        if (!Session.tempoId(session)) return undefined
         if (session.expiresAt - 30_000 > Date.now()) return session.accessToken
         return (await Core.refresh(context, { margin: 30_000 }))?.accessToken
       }
@@ -1389,6 +1507,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         if (!byChain) accounts.set(chainId, (byChain = new WeakMap()))
         const session = context.session.get()
         if (!session) return undefined
+        // A guest session's key pair signs as the root account, on every chain, with no access key.
+        if (!byChain.has(session) && Session.guest(session))
+          byChain.set(session, Guest.account(config, { session }))
         if (!byChain.has(session))
           byChain.set(
             session,
@@ -1552,7 +1673,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * which each call of the screen waits for. With `options.raise`, the limit of its token adds
        * its amount, and the sign-in
        * always shows, also for an expired access key. The new access key keeps the old one's
-       * expiry while it is in the future. Otherwise it takes the instance's `accessKey` expiry.
+       * expiry while it is more than {@link approvalTime} ahead. Otherwise it takes the instance's
+       * `accessKey` expiry.
        * Without one, it takes the old one's lifetime from now, as a renewal does, or else the
        * expiry that Tempo ID fills. A sign-in that returns another user or account sets no
        * session, and rejects.
@@ -1605,8 +1727,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         // permissions the new access key takes, such as after `switchChain`. A session that never
         // held an access key requests none.
         // Tempo ID holds no account of a local session, so neither its authorization nor its dialog
-        // renews the access key: the app signs a new one with `local.signIn`.
-        if (before && Session.local(before)) throw error
+        // renews the access key: the app signs a new one with `local.signIn`. A guest session holds
+        // no access key to renew.
+        if (before && !Session.tempoId(before)) throw error
         const onChain = accessKeyOn(before, { chainId })
         const previous = onChain ?? before?.accessKey ?? before?.accessKeys?.[0]
         if (!before || !previous) throw error
@@ -1644,12 +1767,14 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           !!authorization.expiry &&
           authorization.expiry >= Request_internal.millisecondExpiry
         // `kept`: the earliest granted expiry, in Unix seconds, at which the new access key keeps the
-        // old one's lifetime. An earlier expiry means that Tempo ID shortened the request.
+        // old one's lifetime. An earlier expiry means that Tempo ID shortened the request. Tempo ID
+        // refuses an approval after the requested expiry, so an old expiry that can pass while the
+        // screen waits counts as expired.
         const { expiry, kept } = (() => {
           if (
             authorization.expiry &&
             !milliseconds &&
-            authorization.expiry * 1000 > Date.now()
+            authorization.expiry > Math.floor(Date.now() / 1000) + approvalTime
           )
             return { expiry: authorization.expiry, kept: authorization.expiry }
           if (resolved) return { expiry: resolved.expiry, kept: undefined }
@@ -1657,8 +1782,9 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           // An instance without `accessKey` renews an expired access key that the sign-in named for
           // the same lifetime, as `authorize` does, so the new access key lives no longer than the first.
           // A duration counts from the request, which a popup's Continue prompt can delay, so the
-          // request starts no earlier than now.
-          if (previous.lifetime && previous.lifetime > 0)
+          // request starts no earlier than now. A lifetime within `approvalTime` can end while the
+          // screen waits, so Tempo ID fills the expiry in its place.
+          if (previous.lifetime && previous.lifetime > approvalTime)
             return {
               expiry: `${previous.lifetime}s` as Permissions.Duration,
               kept: Math.floor(Date.now() / 1000) + previous.lifetime,
@@ -1803,6 +1929,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                   return change.fail(
                     new RetryClosedError({
                       cause: error,
+                      denied: true,
                       kind: failure.kind,
                     }),
                   )
@@ -1905,6 +2032,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         await change.commit(
           moved.accessKey ||
             moved === next ||
+            Session.guest(moved) ||
             !Session.same(latest, moved) ||
             !latest.account ||
             latest.accessKey
@@ -2419,7 +2547,74 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
         const remote = (parameters: Token.transfer.Parameters) =>
           !parameters.account &&
           Token.ownerSends(context.session.get(), { chainId })
+        /**
+         * Returns `parameters` with the user's passkey as the approving owner. The stored operation
+         * names its account, so an approval by `hash` alone signs with the passkey as `account`.
+         */
+        const approve = async (parameters: Coordinated) => {
+          const { account, hash } = parameters
+          const signer = await owner(client, {
+            account:
+              account && typeof account === 'object'
+                ? (account as Account.ConfigurableAccount)
+                : undefined,
+            chainId,
+            hash,
+          })
+          return account === undefined
+            ? { ...parameters, account: signer }
+            : { ...parameters, owner: signer }
+        }
         const extended = client.extend((client) => ({
+          // A fixed session signs on a backend, where no passkey of the user signs.
+          ...(session
+            ? {}
+            : {
+                /**
+                 * Viem's `sendTransaction` and `sendTransactionSync`, where the user's passkey
+                 * approves a coordinated transaction of a configurable account (TIP-1107) that
+                 * names no `owner`: an approval by `hash` alone, or a transaction of an account
+                 * that holds no local owner, such as `Account.fromConfig(address)`. The passkey
+                 * owner of the session's Tempo Account that the account's configuration names
+                 * signs. Coordination needs the plugin's `relay`. Every other call
+                 * is Viem's own, unchanged.
+                 *
+                 * @throws {OwnerRequiredError} When no passkey of the user owns the account.
+                 *
+                 * @example
+                 * ```ts
+                 * import { Account } from 'viem/tempo'
+                 * import { accounts } from './tempo.config'
+                 *
+                 * const account = Account.fromConfig(multisig)
+                 * const pending = await accounts.viem.sendTransactionSync({ account, calls })
+                 * await accounts.viem.sendTransactionSync({ hash: pending.transactionHash })
+                 * ```
+                 */
+                sendTransaction: ((parameters: Coordinated) =>
+                  coordinated(parameters)
+                    ? approve(parameters).then((approval) =>
+                        client.sendTransaction(approval as never),
+                      )
+                    : client.sendTransaction(
+                        parameters as never,
+                      )) as typeof client.sendTransaction,
+                /**
+                 * Viem's `sendTransactionSync`, where the user's passkey approves a coordinated
+                 * transaction of a configurable account that names no `owner`, as
+                 * `sendTransaction` does. The receipt's status is `pending` until the owners reach the threshold.
+                 *
+                 * @throws {OwnerRequiredError} When no passkey of the user owns the account.
+                 */
+                sendTransactionSync: ((parameters: Coordinated) =>
+                  coordinated(parameters)
+                    ? approve(parameters).then((approval) =>
+                        client.sendTransactionSync(approval as never),
+                      )
+                    : client.sendTransactionSync(
+                        parameters as never,
+                      )) as typeof client.sendTransactionSync,
+              }),
           ...(page && !session
             ? {
                 token: {
@@ -2599,9 +2794,12 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
 
       // The clients that send a payment of `pay` with the session's access key, one for each chain.
       // On a page, a low balance shows the deposit page, and the access key sends again. The payment
-      // page takes each other refusal, so no other screen of a retry shows.
+      // page takes each other refusal, so no other screen of a retry shows. Outside a page, no
+      // payment page exists, so with the `device` plugin a spent limit retries through its grant.
       const payers = new Map<number, viem.Client>()
-      const payerRetry = page ? { accessKey: false, limit: false } : false
+      const payerRetry = page
+        ? { accessKey: false, limit: false }
+        : { balance: false }
 
       /**
        * Sends `transfer`, the transfer of `payment` that `Token.payable` returned, with the access
@@ -2611,7 +2809,8 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * the deposit arrives. A close of the deposit page rejects with {@link RetryClosedError}. On
        * a page, a refusal of the node that the payment page resolves returns `undefined`: a low
        * balance after the retry, a spent limit, an access key that the chain does not hold, or a
-       * call outside the access key's scopes. Outside a page, such a refusal rejects with
+       * call outside the access key's scopes. Outside a page, with the `device` plugin, a spent limit
+       * retries through a device grant first. Outside a page, such a refusal rejects with
        * `Actions.account.PageRequiredError`, whose cause is the refusal, except a low balance, which
        * rejects as it is, and a revoked access key, which rejects with
        * `Accounts.AccessKeyRequiredError`, whose cause is the refusal. A transfer that the chain reverts since its fee spent the rest of the
@@ -2712,11 +2911,18 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
           if (typeof value === 'string' && Address.validate(value)) return value
           return undefined
         })()
+        // Outside a page, a client whose retry takes a spent limit, as with the `device` plugin,
+        // raises the limit for an amount above it. A fixed session never retries.
+        const retries = page
+          ? false
+          : kinds(resolve(payment.chainId).retry ?? true, payerRetry)
         const transfer = Token.payable(
           payment.session ?? context.session.get(),
           {
             ...payment,
             feeToken,
+            raises:
+              !payment.session && retries !== false && retries.limit !== false,
             // Outside a page, no payment page takes the payment, so the access key sends any amount
             // within the whole limit, as before the allowance, and the chain decides.
             relayed: !page || !!routing(payment.chainId).relay,
@@ -2874,11 +3080,14 @@ export declare namespace viem {
      * resource. The sign-in requests the resources and the API scopes of the session's access token
      * again.
      *
-     * The new access key keeps the old one's expiry while it is in the future. An expired access
-     * key's replacement takes the expiry of the instance's `accessKey`. Without it, the replacement
+     * The new access key keeps the old one's expiry while it is more than 10 minutes ahead, the
+     * longest wait of a device code. Tempo ID refuses an approval after the requested expiry. An
+     * access key that expires sooner counts as expired. An expired access key's replacement takes
+     * the expiry of the instance's `accessKey`. Without it, the replacement
      * takes the expired access key's lifetime, counted from the retry's request, as
      * `accounts.authorize` renews it, so it lives no longer than the first. An access key without a
-     * lifetime, such as one that never expires, takes the expiry that Tempo ID fills. A sign-in
+     * lifetime, such as one that never expires, or with a lifetime of 10 minutes or less, takes the
+     * expiry that Tempo ID fills. A sign-in
      * that returns another user or Tempo Account sets no session, and the call rejects with
      * {@link RetryAccountError}.
      */
@@ -3323,6 +3532,17 @@ const closedMessages = {
   limit: 'The user closed the sign-in for a new access key with a new limit.',
 } as const satisfies Record<Retry.Kind, string>
 
+/**
+ * What the user denied outside a page, for each kind of failure, in the message of
+ * {@link RetryClosedError}.
+ */
+const deniedMessages = {
+  accessKey: 'The user denied the device code for a new access key.',
+  balance: 'The user denied the device code for a deposit.',
+  limit:
+    'The user denied the device code for a new access key with a new limit.',
+} as const satisfies Record<Retry.Kind, string>
+
 /** Tempo's chains, which a chain ID without a `chain` in its options uses. */
 const defaultChains = [tempo, tempoTestnet, tempoDevnet, tempoLocalnet] as const
 
@@ -3358,6 +3578,13 @@ type Screen = {
  * milliseconds.
  */
 const depositLimit = 600_000
+
+/**
+ * How long a retry's screen can wait for the user's approval, in seconds: the longest lifetime of a
+ * device code. Tempo ID refuses an approval after the requested expiry, so a new access key keeps
+ * the old one's expiry only if that expiry is later.
+ */
+const approvalTime = 600
 
 /** How often a retry outside a page reads the balance while it waits for a deposit, in milliseconds. */
 const depositInterval = 2_000
@@ -3702,6 +3929,21 @@ declare namespace lapsed {
     /** The chain of the client that signs. */
     chainId: number
   }
+}
+
+/** The fields of a transaction's parameters that decide who approves it as an owner. */
+type Coordinated = {
+  /** The sender, or absent for the client's account. */
+  account?:
+    | Account.Account
+    | Account.ConfigurableAccount
+    | `0x${string}`
+    | null
+    | undefined
+  /** The hash of a stored operation that the transaction approves. */
+  hash?: `0x${string}` | undefined
+  /** The owner that approves, which the call names itself. */
+  owner?: unknown
 }
 
 /** The members of a client that are its settings, not its actions, which the instance leaves out. */

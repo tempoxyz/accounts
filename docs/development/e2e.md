@@ -65,7 +65,7 @@ Each service has two variables. The image variable names another image for the c
 | `TEMPO_NODE_IMAGE`           | `ghcr.io/tempoxyz/tempo:latest`                                     | The image of each node that the suite starts          |
 | `TEMPO_RPC_URL`              | `http://127.0.0.1:9545/1`                                           | The RPC URL of a running node of chain 1337           |
 | `TEMPO_SECOND_RPC_URL`       | `http://127.0.0.1:9645/1`                                           | The RPC URL of a running node of chain 31318          |
-| `TEMPO_ID_IMAGE`             | `ghcr.io/tempoxyz/id-dev:d130cf0d808bce2e3047044231923597b9510bbd`  | The image of the Tempo ID that the suite starts       |
+| `TEMPO_ID_IMAGE`             | `ghcr.io/tempoxyz/id-dev:f39289357b2da16021088b137d5f271098c3d318`  | The image of the Tempo ID that the suite starts       |
 | `TEMPO_ID_URL`               | `http://localhost:8787`                                             | The URL of a running `id-dev` instance                |
 | `TEMPO_API_IMAGE`            | `ghcr.io/tempoxyz/api-dev:0dea25edcab7f3a4b55443064bc9d81bc6807383` | The image of the Tempo API that the suite starts      |
 | `TEMPO_API_URL`              | `http://127.0.0.1:9546`                                             | The URL of a running Tempo API                        |
@@ -297,7 +297,7 @@ The page's query sets the options that a spec varies. Tempo ID matches a redirec
 | `dpop=1`           | A DPoP key binds the tokens. The page keeps the key in IndexedDB                |
 | `expiry`           | The expiry of each access key, such as `15s`. Defaults to `1d`                  |
 | `funding`          | The amount that a sign-in needs in the Tempo Account, as JSON                   |
-| `instanceResource` | The registered resource of the instance, so a sign-in opens a popup             |
+| `instanceResource` | The registered resource that the instance names for each request                |
 | `message`          | The message that each "Sign a message" control signs                            |
 | `par=1`            | On `/`, the plugin pushes each request, so the sign-in opens a popup            |
 | `plugin=1`         | On `/wagmi/`, the config is `accounts.wagmi` of the page's own instance         |
@@ -305,6 +305,7 @@ The page's query sets the options that a spec varies. Tempo ID matches a redirec
 | `reauthorize=0`    | `useSession` authorizes no Tempo ID session of the browser at a mount           |
 | `resource`         | The registered resource that the tokens of "Sign in" are for                    |
 | `retry=0`          | The Viem client shows no screen for a refused transaction, and rejects the call |
+| `scope`            | The scopes beyond the instance's that the tokens of "Sign in" hold              |
 | `second=1`         | On `/wagmi/`, the connector's config also holds the second node's chain         |
 | `typedData`        | The typed data that "Sign typed data as the owner" signs, as `Json.stringify`   |
 

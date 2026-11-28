@@ -196,6 +196,47 @@ describe('Store.file', () => {
     },
   )
 
+  test('behavior: `update` writes each result on the value that its `fn` read, so concurrent updates of a key both land, and an insert of an absent value keeps the first one', async () => {
+    const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
+    onTestFinished(() => Fs.rm(directory, { force: true, recursive: true }))
+    const store = File.create(Path.join(directory, 'store.json'))
+    const other = File.create(Path.join(directory, 'store.json'))
+    const add = (value: unknown) => {
+      const next = ((value as number | undefined) ?? 0) + 1
+      return { result: next, value: next }
+    }
+    const insert = (value: string) => (current: unknown) =>
+      current === undefined
+        ? { result: value, value }
+        : { result: current, value: current }
+
+    const counted = await Promise.all([
+      store.update?.('count', add),
+      other.update?.('count', add),
+    ])
+    const inserted = await Promise.all([
+      store.update?.('key', insert('first')),
+      other.update?.('key', insert('second')),
+    ])
+
+    expect([
+      [...counted].sort((a, b) => Number(a) - Number(b)),
+      await store.getItem('count'),
+      inserted[0] === inserted[1],
+      await store.getItem('key'),
+    ]).toMatchInlineSnapshot(`
+      [
+        [
+          1,
+          2,
+        ],
+        2,
+        true,
+        "first",
+      ]
+    `)
+  })
+
   test('behavior: a removal of an absent entry writes no file, creates no folder, and leaves the file as it was', async () => {
     const directory = await Fs.mkdtemp(Path.join(Os.tmpdir(), 'accounts-'))
     const missing = Path.join(directory, 'missing', 'session.json')

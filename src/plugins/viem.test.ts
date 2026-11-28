@@ -2,12 +2,13 @@
  * Runs the `viem` plugin without a server: the account of the default client before and after the
  * instance reads its saved session, an action held across `switchChain`, the access token that
  * the relay route receives, the access token of the owner's account read during a refresh, the
- * machine of a retry's screen, and the machine of the hold of a registration.
+ * passkey owner of a coordinated transaction, the machine of a retry's screen, and the machine of the hold of a registration.
  * @module
  */
-import { Address, Secp256k1 } from 'ox'
+import { Address, P256, Secp256k1 } from 'ox'
 import { KeyAuthorization, TxEnvelopeTempo } from 'ox/tempo'
 import { type BaseError, custom, http } from 'viem'
+import * as TempoViem from 'viem/tempo'
 import { type Account, Actions } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vite-plus/test'
@@ -21,6 +22,9 @@ import {
 import { getShortestPaths } from 'xstate/graph'
 import * as Accounts from '../Accounts.js'
 import * as AccessKey from '../internal/AccessKey.js'
+import * as SignIn from '../internal/SignIn.js'
+import * as TempoAccount from '../internal/TempoAccount.js'
+import * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
 import * as Store from '../Store.js'
 import { backend } from './backend.js'
@@ -1356,6 +1360,54 @@ describe('viem', () => {
       `)
   })
 
+  test("signs a transaction of a guest session outside a page as the guest account, with the key pair's P256 envelope", async () => {
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'cli:guest-example',
+      guest: true,
+      plugins: [
+        viem(),
+        // Starts the guest session, as a sign-in that selects "Continue as guest" does.
+        Plugin.from({
+          actions: (context) => ({
+            guest: () =>
+              SignIn.guest(context, { change: context.session.change() }),
+          }),
+          id: 'pick',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const session = await accounts.pick.guest()
+
+    // A transaction whose fields are all given fills nothing, so the signature sends no request.
+    const signed = await accounts.viem.account.signTransaction({
+      calls: [
+        { data: '0x01', to: '0x0000000000000000000000000000000000000001' },
+      ],
+      chainId: 4217,
+      gas: 100_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 1n,
+      nonce: 0,
+      type: 'tempo',
+    } as never)
+    const envelope = TxEnvelopeTempo.deserialize(
+      signed as TxEnvelopeTempo.Serialized,
+    )
+
+    expect([
+      accounts.viem.account.address === session.address,
+      envelope.signature?.type,
+    ]).toMatchInlineSnapshot(`
+      [
+        true,
+        "p256",
+      ]
+    `)
+  })
+
   test("sends a payment of `pay` with the session's access key to the node, and opens no payment page", async () => {
     const store = Store.memory()
     const owner = Secp256k1.randomPrivateKey()
@@ -1657,6 +1709,138 @@ describe('viem', () => {
       ]
     `)
   })
+
+  test("throws OwnerRequiredError before any request or ceremony when the user's one passkey owns no shared account", async () => {
+    const setup = await coordinated()
+    const shared = TempoViem.Account.fromConfig({
+      address: 'infer',
+      owners: [address(), address()],
+      threshold: 2,
+    })
+
+    const error = await setup.accounts.viem
+      .sendTransactionSync({ account: shared, calls: [{ to: address() }] })
+      .catch((error: unknown) => error)
+
+    expect(error).toMatchInlineSnapshot(
+      `[Plugins.viem.OwnerRequiredError: No passkey of the user owns the account. Pass the owner that approves the transaction as \`owner\`, or sign in as one of the account's owners.]`,
+    )
+    expect({
+      ceremonies: setup.ceremonies,
+      sent: setup.sent,
+    }).toMatchInlineSnapshot(`
+      {
+        "ceremonies": 0,
+        "sent": [],
+      }
+    `)
+  })
+
+  test("passes an approval by `hash` of a configurable account with a local owner to Viem unchanged, which requires its `owner`, and the user's passkey signs nothing", async () => {
+    const setup = await coordinated()
+    const cosigner = TempoViem.Account.fromSecp256k1(
+      Secp256k1.randomPrivateKey(),
+    )
+    const shared = TempoViem.Account.fromConfig({
+      address: 'infer',
+      owners: [cosigner],
+      threshold: 1,
+    })
+
+    const error = await setup.accounts.viem
+      .sendTransactionSync({ account: shared, hash: `0x${'ab'.repeat(32)}` })
+      .catch((error: Error & { details?: string }) => error.details)
+
+    expect({
+      ceremonies: setup.ceremonies,
+      error,
+      sent: setup.sent,
+    }).toMatchInlineSnapshot(`
+      {
+        "ceremonies": 0,
+        "error": "A local owner account is required to approve a stored configurable account transaction.",
+        "sent": [],
+      }
+    `)
+  })
+
+  /**
+   * Returns an instance on Tempo signed in to a Tempo Account whose one owner is a passkey that
+   * counts its ceremonies, over a transport that records each method and returns `null`.
+   */
+  async function coordinated() {
+    const counter = { ceremonies: 0 }
+    const sent: string[] = []
+    const passkey = TempoViem.Account.fromHeadlessWebAuthn(
+      P256.randomPrivateKey(),
+      { origin: 'https://app.example.com', rpId: 'app.example.com' },
+    )
+    const counted = {
+      ...passkey,
+      sign: (parameters: Parameters<typeof passkey.sign>[0]) => {
+        counter.ceremonies++
+        return passkey.sign(parameters)
+      },
+    }
+    const accounts = Accounts.create({
+      chain: tempo.id,
+      clientId: 'https://app.example.com',
+      plugins: [
+        viem({
+          chain: tempo,
+          retry: false,
+          transport: custom({
+            request(args) {
+              sent.push(args.method)
+              return Promise.resolve(null)
+            },
+          }),
+        }),
+        Plugin.from({
+          actions: (context) => ({
+            async seed() {
+              const account = TempoAccount.from({
+                ...TempoViem.Account.fromConfig({
+                  address: 'infer',
+                  owners: [counted as never],
+                  threshold: 1,
+                }),
+                keys: [],
+                owner: 'webAuthn',
+                realm: { id: 'default', name: 'Default' },
+              } as never)
+              await context.session.change().commit(
+                SignIn.toSession({
+                  accessToken: 'access-token',
+                  account,
+                  expiresAt: Date.now() + 60 * 60 * 1000,
+                  receivedAt: Date.now(),
+                  user: { email: 'user@example.com', id: 'user_1' },
+                } as never),
+              )
+            },
+          }),
+          id: 'seed',
+        }),
+      ],
+      store: Store.memory(),
+    } as never) as any
+    await accounts.seed.seed()
+    return {
+      accounts,
+      get ceremonies() {
+        return counter.ceremonies
+      },
+      sent,
+    }
+  }
+
+  /** Returns a random address. */
+  function address() {
+    return Address.fromPublicKey(
+      Secp256k1.getPublicKey({ privateKey: Secp256k1.randomPrivateKey() }),
+    )
+  }
 })
 
 describe('members', () => {

@@ -574,6 +574,53 @@ describe('challenge', () => {
   })
 })
 
+describe('guestParameters', () => {
+  test.for([
+    { challenge: undefined, expected: 'offer', guest: true, offer: undefined },
+    {
+      challenge: 'Sign in to app.example',
+      expected: null,
+      guest: true,
+      offer: undefined,
+    },
+    // The caller signs the challenge with the guest key pair, such as for the `siwe` plugin.
+    {
+      challenge: 'Sign in to app.example',
+      expected: 'offer',
+      guest: true,
+      offer: true,
+    },
+    {
+      challenge: 'Sign in to app.example',
+      expected: null,
+      guest: false,
+      offer: true,
+    },
+    // A backend sign-in starts no guest session.
+    { challenge: undefined, expected: null, guest: true, offer: false },
+    { challenge: undefined, expected: null, guest: false, offer: undefined },
+    {
+      challenge: undefined,
+      expected: null,
+      guest: undefined,
+      offer: undefined,
+    },
+  ] as const)(
+    'adds $expected for guest $guest, challenge $challenge, and the offer $offer',
+    async (row) => {
+      const auth = Accounts.from({ clientId: 'client_1', guest: row.guest })
+
+      const { url } = await Request.authorizeUrl(auth, {
+        challenge: row.challenge,
+        guest: row.offer,
+        redirectUri: 'https://app.example/callback',
+      })
+
+      expect(new URL(url).searchParams.get('guest')).toBe(row.expected)
+    },
+  )
+})
+
 describe('permissions', () => {
   test('throws `expiry_passed` with status 0 for an expiry that has passed', () => {
     const error = (() => {

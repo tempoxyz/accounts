@@ -472,6 +472,8 @@ A string in <SourceLink name="auth" path="src/plugins/siwe.ts">`auth`</SourceLin
 
 <SourceLink name="pay" path="src/Accounts.ts">`accounts.pay`</SourceLink> without an account signs the user in in the same way, beside the payment.
 
+With <SourceLink name="Config.guest" path="src/Accounts.ts">`guest: true`</SourceLink>, the sign-in also offers Continue as guest. The guest key pair then signs the message, and the verify route receives the guest account's address and P256 signature. [Guest checkout](/docs/guides/guest-checkout#sign-a-guest-in-to-the-app) covers the guest session.
+
 A sign-in with an access key needs one passkey prompt too. The account signs the key authorization, whose witness is the message's EIP-191 hash.
 
 The verify route then receives `{ address, id, keyAuthorization, message }`, with the sign-in's access token in its `Authorization` header, and <SourceLink name="handler" path="src/Accounts.ts">`accounts.handler`</SourceLink> checks that the token names the access key for the app. Any app may set a witness, so the token binds the proof to this app. With the client IDs of several apps, <SourceLink name="accessTokens" path="src/plugins/siwe.ts">`accessTokens`</SourceLink> accepts the tokens of each.
