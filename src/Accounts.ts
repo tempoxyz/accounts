@@ -1383,8 +1383,9 @@ export type Accounts<
        * Tempo ID session that ended elsewhere.
        *
        * New tokens send the request again, if its body reads twice, such as a string or a `Blob`.
-       * A stream body, a session without a refresh token, a failed refresh, and a sign-in of another
-       * user return the first response. A refused refresh token ends the session.
+       * A stream body returns the first response after the refresh, so the next call sends the new
+       * tokens. A session without a refresh token, a failed refresh, and a sign-in of another user
+       * return the first response. A refused refresh token ends the session.
        *
        * A cross-origin API must list `WWW-Authenticate` in `Access-Control-Expose-Headers`. Without
        * it, the page cannot read the challenge, and the call returns the first response.
@@ -2825,11 +2826,7 @@ export function create<
           ...parameters,
           accessToken: token,
         })
-        if (
-          !Api.refusesToken(response) ||
-          !Api.resendable(parameters.init?.body)
-        )
-          return response
+        if (!Api.refusesToken(response)) return response
 
         // The API refused a live access token. A slow device clock or a Tempo ID session that ended
         // elsewhere causes this. One refresh separates the two cases, as `account.get` does.
@@ -2846,6 +2843,9 @@ export function create<
           )
           if (failed) return response
         }
+        // A stream body reads once, so the call returns the first response. The refresh still ran,
+        // so the next call sends the new token, and a refused refresh token ends the session.
+        if (!Api.resendable(parameters.init?.body)) return response
         // The resend takes the token of the session that the subject check read, so a sign-in of
         // another user during the cancel of the first body never authenticates the request.
         const latest = context.session.get()

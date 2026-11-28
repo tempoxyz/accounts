@@ -2221,6 +2221,95 @@ describe('session.fetch', () => {
     `)
   })
 
+  test('refreshes once, and returns the refusal, when the API refuses the live access token of a request with a stream body', async () => {
+    const store = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        if (pathname === '/oauth2/token') {
+          requests.push(`${request.method} ${pathname}`)
+          return Response.json({
+            access_token: 'access-token-new',
+            expires_in: 300,
+            refresh_token: 'refresh-token-new',
+            token_type: 'Bearer',
+          })
+        }
+        // The API reads the body, which consumes a stream, as a network transport does.
+        const authorization = request.headers.get('authorization')
+        requests.push(
+          `${request.method} ${pathname} ${authorization} ${await request.text()}`,
+        )
+        // The access token expired at the API before its `expiresAt` on the device, such as with a
+        // device clock that runs slow.
+        if (authorization === 'Bearer access-token')
+          return Response.json(
+            { error: 'invalid_token' },
+            {
+              headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
+              status: 401,
+            },
+          )
+        return Response.json({ ok: true })
+      }) as typeof globalThis.fetch,
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await store.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    // A stream body reads once, so the call cannot send the request again.
+    const upload = await accounts.session.fetch({
+      init: {
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('note'))
+            controller.close()
+          },
+        }),
+        duplex: 'half',
+        method: 'POST',
+      } as RequestInit,
+      url: 'https://api.example.com/notes',
+    })
+    const next = await accounts.session.fetch({
+      url: 'https://api.example.com/notes',
+    })
+
+    expect({
+      requests,
+      statuses: [upload.status, next.status],
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [
+          "POST /notes Bearer access-token note",
+          "POST /oauth2/token",
+          "GET /notes Bearer access-token-new ",
+        ],
+        "statuses": [
+          401,
+          200,
+        ],
+      }
+    `)
+  })
+
   test('returns the refusal, and signs out, when Tempo ID refuses the refresh token after the API refuses the access token', async () => {
     const store = Store.memory()
     const name =
