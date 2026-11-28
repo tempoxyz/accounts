@@ -12478,7 +12478,6 @@ style:
     site/src/server/Subscriptions.ts: { baseline: pass }
     site/src/server/Worker.ts: { baseline: pass }
     site/tsconfig.json: { baseline: pass }
-    site/vercel.json: { baseline: pass }
     site/vite.config.ts: { baseline: pass }
     site/vocs.config.ts: { baseline: pass }
     site/wrangler.json: { baseline: pass }

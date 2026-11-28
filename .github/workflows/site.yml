@@ -99,7 +99,7 @@ jobs:
           deployment-id: accounts-site
           module-digest: ${{ needs.attest.outputs.module-digest }}
 
-      # The verification URL is `accounts.tempo.xyz`, the Worker's custom domain. The check thus
+      # The verification URL is `accounts.tempo.com`, a custom domain of the Worker. The check thus
       # reaches the new version through the domain.
       - name: Check deployment
         env:
