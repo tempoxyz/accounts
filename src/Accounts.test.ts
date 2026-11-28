@@ -2229,35 +2229,34 @@ describe('session.fetch', () => {
     const accounts = Accounts.create({
       chain: 42431,
       clientId: 'https://app.example.com',
-      fetch: ((input: RequestInfo | URL, init?: RequestInit) => {
-        const { pathname } = new URL(String(input))
-        const method = init?.method ?? 'GET'
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
         if (pathname === '/oauth2/token') {
-          requests.push(`${method} ${pathname}`)
-          return Promise.resolve(
-            Response.json({
-              access_token: 'access-token-new',
-              expires_in: 300,
-              refresh_token: 'refresh-token-new',
-              token_type: 'Bearer',
-            }),
-          )
+          requests.push(`${request.method} ${pathname}`)
+          return Response.json({
+            access_token: 'access-token-new',
+            expires_in: 300,
+            refresh_token: 'refresh-token-new',
+            token_type: 'Bearer',
+          })
         }
-        const authorization = new Headers(init?.headers).get('authorization')
-        requests.push(`${method} ${pathname} ${authorization}`)
+        // The API reads the body, which consumes a stream, as a network transport does.
+        const authorization = request.headers.get('authorization')
+        requests.push(
+          `${request.method} ${pathname} ${authorization} ${await request.text()}`,
+        )
         // The access token expired at the API before its `expiresAt` on the device, such as with a
         // device clock that runs slow.
         if (authorization === 'Bearer access-token')
-          return Promise.resolve(
-            Response.json(
-              { error: 'invalid_token' },
-              {
-                headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
-                status: 401,
-              },
-            ),
+          return Response.json(
+            { error: 'invalid_token' },
+            {
+              headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
+              status: 401,
+            },
           )
-        return Promise.resolve(Response.json({ ok: true }))
+        return Response.json({ ok: true })
       }) as typeof globalThis.fetch,
       store,
       url: 'http://127.0.0.1:9',
@@ -2299,9 +2298,9 @@ describe('session.fetch', () => {
     }).toMatchInlineSnapshot(`
       {
         "requests": [
-          "POST /notes Bearer access-token",
+          "POST /notes Bearer access-token note",
           "POST /oauth2/token",
-          "GET /notes Bearer access-token-new",
+          "GET /notes Bearer access-token-new ",
         ],
         "statuses": [
           401,
