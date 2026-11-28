@@ -565,8 +565,8 @@ describe('tokenHeaders', () => {
           url,
         })
         const { iat } = decodeJwt(headers.dpop!)
-        // A second can pass between the reads.
-        return Math.round((now - iat!) / 10) * 10
+        // A second can pass between the reads. Adding 0 turns the -0 of such a read into 0.
+        return Math.round((now - iat!) / 10) * 10 + 0
       }),
     )
 
