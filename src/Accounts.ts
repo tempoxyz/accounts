@@ -1213,7 +1213,7 @@ export type Accounts<
      * instance reads the stored session first, and Tempo ID only if the session holds no account.
      * A third-party client ID, such as an origin, sends no read, and the payment page picks the
      * account. So does a session that signed in without a Tempo Account on an instance with
-     * `account: false`, so the read creates no account. Outside a page, a call without a session throws {@link SignedOutError} before any request.
+     * `account: false`, so the read creates no account. Outside a page, a call without a session throws {@link SignedOutError} before any request. So does a call with a session that `Session.expired` reports, such as one whose every access key expired, once no plugin sent the payment.
      * Call it in a click handler, with `account` for a popup on another chain than the instance's,
      * since a popup opens only before any read. Throws the
      * errors of `Actions.account.pay`, and {@link SignedOutError} without an account.
@@ -2790,8 +2790,20 @@ export function create<
           payment: true,
           sender: false,
         })
+      const attempt = send(0)
+      // Outside a page, no page takes a payment that no plugin sent. A session that `Session.expired`
+      // reports, such as one whose every access key expired, is signed out, as its status shows.
+      const settled =
+        typeof document === 'undefined' && !fixed
+          ? (attempt ?? Promise.resolve(undefined)).then((sent) => {
+              const current = context.session.get()
+              if (!sent && current && Session.expired(current))
+                throw new SignedOutError()
+              return sent
+            })
+          : attempt
       // The payment page loads in a hidden dialog while a plugin sends, and shows only if none sent.
-      return await AccountActions.pay(config, { ...payment, attempt: send(0) })
+      return await AccountActions.pay(config, { ...payment, attempt: settled })
     },
     session: {
       accessToken,
