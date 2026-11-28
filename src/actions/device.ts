@@ -85,6 +85,12 @@ export async function authorize<
         .filter(Boolean)
         .join(' '),
     )
+  // React Native's `AbortSignal` has no `reason`, and Hermes has no `DOMException`.
+  const aborted = () =>
+    options.signal?.reason ??
+    Object.assign(new Error('The code request was aborted.'), {
+      name: 'AbortError',
+    })
   const code = await Api.json<{
     device_code: string
     expires_in: number
@@ -98,7 +104,9 @@ export async function authorize<
       method: 'POST',
       // A redirect would post the request to another origin, and each poll refuses it.
       redirect: 'manual',
+      signal: options.signal ?? null,
     }).catch((error: unknown) => {
+      if (options.signal?.aborted) throw aborted()
       throw new RequestError({
         cause: error,
         code: 'server_error',
@@ -107,7 +115,11 @@ export async function authorize<
         status: 0,
       })
     }),
-  )
+  ).catch((error: unknown) => {
+    // An abort while the body arrives fails the read of the body, which is no network failure.
+    if (options.signal?.aborted) throw aborted()
+    throw error
+  })
 
   // Whether the grant carries a challenge, whose signature the approval must hold.
   const challenged = options.challenge !== undefined
@@ -232,6 +244,11 @@ export declare namespace authorize {
     resource?: Config['resource']
     /** Scopes that the code requests beside the instance's `scope`, as `device.signIn` describes. */
     scope?: string | undefined
+    /**
+     * Aborts the code request, and rejects with the signal's reason. Absent, the code request ends
+     * only with its response.
+     */
+    signal?: AbortSignal | undefined
   }
 
   /** The authorization of an approved grant, without an access key for a grant without one. */

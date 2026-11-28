@@ -299,7 +299,7 @@ export const accounts = Accounts.create({
 
 ### Stop waiting for the approval
 
-<SourceLink name="signIn.signal" path="src/plugins/device.ts">`signal`</SourceLink> stops the polls, such as at a timeout or at Ctrl+C. The sign-in then rejects with the signal's reason. If a poll in flight returns an approval, the sign-in still signs the user in.
+<SourceLink name="signIn.signal" path="src/plugins/device.ts">`signal`</SourceLink> aborts the code request and stops the polls, such as at a timeout or at Ctrl+C. The sign-in then rejects with the signal's reason. If a poll in flight returns an approval, the sign-in still signs the user in.
 
 :::code-group
 
