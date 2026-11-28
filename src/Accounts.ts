@@ -1515,7 +1515,8 @@ export type Accounts<
        * status leaves `pending` with no other call. A `session.get` in that code reads first. The
        * load runs no restore hook, so an instance with a plugin that restores, such as `redirect`,
        * loads nothing at a subscription, and its status leaves `pending` at the page's
-       * `session.get`. If the store rejects the read, the status stays `pending`.
+       * `session.get`. If the store rejects the read, or the saved session's access key expired, the
+       * status stays `pending`.
        *
        * @example
        * ```ts
@@ -2867,14 +2868,15 @@ export function create<
           // subscribes, where a page's own `session.get` reads first. The load runs no restore hook,
           // such as a redirect's callback, which only `session.get` completes and reports, so an
           // instance with one loads nothing here. A failed read keeps `pending`, as `session.get`
-          // does.
+          // does. An expired access key keeps its session in the store and the status `pending`, so
+          // the page's `session.get` renews it inside an authorization, with no `signedOut` first.
           if (!restores)
             queueMicrotask(() => {
               if (
                 session.actor &&
                 !InternalSession.machines.loaded(session.actor.getSnapshot())
               )
-                void session.load().catch(() => undefined)
+                void session.load({ expired: 'keep' }).catch(() => undefined)
             })
           return unsubscribe
         },

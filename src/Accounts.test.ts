@@ -3461,6 +3461,68 @@ describe('session.status', () => {
       }
     `)
   })
+  test("keeps a saved session whose access key expired, and `pending`, at the first subscription, for the page's `session.get` to renew", async () => {
+    const owner = Account.fromSecp256k1(
+      '0x0123456789012345678901234567890123456789012345678901234567890123',
+    )
+    const accessKey = Account.fromSecp256k1(
+      '0x0123456789012345678901234567890123456789012345678901234567890124',
+    )
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const store = Store.memory()
+    const requests: string[] = []
+    // The access key expired a minute ago, as when a returning user opens the app after its expiry.
+    const keyAuthorization = await owner.signKeyAuthorization(
+      { address: accessKey.address, type: 'secp256k1' },
+      { chainId: 42431n, expiry: Math.floor(Date.now() / 1000) - 60 },
+    )
+    const saved = Session.from({
+      accessKey: {
+        account: owner.address,
+        chainId: 42431,
+        keyAuthorization: KeyAuthorization.toRpc(keyAuthorization),
+      },
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      refreshToken: 'refresh-token',
+      user: { email: 'user@example.com', id: 'user_1' },
+    })
+    await store.setItem(name, { state: { session: saved }, version: 0 })
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (input, init) => {
+        requests.push(`${init?.method ?? 'GET'} ${String(input)}`)
+        return globalThis.fetch(input, init)
+      },
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    const statuses: string[] = []
+
+    // A router guard follows the status, and the page reads no session.
+    accounts.session.status.subscribe((status, previous) =>
+      statuses.push(`${previous.status} > ${status.status}`),
+    )
+
+    // The status never leaves `pending` within the bound.
+    await expect(
+      expect
+        .poll(() => accounts.session.status.get().status, {
+          interval: 10,
+          timeout: 200,
+        })
+        .not.toBe('pending'),
+    ).rejects.toThrow()
+    const stored = Json.stringify(await store.getItem(name))
+
+    expect({
+      kept: stored.includes('"refreshToken":"refresh-token"'),
+      requests,
+      statuses,
+    }).toMatchInlineSnapshot()
+  })
   test("shows no `signedOut` before a restore hook sets the session, such as a redirect's callback, and runs the hook once beside the page's read", async () => {
     const session = Session.from({
       accessToken: 'access-token',

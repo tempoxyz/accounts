@@ -1904,6 +1904,7 @@ export function create(options: create.Options): create.ReturnType {
         actor.send({ type: 'load' })
         return session
       }
+      if (options.expired === 'keep') return undefined
       // The read and the empty write run under the lock, so a refresh in another tab never saves a
       // successor between them, which the write would erase.
       const empty = async () => {
@@ -2445,9 +2446,16 @@ export declare namespace create {
     idle: () => Promise<boolean>
     /**
      * Reads the saved session once, and returns the session. Empties a session whose access key
-     * expired, under the lock unless `options.locked` says that the caller holds it.
+     * expired, under the lock unless `options.locked` says that the caller holds it. With
+     * `expired: 'keep'`, an expired session stays in the store, the status stays `pending`, and the
+     * load returns `undefined`.
      */
     load: (options?: {
+      /**
+       * What the load does with a saved session whose access key expired: `'empty'` empties it and
+       * revokes its refresh token, and `'keep'` leaves it for a later read. Defaults to `'empty'`.
+       */
+      expired?: 'empty' | 'keep' | undefined
       locked?: boolean | undefined
     }) => Promise<Session.Any | undefined>
     /**
