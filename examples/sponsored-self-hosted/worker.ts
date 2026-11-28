@@ -11,7 +11,7 @@
  * - A transaction of OUSD transfers only, within a gas limit and a fee cap (`validate`).
  * @module
  */
-import { Accounts } from 'accounts'
+import { Accounts } from 'accounts/lite'
 import { relay } from 'accounts/plugins'
 import { env } from 'cloudflare:workers'
 import { Hono } from 'hono'
