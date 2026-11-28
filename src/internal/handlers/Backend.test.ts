@@ -1263,7 +1263,9 @@ describe('fetch', () => {
     expect(
       callback.headers
         .getSetCookie()
-        .filter((cookie) => cookie.startsWith('__Host-tempo-id.dialog=')),
+        .filter((cookie) => cookie.startsWith('__Host-tempo-id.dialog='))
+        // A second can pass between the sign-in and the callback.
+        .map((cookie) => cookie.replace('Max-Age=599', 'Max-Age=600')),
     ).toMatchInlineSnapshot(`
       [
         "__Host-tempo-id.dialog=1; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600",
