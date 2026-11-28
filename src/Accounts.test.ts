@@ -1890,7 +1890,7 @@ describe('pay', () => {
       '0x0123456789012345678901234567890123456789012345678901234567890124'
     const accessKey = Account.fromSecp256k1(privateKey, { access: owner })
     const store = Store.memory()
-    // A native app's session, whose access key expires in a second.
+    // A native app's session, whose access key expires after the load.
     await store.setItem(
       'tempo-id:session:["http://127.0.0.1:9","client_1",1337]',
       {
@@ -1902,7 +1902,7 @@ describe('pay', () => {
               keyAuthorization: KeyAuthorization.toRpc(
                 await owner.signKeyAuthorization(accessKey, {
                   chainId: 1337n,
-                  expiry: Math.floor(Date.now() / 1000) + 1,
+                  expiry: Math.floor(Date.now() / 1000) + 2,
                 }),
               ),
               privateKey,
