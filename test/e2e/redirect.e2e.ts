@@ -1,7 +1,8 @@
 /**
  * Tests the redirect page of the web test app: a sign-in that leaves the page for Tempo ID's sign-in
- * and returns to it, the callbacks that the page refuses, and the state that the return needs. Also
- * tests the open page, whose `open` shows the sign-in in a window in place of a system browser.
+ * and returns to it, the renewal of its access key, the callbacks that the page refuses, and the
+ * state that the return needs. Also tests the open page, whose `open` shows the sign-in in a window
+ * in place of a system browser.
  * @module
  */
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts'
@@ -63,6 +64,58 @@ test.describe('redirect', () => {
         await Chain.balance({ address: recipient, token: Chain.ousd }),
       ).toBe(3_000_000n)
       await capture('sent')
+    })
+  })
+
+  test('renews an access key that only the sign-in named for the lifetime that the sign-in requested', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    // Tempo ID refuses an expiry that passed, so the expiry leaves time for a slow sign-in.
+    await page.goto(`${url}?expiry=15s&signInKey=1`)
+
+    const before =
+      await test.step('signs in after a time on Tempo ID’s page', async () => {
+        await Playwright.start(page, { name: 'Sign in' })
+        await page.waitForURL(`${TempoId.url}/**`)
+        // The user reads Tempo ID's page before the sign-in, which the access key's lifetime excludes.
+        const left = Date.now()
+        await expect
+          .poll(() => Date.now() - left, { timeout: 10_000 })
+          .toBeGreaterThan(5_000)
+        await Playwright.signIn(page, { code, email })
+
+        await expect(page.locator('#status')).toHaveText('signedIn')
+        await capture('signed in')
+        return (await Playwright.run(page, { name: 'Session' })).value
+      })
+
+    await test.step('waits for the expiry of the access key', async () => {
+      await expect
+        .poll(() => Date.now() / 1000 > before.key.expiry, { timeout: 30_000 })
+        .toBe(true)
+      await capture('expired')
+    })
+
+    await test.step('renews the access key for 15 seconds at the next page load', async () => {
+      const renewal = page.waitForRequest(
+        (request) => request.url() === `${TempoId.url}/v1/authorize`,
+      )
+      await page.goto(`${url}?signInKey=1`)
+      const request = await renewal
+      await request.response()
+
+      await expect(page.locator('#history')).toHaveText(
+        'pending reauthorizing signedIn',
+      )
+      const { expiry } = request.postDataJSON().key_authorization
+      // The page reads its clock in whole seconds before the request starts.
+      const lifetime = expiry - Math.floor(request.timing().startTime / 1000)
+      expect(lifetime).toBeGreaterThanOrEqual(14)
+      expect(lifetime).toBeLessThanOrEqual(15)
+      await capture('renewed')
     })
   })
 

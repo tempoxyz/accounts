@@ -33,6 +33,12 @@ type Base = {
    * redeems its code. Absent in a redirect of an earlier version.
    */
   issuer?: string | undefined
+  /**
+   * The access key's expiry and the seconds from the request to it, which a renewal requests again,
+   * if Tempo ID grants that expiry. Absent without an access key of the app's own, for one that
+   * never expires, and in a redirect of an earlier version.
+   */
+  lifetime?: { expiry: number; seconds: number } | undefined
   /** Where Tempo ID redirects back to. The code exchange repeats it. */
   redirectUri: string
   /** The value that the callback must echo, so a forged callback fails. */

@@ -23,8 +23,11 @@ import * as App from '../App.js'
 export async function start() {
   await second(sessionStorage.getItem('tempo-id-test:second'))
 
+  const { accessKey, ...options } = await App.options()
   const accounts = Accounts.create({
-    ...(await App.options()),
+    ...options,
+    // An app can name the access key only in its sign-in, so a renewal derives it from the session.
+    ...(App.query.get('signInKey') === '1' ? {} : { accessKey }),
     plugins: [redirect(), ...App.plugins()],
     redirectUri: `${window.location.origin}/redirect/${sessionStorage.getItem('tempo-id-test:redirect-query') ?? ''}`,
     ...store(sessionStorage.getItem('tempo-id-test:store')),

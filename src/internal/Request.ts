@@ -56,6 +56,13 @@ export async function authorizeUrl(
     accessKey && !('address' in accessKey)
       ? await AccessKey.resolve(accessKey)
       : undefined
+  const authorization = (() => {
+    if (!accessKey) return undefined
+    if ('address' in accessKey) return keyAuthorization(auth, { accessKey })
+    return keyAuthorization(auth, {
+      accessKey: { ...accessKey, account: resolved!.signer },
+    })
+  })()
   const pending = Pending.from({
     ...(resolved
       ? resolved.material
@@ -64,18 +71,21 @@ export async function authorizeUrl(
     ...(options.challenge !== undefined ? { challenge: true as const } : {}),
     clientId: auth.clientId,
     issuer: new URL(auth.url).origin,
+    // The lifetime counts from the request, so the user's time on Tempo ID's pages leaves it whole.
+    // Only the app's own access key renews, so only it keeps one.
+    ...(resolved && authorization?.expiry
+      ? {
+          lifetime: {
+            expiry: authorization.expiry,
+            seconds: authorization.expiry - Math.floor(Date.now() / 1000),
+          },
+        }
+      : {}),
     redirectUri,
     // `Bytes.random` needs only `crypto.getRandomValues`, which React Native polyfills.
     state: Base64.fromBytes(Bytes.random(16), base64url),
     verifier: Base64.fromBytes(Bytes.random(32), base64url),
   })
-  const authorization = (() => {
-    if (!accessKey) return undefined
-    if ('address' in accessKey) return keyAuthorization(auth, { accessKey })
-    return keyAuthorization(auth, {
-      accessKey: { ...accessKey, account: resolved!.signer },
-    })
-  })()
   // The issuer's endpoint redirects to the sign-in page at once. `/authorize` redirects here first.
   const url = new URL('/oauth2/authorize', auth.url)
   const parameters = new URLSearchParams({
