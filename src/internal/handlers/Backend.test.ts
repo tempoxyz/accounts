@@ -2510,6 +2510,33 @@ describe('session.get', () => {
     `)
     expect(missing).toMatchInlineSnapshot(`undefined`)
   })
+
+  test('returns undefined when a refresh without a response ends the session, as GET /session does', async () => {
+    const store = Store.memory()
+    const accounts = instance({ store })
+    const { id } = await accounts.backend.save({
+      session: Session.from({
+        ...session(),
+        expiresAt: 0,
+        refreshToken: 'refresh-token',
+      }),
+    })
+
+    // Nothing listens at the URL, so the refresh of the expired access token receives no response.
+    // Tempo ID may have rotated the refresh token, so the read ends the session.
+    const read = await accounts.session
+      .get(
+        new Request(origin, {
+          headers: { cookie: `__Host-tempo-id.sid=${id}` },
+        }),
+      )
+      .catch((error: unknown) => error)
+
+    expect(read).toMatchInlineSnapshot(`undefined`)
+    expect(await store.getItem(`tempo-id:session:${id}`)).toMatchInlineSnapshot(
+      `undefined`,
+    )
+  })
 })
 
 /** Returns the `Cookie` header that a browser sends after `response`'s `Set-Cookie` headers. */

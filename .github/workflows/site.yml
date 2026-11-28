@@ -99,13 +99,24 @@ jobs:
           deployment-id: accounts-site
           module-digest: ${{ needs.attest.outputs.module-digest }}
 
-      # The verification URL is `accounts.tempo.xyz`, which Vercel proxies to the Worker's workers.dev
-      # URL. The check thus reaches the new version through the domain.
+      # The verification URL is `accounts.tempo.com`, a custom domain of the Worker. The check thus
+      # reaches the new version through the domain.
       - name: Check deployment
         env:
           URL: ${{ steps.deploy.outputs.verification-url }}
         run: |
-          curl --fail --output /dev/null --retry 10 --retry-all-errors --retry-delay 6 --show-error --silent "$URL/"
+          # Only a 200 proves the page is public. Access answers a visitor that no policy admits with
+          # a 302 to its sign-in page, which `--fail` accepts.
+          status=$(curl --fail --output /dev/null --retry 10 --retry-all-errors --retry-delay 6 --show-error --silent --write-out '%{http_code}' "$URL/")
+          [[ "$status" == 200 ]] || { echo "::error::$URL/ answered $status, not 200." >&2; exit 1; }
+
+          # The tempo.xyz zone redirects plain HTTP to HTTPS. Without the redirect, a route of `/api/`
+          # would name an `http:` client ID.
+          redirect=$(curl --output /dev/null --retry 10 --retry-all-errors --retry-delay 6 --show-error --silent --write-out '%{http_code} %{redirect_url}' "http://${URL#https://}/")
+          case "$redirect" in
+            "301 $URL/" | "308 $URL/") ;;
+            *) echo "::error::http://${URL#https://}/ answered '$redirect', not a redirect to $URL/." >&2; exit 1 ;;
+          esac
           printf 'The site runs at [%s](%s).\n' "$URL" "$URL" >> "$GITHUB_STEP_SUMMARY"
 
 permissions: {}
