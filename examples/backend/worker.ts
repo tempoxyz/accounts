@@ -5,8 +5,7 @@
  * the server.
  * @module
  */
-import { Accounts } from 'accounts'
-import { DurableObject, Sessions } from 'accounts/cloudflare'
+import { Accounts, DurableObject, Sessions } from 'accounts/cloudflare'
 import { backend, viem } from 'accounts/plugins'
 import { env } from 'cloudflare:workers'
 import { Hono } from 'hono'

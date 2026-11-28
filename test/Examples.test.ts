@@ -1,6 +1,7 @@
 /**
- * Tests the mobile example as a copy of it installs: the workspace installs the versions that its
- * `package.json` names, so CI type-checks what an app installs, and Metro loads its configuration.
+ * Tests the examples as a copy of each installs: the workspace installs the versions that the mobile
+ * example's `package.json` names, so CI type-checks what an app installs, and Metro loads its
+ * configuration. Each Worker example bundles only the plugins that it names.
  * @module
  */
 import * as ChildProcess from 'node:child_process'
@@ -12,6 +13,16 @@ import { describe, expect, test } from 'vite-plus/test'
 
 /** The folder of the mobile example. */
 const root = Path.resolve(import.meta.dirname, '../examples/mobile')
+
+/**
+ * The modules of the plugins that the root entry's `Accounts.create` adds. A Worker bundles each in
+ * its one file, also those that a page loads from chunks of their own.
+ */
+const defaults =
+  /^src\/(internal\/Default(Dialog|Mpp)|plugins\/(dialog|funding))\.ts$|^src\/mpp\//
+
+/** The folder of each example. */
+const examples = Path.resolve(import.meta.dirname, '../examples')
 
 /** The manifest of a package. */
 type Manifest = {
@@ -125,6 +136,54 @@ describe('examples/mobile', () => {
 
     expect(JSON.parse(result.stdout)).toMatchInlineSnapshot(`""`)
   }, 20_000)
+})
+
+describe('examples/* (Workers)', () => {
+  test('bundles none of the default plugins of the root entry in a Worker that names its plugins', async () => {
+    const workers = ['backend', 'sponsored-self-hosted', 'sponsored-tempo-api']
+
+    const bundled = await Promise.all(
+      workers.map(async (name) => {
+        // Wrangler bundles a Worker in one file, with the conditions of workerd.
+        const { metafile } = await Esbuild.build({
+          bundle: true,
+          conditions: ['src', 'workerd', 'worker', 'browser'],
+          // An output file, which `write: false` keeps in memory, holds the bytes of each module.
+          outfile: 'worker.js',
+          entryPoints: [Path.join(examples, name, 'worker.ts')],
+          external: ['cloudflare:workers', 'node:*'],
+          format: 'esm',
+          logLevel: 'silent',
+          metafile: true,
+          platform: 'neutral',
+          write: false,
+        })
+        // A module that tree-shaking drops holds no bytes of the output.
+        const modules = Object.values(metafile.outputs)
+          .flatMap((output) =>
+            Object.entries(output.inputs)
+              .filter(([, input]) => input.bytesInOutput > 0)
+              .map(([input]) => input),
+          )
+          .map((input) =>
+            Path.relative(
+              Path.join(examples, '..'),
+              Path.resolve(process.cwd(), input),
+            ),
+          )
+          .filter((input) => defaults.test(input))
+        return [name, modules] as const
+      }),
+    )
+
+    expect(Object.fromEntries(bundled)).toMatchInlineSnapshot(`
+      {
+        "backend": [],
+        "sponsored-self-hosted": [],
+        "sponsored-tempo-api": [],
+      }
+    `)
+  }, 60_000)
 })
 
 /** Returns the manifest at `path`. */
