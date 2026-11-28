@@ -7,7 +7,7 @@
  */
 import { Address, P256, Secp256k1 } from 'ox'
 import { KeyAuthorization, TxEnvelopeTempo } from 'ox/tempo'
-import { custom, http } from 'viem'
+import { type BaseError, custom, http } from 'viem'
 import * as TempoViem from 'viem/tempo'
 import { type Account, Actions } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
@@ -411,6 +411,81 @@ describe('viem', () => {
       }
     `)
     expect(revoked).toMatchInlineSnapshot(`"Accounts.SignedOutError"`)
+  })
+
+  test('rejects a transfer of a session without an access key on the chain with AccessKeyRequiredError before the node receives a fill, also through a standalone action', async () => {
+    const store = Store.memory()
+    // The session's only access key is on another chain, so the owner signs here, and no
+    // transaction signs.
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",4217]',
+      {
+        state: {
+          session: Session.from({
+            accessKey: createAccessKey({
+              chainId: 42431,
+              owner: Secp256k1.randomPrivateKey(),
+            }),
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const sent: string[] = []
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'https://app.example.com',
+      plugins: [
+        viem({
+          // Nothing listens at the URL, so the transport records each request that would reach a node.
+          transport: http('http://127.0.0.1:9', {
+            async onFetchRequest(request) {
+              const body = (await request.clone().json()) as { method: string }
+              sent.push(body.method)
+            },
+            retryCount: 0,
+          }),
+        }),
+      ],
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await accounts.session.get()
+    const parameters = {
+      amount: 1n,
+      to: '0x0000000000000000000000000000000000000001',
+      token: '0x20c0000000000000000000000000000000000000',
+    } as const
+
+    const own = await accounts.token
+      .transferSync(parameters)
+      .catch((error: unknown) => error)
+    // A standalone action, such as the one of wagmi/tempo, wraps the error in Viem's own.
+    const standalone = await Actions.token
+      .transferSync(accounts.viem, parameters)
+      .catch((error: BaseError) => error.walk())
+    const transfers = [...sent]
+    // An estimate signs nothing, so it still fills.
+    await accounts.token.transfer
+      .estimateGas({
+        ...parameters,
+        account: accounts.viem.account,
+        chain: accounts.viem.chain,
+      })
+      .catch(() => undefined)
+
+    expect({ estimate: sent[0], own, standalone, transfers })
+      .toMatchInlineSnapshot(`
+      {
+        "estimate": "eth_fillTransaction",
+        "own": [Accounts.AccessKeyRequiredError: The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain.],
+        "standalone": [Accounts.AccessKeyRequiredError: The call needs an access key, but the client's account holds no live access key on the chain. Sign in with an access key on the chain.],
+        "transfers": [],
+      }
+    `)
   })
 
   test("keeps the plugin's nonce of a fixed session's transaction and the chain's own fields, with feeToken", async () => {
@@ -988,6 +1063,54 @@ describe('viem', () => {
     expect(error).toMatchInlineSnapshot(
       `[Accounts.SignedOutError: The client's account is signed out. Sign in before sending.]`,
     )
+  })
+
+  test('refuses a transfer of a fixed session whose access keys all expired with SignedOutError before the node receives a fill', async () => {
+    const owner = Secp256k1.randomPrivateKey()
+    const sent: string[] = []
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'https://app.example.com',
+      plugins: [
+        viem({
+          // Nothing listens at the URL, so the transport records each request that would reach a node.
+          transport: http('http://127.0.0.1:9', {
+            async onFetchRequest(request) {
+              const body = (await request.clone().json()) as { method: string }
+              sent.push(body.method)
+            },
+            retryCount: 0,
+          }),
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    // The expired access key of another chain drops the expired one of the client's chain, so the
+    // client's account holds no access key.
+    const session = Session.from({
+      accessKey: createAccessKey({ chainId: 4217, expiry: -60, owner }),
+      accessKeys: [createAccessKey({ chainId: 42431, expiry: -60, owner })],
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      user: { email: 'user@example.com', id: 'user_1' },
+    })
+
+    const error = await accounts
+      .viem({ session })
+      .token.transferSync({
+        amount: 1n,
+        to: '0x0000000000000000000000000000000000000001',
+        token: '0x20c0000000000000000000000000000000000000',
+      })
+      .catch((error: unknown) => error)
+
+    expect({ error, sent }).toMatchInlineSnapshot(`
+      {
+        "error": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "sent": [],
+      }
+    `)
   })
 
   test('refuses a transaction of an access key that expired while an access key on another chain lives, with AccessKeyRequiredError', async () => {

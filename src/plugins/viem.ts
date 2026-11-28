@@ -187,7 +187,9 @@ export declare namespace RetryClosedError {
  * always signs with its access key. A signature of a message or typed data reads nothing from the
  * chain. A cloud wallet signs only for an app with the `tempo-id:sign` scope, on a chain with
  * configurable accounts. If no owner signs alone, such as passkeys below the threshold, the
- * signature throws `Accounts.AccessKeyRequiredError`.
+ * signature throws `Accounts.AccessKeyRequiredError`. A transaction of such a session throws it
+ * before the node receives a fill, also through a standalone action, such as
+ * `Actions.token.transferSync`. A prepare or an estimate of it still fills.
  *
  * A session without its account, such as after a dialog's sign-in, reads the account at the owner's
  * first signature, with the access token that `session.accessToken` returns. A token that holds for
@@ -454,13 +456,20 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * the same protocol nonce, and the node keeps one of them. Viem detects only transactions that
        * start in one turn of the event loop, and a server's requests start in turns of their own. A
        * client of a fixed session is `shared`, since another instance, such as that of another
-       * request or replica, can send for the session at once.
+       * request or replica, can send for the session at once. A send of `options.account`,
+       * the client's own account, that no access key signs rejects with `options.refusal` before
+       * the fill, so the node receives no request.
        */
       function coordinate(
         chain: Chain,
-        options_coordinate: { shared: boolean },
+        options_coordinate: {
+          account: LocalAccount
+          /** Returns the error that the signature of `account` would reject with. */
+          refusal: () => Error
+          shared: boolean
+        },
       ): Chain {
-        const { shared } = options_coordinate
+        const { account: account_client, refusal, shared } = options_coordinate
         const prepare = (chain as TempoChain).prepareTransactionRequest
         if (!Array.isArray(prepare)) return chain
         // Viem types the hook's request by the chain's formatters, which a plain chain does not hold.
@@ -482,6 +491,18 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                 return (await fn(request, args)) ?? reattach(request, args)
               }
               const { account, nonce, nonceKey, parameters } = request
+              // The client's own account signs a transaction only with an access key on the chain.
+              // Without one, the signature of a send would reject after the fill, so the fill would
+              // only read the node, and its refusal, such as for a low balance, would hide the cause.
+              // Viem's sends alone prepare `sidecars`, so a prepare or an estimate, which signs
+              // nothing, still fills.
+              if (
+                args.phase === 'beforeFillTransaction' &&
+                account === account_client &&
+                parameters?.includes('sidecars') &&
+                account_client.source !== 'accessKey'
+              )
+                throw refusal()
               // Only a transaction whose nonce the node fills takes the protocol nonce. Viem's
               // estimate prepares no nonce, and sends nothing.
               if (
@@ -2611,7 +2632,21 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             ...defaults,
             ...clientOptions,
             account,
-            chain: coordinate(chain, { shared: Boolean(session) }),
+            chain: coordinate(chain, {
+              account,
+              // The refusal matches that of the account's `signTransaction`: an expired access key
+              // that this app holds rejects as `expiring` rejects it, and any other case as
+              // `Signer.fromSession`'s account does.
+              refusal: () => {
+                if (!lapsed(session ?? context.session.get(), { chainId }))
+                  return new AccessKeyRequiredError()
+                if (session) return lapse_fixed(session)
+                if (renews) return new AccessKeyExpiredError()
+                if (!page) return lapse_current()
+                return new AccessKeyRequiredError()
+              },
+              shared: Boolean(session),
+            }),
             transport: reads,
           },
           { verifier: tokens },
