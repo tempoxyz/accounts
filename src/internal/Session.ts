@@ -2595,8 +2595,9 @@ type Saved = {
 /**
  * Returns `session` on `chainId`: its access key on that chain as `accessKey`, and its other access
  * keys in `accessKeys`. The account drops with the access key that leaves `accessKey`, since an
- * account's address can differ by chain. Returns `session` itself when `accessKey` is on `chainId`
- * already, or when it holds no access key.
+ * account's address can differ by chain. Each access key appears once, also for a session that an
+ * earlier release saved with its access key in `accessKeys` too. Returns `session` itself when
+ * `accessKey` is on `chainId` already, or when it holds no access key.
  *
  * @example
  * ```ts
@@ -2612,8 +2613,14 @@ export function toChain(
   if (session.accessKey && Number(session.accessKey.chainId) === chainId)
     return session
 
+  // One public access key can act on several chains, so the chain and the key ID identify an entry.
+  const id = (entry: NonNullable<Session.Any['accessKey']>) =>
+    `${Number(entry.chainId)}:${entry.keyAuthorization.keyId.toLowerCase()}`
   const all = [session.accessKey, ...(session.accessKeys ?? [])].filter(
-    (entry): entry is NonNullable<typeof entry> => !!entry,
+    (entry, index, entries): entry is NonNullable<typeof entry> =>
+      !!entry &&
+      entries.findIndex((other) => !!other && id(other) === id(entry)) ===
+        index,
   )
   const accessKey = all.find((entry) => Number(entry.chainId) === chainId)
   const accessKeys = all.filter((entry) => entry !== accessKey)

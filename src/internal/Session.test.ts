@@ -207,7 +207,11 @@ describe('machines.session', () => {
 
     test("moves the kept expired session's access keys to the chain that a switch selects", () => {
       const actor = createActor(machines.session).start()
-      const accessKey = { account: '0x1', chainId: 4217 } as never
+      const accessKey = {
+        account: '0x1',
+        chainId: 4217,
+        keyAuthorization: { keyId: '0xa' },
+      } as never
 
       actor.send({
         renewing: { ...expired, accessKey },
@@ -232,7 +236,11 @@ describe('machines.session', () => {
 
     test('moves a kept expired session that the instance adopts after a switch, until a change sets a session', () => {
       const actor = createActor(machines.session).start()
-      const accessKey = { account: '0x1', chainId: 4217 } as never
+      const accessKey = {
+        account: '0x1',
+        chainId: 4217,
+        keyAuthorization: { keyId: '0xa' },
+      } as never
 
       actor.send({ chainId: 42431, type: 'renewing.move' })
       // A read that started before the switch adopts the earlier chain's copy, which moves too.
@@ -2788,8 +2796,16 @@ describe('create', () => {
 })
 
 describe('toChain', () => {
-  const accessKeyA = { account: '0x1', chainId: 4217 } as never
-  const accessKeyB = { account: '0x1', chainId: 42431 } as never
+  const accessKeyA = {
+    account: '0x1',
+    chainId: 4217,
+    keyAuthorization: { keyId: '0xa' },
+  } as never
+  const accessKeyB = {
+    account: '0x1',
+    chainId: 42431,
+    keyAuthorization: { keyId: '0xb' },
+  } as never
   const base = Session.from({
     accessToken: 'a',
     expiresAt: 1,
@@ -2837,5 +2853,28 @@ describe('toChain', () => {
       ...base,
       accessKeys: [accessKeyA],
     })
+  })
+
+  test('keeps one copy of an access key that a saved session holds in both `accessKey` and `accessKeys`', () => {
+    // A copy that the store returns, so an identity check does not find it.
+    const session = {
+      ...base,
+      accessKey: accessKeyA,
+      accessKeys: [structuredClone(accessKeyA)],
+    }
+
+    const moved = toChain(session, { chainId: 42431 })
+
+    expect({
+      accessKey: moved.accessKey?.chainId,
+      accessKeys: moved.accessKeys?.map((entry) => entry.chainId),
+    }).toMatchInlineSnapshot(`
+      {
+        "accessKey": undefined,
+        "accessKeys": [
+          4217,
+        ],
+      }
+    `)
   })
 })
