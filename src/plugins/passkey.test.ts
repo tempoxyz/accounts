@@ -178,7 +178,7 @@ describe('passkey', () => {
     `)
   })
 
-  test('prepare returns a handle whose concurrent signIn calls, such as a double click, share one sign-in, since the browser refuses a second ceremony while one runs', async () => {
+  test('prepare returns a handle whose signIn calls during a request each send their own, so a stalled request holds no retry', async () => {
     const paths: string[] = []
     const accounts = Accounts.create({
       chain: 42431,
@@ -202,12 +202,9 @@ describe('passkey', () => {
       prepared.signIn(),
       prepared.signIn(),
     ])
-    const later = await prepared.signIn().catch((error: unknown) => error)
 
-    // Nothing answers, so each sign-in rejects. The two concurrent calls send one options request,
-    // and the call after them sends its own.
+    // Nothing answers, so no ceremony starts, and each call rejects with its own request's error.
     expect({
-      later: later === (first as PromiseRejectedResult).reason,
       paths,
       shared:
         first.status === 'rejected' &&
@@ -215,12 +212,11 @@ describe('passkey', () => {
         first.reason === second.reason,
     }).toMatchInlineSnapshot(`
       {
-        "later": false,
         "paths": [
           "/v1/auth/passkey/options",
           "/v1/auth/passkey/options",
         ],
-        "shared": true,
+        "shared": false,
       }
     `)
   })

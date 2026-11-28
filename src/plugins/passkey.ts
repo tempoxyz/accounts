@@ -356,8 +356,8 @@ export function passkey(options: passkey.Options = {}) {
          * `signIn` requests options of its own before the ceremony. Their `select` defaults as
          * `passkey.signIn` defaults it, so after a `signOut` without `everywhere` they offer
          * every passkey. Prepare a new handle after a `signOut` to keep that request out of the
-         * gesture. A `signIn` while the handle's sign-in runs, such as at a double click,
-         * returns that sign-in's promise, with no request or prompt of its own.
+         * gesture. A `signIn` during the passkey prompt of the handle's sign-in, such as at a double
+         * click, returns that sign-in's promise, with no request or prompt of its own.
          *
          * @example
          * ```ts
@@ -430,32 +430,41 @@ export function passkey(options: passkey.Options = {}) {
           // Without `available`, the handle shares the read of `available` that runs, such as the
           // sign-in form's read for its passkey button.
           let prepared = request(parameters.available ?? read())
-          // The sign-in that runs, which a call during it, such as a double click, joins. The
-          // browser refuses a second ceremony while one runs, so that call's own options request
-          // and prompt would only fail. A settled sign-in clears it, so a later call signs in again.
+          // The sign-in whose ceremony runs, which a call during the ceremony, such as a double
+          // click, joins. The browser refuses a second ceremony while one runs, so that call's own
+          // options request and prompt would only fail. A call during a request starts its own
+          // sign-in, so a stalled request holds no retry.
           let running: Promise<passkey.signIn.ReturnType> | undefined
-          const signIn = async (): Promise<passkey.signIn.ReturnType> => {
-            // The prepared request names its chain, which a switch since can leave.
-            const change = context.session.change({ chainId })
-            if (!fixed && prepared.stale())
-              // The realms read of the handle answered already, so the new options need none.
-              prepared = request(await prepared.handle.available)
-            const result = await prepared.handle
-              .signIn({ getFn: ceremony(change) })
-              .catch(change.fail)
-            return finish(change, result, resolved.account)
-          }
           return {
             available: prepared.handle.available,
             signIn() {
               if (running) return running
-              const current = signIn()
-              running = current
-              // The cleanup handles both outcomes, so it adds no unhandled rejection.
-              const clear = () => {
-                if (running === current) running = undefined
-              }
-              void current.then(clear, clear)
+              const current = (async (): Promise<passkey.signIn.ReturnType> => {
+                // The prepared request names its chain, which a switch since can leave.
+                const change = context.session.change({ chainId })
+                if (!fixed && prepared.stale())
+                  // The realms read of the handle answered already, so the new options need none.
+                  prepared = request(await prepared.handle.available)
+                const getFn = ceremony(change)
+                let call: 'account' | 'assertion' = 'assertion'
+                const result = await prepared.handle
+                  .signIn({
+                    getFn: async (parameters) => {
+                      // Only the assertion is the sign-in's ceremony. The session's account keeps
+                      // the function for its own signatures.
+                      if (call === 'account') return await getFn(parameters)
+                      call = 'account'
+                      running = current
+                      try {
+                        return await getFn(parameters)
+                      } finally {
+                        if (running === current) running = undefined
+                      }
+                    },
+                  })
+                  .catch(change.fail)
+                return finish(change, result, resolved.account)
+              })()
               return current
             },
           }
@@ -595,7 +604,7 @@ export declare namespace passkey {
       /**
        * Signs in as `passkey.signIn` does, with the handle's options, and sets the instance's
        * session. Requests new options if the handle holds none, or if they are older than 4 minutes. A
-       * call while the handle's sign-in runs returns that sign-in's promise.
+       * call during the passkey prompt of the handle's sign-in returns that sign-in's promise.
        *
        * @throws {Accounts.RequestError} With `server_error` and `status` 0, when a request receives
        *   no response, as `passkey.signIn` throws it.
