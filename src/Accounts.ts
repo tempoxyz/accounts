@@ -1379,7 +1379,7 @@ export type Accounts<
        * the refresh revokes its new tokens after the request.
        *
        * If the response has status 401 and `WWW-Authenticate` names `invalid_token`, the call
-       * refreshes the tokens once. Without a `WWW-Authenticate` header that the page reads, a JSON
+       * refreshes the tokens once. Without a readable challenge that holds an `error`, a JSON
        * body whose `error` is `invalid_token` refreshes them too. Examples are an access token
        * that expired at the API first, or a Tempo ID session that ended elsewhere.
        *

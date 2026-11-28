@@ -398,6 +398,21 @@ describe('refusesToken', () => {
     `)
   })
 
+  test('refuses for a 401 whose challenge holds no error and whose JSON body names invalid_token', async () => {
+    const response = Response.json(
+      { error: 'invalid_token' },
+      {
+        headers: {
+          'www-authenticate':
+            'Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"',
+        },
+        status: 401,
+      },
+    )
+
+    expect(await Api.refusesToken(response)).toMatchInlineSnapshot(`true`)
+  })
+
   test('keeps a readable challenge that names another error over the body', async () => {
     const response = Response.json(
       { error: 'invalid_token' },

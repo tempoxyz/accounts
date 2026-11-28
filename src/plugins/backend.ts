@@ -237,7 +237,7 @@ export function backend(options: backend.Options) {
          * if necessary. Returns `undefined` without a session, and for a SIWE session, which holds
          * no access token, and sends no request. If the response has status 401 and `WWW-Authenticate`
          * names `invalid_token`, such as after Tempo ID ended the user's session, the call refreshes
-         * the session once. Without `WWW-Authenticate`, a JSON body whose `error` is
+         * the session once. Without a challenge that holds an `error`, a JSON body whose `error` is
          * `invalid_token` refreshes it too. New tokens send the request again, if its body reads
          * twice, such as a string or a `Blob`. A stream body, a refresh that fails or that Tempo ID
          * refuses, and a second refusal of the token that such a refresh issued return the first

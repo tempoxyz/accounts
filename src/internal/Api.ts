@@ -600,17 +600,19 @@ export function expired(token: string) {
 
 /**
  * Returns whether the response refuses its request's access token: status 401, with a
- * `WWW-Authenticate` challenge that names `invalid_token` (RFC 6750 §3.1). Without a challenge
- * that the caller can read, a JSON body whose `error` is `invalid_token` refuses it too, such as
- * `Response.json({ error: 'invalid_token' }, { status: 401 })`. The read takes a clone, so the
- * caller still reads the body.
+ * `WWW-Authenticate` challenge that names `invalid_token` (RFC 6750 §3.1). Without a readable
+ * challenge that holds an `error`, a JSON body whose `error` is `invalid_token` refuses it too,
+ * such as `Response.json({ error: 'invalid_token' }, { status: 401 })`. The read takes a clone, so
+ * the caller still reads the body.
  */
 export async function refusesToken(response: Response) {
   if (response.status !== 401) return false
   // A page reads no header of a cross-origin response that the API does not expose, but it reads
-  // the body.
-  const challenge = response.headers.get('www-authenticate')
-  if (challenge !== null) return /\berror="?invalid_token"?/i.test(challenge)
+  // the body. A challenge without `error`, such as `Bearer resource_metadata="…"`, leaves the
+  // decision to the body.
+  const challenge = response.headers.get('www-authenticate') ?? ''
+  if (/\berror=/i.test(challenge))
+    return /\berror="?invalid_token"?/i.test(challenge)
   if (!/\bjson\b/i.test(response.headers.get('content-type') ?? ''))
     return false
   const body: unknown = await response
