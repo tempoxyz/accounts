@@ -1378,6 +1378,17 @@ export type Accounts<
        * the `TypeError` of a relative `url` outside a page. A browser tab's sign-out that waits for
        * the refresh revokes its new tokens after the request.
        *
+       * If the response has status 401 and `WWW-Authenticate` names `invalid_token`, the call
+       * refreshes the tokens once. Examples are an access token that expired at the API first, or a
+       * Tempo ID session that ended elsewhere.
+       *
+       * New tokens send the request again, if its body reads twice, such as a string or a `Blob`.
+       * A stream body, a session without a refresh token, a failed refresh, and a sign-in of another
+       * user return the first response. A refused refresh token ends the session.
+       *
+       * A cross-origin API must list `WWW-Authenticate` in `Access-Control-Expose-Headers`. Without
+       * it, the page cannot read the challenge, and the call returns the first response.
+       *
        * With the `backend` plugin, `fetch(request, parameters)` sends the request with the access
        * token of the session that the server request's session cookie names, after a refresh if
        * necessary. It returns `undefined` without that session, and for a SIWE session, which holds
@@ -2785,17 +2796,54 @@ export function create<
         // refresh, as `fetch` rejects at the abort.
         const signal = parameters.init?.signal ?? undefined
         if (signal?.aborted) throw aborted(signal)
-        const token = await (() => {
-          if (!signal) return accessToken()
-          return new Promise<string>((resolve, reject) => {
+        // Rejects at the abort, and leaves `promise` running, since other calls can share it.
+        const until = <value>(promise: Promise<value>) => {
+          if (!signal) return promise
+          return new Promise<value>((resolve, reject) => {
             const abort = () => reject(aborted(signal))
             signal.addEventListener('abort', abort, { once: true })
-            accessToken()
+            promise
               .then(resolve, reject)
               .finally(() => signal.removeEventListener('abort', abort))
           })
-        })()
-        return Actions.fetch(config, { ...parameters, accessToken: token })
+        }
+        const token = await until(accessToken())
+        // The call started for the user of this token, so its retry never sends another user's token.
+        const started = context.session.get()
+        const subject = started && Session.subject(started)
+        const response = await Actions.fetch(config, {
+          ...parameters,
+          accessToken: token,
+        })
+        if (
+          !Api.refusesToken(response) ||
+          !Api.resendable(parameters.init?.body)
+        )
+          return response
+
+        // The API refused a live access token. A slow device clock or a Tempo ID session that ended
+        // elsewhere causes this. One refresh separates the two cases, as `account.get` does.
+        // If another call replaced the refused token already, the request sends its token.
+        const current = context.session.get()
+        if (!current?.refreshToken) return response
+        if (current.accessToken === token) {
+          // A refused refresh token ends the session, and the call returns the first response.
+          const failed = await until(
+            refresh().then(
+              () => false,
+              () => true,
+            ),
+          )
+          if (failed) return response
+        }
+        // The resend takes the token of the session that the subject check read, so a sign-in of
+        // another user during the cancel of the first body never authenticates the request.
+        const latest = context.session.get()
+        if (!latest || Session.subject(latest) !== subject) return response
+        const renewed = latest.accessToken
+        if (!renewed || renewed === token) return response
+        await response.body?.cancel()
+        return Actions.fetch(config, { ...parameters, accessToken: renewed })
       },
       get: (parameters: Core.getSession.Parameters | Request = {}) => {
         if (parameters instanceof Request)

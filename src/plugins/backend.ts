@@ -286,7 +286,7 @@ export function backend(options: backend.Options) {
           })
           if (!tokenHeaders) return undefined
           const response = await send(tokenHeaders)
-          if (!refusesToken(response)) return response
+          if (!Api.refusesToken(response)) return response
 
           // The API refused a token that the session still holds, so the session refreshes once. The
           // request already reached the API, so a failed refresh returns its response. Sessions that
@@ -298,7 +298,7 @@ export function backend(options: backend.Options) {
           if (
             !renewed ||
             accessTokenOf(renewed) === refused ||
-            !resendable(init.body)
+            !Api.resendable(init.body)
           )
             return response
           await response.body?.cancel()
@@ -1000,34 +1000,6 @@ function local(sessions: BackendSessions.create.ReturnType): backend.Sessions {
  */
 function accessTokenOf(headers: Record<string, string>) {
   return new Headers(headers).get('authorization')?.split(' ')[1]
-}
-
-/**
- * Returns whether the response refuses its request's access token: status 401, with a
- * `WWW-Authenticate` challenge that names `invalid_token` (RFC 6750 §3.1).
- */
-function refusesToken(response: Response) {
-  if (response.status !== 401) return false
-  const challenge = response.headers.get('www-authenticate') ?? ''
-  return /\berror="?invalid_token"?/i.test(challenge)
-}
-
-/**
- * Returns whether a request body reads the same at a second send: absent, a string, a `Blob`, an
- * `ArrayBuffer` or a view of one, `FormData`, or `URLSearchParams`. A stream or an iterable reads
- * once.
- */
-function resendable(body: RequestInit['body']) {
-  return (
-    body === undefined ||
-    body === null ||
-    typeof body === 'string' ||
-    body instanceof Blob ||
-    body instanceof ArrayBuffer ||
-    ArrayBuffer.isView(body) ||
-    body instanceof FormData ||
-    body instanceof URLSearchParams
-  )
 }
 
 /** Returns a new session ID: 32 random bytes in unpadded URL-safe Base64. */
