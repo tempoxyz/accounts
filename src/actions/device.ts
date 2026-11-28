@@ -246,7 +246,7 @@ export declare namespace authorize {
     scope?: string | undefined
     /**
      * Aborts the code request, and rejects with the signal's reason. Absent, the code request ends
-     * only with its response. `wait` takes its own signal.
+     * only with its response.
      */
     signal?: AbortSignal | undefined
   }

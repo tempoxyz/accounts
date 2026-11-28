@@ -280,7 +280,8 @@ export function device(options: device.Options = {}) {
          * approves the code, and returns the authorization, as `device.poll` returns it. Sets no
          * session, so the caller checks and keeps the authorization, such as the `viem` plugin's
          * retry, which keeps it only for the same user and Tempo Account. It takes the parameters of
-         * `device.signIn`, and `signal`, which stops the polls. An aborted call shows no code.
+         * `device.signIn`, and `signal`, which aborts the code request and stops the polls. An aborted call
+         * shows no code.
          *
          * @throws {Accounts.RequestError} As `device.signIn` throws it.
          * @throws {Plugins.device.OnCodeRequiredError} Without the plugin's `onCode`.
