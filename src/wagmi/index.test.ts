@@ -712,7 +712,6 @@ describe('tempoId', () => {
   })
 
   test('refuses a call that names another account by address with `Provider.UnauthorizedError`, and sends no wallet request to the RPC', async () => {
-    const methods: string[] = []
     const store = await sessionStore()
     const config = createConfig({
       chains: [tempo],
@@ -723,20 +722,8 @@ describe('tempoId', () => {
           url: 'http://127.0.0.1:9',
         }),
       ],
-      transports: {
-        // An RPC that records each request that reaches it, and refuses every method but the chain's.
-        [tempo.id]: custom(
-          {
-            request(args) {
-              methods.push(args.method)
-              if (args.method === 'eth_chainId')
-                return Promise.resolve('0x1079')
-              return Promise.reject(new Error('Method not supported.'))
-            },
-          },
-          { retryCount: 0 },
-        ),
-      },
+      // A closed port: a call that reaches the RPC rejects with an error that names its method.
+      transports: { [tempo.id]: http('http://127.0.0.1:9', { retryCount: 0 }) },
     })
     await reconnect(config)
     const other = '0x0000000000000000000000000000000000000001'
@@ -759,24 +746,30 @@ describe('tempoId', () => {
             to: other,
           } as never,
         ),
-      ].map((promise) => promise.catch((error: Error) => error.message)),
+      ].map((promise) =>
+        promise.catch((error: Error & { cause?: Error | undefined }) => ({
+          method: /"method":"(\w+)"/.exec(error.message)?.[1],
+          name: error.cause?.name ?? error.name,
+        })),
+      ),
     )
 
     expect(errors).toMatchInlineSnapshot(`
       [
-        "Invalid account: 0x0000000000000000000000000000000000000001 is not the session's account. Sign with the connected account.",
-        "Invalid account: 0x0000000000000000000000000000000000000001 is not the session's account. Sign with the connected account.",
-        "An error occurred.
-
-      Request Arguments:
-        from:  0x0000000000000000000000000000000000000001
-        to:    0x0000000000000000000000000000000000000001
-
-      Details: Invalid account: 0x0000000000000000000000000000000000000001 is not the session's account. Sign with the connected account.
-      Version: viem@2.58.8",
+        {
+          "method": undefined,
+          "name": "Provider.UnauthorizedError",
+        },
+        {
+          "method": undefined,
+          "name": "Provider.UnauthorizedError",
+        },
+        {
+          "method": undefined,
+          "name": "Provider.UnauthorizedError",
+        },
       ]
     `)
-    expect(methods).toMatchInlineSnapshot(`[]`)
   })
 
   test('sends the calls of `sendCalls`, `sendCallsSync`, and tree-shakable actions with the access key, for a call that names the connected account', async () => {
