@@ -2920,6 +2920,7 @@ export namespace machines {
         assertEvent(args.event, 'adopt')
         const { context, event } = args
         return {
+          adopted: true,
           loaded: true,
           // The next authorization renews the expired session that another tab emptied, or keeps
           // renewing this instance's own, as `set` does.
@@ -3112,6 +3113,9 @@ export namespace machines {
         assertEvent(args.event, 'set')
         const { context, event } = args
         return {
+          // A change of the adopted session, such as its refresh or its account read, keeps the mark.
+          // A sign-in or a sign-out of the instance itself clears it.
+          adopted: !!event.session && !event.signIn && context.adopted,
           loaded: true,
           // A new session replaces the expired one that an authorization renews. Without one, the
           // next authorization renews it, also after `load` emptied it outside an authorization.
@@ -3224,6 +3228,7 @@ export namespace machines {
     },
   }).createMachine({
     context: {
+      adopted: false,
       authorizations: 0,
       checked: undefined,
       delegations: 0,
@@ -3312,6 +3317,13 @@ export namespace machines {
      * the changes, as {@link Event} describes, and no app reads them.
      */
     export type Context = {
+      /**
+       * Whether the last change of the session came from another context, such as another tab's
+       * sign-in, which the instance adopted without a write. A later change of that session, such as
+       * its refresh, keeps it. `false` after a sign-in or a sign-out of the instance itself, and at
+       * the start.
+       */
+      adopted: boolean
       /** The number of authorizations in progress, which hold the status at `pending` or `reauthorizing`. */
       authorizations: number
       /**
@@ -4539,6 +4551,14 @@ export namespace machines {
    */
   export function signIns(snapshot: machines.session.Snapshot): number {
     return snapshot.context.signIns
+  }
+
+  /**
+   * Returns whether the last change of the session came from another context, such as another tab's
+   * sign-in, rather than from the instance itself.
+   */
+  export function adopted(snapshot: machines.session.Snapshot): boolean {
+    return snapshot.context.adopted
   }
 
   /**

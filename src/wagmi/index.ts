@@ -174,6 +174,12 @@ export class StoreRequiredError extends Error {
  * that the chain does not hold retries through wagmi's actions too. The `retry` option of the
  * `viem` plugin describes the retry.
  *
+ * A session that another tab or instance saves connects wagmi at the next `connect` or
+ * `reconnect`, since wagmi's storage holds the connection of the tab that wrote it last. If the
+ * session's end or an expiry ended the connector's connection in this tab, the next session connects
+ * at once, unless wagmi's storage names another wallet. Another tab's later write of that storage can
+ * name this connector over a wallet that this tab connected after the end.
+ *
  * `disconnect` signs the user out with `accounts.signOut`. A sign-out through the instance itself
  * disconnects wagmi too. If the sign-out rejects, such as for a revocation with status 0, 429, or
  * 5xx, the session still ends, and the provider emits `disconnect`. wagmi stays connected, so its
@@ -724,6 +730,15 @@ const defaultSignInIds = new Set(['device', 'dialog', 'passkey', 'redirect'])
 /** The members of every connector's instance, whatever its plugins. */
 type Base = Accounts.Accounts<readonly [ReturnType<typeof viem>]>
 
+/** The options of the connector's `connectIfChosen`. */
+type ChosenOptions = {
+  /**
+   * Whether an expiry ended wagmi's connection of this connector before the session, so the
+   * connector held the current connection. Defaults to `false`.
+   */
+  resumes?: boolean | undefined
+}
+
 /** The options of the connector's `saved`. */
 type SavedOptions = {
   /**
@@ -902,7 +917,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
     function afterSignOut() {
       if (!machines.held(disconnects.getSnapshot()) || context?.session.get())
         return
-      disconnects.send({ type: 'session.change' })
+      disconnects.send({ addressed: false, type: 'session.change' })
       endConnection()
     }
 
@@ -979,20 +994,24 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
         // nothing again, and a new session of the same account connects wagmi again.
         const ended = machines.expired(snapshot)
         if (!session && ended)
-          return disconnects.send({ type: 'session.change' })
+          return disconnects.send({ type: 'session.clear' })
         const shown = ended ? undefined : addressOf(previous)
         // `disconnect` ends wagmi's connection once its sign-out settles. The provider's listeners
         // receive the end of the session at once.
         if (!session && machines.signingOut(snapshot)) return onSignOut()
         // wagmi can hold the account of a session that `disconnect` ended, which a new session replaces.
         const stale = machines.stale(snapshot)
-        if (session) disconnects.send({ type: 'session.change' })
         const next = addressOf(session)
+        if (session)
+          disconnects.send({
+            addressed: next !== undefined,
+            type: 'session.change',
+          })
         if (session && !next) {
           // A session without an access key or an account, such as a dialog's sign-in without an
           // access key, has no address until its account is read. The account's commit notifies
           // this subscriber again.
-          if (shown) onDisconnect()
+          if (shown) endSession()
           else if (stale) endConnection()
           // A failed read leaves wagmi disconnected, and `connect` reads the account again.
           void withAccount(session).catch(() => undefined)
@@ -1003,8 +1022,11 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           if (session) emitNamed()
           return
         }
-        if (next) onAccountsChanged([next])
-        else onDisconnect()
+        // After an expiry ended wagmi's connection here, also after a read emptied the expired
+        // session, the account's next session connects.
+        if (next)
+          onAccountsChanged([next], { resumes: machines.resumes(snapshot) })
+        else endSession()
       })
       // A renewal that ends without a session ends the session that the subscriber kept: an
       // authorization that finds no Tempo ID session, or a sign-out during the renewal, which moves
@@ -1019,10 +1041,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           snapshot &&
           InternalSession.machines.expired(snapshot)
         )
-          disconnects.send({
-            connected: addressOf(snapshot.context.session) !== undefined,
-            type: 'session.expire',
-          })
+          disconnects.send({ type: 'session.expire' })
         if (
           previous.status === 'reauthorizing' &&
           status.status !== 'reauthorizing' &&
@@ -1034,8 +1053,8 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           if (snapshot && InternalSession.machines.expired(snapshot)) return
           // The expiry ended wagmi's connection already, so a failed renewal ends nothing again.
           if (machines.expired(disconnects.getSnapshot()))
-            return disconnects.send({ type: 'session.change' })
-          onDisconnect()
+            return disconnects.send({ type: 'session.clear' })
+          endSession()
         }
       })
       return instance
@@ -1327,9 +1346,13 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
     /**
      * Emits the change of the session's accounts to wagmi and to the providers' listeners. wagmi
      * reads `change` only for a connection of this connector, and `connect` without one, so a
-     * sign-in through the instance itself connects wagmi too.
+     * sign-in through the instance itself connects wagmi too. `options.resumes` connects a session
+     * that another context saved after an expiry ended wagmi's connection here.
      */
-    function onAccountsChanged(accounts: readonly string[]) {
+    function onAccountsChanged(
+      accounts: readonly string[],
+      options: ChosenOptions = {},
+    ) {
       if (accounts.length === 0) return onDisconnect()
       const addresses = accounts.map((account) => Address.checksum(account))
       config.emitter.emit('change', { accounts: addresses })
@@ -1338,15 +1361,34 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       // wagmi's `connect` makes this connector the current one, so it follows only when no other
       // connector holds the current connection, never over another wallet. A failed read of
       // wagmi's storage counts as none, so the promise needs no other handler.
-      void connectIfChosen(addresses)
+      void connectIfChosen(addresses, options)
     }
 
-    /** Emits wagmi's `connect` unless another connector holds wagmi's current connection. */
-    async function connectIfChosen(addresses: readonly Address.Address[]) {
+    /**
+     * Emits wagmi's `connect` unless another connector holds wagmi's current connection. A session
+     * that another context saved connects only with `options.resumes`.
+     */
+    async function connectIfChosen(
+      addresses: readonly Address.Address[],
+      options: ChosenOptions = {},
+    ) {
       // Without storage, the connector cannot read wagmi's current connection, so it connects
       // nothing, never over another wallet. `connect` and `reconnect` connect it.
       if (!config.storage) return
+      // wagmi's storage holds the state of the context that wrote it last, such as another tab of
+      // the page, so for a session that another context saved, it does not name this context's
+      // current connection. `connect` and `reconnect` connect such a session. A connection of this
+      // connector that the session's end ended here resumes with it.
+      const { actor } = getInstance().session
+      if (
+        !options.resumes &&
+        actor &&
+        InternalSession.machines.adopted(actor.getSnapshot())
+      )
+        return
       // wagmi persists its state, whose `current` names the connection that its actions use.
+      // A resumed connection still yields to a wallet that wagmi's storage names, such as one that
+      // the tab connected after the end.
       const store = await (async () =>
         (await config.storage?.getItem('store')) as
           | {
@@ -1369,6 +1411,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
       if (!held || !Address.isEqual(held, addresses[0]!)) return
       // `isAuthorized` refuses such a session, so a late read connects it neither.
       if (foreign(session!)) return
+      disconnects.send({ type: 'connection.start' })
       config.emitter.emit('connect', {
         accounts: addresses,
         chainId: getInstance().chain.get(),
@@ -1387,6 +1430,15 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
         Api.page() === undefined &&
         Api.unbound(getInstance().config, session)
       )
+    }
+
+    /**
+     * Ends wagmi's connection at the end of the instance's session outside `disconnect`, such as
+     * another tab's sign-out, so the next session resumes a connection that this connector held.
+     */
+    function endSession() {
+      disconnects.send({ type: 'session.end' })
+      onDisconnect()
     }
 
     /** Emits the end of the session to wagmi and to the providers' listeners. */
@@ -1582,6 +1634,7 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
           throw error
         })
         connects.send({ attempt, type: 'connect.end' })
+        disconnects.send({ type: 'connection.start' })
         return {
           accounts: withCapabilities
             ? [{ address, capabilities: {} }]
@@ -1604,14 +1657,16 @@ function connector<const plugins extends readonly Plugin.Option[]>(source: {
         } catch (error) {
           // Without a session, wagmi keeps the ended session's account, so its next `disconnect`
           // revokes the refresh token. A session that a sign-in set during the sign-out stays.
-          disconnects.send({
-            type: context!.session.get() ? 'signOut.finish' : 'signOut.fail',
-          })
+          const held = context!.session.get()
+          disconnects.send({ type: held ? 'signOut.finish' : 'signOut.fail' })
+          if (held) disconnects.send({ type: 'connection.start' })
           throw error
         }
         disconnects.send({ type: 'signOut.finish' })
         // A sign-in that commits during the sign-out holds a new session, which stays connected.
-        if (!context!.session.get()) endConnection()
+        if (context!.session.get())
+          disconnects.send({ type: 'connection.start' })
+        else endConnection()
       },
       getAccounts,
       getChainId,
@@ -1849,20 +1904,26 @@ export namespace machines {
   }
 
   /**
-   * The machine of a connector's `disconnect` calls. The session's subscriber ends wagmi's connection
-   * at an empty session only outside `signingOut`. In `signingOut`, `disconnect` ends it once its
-   * sign-out settles. A sign-out that rejects without a session leaves wagmi connected in `held`, so
-   * wagmi's next `disconnect` revokes the refresh token. The next sign-out or sign-in of the instance
-   * ends `held`. At the expiry of a connected session's access keys, `expired` ends wagmi's
-   * connection once. The instance's next change of the session ends `expired`: the read that empties
-   * the expired session, a failed renewal, or a new session, which connects wagmi again.
+   * The machine of a connector's `disconnect` calls, and of wagmi's connection of the connector in
+   * this context. `connected` holds while wagmi holds the connection here, from a `connect`, a
+   * `reconnect`, or a sign-in of the instance. The session's subscriber ends wagmi's connection at an
+   * empty session only outside `signingOut`. In `signingOut`, `disconnect` ends it once its sign-out
+   * settles. A sign-out that rejects without a session leaves wagmi connected in `held`, so wagmi's
+   * next `disconnect` revokes the refresh token. The next sign-out or sign-in of the instance ends
+   * `held`. At the expiry of the session's access keys, `expired` ends wagmi's connection once. The
+   * read that empties the expired session, a failed renewal, or another end of the session outside
+   * `disconnect`, such as another tab's sign-out, moves it to `lapsed`. In both states, the next
+   * session connects wagmi again, also one that another tab saved, since this connector held wagmi's
+   * connection here. Another change of the session ends them.
    *
-   * | State        | wagmi's connection                                            | Tag     |
-   * | ------------ | ------------------------------------------------------------- | ------- |
-   * | `idle`       | Follows the instance's session                                |         |
-   * | `signingOut` | Holds the account of the session that the sign-out ended      | `stale` |
-   * | `held`       | Holds the account of the session that a failed sign-out ended | `stale` |
-   * | `expired`    | Ended at the expiry of the session's access keys              |         |
+   * | State        | wagmi's connection                                            | Tag         |
+   * | ------------ | ------------------------------------------------------------- | ----------- |
+   * | `idle`       | Holds no connection of this connector                         |             |
+   * | `connected`  | Follows the instance's session                                |             |
+   * | `signingOut` | Holds the account of the session that the sign-out ended      | `stale`     |
+   * | `held`       | Holds the account of the session that a failed sign-out ended | `stale`     |
+   * | `expired`    | Ended at the expiry of the session's access keys              | `resumable` |
+   * | `lapsed`     | Ended with the session, outside `disconnect`                  | `resumable` |
    */
   export const disconnect = setup({
     actions: {
@@ -1874,10 +1935,13 @@ export namespace machines {
       start: assign((args) => ({ runs: args.context.runs + 1 })),
     },
     guards: {
-      /** Whether wagmi holds the account of the session that expired. */
-      connected: (args) => {
-        assertEvent(args.event, 'session.expire')
-        return args.event.connected
+      /**
+       * Whether the new session has an address. A session without one, such as a dialog's sign-in
+       * without an access key, keeps the ended connection until the commit of its account read.
+       */
+      addressed: (args) => {
+        assertEvent(args.event, 'session.change')
+        return args.event.addressed
       },
       /** Whether the sign-out that settles is the last one in progress. */
       last: (args) => args.context.runs === 1,
@@ -1891,15 +1955,26 @@ export namespace machines {
     id: 'disconnect',
     initial: 'idle',
     states: {
-      expired: {
-        entry: 'end',
+      connected: {
         on: {
-          'session.change': { target: 'idle' },
+          'session.end': { target: 'lapsed' },
+          'session.expire': { target: 'expired' },
           'signOut.start': { actions: 'start', target: 'signingOut' },
         },
       },
+      expired: {
+        entry: 'end',
+        on: {
+          'connection.start': { target: 'connected' },
+          'session.change': { guard: 'addressed', target: 'idle' },
+          'session.clear': { target: 'lapsed' },
+          'signOut.start': { actions: 'start', target: 'signingOut' },
+        },
+        tags: ['resumable'],
+      },
       held: {
         on: {
+          'connection.start': { target: 'connected' },
           'session.change': { target: 'idle' },
           'signOut.start': { actions: 'start', target: 'signingOut' },
         },
@@ -1907,9 +1982,17 @@ export namespace machines {
       },
       idle: {
         on: {
-          'session.expire': { guard: 'connected', target: 'expired' },
+          'connection.start': { target: 'connected' },
           'signOut.start': { actions: 'start', target: 'signingOut' },
         },
+      },
+      lapsed: {
+        on: {
+          'connection.start': { target: 'connected' },
+          'session.change': { guard: 'addressed', target: 'idle' },
+          'signOut.start': { actions: 'start', target: 'signingOut' },
+        },
+        tags: ['resumable'],
       },
       signingOut: {
         on: {
@@ -1938,6 +2021,12 @@ export namespace machines {
     /** An event of a connector. */
     type Event =
       | {
+          /** wagmi connected this connector here, at a `connect`, a `reconnect`, or a sign-in. */
+          type: 'connection.start'
+        }
+      | {
+          /** Whether the new session has an address. `false` without a session. */
+          addressed: boolean
           /**
            * The instance's session changed to a new session, a sign-out of the instance completed,
            * or a read emptied the expired session.
@@ -1945,9 +2034,15 @@ export namespace machines {
           type: 'session.change'
         }
       | {
-          /** Whether wagmi holds the account of the session. */
-          connected: boolean
-          /** The session's access keys expired while the instance held it. */
+          /** A read emptied the expired session, or its renewal failed. */
+          type: 'session.clear'
+        }
+      | {
+          /** The session ended outside `disconnect`, such as at another tab's sign-out. */
+          type: 'session.end'
+        }
+      | {
+          /** The session's access keys expired while wagmi held its connection here. */
           type: 'session.expire'
         }
       | {
@@ -1978,6 +2073,14 @@ export namespace machines {
   /** Returns whether a failed sign-out of `disconnect` left wagmi connected without a session. */
   export function held(snapshot: disconnect.Snapshot) {
     return snapshot.matches('held')
+  }
+
+  /**
+   * Returns whether an expiry ended wagmi's connection of this connector, with no other session
+   * since, so the next session connects wagmi again.
+   */
+  export function resumes(snapshot: disconnect.Snapshot) {
+    return snapshot.hasTag('resumable')
   }
 
   /** Returns whether a sign-out of `disconnect` runs, so wagmi's connection waits for it to settle. */
