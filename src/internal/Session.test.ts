@@ -2208,6 +2208,36 @@ describe('machines.session', () => {
       })
   })
 
+  describe('revokesReplaced', () => {
+    const cases = [
+      [
+        "a sign-in's or a restore's new tokens",
+        expired,
+        renewed,
+        false,
+        'expired',
+      ],
+      ["another user's sign-in", expired, other, false, 'expired'],
+      [
+        'a result with the held refresh token',
+        renewed,
+        other,
+        false,
+        undefined,
+      ],
+      ['an update of the held tokens', expired, renewed, true, undefined],
+      ['an empty result', expired, undefined, false, undefined],
+      ['no held session', undefined, renewed, false, undefined],
+    ] as const
+
+    for (const [name, held, session, update, expected] of cases)
+      test(`revokes ${expected ?? 'nothing'} for ${name}`, () => {
+        const result = machines.revokesReplaced({ held, session, update })
+
+        expect(result?.refreshToken).toBe(expected)
+      })
+  })
+
   describe('renews', () => {
     const cases = [
       [

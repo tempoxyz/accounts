@@ -1739,6 +1739,11 @@ export function create(options: create.Options): create.ReturnType {
           // sign-out reads.
           const signIn = !!session && !options.update && !options.restore
           const replaced = signIn ? context().session : undefined
+          const revocable = machines.revokesReplaced({
+            held: context().session,
+            session,
+            update: !!options.update,
+          })
           // Another context, such as a second run of a CLI's login, can have saved a session that this
           // instance never read. The sign-in's save replaces it, so the read starts before the save,
           // and the sign-in never waits for it.
@@ -1802,11 +1807,7 @@ export function create(options: create.Options): create.ReturnType {
           }
           // The revocation runs beside the sign-in, so the sign-in waits for no round trip, and it
           // rejects nothing.
-          if (
-            replaced?.refreshToken &&
-            replaced.refreshToken !== session?.refreshToken
-          )
-            void revokeReplaced(replaced, since)
+          if (revocable) void revokeReplaced(revocable, since)
           if (overwriting)
             void overwriting.then(async (stored) => {
               const overwritten = machines.overwrites({
@@ -4462,6 +4463,34 @@ export namespace machines {
       current: Session.Any | undefined
       /** The session that the store holds. */
       stored: Session.Any | undefined
+    }
+
+    type ReturnType = Session.Any | undefined
+  }
+
+  /**
+   * Returns the session whose refresh token a change's commit revokes: the session that the
+   * instance holds, which the result replaces. A sign-in replaces it, and so does a restore, such as
+   * an `authorize` of a new access key. An update of the same session's tokens, an empty result, and
+   * a result with the same refresh token revoke none.
+   */
+  export function revokesReplaced(
+    options: machines.revokesReplaced.Options,
+  ): machines.revokesReplaced.ReturnType {
+    const { held, session, update } = options
+    if (!session || update || !held?.refreshToken) return undefined
+    if (held.refreshToken === session.refreshToken) return undefined
+    return held
+  }
+
+  export declare namespace revokesReplaced {
+    type Options = {
+      /** The session that the instance holds when the change commits. */
+      held: Session.Any | undefined
+      /** The session of the change's result. Absent for an empty result. */
+      session: Session.Any | undefined
+      /** Whether the change updates the tokens of the session that the instance holds. */
+      update: boolean
     }
 
     type ReturnType = Session.Any | undefined
