@@ -7,6 +7,7 @@ import { PGlite } from '@electric-sql/pglite'
 import * as ChildProcess from 'node:child_process'
 import * as Events from 'node:events'
 import * as Fs from 'node:fs'
+import * as Net from 'node:net'
 import * as Os from 'node:os'
 import * as Path from 'node:path'
 import { P256, PublicKey } from 'ox'
@@ -170,6 +171,45 @@ describe('device', () => {
     } finally {
       Fs.closeSync(Fs.openSync(file, 'w'))
       Fs.rmSync(directory, { force: true, recursive: true })
+    }
+  })
+
+  test('signIn aborts the code request at an abort of signal, so a stalled request holds no connection', async () => {
+    // The server accepts each connection and never answers, as a stalled network does.
+    const sockets: Net.Socket[] = []
+    const server = Net.createServer((socket) => {
+      sockets.push(socket)
+      // The socket discards the request, so it reads the end of the connection.
+      socket.resume()
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as Net.AddressInfo
+    const accounts = Accounts.create({
+      accessKey: { expiry: '7d', limits: [{ limit: '100', token: 'ousd' }] },
+      chain: 42431,
+      clientId: 'cli:acme-example',
+      plugins: [device({ onCode: () => {} })],
+      store: Store.memory(),
+      url: `http://127.0.0.1:${port}`,
+    })
+    const controller = new AbortController()
+
+    try {
+      const signIn = accounts.device
+        .signIn({ signal: controller.signal })
+        .catch((error: unknown) => error)
+      await expect.poll(() => sockets.length).toBe(1)
+      controller.abort(new Error('Timed out.'))
+      const error = await signIn
+
+      expect(error).toMatchInlineSnapshot(`[Error: Timed out.]`)
+      // Each connection of the code request ends, so none keeps the process alive.
+      await expect
+        .poll(() => sockets.every((socket) => socket.readableEnded))
+        .toBe(true)
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise((resolve) => server.close(resolve))
     }
   })
 

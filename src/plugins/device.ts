@@ -101,7 +101,8 @@ export function device(options: device.Options = {}) {
           challenge: parameters.challenge !== undefined,
         })
 
-        // An abort rejects the code request and `onCode` at once. The wait lets a poll in flight
+        // An abort rejects the code request and `onCode` at once, and aborts the code request's
+        // fetch, so a stalled request holds no connection. The wait lets a poll in flight
         // finish, so an approval that it carries reaches the caller, which revokes its tokens. React
         // Native's `AbortSignal` has no `reason`.
         const reason = () =>
@@ -113,8 +114,14 @@ export function device(options: device.Options = {}) {
         // The call removes its listener once it settles, so a signal that many calls share, such as
         // a CLI's Ctrl+C, keeps none of them.
         let abort_signal: (() => void) | undefined
+        // The code request's own signal, since a fetch can keep its listener on the signal it takes.
+        const controller = new AbortController()
         const aborted = new Promise<never>((_, reject) => {
-          abort_signal = () => reject(reason())
+          abort_signal = () => {
+            const error = reason()
+            controller.abort(error)
+            reject(error)
+          }
           signal?.addEventListener('abort', abort_signal, { once: true })
         })
         aborted.catch(() => undefined)
@@ -130,6 +137,7 @@ export function device(options: device.Options = {}) {
               funding: parameters.funding,
               resource: parameters.resource,
               scope: parameters.scope,
+              signal: controller.signal,
             }),
           )
           await until(
@@ -612,9 +620,9 @@ export declare namespace device {
        */
       scope?: string | undefined
       /**
-       * Stops the polls, and rejects with the signal's reason. An aborted call shows no code. A
-       * poll in flight finishes, so an approval that it carries still returns. Absent, the polls
-       * end only with the code.
+       * Aborts the code request, stops the polls, and rejects with the signal's reason. An aborted
+       * call shows no code. A poll in flight finishes, so an approval that it carries still returns.
+       * Absent, the polls end only with the code.
        */
       signal?: AbortSignal | undefined
     }

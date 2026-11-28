@@ -98,7 +98,16 @@ export async function authorize<
       method: 'POST',
       // A redirect would post the request to another origin, and each poll refuses it.
       redirect: 'manual',
+      signal: options.signal ?? null,
     }).catch((error: unknown) => {
+      // React Native's `AbortSignal` has no `reason`, and Hermes has no `DOMException`.
+      if (options.signal?.aborted)
+        throw (
+          options.signal.reason ??
+          Object.assign(new Error('The code request was aborted.'), {
+            name: 'AbortError',
+          })
+        )
       throw new RequestError({
         cause: error,
         code: 'server_error',
@@ -232,6 +241,11 @@ export declare namespace authorize {
     resource?: Config['resource']
     /** Scopes that the code requests beside the instance's `scope`, as `device.signIn` describes. */
     scope?: string | undefined
+    /**
+     * Aborts the code request, and rejects with the signal's reason. Absent, the code request ends
+     * only with its response. `wait` takes its own signal.
+     */
+    signal?: AbortSignal | undefined
   }
 
   /** The authorization of an approved grant, without an access key for a grant without one. */
