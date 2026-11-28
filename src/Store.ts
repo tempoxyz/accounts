@@ -41,7 +41,7 @@ export type Store = {
    * one Durable Object, as `Store.durableObject` of `accounts/cloudflare` does, or only the app, as
    * the store of `accounts/expo` does.
    * In a browser, a page load empties such a store, so `redirect.signIn` without `open` refuses
-   * it before any request, and the `react` plugin's first render authorizes nothing by default. An instance's `session.refresh` with such a store reads a refusal of its refresh token as final where a
+   * it before any request. An instance's `session.refresh` with such a store reads a refusal of its refresh token as final where a
    * lock spans the process, Web Locks or the store's `lock`, since no other process can rotate the token. Defaults to `false`.
    */
   local?: boolean | undefined

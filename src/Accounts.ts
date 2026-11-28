@@ -1576,9 +1576,7 @@ export type Accounts<
      * revokes its refresh token at `POST /oauth2/revoke`. The user's Tempo ID session, and every
      * other app's session, stay signed in. The instance saves a signed-out mark, so `session.get`
      * with `reauthorize`, and the `react` plugin's first render, sign the user in again only
-     * after the next sign-in, such as through `authorize`. A page load empties a store that sets
-     * `local`, such as `Store.memory`, with the mark, so the `react` plugin authorizes nothing
-     * there by default. Access tokens work until they expire,
+     * after the next sign-in, such as through `authorize`. Access tokens work until they expire,
      * at most 5 minutes, and the access key until its `expiry`, but the instance forgets both. A
      * sign-in over a session revoked the refresh token of the session that it replaced already.
      *
