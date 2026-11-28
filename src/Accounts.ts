@@ -795,7 +795,8 @@ export type Accounts<
      * browser, with no sign-in. Sets the session, and returns it, or empties it and returns
      * `undefined` when the browser holds no Tempo ID session. If the instance holds no session
      * at the empty result, that result writes nothing to the store, so another tab's sign-in during
-     * the call stays.
+     * the call stays. If the result replaces a session that the instance holds, the call revokes
+     * that session's refresh token in the background, as a sign-in does.
      * Only a
      * [first-party app](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps)
      * authorizes this way, and the access key must fit the

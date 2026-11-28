@@ -1735,10 +1735,11 @@ export function create(options: create.Options): create.ReturnType {
             actor.send({ type: 'load' })
             return
           }
-          // A sign-in replaces the session that the instance holds, whose refresh token no later
-          // sign-out reads.
           const signIn = !!session && !options.update && !options.restore
-          const replaced = signIn ? context().session : undefined
+          // A sign-in replaces the session that the instance holds, whose refresh token no later
+          // sign-out reads. A restore, such as an `authorize` of a new access key, replaces it too.
+          const replaced =
+            session && !options.update ? context().session : undefined
           // Another context, such as a second run of a CLI's login, can have saved a session that this
           // instance never read. The sign-in's save replaces it, so the read starts before the save,
           // and the sign-in never waits for it.
