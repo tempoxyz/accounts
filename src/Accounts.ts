@@ -1528,6 +1528,13 @@ export type Accounts<
        * returns the same object while the status is unchanged, so the pair fits
        * `useSyncExternalStore` as it is. `accounts.useSession()` reads it in React.
        *
+       * The first `subscribe` before any read loads the saved session, after the code that
+       * subscribes, so the status leaves `pending` with no other call. A `session.get` in that code
+       * reads first. The load runs no restore hook, so an instance with a plugin that restores, such
+       * as `redirect`, loads nothing at a subscription, and its status leaves `pending` at the
+       * page's `session.get`. If the store rejects the read, or the saved session's access key
+       * expired, the status stays `pending`.
+       *
        * @example
        * ```ts
        * import { Accounts } from 'accounts'
@@ -1950,6 +1957,9 @@ export function create<
   }
   const config = from(merged)
   const plugins: readonly Plugin.Plugin[] = named
+  // Whether a plugin restores at a read, such as the `redirect` plugin's callback, which a status
+  // subscription's load leaves to the page's `session.get`.
+  const restores = plugins.some((plugin) => plugin.hooks?.restore !== undefined)
   // A store of one user's, a CLI's shared file, or a browser's IndexedDB holds the session. A
   // backend's instance passes no store, since it serves many users.
   const enabled = merged.store !== undefined || typeof indexedDB !== 'undefined'
@@ -2903,7 +2913,28 @@ export function create<
         }))
       },
       refresh,
-      status: session.status,
+      status: {
+        get: session.status.get,
+        subscribe(listener: Parameters<typeof session.status.subscribe>[0]) {
+          const unsubscribe = session.status.subscribe(listener)
+          // A subscriber that reads no session, such as a router guard, still sees the status leave
+          // `pending`, since the first subscription loads the saved session after the code that
+          // subscribes, where a page's own `session.get` reads first. The load runs no restore hook,
+          // such as a redirect's callback, which only `session.get` completes and reports, so an
+          // instance with one loads nothing here. A failed read keeps `pending`, as `session.get`
+          // does. An expired access key keeps its session in the store and the status `pending`.
+          // The page's `session.get` then renews it inside an authorization, with no `signedOut`.
+          if (!restores)
+            queueMicrotask(() => {
+              if (
+                session.actor &&
+                !InternalSession.machines.loaded(session.actor.getSnapshot())
+              )
+                void session.load({ expired: 'keep' }).catch(() => undefined)
+            })
+          return unsubscribe
+        },
+      },
       subscribe: session.subscribe,
     },
     signOut: (parameters?: NonNullable<Parameters<Accounts['signOut']>[0]>) =>

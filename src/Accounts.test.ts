@@ -3643,7 +3643,229 @@ describe('session.status', () => {
       state: { session: { accessToken: 'access-token' } },
     })
   })
-  test("follows another instance's sign-in on the same store before a read of its own, such as another tab's, as it follows that instance's sign-out", async () => {
+  test('reads the saved session at the first subscription, so a router guard that calls no `session.get` leaves `pending`', async () => {
+    const saved = Store.memory()
+    await saved.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","client_1",1337]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 3_600_000,
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const requests: string[] = []
+    const guard = (store: Store.Store) => {
+      const accounts = Accounts.create({
+        chain: 1337,
+        clientId: 'client_1',
+        fetch: (input, init) => {
+          requests.push(`${init?.method ?? 'GET'} ${String(input)}`)
+          return globalThis.fetch(input, init)
+        },
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+      const statuses: string[] = []
+      accounts.session.status.subscribe((status, previous) =>
+        statuses.push(
+          `${previous.status} > ${status.status} ${status.session?.user.email}`,
+        ),
+      )
+      return { accounts, statuses }
+    }
+    // A returning visitor's page, and a new visitor's.
+    const returning = guard(saved)
+    const visitor = guard(Store.memory())
+
+    await expect
+      .poll(() => returning.accounts.session.status.get().status, {
+        timeout: 2_000,
+      })
+      .toBe('signedIn')
+    await expect
+      .poll(() => visitor.accounts.session.status.get().status, {
+        timeout: 2_000,
+      })
+      .toBe('signedOut')
+
+    expect({
+      requests,
+      returning: returning.statuses,
+      visitor: visitor.statuses,
+    }).toMatchInlineSnapshot(`
+      {
+        "requests": [],
+        "returning": [
+          "pending > signedIn user@example.com",
+        ],
+        "visitor": [
+          "pending > signedOut undefined",
+        ],
+      }
+    `)
+  })
+  test("keeps a saved session whose access key expired, and `pending`, at the first subscription, for the page's `session.get` to renew", async () => {
+    const owner = Account.fromSecp256k1(
+      '0x0123456789012345678901234567890123456789012345678901234567890123',
+    )
+    const accessKey = Account.fromSecp256k1(
+      '0x0123456789012345678901234567890123456789012345678901234567890124',
+    )
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const store = Store.memory()
+    const requests: string[] = []
+    // The access key expired a minute ago, as when a returning user opens the app after its expiry.
+    const keyAuthorization = await owner.signKeyAuthorization(
+      { address: accessKey.address, type: 'secp256k1' },
+      { chainId: 42431n, expiry: Math.floor(Date.now() / 1000) - 60 },
+    )
+    const saved = Session.from({
+      accessKey: {
+        account: owner.address,
+        chainId: 42431,
+        keyAuthorization: KeyAuthorization.toRpc(keyAuthorization),
+      },
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      refreshToken: 'refresh-token',
+      user: { email: 'user@example.com', id: 'user_1' },
+    })
+    await store.setItem(name, { state: { session: saved }, version: 0 })
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: (input, init) => {
+        requests.push(`${init?.method ?? 'GET'} ${String(input)}`)
+        return globalThis.fetch(input, init)
+      },
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    const statuses: string[] = []
+
+    // A router guard follows the status, and the page reads no session.
+    accounts.session.status.subscribe((status, previous) =>
+      statuses.push(`${previous.status} > ${status.status}`),
+    )
+
+    // The status never leaves `pending` within the bound.
+    await expect(
+      expect
+        .poll(() => accounts.session.status.get().status, {
+          interval: 10,
+          timeout: 200,
+        })
+        .not.toBe('pending'),
+    ).rejects.toThrow()
+    const stored = Json.stringify(await store.getItem(name))
+
+    expect({
+      kept: stored.includes('"refreshToken":"refresh-token"'),
+      requests,
+      statuses,
+    }).toMatchInlineSnapshot(`
+      {
+        "kept": true,
+        "requests": [],
+        "statuses": [],
+      }
+    `)
+  })
+  test("shows no `signedOut` before a restore hook sets the session, such as a redirect's callback, and runs the hook once beside the page's read", async () => {
+    const session = Session.from({
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 3_600_000,
+      user: { email: 'user@example.com', id: 'user_1' },
+    })
+    // The hook completes a callback, as the `redirect` plugin's does.
+    const hooks: string[] = []
+    const callback = Accounts.create({
+      chain: 1337,
+      clientId: 'client_1',
+      plugins: [
+        Plugin.from({
+          hooks: {
+            async restore(context) {
+              hooks.push('restore')
+              await context.session.change().commit(session)
+            },
+          },
+          id: 'test',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const statuses: string[] = []
+    callback.session.status.subscribe((status, previous) =>
+      statuses.push(`${previous.status} > ${status.status}`),
+    )
+
+    // The page reads the session in the code that subscribes its guard.
+    await callback.session.get()
+
+    expect({ hooks, statuses }).toMatchInlineSnapshot(`
+      {
+        "hooks": [
+          "restore",
+        ],
+        "statuses": [
+          "pending > signedIn",
+        ],
+      }
+    `)
+  })
+  test("loads nothing at a subscription of an instance with a restore hook, whose failure the page's `session.get` throws", async () => {
+    // The hook refuses once, as the `redirect` plugin's refused callback does.
+    let refused = false
+    const accounts = Accounts.create({
+      chain: 1337,
+      clientId: 'client_1',
+      plugins: [
+        Plugin.from({
+          hooks: {
+            restore() {
+              if (refused) return Promise.resolve()
+              refused = true
+              return Promise.reject(new Error('Refused callback.'))
+            },
+          },
+          id: 'test',
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    const statuses: string[] = []
+    accounts.session.status.subscribe((status, previous) =>
+      statuses.push(`${previous.status} > ${status.status}`),
+    )
+
+    // The page reads the session later, such as in an effect.
+    await new Promise<void>((resolve) => queueMicrotask(resolve))
+    const before = accounts.session.status.get().status
+    const first = await accounts.session
+      .get()
+      .catch((error: Error) => error.message)
+
+    expect({ before, first, refused, statuses }).toMatchInlineSnapshot(`
+      {
+        "before": "pending",
+        "first": "Refused callback.",
+        "refused": true,
+        "statuses": [
+          "pending > signedOut",
+        ],
+      }
+    `)
+  })
+  test("follows another instance's sign-in on the same store, such as another tab's, as it follows that instance's sign-out", async () => {
     const store = Store.memory()
     const create = () =>
       Accounts.create({
@@ -3688,7 +3910,8 @@ describe('session.status', () => {
 
     expect(statuses).toMatchInlineSnapshot(`
       [
-        "pending > signedIn user@example.com",
+        "pending > signedOut undefined",
+        "signedOut > signedIn user@example.com",
         "signedIn > signedOut undefined",
       ]
     `)
