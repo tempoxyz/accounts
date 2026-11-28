@@ -1058,20 +1058,41 @@ import { Handler } from 'accounts/server' // [!code --]
 import { Accounts } from 'accounts' // [!code ++]
 import { relay } from 'accounts/plugins' // [!code ++]
 import { Hono } from 'hono'
+import { TempoAddress } from 'ox/tempo'
+import { isAddressEqual } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { Relay } from 'viem/tempo' // [!code ++]
+import { Transaction } from 'viem/tempo' // [!code --]
+import { Relay, Transaction } from 'viem/tempo' // [!code ++]
 
 const account = privateKeyToAccount(
   process.env.FEE_PAYER_PRIVATE_KEY as `0x${string}`,
 )
-const allowed = '0x000000000000000000000000000000000000dEaD'
+const contract = '0x000000000000000000000000000000000000dEaD'
+// An access key's first transaction carries its key authorization, about 5 million gas.
+const maxGas = 6_000_000n
+const maxFeePerGas = 10_000_000_000n
+
+// Sponsors a transaction within the caps whose every call targets `contract`. A transaction
+// without `calls` carries one call in `to`.
+function validate(request: Transaction.TransactionRequest) {
+  if (!request.gas || request.gas > maxGas) return false
+  if (!request.maxFeePerGas || request.maxFeePerGas > maxFeePerGas) return false
+
+  const calls = request.calls ?? [
+    { data: request.data, to: request.to, value: request.value },
+  ]
+  return (
+    calls.length > 0 &&
+    calls.every(
+      (call) =>
+        !!call.to && isAddressEqual(TempoAddress.resolve(call.to), contract),
+    )
+  )
+}
 
 const handler = Handler.relay({ // [!code --]
   autoSwap: true, // [!code --]
-  feePayer: { // [!code --]
-    account, // [!code --]
-    validate: (request) => request.to === allowed, // [!code --]
-  }, // [!code --]
+  feePayer: { account, validate }, // [!code --]
   path: '/api/relay', // [!code --]
 }) // [!code --]
 const accounts = Accounts.create({ // [!code ++]
@@ -1080,10 +1101,7 @@ const accounts = Accounts.create({ // [!code ++]
   plugins: [ // [!code ++]
     relay({ // [!code ++]
       plugins: [ // [!code ++]
-        Relay.feePayer({ // [!code ++]
-          account, // [!code ++]
-          validate: (request) => request.to === allowed, // [!code ++]
-        }), // [!code ++]
+        Relay.feePayer({ account, validate }), // [!code ++]
         Relay.autoSwap(), // [!code ++]
       ], // [!code ++]
     }), // [!code ++]
