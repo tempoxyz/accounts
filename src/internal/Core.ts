@@ -512,41 +512,26 @@ export function refresh(
       return change.fail(error, { unanswered: rotating || refused })
     })
     if (!tokens) return replaced
-    // A sign-in in another tab takes no lock, so the refresh reads the store again, and a newer
-    // session there overtakes it. The commit of an overtaken refresh changes nothing, and after a
-    // sign-out it revokes the new tokens.
-    const held = context.session.get()
-    const latest = await context.session.reload()
+    // A sign-in in another tab takes no lock, so the refresh reads the store again. A newer session
+    // there overtakes the refresh, and its commit changes nothing.
+    //
+    // After a sign-out, here or in another tab, the commit revokes the new tokens. It records the
+    // sent token as rotated, so a sign-out that waits for the lock revokes neither. The session
+    // stays empty, and the refresh returns no session.
+    await context.session.reload()
     // A refresh may omit the ID token, which still names the same user, so the session keeps it.
     const session = {
       ...current,
       ...tokens,
       idToken: tokens.idToken ?? current.idToken,
     }
-    const commit = () =>
-      change.commit(session).then(
-        () => session,
-        (error: unknown) => {
-          if (error instanceof SupersededError) return context.session.get()
-          throw error
-        },
-      )
-    // A sign-out in another tab emptied the store, and waits for this lock to revoke the token that
-    // it reads then. The new session goes to the store, so that sign-out revokes the new token, and
-    // never the rotated one. Without a lock that spans the contexts, the sign-out in another
-    // process can have ended, and the store stays empty. The commit then revokes the new tokens,
-    // and marks the sent token revoked, so a sign-out that waits for the lock skips it.
-    if (held && !latest) {
-      // A refusal or a sign-out in this instance emptied the session. The commit then revokes the
-      // new tokens, and records the sent token as rotated, so neither revokes it. The hand-off
-      // would set the session again, which that sign-out would keep. Another tab's sign-out also
-      // moves the version, and keeps the hand-off below.
-      if (change.refused() || signedOut()) return commit()
-      if (!spansContexts) return commit()
-      await context.session.change({ update: true }).commit(session)
-      return session
-    }
-    return commit()
+    return change.commit(session).then(
+      () => session,
+      (error: unknown) => {
+        if (error instanceof SupersededError) return context.session.get()
+        throw error
+      },
+    )
   })
 }
 

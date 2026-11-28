@@ -1484,7 +1484,8 @@ export type Accounts<
        * Refreshes the session's tokens with its refresh token, saves them, and returns the session.
        * Returns `undefined` without a session or a refresh token. Overlapping calls on one store,
        * also in other tabs, send one request, and each returns the same session, unless its access
-       * token expired while the call waited.
+       * token expired while the call waited. A sign-out during the refresh, also in another tab,
+       * makes it return `undefined` and revoke the new tokens, so the status stays `signedOut`.
        *
        * @throws {RequestError} When the token endpoint refuses the request:
        *   - `invalid_grant`: The refresh token was revoked, expired, or used more than 30 seconds

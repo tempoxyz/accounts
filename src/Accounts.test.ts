@@ -3919,6 +3919,83 @@ describe('session.status', () => {
 })
 
 describe('session.refresh', () => {
+  test("runs `afterSignOut` in an instance whose refresh another instance's sign-out overtakes, and returns no session", async () => {
+    const store = Store.memory()
+    await store.setItem(
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]',
+      {
+        state: {
+          session: Session.from({
+            accessToken: 'access-token',
+            expiresAt: Date.now() + 3_600_000,
+            refreshToken: 'refresh-token',
+            user: { email: 'user@example.com', id: 'user_1' },
+          }),
+        },
+        version: 0,
+      },
+    )
+    const events: string[] = []
+    let release = () => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    const create = (label: string) =>
+      Accounts.create({
+        chain: 1337,
+        clientId: 'https://app.example.com',
+        async fetch(input) {
+          const { pathname } = new URL(String(input))
+          events.push(`${label} ${pathname}`)
+          if (pathname !== '/oauth2/token') return new Response(null)
+          await held
+          return Response.json({
+            access_token: 'access-token-1',
+            expires_in: 3600,
+            refresh_token: 'refresh-token-1',
+            token_type: 'Bearer',
+          })
+        },
+        plugins: [
+          Plugin.from({
+            hooks: {
+              afterSignOut: () => void events.push(`${label} afterSignOut`),
+            },
+            id: 'probe',
+          }),
+        ],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const first = create('first')
+    const second = create('second')
+    await Promise.all([first.session.get(), second.session.get()])
+
+    // The second instance's token request waits until the first instance signs out.
+    const refreshing = second.session.refresh()
+    await expect.poll(() => events).toContain('second /oauth2/token')
+    const signingOut = first.signOut()
+    await expect.poll(() => first.session.status.get().status).toBe('signedOut')
+    release()
+    const [session] = await Promise.all([refreshing, signingOut])
+    await expect.poll(() => events.includes('second afterSignOut')).toBe(true)
+
+    expect({
+      events: events.toSorted(),
+      session,
+      status: second.session.status.get().status,
+    }).toMatchInlineSnapshot(`
+      {
+        "events": [
+          "first afterSignOut",
+          "second /oauth2/revoke",
+          "second /oauth2/token",
+          "second afterSignOut",
+        ],
+        "session": undefined,
+        "status": "signedOut",
+      }
+    `)
+  })
+
   test('throws RequestError with status 0 when no attempt receives a response', async () => {
     const store = Store.memory()
     const accounts = Accounts.create({

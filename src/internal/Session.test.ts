@@ -2429,6 +2429,28 @@ describe('machines.session', () => {
     `)
   })
 
+  describe('endsOnReload', () => {
+    const cases = [
+      ["another context's sign-out", renewed, undefined, undefined, true],
+      [
+        'an expired session kept for its renewal',
+        expired,
+        expired,
+        undefined,
+        false,
+      ],
+      ['a session that the reload keeps', renewed, undefined, renewed, false],
+      ['no session held', undefined, undefined, undefined, false],
+    ] as const
+
+    for (const [name, current, renewing, session, expected] of cases)
+      test(`returns ${expected} for ${name}`, () => {
+        const result = machines.endsOnReload({ current, renewing, session })
+
+        expect(result).toBe(expected)
+      })
+  })
+
   describe('refusing', () => {
     const cases = [
       ['the ended user', ['user_1'], renewed, true],

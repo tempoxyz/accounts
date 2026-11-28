@@ -662,6 +662,47 @@ test.describe('session', () => {
       await capture('second tab refreshed', tab)
     })
   })
+
+  test('keeps a tab signed out at another tab’s sign-out during its refresh, and revokes the new tokens', async ({
+    capture,
+    code,
+    context,
+    email,
+    page,
+  }) => {
+    const tab = await context.newPage()
+    await Promise.all([page.goto(passive), tab.goto(passive)])
+    await enter(page, { code, email })
+    await expect(tab.locator('#status')).toHaveText('signedIn')
+
+    // The second tab's refresh waits for its answer until the first tab signs out, so the sign-out
+    // empties the store while the refresh holds the lock.
+    const requests = record(tab)
+    let release = () => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    await context.route(tokenUrl, async (route) => {
+      await held
+      await route.continue()
+    })
+
+    await test.step('returns no session, and never shows the second tab signed in again', async () => {
+      await Playwright.start(tab, { name: 'Refresh' })
+      await expect.poll(() => requests).toEqual(['POST /oauth2/token'])
+      await Playwright.start(page, { name: 'Sign out' })
+      await expect(page.locator('#status')).toHaveText('signedOut')
+      release()
+
+      const refreshed = await Playwright.outcome(tab, { name: 'Refresh' })
+      expect(refreshed).toEqual({ state: 'fulfilled', value: null })
+      await expect(tab.locator('#history')).toHaveText(
+        'pending signedOut signedIn signedOut',
+      )
+      await expect
+        .poll(() => requests)
+        .toEqual(['POST /oauth2/token', 'POST /oauth2/revoke'])
+      await capture('second tab signed out', tab)
+    })
+  })
 })
 
 test.describe('useSession', () => {
