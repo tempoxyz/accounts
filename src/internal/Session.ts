@@ -202,9 +202,11 @@ export function create(options: create.Options): create.ReturnType {
     // The plugins' hooks run after the lock releases, since a hook that takes the lock, such as
     // through `exclusive`, would otherwise wait for itself.
     void (async () => {
+      // An adoption sends no request, and the message came from a context that the Web Lock spans,
+      // so it waits for no lock of other processes, such as the lock of `Store.postgres`.
       const hooks = await (options.signOut && exclusives === 0
         ? adopt(options)
-        : exclusive(() => adopt(options)))
+        : exclusive(() => adopt(options), { local: true }))
       await hooks?.()
     })().catch(() => undefined)
   }
@@ -499,11 +501,15 @@ export function create(options: create.Options): create.ReturnType {
    * Runs `fn` while no other run of the session's `exclusive` does. A browser's tabs share the
    * session through its store, so their Web Lock spans them. A shared store with a `lock` of its
    * own, such as `Store.redis`, spans other processes too, so the run also holds that lock. A run
-   * without `counted` saves no session, so another tab's sign-out applies at once beside it.
+   * without `counted` saves no session, so another tab's sign-out applies at once beside it. A run
+   * with `local` holds only the Web Lock, where Web Locks exist.
    */
   function exclusive<value>(
     fn: () => Promise<value>,
-    options: { counted?: boolean | undefined } = {},
+    options: {
+      counted?: boolean | undefined
+      local?: boolean | undefined
+    } = {},
   ): Promise<value> {
     const locks = (globalThis.navigator as { locks?: LockManager } | undefined)
       ?.locks
@@ -537,7 +543,7 @@ export function create(options: create.Options): create.ReturnType {
         })
       })
     if (!locks) return lock(key, counted)
-    if (!store?.lock || store.local)
+    if (!store?.lock || store.local || options.local)
       return locks.request(`${name}:exclusive`, counted)
     // Web Locks span one browser or one Node process only, so a shared store's own lock, such as
     // `Store.redis`'s, also serializes the runs of other processes, which then rotate its refresh

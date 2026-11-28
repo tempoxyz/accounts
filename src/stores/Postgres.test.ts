@@ -7,8 +7,9 @@ import { WebCryptoP256 } from 'ox'
 import { describe, expect, onTestFinished, test } from 'vite-plus/test'
 import * as Accounts from '../Accounts.js'
 import * as BackendSessions from '../internal/BackendSessions.js'
+import * as Plugin from '../Plugin.js'
 import * as Session from '../Session.js'
-import type * as Store from '../Store.js'
+import * as Store from '../Store.js'
 import * as Postgres from './Postgres.js'
 
 describe('Store.postgres', () => {
@@ -839,5 +840,65 @@ describe('Store.postgres', () => {
           ],
         }
       `)
+  })
+
+  test('behavior: an instance adopts the sign-in of another instance on the store without the lock of other processes', async () => {
+    const database = new PGlite()
+    onTestFinished(() => database.close())
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",1337]'
+    const postgres = Postgres.create({
+      query: (text, values) => database.query(text, [...values]),
+    })
+    // Each hold of the lock of other processes records its key.
+    const holds: string[] = []
+    const store = Store.from({
+      ...postgres,
+      lock: <result>(
+        key: string,
+        fn: (check?: () => Promise<void>) => Promise<result>,
+      ) => {
+        holds.push(key.replace(name, 'session'))
+        return postgres.lock!(key, fn)
+      },
+    })
+    // The plugin commits a session, as a sign-in does, with no request.
+    const create = () =>
+      Accounts.create({
+        chain: 1337,
+        clientId: 'https://app.example.com',
+        plugins: [
+          Plugin.from({
+            actions: (context) => ({
+              commit: () =>
+                context.session.change().commit(
+                  Session.from({
+                    accessToken: 'access-token',
+                    expiresAt: Date.now() + 3_600_000,
+                    refreshToken: 'refresh-token',
+                    user: { email: 'user@example.com', id: 'user_1' },
+                  }),
+                ),
+            }),
+            id: 'test',
+          }),
+        ],
+        store,
+        url: 'http://127.0.0.1:9',
+      })
+    const first = create()
+    const second = create()
+    await Promise.all([first.session.get(), second.session.get()])
+
+    await first.test.commit()
+    await expect
+      .poll(() => second.session.status.get().session?.refreshToken, {
+        timeout: 1_000,
+      })
+      .toBe('refresh-token')
+    // Each later run of the second instance waits for this Web Lock, so the request settles after them.
+    await navigator.locks.request(`${name}:exclusive`, async () => {})
+
+    expect(holds).toMatchInlineSnapshot(`[]`)
   })
 })
