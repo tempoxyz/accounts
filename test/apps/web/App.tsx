@@ -26,6 +26,7 @@
  * | `loginHint`        | The address that the dialog page's sign-in fills in Tempo ID's email field      |
  * | `message`          | The message that each "Sign a message" control signs                            |
  * | `reauthorize=0`    | `useSession` authorizes no Tempo ID session of the browser at a mount           |
+ * | `reauthorize=1`    | `useSession` authorizes the Tempo ID session at a mount, also on a local store  |
  * | `resource`         | The registered resource that the tokens of the "Sign in" control are for        |
  * | `retry=0`          | The Viem client shows no screen for a refused transaction, and rejects the call |
  * | `scope`            | The scopes beyond the instance's that the tokens of "Sign in" hold              |
@@ -280,7 +281,9 @@ export declare namespace permissions {
 export function plugins() {
   return [
     react(
-      query.get('reauthorize') === '0' ? { reauthorizeOnMount: false } : {},
+      query.has('reauthorize')
+        ? { reauthorizeOnMount: query.get('reauthorize') !== '0' }
+        : {},
     ),
     viem({
       chain: tempoLocalnet,

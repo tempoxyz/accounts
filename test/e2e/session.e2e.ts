@@ -435,9 +435,10 @@ test.describe('session', () => {
     await page.goto(url)
     await enter(page, { code, email })
     // The second tab keeps its own copy of the session, which the first tab's sign-out cannot empty.
+    // A local store authorizes nothing at a mount by default, so the tab asks for it.
     const tab = await context.newPage()
     const sent = grants(tab)
-    await tab.goto(`${url}?store=memory`)
+    await tab.goto(`${url}?store=memory&reauthorize=1`)
     await expect(tab.locator('#status')).toHaveText('signedIn')
 
     await test.step('signs the second tab out at the first tab’s logout', async () => {
@@ -742,6 +743,54 @@ test.describe('useSession', () => {
       await expect(page.locator('#history')).toHaveText('pending signedOut')
       expect(requests).toEqual([])
       await capture('reloaded')
+    })
+  })
+
+  test('stays signed out at a page load after a sign-out on `Store.memory`, and authorizes nothing', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    // A page load empties the store, and the signed-out mark with it, while the browser keeps its
+    // Tempo ID session.
+    await page.goto(`${url}?store=memory`)
+
+    await test.step('signs in, then signs out of the app alone', async () => {
+      await enter(page, { code, email })
+      await Playwright.run(page, { name: 'Sign out' })
+
+      await expect(page.locator('#status')).toHaveText('signedOut')
+      await capture('signed out')
+    })
+
+    await test.step('authorizes nothing at the next page load', async () => {
+      const requests = record(page)
+      await page.reload()
+
+      await expect(page.locator('#history')).toHaveText('pending signedOut')
+      expect(
+        requests.filter((request) => request.startsWith('POST /v1/authorize')),
+      ).toEqual([])
+      await capture('reloaded')
+    })
+  })
+
+  test('renews the session at a page load on `Store.memory` with `reauthorizeOnMount: true`', async ({
+    capture,
+    code,
+    email,
+    page,
+  }) => {
+    await page.goto(`${url}?store=memory&reauthorize=1`)
+    await enter(page, { code, email })
+
+    await test.step('signs in at the next page load with the browser’s Tempo ID session', async () => {
+      await page.reload()
+
+      await expect(page.locator('#history')).toHaveText('pending signedIn')
+      await expect(page.locator('#email')).toHaveText(email)
+      await capture('renewed')
     })
   })
 

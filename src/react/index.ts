@@ -71,11 +71,14 @@ export function react(options: react.Options = {}) {
   return Plugin.from({
     extend: (instance: Accounts.Accounts, context: Plugin.Context) => {
       // Only a first-party app's page holds a Tempo ID session that it may read. A third-party app
-      // has no CORS grant for it, and a native app holds no browser session.
+      // has no CORS grant for it, and a native app holds no browser session. A page load empties a
+      // store that sets `local`, such as `Store.memory`, and the signed-out mark of a sign-out
+      // with it, so an authorization there signs the user in again after a sign-out.
       const defaulted =
         options.reauthorizeOnMount === undefined &&
         typeof document !== 'undefined' &&
-        !ClientId.thirdParty(instance.config.clientId)
+        !ClientId.thirdParty(instance.config.clientId) &&
+        !instance.config.store?.local
 
       // The machine decides whether a mount authorizes, and shares one restore between the mounts
       // that arrive while it runs. It skips the authorization only for a page that the plugin's own
@@ -207,7 +210,9 @@ export declare namespace react {
      * that session. Defaults to `true` on a page of a
      * [first-party app](https://github.com/tempoxyz/id/blob/main/docs/apps.md#first-party-apps),
      * and `false` elsewhere. A third-party app has no grant to read the Tempo ID session, and a
-     * native app holds no browser session, so neither authorizes by default.
+     * native app holds no browser session, so neither authorizes by default. Also `false` for a
+     * `store` that sets `local`, such as `Store.memory`. A page load empties such a store, with
+     * the signed-out mark of `accounts.signOut`, so an authorization would sign the user in again.
      *
      * A failure of the default authorization, such as an unreachable Tempo ID, a check of the
      * Tempo ID session without a response within 10 seconds, or a page origin without a CORS
