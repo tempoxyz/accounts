@@ -1,7 +1,7 @@
 /**
  * Extends Playwright's `test` with a new address per test, the inbox's sign-in codes, and screenshots
  * for the report. A test fails if its page logs a console error or throws. `approve`, `deny`,
- * `deposit`, `device`, `form`, `frame`, `funding`, `grant`, `payment`, `prompt`, and `revoke` hold the
+ * `deposit`, `device`, `form`, `frame`, `funding`, `grant`, `guest`, `payment`, `prompt`, and `revoke` hold the
  * suite's only selectors of the package's dialog and of Tempo ID's own pages, beside `dialog` and
  * `signIn`, which `accounts/test/playwright` exports. `abort`, `call`, `calls`,
  * `issue`, `outcome`, `run`, `send`, `signIn_custom`, `start`, and `submit` drive the controls of a
@@ -371,7 +371,7 @@ export async function device(page: Page): Promise<device.ReturnType> {
     denied: page.getByText('The device was not signed in'),
     message: page.getByRole('note').locator('pre'),
     note: page.getByRole('note').filter({ has: page.locator('pre') }),
-    unverified: page.getByText('an unverified app'),
+    unverified: page.getByRole('img', { name: 'Unverified' }),
   }
 }
 
@@ -389,7 +389,7 @@ export declare namespace device {
     message: Locator
     /** The note of a request that signs a message: who signs it, and the message. */
     note: Locator
-    /** The flag of the description for an app without a registration. */
+    /** The badge of the description for an app that Tempo ID has not verified. */
     unverified: Locator
   }
 }
@@ -455,6 +455,15 @@ export declare namespace funding {
  */
 export function grant(target: FrameLocator | Page) {
   return target.locator('[data-grant]').filter({ visible: true })
+}
+
+/**
+ * Selects Continue as guest on Tempo ID's sign-in page in `target`: a page, or the frame of a
+ * dialog. Tempo ID offers it for a request with `guest=offer`.
+ */
+export async function guest(target: FrameLocator | Page) {
+  await hydrated(target)
+  await target.getByRole('button', { name: 'Continue as guest' }).click()
 }
 
 /**

@@ -7,7 +7,7 @@ const repository = 'https://github.com/tempoxyz/accounts'
 
 export default defineConfig({
   // Production origin. The sitemap and the canonical URLs of every deployment name it.
-  baseUrl: 'https://accounts.tempo.xyz',
+  baseUrl: 'https://accounts.tempo.com',
   description:
     'The SDK of Tempo ID. Sign users in, and keep their session, their access key, and a Viem client that signs with it.',
   editLink: {

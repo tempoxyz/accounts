@@ -9,7 +9,7 @@
 <p align="center"><b>Accounts SDK for Apps building on Tempo</b></p>
 
 <p align="center">
-  <a href="https://accounts.tempo.xyz">Website</a> · <a href="https://accounts.tempo.xyz/docs">Docs</a> · <a href="#install">Install</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a>
+  <a href="https://accounts.tempo.com">Website</a> · <a href="https://accounts.tempo.com/docs">Docs</a> · <a href="#install">Install</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a>
 </p>
 
 ---
@@ -19,7 +19,7 @@
 Prompt your agent:
 
 ```
-Read accounts.tempo.xyz and integrate Tempo into my application
+Read accounts.tempo.com and integrate Tempo into my application
 ```
 
 ## Install
@@ -59,7 +59,7 @@ await accounts.pay({ amount, to, token })
 
 ## Documentation
 
-Start at [accounts.tempo.xyz](https://accounts.tempo.xyz) for the product overview and integration guides. The documentation lives at [accounts.tempo.xyz/docs](https://accounts.tempo.xyz/docs).
+Start at [accounts.tempo.com](https://accounts.tempo.com) for the product overview and integration guides. The documentation lives at [accounts.tempo.com/docs](https://accounts.tempo.com/docs).
 
 ## Getting Help
 
