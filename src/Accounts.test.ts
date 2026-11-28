@@ -3521,7 +3521,13 @@ describe('session.status', () => {
       kept: stored.includes('"refreshToken":"refresh-token"'),
       requests,
       statuses,
-    }).toMatchInlineSnapshot()
+    }).toMatchInlineSnapshot(`
+      {
+        "kept": true,
+        "requests": [],
+        "statuses": [],
+      }
+    `)
   })
   test("shows no `signedOut` before a restore hook sets the session, such as a redirect's callback, and runs the hook once beside the page's read", async () => {
     const session = Session.from({
