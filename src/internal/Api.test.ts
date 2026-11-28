@@ -2,7 +2,8 @@
  * Tests the headers of a request that sends an access token, as `Actions.fetch` and `backend.fetch`
  * build them, the requests to Tempo ID that carry a secret, and the read of a challenge signature
  * from Tempo ID's response, and the refusal of a token response without an access token or a
- * lifetime, or of a key authorization that does not parse.
+ * lifetime, or of a key authorization that does not parse, and the refusal of an access token by an
+ * API response.
  * @module
  */
 import { decodeJwt } from 'jose'
@@ -364,6 +365,82 @@ describe('grant', () => {
       [
         {},
         {},
+      ]
+    `)
+  })
+})
+
+describe('refusesToken', () => {
+  test('refuses for a 401 whose challenge names invalid_token', async () => {
+    const response = Response.json(
+      { error: 'invalid_token' },
+      {
+        headers: { 'www-authenticate': 'DPoP error="invalid_token"' },
+        status: 401,
+      },
+    )
+
+    expect(await Api.refusesToken(response)).toMatchInlineSnapshot(`true`)
+  })
+
+  test('refuses for a 401 without a challenge whose JSON body names invalid_token, and keeps the body', async () => {
+    const response = Response.json({ error: 'invalid_token' }, { status: 401 })
+
+    const refused = await Api.refusesToken(response)
+
+    expect({ body: await response.json(), refused }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "invalid_token",
+        },
+        "refused": true,
+      }
+    `)
+  })
+
+  test('refuses for a 401 whose challenge holds no error and whose JSON body names invalid_token', async () => {
+    const response = Response.json(
+      { error: 'invalid_token' },
+      {
+        headers: {
+          'www-authenticate':
+            'Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"',
+        },
+        status: 401,
+      },
+    )
+
+    expect(await Api.refusesToken(response)).toMatchInlineSnapshot(`true`)
+  })
+
+  test('keeps a readable challenge that names another error over the body', async () => {
+    const response = Response.json(
+      { error: 'invalid_token' },
+      {
+        headers: { 'www-authenticate': 'Bearer error="insufficient_scope"' },
+        status: 401,
+      },
+    )
+
+    expect(await Api.refusesToken(response)).toMatchInlineSnapshot(`false`)
+  })
+
+  test('does not refuse for a 401 without JSON, or another status with the body', async () => {
+    const results = await Promise.all([
+      Api.refusesToken(new Response('invalid_token', { status: 401 })),
+      Api.refusesToken(
+        Response.json({ error: 'invalid_request' }, { status: 401 }),
+      ),
+      Api.refusesToken(
+        Response.json({ error: 'invalid_token' }, { status: 403 }),
+      ),
+    ])
+
+    expect(results).toMatchInlineSnapshot(`
+      [
+        false,
+        false,
+        false,
       ]
     `)
   })

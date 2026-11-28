@@ -237,10 +237,11 @@ export function backend(options: backend.Options) {
          * if necessary. Returns `undefined` without a session, and for a SIWE session, which holds
          * no access token, and sends no request. If the response has status 401 and `WWW-Authenticate`
          * names `invalid_token`, such as after Tempo ID ended the user's session, the call refreshes
-         * the session once. New tokens send the request again, if its body reads twice, such as a
-         * string or a `Blob`. A stream body, a refresh that fails or that Tempo ID refuses, and a
-         * second refusal of the token that such a refresh issued return the first response. A refused
-         * refresh token ends the session.
+         * the session once. Without a challenge that holds an `error`, a JSON body whose `error` is
+         * `invalid_token` refreshes it too. New tokens send the request again, if its body reads
+         * twice, such as a string or a `Blob`. A stream body, a refresh that fails or that Tempo ID
+         * refuses, and a second refusal of the token that such a refresh issued return the first
+         * response. A refused refresh token ends the session.
          * @throws {Accounts.RequestError} With `invalid_dpop_proof` and status 400, if another DPoP
          *   key, or no key, binds the access token. The call sends no request. Also when a refresh
          *   fails, as `get` describes.
@@ -286,7 +287,7 @@ export function backend(options: backend.Options) {
           })
           if (!tokenHeaders) return undefined
           const response = await send(tokenHeaders)
-          if (!Api.refusesToken(response)) return response
+          if (!(await Api.refusesToken(response))) return response
 
           // The API refused a token that the session still holds, so the session refreshes once. The
           // request already reached the API, so a failed refresh returns its response. Sessions that

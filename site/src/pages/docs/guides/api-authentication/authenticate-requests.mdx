@@ -92,7 +92,7 @@ export const accounts = Accounts.create({ plugins: [react()] })
 :::
 
 :::note
-A browser sends a cross-origin request only if the API's CORS policy allows the page's origin. The page reads the `WWW-Authenticate` header of a 401 only if the API lists it in `Access-Control-Expose-Headers`.
+A browser sends a cross-origin request only if the API's CORS policy allows the page's origin. The page reads the `WWW-Authenticate` header of a 401 only if the API lists it in `Access-Control-Expose-Headers`. Without that header, `session.fetch` reads the `error` of a JSON body, such as `{ error: 'invalid_token' }`.
 :::
 
 ### Create the instance<StepTag kind="server" />
