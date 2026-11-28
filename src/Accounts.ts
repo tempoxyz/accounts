@@ -1379,15 +1379,17 @@ export type Accounts<
        * the refresh revokes its new tokens after the request.
        *
        * If the response has status 401 and `WWW-Authenticate` names `invalid_token`, the call
-       * refreshes the tokens once. Examples are an access token that expired at the API first, or a
-       * Tempo ID session that ended elsewhere.
+       * refreshes the tokens once. Without a `WWW-Authenticate` header that the page reads, a JSON
+       * body whose `error` is `invalid_token` refreshes them too. Examples are an access token
+       * that expired at the API first, or a Tempo ID session that ended elsewhere.
        *
        * New tokens send the request again, if its body reads twice, such as a string or a `Blob`.
        * A stream body, a session without a refresh token, a failed refresh, and a sign-in of another
        * user return the first response. A refused refresh token ends the session.
        *
-       * A cross-origin API must list `WWW-Authenticate` in `Access-Control-Expose-Headers`. Without
-       * it, the page cannot read the challenge, and the call returns the first response.
+       * A cross-origin API that answers with no such body must list `WWW-Authenticate` in
+       * `Access-Control-Expose-Headers`. Without it, the page cannot read the challenge, and the
+       * call returns the first response.
        *
        * With the `backend` plugin, `fetch(request, parameters)` sends the request with the access
        * token of the session that the server request's session cookie names, after a refresh if
@@ -2826,8 +2828,8 @@ export function create<
           accessToken: token,
         })
         if (
-          !Api.refusesToken(response) ||
-          !Api.resendable(parameters.init?.body)
+          !Api.resendable(parameters.init?.body) ||
+          !(await Api.refusesToken(response))
         )
           return response
 

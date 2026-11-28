@@ -2221,6 +2221,79 @@ describe('session.fetch', () => {
     `)
   })
 
+  test('refreshes once, and sends the request again, when the API refuses the live access token with a JSON body and no challenge', async () => {
+    const store = Store.memory()
+    const name =
+      'tempo-id:session:["http://127.0.0.1:9","https://app.example.com",42431]'
+    const requests: string[] = []
+    const accounts = Accounts.create({
+      chain: 42431,
+      clientId: 'https://app.example.com',
+      fetch: ((input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const { pathname } = new URL(request.url)
+        if (pathname === '/oauth2/token') {
+          requests.push(`${request.method} ${pathname}`)
+          return Promise.resolve(
+            Response.json({
+              access_token: 'access-token-new',
+              expires_in: 300,
+              refresh_token: 'refresh-token-new',
+              token_type: 'Bearer',
+            }),
+          )
+        }
+        requests.push(
+          `${request.method} ${pathname} ${request.headers.get('authorization')}`,
+        )
+        // The API answers as the example of `tokens.verifyAccessToken` does, and a cross-origin page
+        // reads no `WWW-Authenticate` header that the API does not expose.
+        if (request.headers.get('authorization') === 'Bearer access-token')
+          return Promise.resolve(
+            Response.json({ error: 'invalid_token' }, { status: 401 }),
+          )
+        return Promise.resolve(Response.json({ ok: true }))
+      }) as typeof globalThis.fetch,
+      store,
+      url: 'http://127.0.0.1:9',
+    })
+    await store.setItem(name, {
+      state: {
+        session: Session.from({
+          accessToken: 'access-token',
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          refreshToken: 'refresh-token',
+          user: { email: 'user@example.com', id: 'user_1' },
+        }),
+      },
+      version: 0,
+    })
+    await accounts.session.get()
+
+    const response = await accounts.session.fetch({
+      init: { body: 'note', method: 'POST' },
+      url: 'https://api.example.com/notes',
+    })
+
+    expect({
+      body: await response.json(),
+      requests,
+      status: response.status,
+    }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "ok": true,
+        },
+        "requests": [
+          "POST /notes Bearer access-token",
+          "POST /oauth2/token",
+          "POST /notes Bearer access-token-new",
+        ],
+        "status": 200,
+      }
+    `)
+  })
+
   test('returns the refusal, and signs out, when Tempo ID refuses the refresh token after the API refuses the access token', async () => {
     const store = Store.memory()
     const name =
