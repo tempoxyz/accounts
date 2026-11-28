@@ -270,7 +270,7 @@ export const accounts = Accounts.create({
 
 ### Turn off the renewal
 
-<SourceLink name="react.reauthorizeOnMount" path="src/react/index.ts">`reauthorizeOnMount: false`</SourceLink> restores only the saved session, so a first-party page without one shows its sign-in. Other apps renew nothing by default, since they hold no grant to read the Tempo ID session.
+<SourceLink name="react.reauthorizeOnMount" path="src/react/index.ts">`reauthorizeOnMount: false`</SourceLink> restores only the saved session, so a first-party page without one shows its sign-in. Other apps renew nothing by default, since they hold no grant to read the Tempo ID session. A page with <SourceLink name="memory" path="src/stores/Memory.ts">`Store.memory`</SourceLink> renews nothing by default either, since a page load empties the signed-out mark of a sign-out.
 
 ```ts [tempo.config.ts]
 import { Accounts } from 'accounts'
