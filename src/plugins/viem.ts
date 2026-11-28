@@ -458,14 +458,19 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
        * start in one turn of the event loop, and a server's requests start in turns of their own. A
        * client of a fixed session is `shared`, since another instance, such as that of another
        * request or replica, can send for the session at once. A send of `options.account`,
-       * the client's own account, that no access key signs rejects with
-       * {@link AccessKeyRequiredError} before the fill, so the node receives no request.
+       * the client's own account, that no access key signs rejects with `options.refusal` before
+       * the fill, so the node receives no request.
        */
       function coordinate(
         chain: Chain,
-        options_coordinate: { account: LocalAccount; shared: boolean },
+        options_coordinate: {
+          account: LocalAccount
+          /** Returns the error that the signature of `account` would reject with. */
+          refusal: () => Error
+          shared: boolean
+        },
       ): Chain {
-        const { account: account_client, shared } = options_coordinate
+        const { account: account_client, refusal, shared } = options_coordinate
         const prepare = (chain as TempoChain).prepareTransactionRequest
         if (!Array.isArray(prepare)) return chain
         // Viem types the hook's request by the chain's formatters, which a plain chain does not hold.
@@ -498,7 +503,7 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
                 parameters?.includes('sidecars') &&
                 account_client.source !== 'accessKey'
               )
-                throw new AccessKeyRequiredError()
+                throw refusal()
               // Only a transaction whose nonce the node fills takes the protocol nonce. Viem's
               // estimate prepares no nonce, and sends nothing.
               if (
@@ -2536,7 +2541,21 @@ export function viem(options: viem.Options | viem.Resolver = {}) {
             ...defaults,
             ...clientOptions,
             account,
-            chain: coordinate(chain, { account, shared: Boolean(session) }),
+            chain: coordinate(chain, {
+              account,
+              // The refusal matches that of the account's `signTransaction`: an expired access key
+              // that this app holds rejects as `expiring` rejects it, and any other case as
+              // `Signer.fromSession`'s account does.
+              refusal: () => {
+                if (!lapsed(session ?? context.session.get(), { chainId }))
+                  return new AccessKeyRequiredError()
+                if (session) return lapse_fixed(session)
+                if (renews) return new AccessKeyExpiredError()
+                if (!page) return lapse_current()
+                return new AccessKeyRequiredError()
+              },
+              shared: Boolean(session),
+            }),
             transport: reads,
           },
           { verifier: tokens },

@@ -1065,6 +1065,54 @@ describe('viem', () => {
     )
   })
 
+  test('refuses a transfer of a fixed session whose access keys all expired with SignedOutError before the node receives a fill', async () => {
+    const owner = Secp256k1.randomPrivateKey()
+    const sent: string[] = []
+    const accounts = Accounts.create({
+      chain: 4217,
+      clientId: 'https://app.example.com',
+      plugins: [
+        viem({
+          // Nothing listens at the URL, so the transport records each request that would reach a node.
+          transport: http('http://127.0.0.1:9', {
+            async onFetchRequest(request) {
+              const body = (await request.clone().json()) as { method: string }
+              sent.push(body.method)
+            },
+            retryCount: 0,
+          }),
+        }),
+      ],
+      store: Store.memory(),
+      url: 'http://127.0.0.1:9',
+    })
+    // The expired access key of another chain drops the expired one of the client's chain, so the
+    // client's account holds no access key.
+    const session = Session.from({
+      accessKey: createAccessKey({ chainId: 4217, expiry: -60, owner }),
+      accessKeys: [createAccessKey({ chainId: 42431, expiry: -60, owner })],
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      user: { email: 'user@example.com', id: 'user_1' },
+    })
+
+    const error = await accounts
+      .viem({ session })
+      .token.transferSync({
+        amount: 1n,
+        to: '0x0000000000000000000000000000000000000001',
+        token: '0x20c0000000000000000000000000000000000000',
+      })
+      .catch((error: unknown) => error)
+
+    expect({ error, sent }).toMatchInlineSnapshot(`
+      {
+        "error": [Accounts.SignedOutError: The client's account is signed out. Sign in before sending.],
+        "sent": [],
+      }
+    `)
+  })
+
   test('refuses a transaction of an access key that expired while an access key on another chain lives, with AccessKeyRequiredError', async () => {
     const store = Store.memory()
     const owners = [Secp256k1.randomPrivateKey(), Secp256k1.randomPrivateKey()]
